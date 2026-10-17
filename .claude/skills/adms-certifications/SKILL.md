@@ -227,7 +227,7 @@ its primary one; a sub held to its own prime's place on the project; a certifica
 or deleted) and **the service** `Certifications` in `apps/api/src/certification/` (certify as the
 monitor from their phone, the capacity worked out and never typed; correct a box; revoke), with `packages/domain`'s `CertificationSubs` (a typed sub matched to a known
 contractor ignoring case and spacing, or made; a name already placed elsewhere on the project
-saved as a separate contractor with a warning), `CertificationChanges` and `ContractorMerge`.
+saved as a separate contractor with a warning), `CertificationChanges` and `ContractorMerge`. ⚠️ **The user, 2026-10-15 (ADR-529 (f)): the merge is retired**: "yep replace the merge with this, and retire the merge endpoint". Two subs on a project whose names are alike (case, spaces, punctuation and a company ending set aside, `SubNames`) flag each certification naming either, `SUB_NAME_ALIKE`; a person corrects the sub or accepts the flag.
 "Replaced on" is the new certification's certified time, as a day in the project's time zone. **Behind requests
 (ADR-433):** a measuring mistake corrected (takes *correct*), signatures on file (takes *QC*) and a
 revocation (an admin's alone); a certification is made, and a modified truck certified again, on a

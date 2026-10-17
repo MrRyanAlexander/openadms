@@ -67,6 +67,22 @@ describe('a shape', () => {
     expect(shapeOf(high).read?.geometry).toEqual(boundary);
   });
 
+  it('a shape of more positions than a call takes arguments still has its box (ADR-485)', () => {
+    // A county's boundary from a shapefile: 400,000 positions round P1's.
+    const count = 400_000;
+    const ring = Array.from({ length: count }, (_, at) => {
+      const turn = (2 * Math.PI * at) / count;
+      return [-75.6 + 0.2 * Math.cos(turn), 39.1 + 0.2 * Math.sin(turn)];
+    });
+    ring.push(ring[0] ?? []);
+    expect(shapeOf({ type: 'Polygon', coordinates: [ring] }).read?.box).toEqual({
+      westLongitude: '-75.80000000',
+      southLatitude: '38.90000000',
+      eastLongitude: '-75.40000000',
+      northLatitude: '39.30000000',
+    });
+  });
+
   it('anything but closed polygon rings on the earth is refused, in plain words', () => {
     const problems = [
       shapeOf({ type: 'Point', coordinates: [-75.6, 39.1] }),

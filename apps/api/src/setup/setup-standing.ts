@@ -93,16 +93,19 @@ export class SetupStanding {
     });
   }
 
-  // One query at a time: a piece of work has one connection.
-  private static async readIn(
+  // One query at a time: a piece of work has one connection. A client user's or an auditor's
+  // read of the setup check and the lookup reads through it too, as the read-only login with the
+  // viewer stated (ADR-535 (6)): only columns that login is granted.
+  static async readIn(
     tx: Prisma.TransactionClient,
     projectId: string,
   ): Promise<SetupChecked & LookupSetup> {
     const live = { projectId, archivedAt: null };
     const rules = await new RuleRows(tx, projectId).entries();
+    // A prime's name alone: a viewer's read is granted no contractor's contact details.
     const places = await tx.projectContractor.findMany({
       where: { ...live, asPrimeId: { not: null } },
-      include: { contractor: true },
+      include: { contractor: { select: { name: true } } },
       orderBy: { id: 'asc' },
     });
     const contracts = await tx.contract.findMany({ where: live, orderBy: { id: 'asc' } });
@@ -173,4 +176,13 @@ export class SetupStanding {
       })),
     };
   }
+}
+
+// The setup check and the lookup, worked out from the setup a piece of work reads (a viewer's).
+export function setupGapsOf(setup: SetupChecked & LookupSetup): SetupGap[] {
+  return new SetupCheck(setup).gaps();
+}
+
+export function quantityAsksOf(setup: SetupChecked & LookupSetup): QuantityAsk[] {
+  return new QuantityLookup(setup).entries();
 }

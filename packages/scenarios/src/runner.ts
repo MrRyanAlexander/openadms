@@ -2,56 +2,40 @@
 // the story's clock, with simulated phones, and reports each step and each check as it goes. A story
 // is told in project time and asserts exact results; a failed check doesn't stop the story, an
 // error does. The database is dropped afterwards unless the run keeps it for a person to look at.
+// Every request a story's phone makes goes through the story's own API over HTTPS (`StoryApi`;
+// BACKLOG 2.7.1 parts 1 and 2, ADR-491…493): no phone's act is a service called in process. The
+// back office and the read-only viewers reach it at their browsers, signed in (part 4, ADR-496).
 import { isDeepStrictEqual } from 'node:util';
 
 import {
-  Certifications,
-  DeviceKeys,
-  Enrolment,
-  Intake,
-  MasterPasscodeCheck,
-  NoMail,
-  NumberAllocator,
-  PasscodeSessions,
-  PasscodeUses,
-  PasswordHasher,
-  PhoneAssignments,
-  OfflineChecks,
-  PhoneLists,
-  PhoneChallenges,
-  PhoneLoginList,
-  PhoneMonitors,
-  PhoneProofs,
-  PhoneSignIns,
-  PhoneTokens,
-  SessionTokens,
-  SetupChoices,
-  Sync,
-  UnplannedAssignments,
-  WrongTries,
-  type AssignmentAtSignIn,
-  type SetupChoicesRead,
-} from '@open-adms/api';
-import type { Database, ViewerDatabase } from '@open-adms/db';
-import {
-  BreachedPasswords,
-  MasterPasscodeTries,
-  PasscodeSessionRules,
-  PasswordRules,
-  PhoneProofRules,
-  SignInTries,
-  type MasterPasscodeSessionKind,
-  type Policy,
-} from '@open-adms/domain';
+  setPersonPasswordEndpoint,
+  turnInAnswerSchema,
+  type Endpoint,
+  type PhoneAssignmentAnswer,
+  type PhoneListsRecord,
+  type PhoneSetupChoicesAnswer,
+  type TurnInAnswer,
+  type TurnInHolds,
+  type TurnInSent,
+} from '@open-adms/contracts';
+import type { Database } from '@open-adms/db';
+import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock } from './clock.ts';
 import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
+import type { AskedWith } from './over-https.ts';
+import {
+  madeUpPassword,
+  OfficeBrowser,
+  setOnTheServer,
+  signedOut,
+  type OfficePerson,
+} from './office-browser.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
+import { StoryApi } from './story-api.ts';
 import { StoryDatabase, storyMasterPasscode, type StoryTemplate } from './story-database.ts';
-
-// The signing secret of a story's API: made up, the same for every story, used nowhere else.
-const storySigningSecret = 'made-up-signing-secret-for-the-stories-only';
+import { StoryMedia } from './story-media.ts';
 
 export interface Story {
   // Its name on the command line, e.g. ticket-101001.
@@ -79,55 +63,109 @@ export interface StoryContext {
   // The services' own clients, on the story's database.
   readonly api: Database;
   readonly worker: Database;
-  // The read-only login's way in, for a read-only viewer's reads: `$viewed` alone (ADR-434).
-  readonly viewed: ViewerDatabase;
+  // A second worker's own client on the story's database, as a second worker container would
+  // hold (BACKLOG 2.8.2, C95): a pool of its own, closed when the story ends.
+  openWorker(): Database;
+  // The story's API's pool, the policy's (ADR-524): how many connections, and how long each of
+  // its pieces of work waited for one so far, in milliseconds.
+  readonly apiPool: { readonly connections: number; waitedMs(): readonly number[] };
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
-  // Where phones sync to (BACKLOG 2.6.2 part 4; ADR-475): the API's own `Sync`, built as its
-  // process builds it (apps/api, src/process/api-process.ts), on the story's database and
-  // clock. A phone's sync is read by the contract and answered whole: its reports, its
-  // records, its numbers, and what a sync brings besides. A photograph's record goes to the
-  // intake behind it until its upload is built (2.6.4).
+  // Where phones sync, send a photograph's files and are turned in (BACKLOG 2.7.1 part 1;
+  // ADR-491): the story's own API, the API's process itself on the story's database and clock,
+  // over HTTPS through the local stack's proxy (`StoryApi`). A phone proves itself with its own
+  // key and holds its token as a real one does; its sync is answered whole, its files kept in
+  // the story's store.
   readonly server: PhoneServer;
-  // The same, on another clock: for field days told again on a clock of their own.
-  serverOn(clock: { now: () => Date }): PhoneServer;
+  // The story's own object store, where the API keeps photographs' files (ADR-483): in memory,
+  // gone when the story ends.
+  readonly media: StoryMedia;
   // Moves the clock to a time (with its offset) and says what happens then.
   at(time: string, what: string): void;
   phone(setup: PhoneSetup): SimulatedDevice;
   // Enrols a phone as a real one is (ARCHITECTURE §7.1, §7.4; ADR-439, 440): once, under the
-  // firm's master passcode, through the API's `Enrolment`, with a device key made in software.
+  // firm's master passcode, at the enrolment endpoint, with a device key made in software.
   // `at` is when it was enrolled, where that is not the story's clock now (a phone enrolled the
   // evening before its work is told).
   enrolled(name: string, at?: Date): Promise<EnrolledPhone>;
   // Creates a field monitor as a real one is (ARCHITECTURE §7.0; ADR-442): on that enrolled
-  // phone, online, under the firm's master passcode, through the API's `PhoneMonitors`. No story
-  // writes a monitor by hand. Asked again by the same name, with or without a phone, it is the
-  // monitor already created: a story that carries another on reads its people this way.
+  // phone, online, under the firm's master passcode, at its endpoint. No story writes a monitor
+  // by hand. Asked again by the same name, with or without a phone, it is the monitor already
+  // created: a story that carries another on reads its people this way.
   monitor(name: string, onPhone?: string): Promise<StoryMonitor>;
-  // The monitor signs in on that enrolled phone, online, with their Monitor ID and password,
-  // through the API's `PhoneSignIns` (ADR-443, 444): the assignment the phone takes, or why it
-  // took none. A refused sign-in stops the story. `at` is when they sign in, where that is not
-  // the story's clock now (field days told again on a clock of their own).
-  signedIn(monitor: StoryMonitor, onPhone: string, at?: Date): Promise<AssignmentAtSignIn>;
+  // The monitor signs in on that enrolled phone, online, with their Monitor ID and password, at
+  // the sign-in endpoint (ADR-443, 444): the assignment the phone takes, or why it took none.
+  // The phone holds their session from then on. A refused sign-in stops the story.
+  signedIn(monitor: StoryMonitor, onPhone: string): Promise<TakenAtSignIn>;
   // Whoever holds the firm's master passcode, on that enrolled phone with a connection, now by
-  // the story's clock: what a setup picks from, read through the API's `SetupChoices`
-  // (ADR-463), and a session opened for a monitor through its `PasscodeSessions` (ADR-462).
-  // No story states the passcode; a refusal stops the story.
+  // the story's clock: what a setup picks from (ADR-463), and a session opened for a monitor,
+  // which the phone holds as a sign-in's (ADR-462). No story states the passcode; a refusal
+  // stops the story.
   readonly underPasscode: {
-    choices(onPhone: string, projectId: string | null): Promise<SetupChoicesRead>;
+    choices(onPhone: string, projectId: string | null): Promise<PhoneSetupChoicesAnswer>;
     session(
       monitor: StoryMonitor,
       onPhone: string,
       kind: MasterPasscodeSessionKind,
-    ): Promise<{ readonly sessionId: string; readonly expiresAt: Date }>;
+    ): Promise<TakenAtSignIn>;
+    // "Sync and turn in" (ADR-488): the phone syncs, sends its files, then is turned in at the
+    // turn-in endpoint over HTTPS (ADR-491); answered to wipe, it wipes. The answer.
+    turnIn(phone: SimulatedDevice): Promise<TurnInAnswer>;
+    // A phone whose key the firm's time revoked proves itself with the passcode typed beside its
+    // signature (ADR-530): what it was answered (`PROVEN`, or the API's code). Proven, it holds
+    // the token for its sync and its turn-in.
+    proves(onPhone: string): Promise<string>;
+    // A turn-in of that enrolled phone naming what the story says it holds, at the same
+    // endpoint, with no sync before it: for a turn-in measured at its size (BACKLOG 2.8.2, C141).
+    turnInNaming(
+      onPhone: string,
+      holds: TurnInHolds,
+      lastUsed?: TurnInSent['lastUsed'],
+    ): Promise<TurnInAnswer>;
   };
-  // A phone's proof of itself, as its sync begins: the API's `PhoneProofs`, on the story's clock.
-  readonly proofs: PhoneProofs;
-  // The lists a phone takes for an assignment: the API's `PhoneLists` (task 2.5.3).
-  readonly lists: PhoneLists;
+  // The lists a phone takes for its assignment (task 2.5.3), asked by the monitor signed in on
+  // it: the assignment the phone takes now must be the one named, or the story stops.
+  readonly lists: {
+    held(phone: {
+      readonly assignmentId: string;
+      readonly deviceId: string;
+    }): Promise<PhoneListsRecord>;
+  };
+  // Every request above on another clock, the story's API started again on it at the first one
+  // sent: for field days told again on a clock of their own. Started again, it holds no part of
+  // a file not yet whole.
+  phonesOn(clock: { now: () => Date }): StoryPhones;
+  // A phone's proof of itself, as its sync begins: over HTTPS to the story's API, on the story's
+  // clock; proven, the phone holds its token for its next requests (`StoryApi.proves`).
+  readonly proofs: Pick<StoryApi, 'proves'>;
+  // The back office and the read-only viewers at their browsers (BACKLOG 2.7.1 part 4; ADR-496):
+  // over HTTPS to the story's API, on the story's clock, each signed in as a real person is
+  // (`OfficeBrowser`). Asked again for the same person, it is the browser they already hold.
+  readonly backOffice: {
+    // The firm's first admin, whom the story wrote with their email address: their password set
+    // on the server, as `pnpm installer:admin` lets an admin back in; they sign in with it and set
+    // their authenticator up.
+    admin(person: OfficePerson): Promise<OfficeBrowser>;
+    // A person an admin created: that admin sets their first password at its endpoint; they sign
+    // in with it, set one of their own and, an admin or a manager/analyst, their authenticator.
+    person(by: OfficeBrowser, person: OfficePerson): Promise<OfficeBrowser>;
+    // A browser nobody signed in at.
+    readonly signedOut: Pick<OfficeBrowser, 'asked'>;
+  };
   // Asserts an exact result; strict deep equality.
   check(what: string, actual: unknown, expected: unknown): void;
 }
+
+// The assignment a phone takes at a sign-in, as the API answered it, or why it took none.
+export type TakenAtSignIn =
+  | { readonly taken: true; readonly assignment: PhoneAssignmentAnswer }
+  | { readonly taken: false; readonly why: NoAssignmentReason };
+
+// A story's phones' requests, all on one clock.
+export type StoryPhones = Pick<
+  StoryContext,
+  'server' | 'enrolled' | 'monitor' | 'signedIn' | 'underPasscode' | 'lists'
+>;
 
 export interface StoryResult {
   readonly name: string;
@@ -163,10 +201,12 @@ export class Runner {
     let failed = 0;
     let error: string | undefined;
     let database: StoryDatabase | undefined;
+    let storyApi: StoryApi | undefined;
     const open: Pick<Database, '$disconnect'>[] = [];
     try {
       const template = this.options.template;
       database = await StoryDatabase.create(template);
+      const opened = database;
       if (template === undefined) {
         const migrations = database.migrate();
         const seeded = await database.seed();
@@ -182,174 +222,150 @@ export class Runner {
       }
       const api = database.open('api');
       const worker = database.open('worker');
-      const viewed = database.openViewer();
-      open.push(api, worker, viewed);
+      open.push(api, worker);
       const clock = new StoryClock(story.start);
       const policy = builtInPolicy();
-      const hasher = new PasswordHasher(storySigningSecret);
-      const offline = new OfflineChecks(storySigningSecret);
-      const keys = new DeviceKeys();
-      const proofRules = new PhoneProofRules(policy);
-      const passcodeAt = (at: { now: () => Date }) =>
-        new MasterPasscodeCheck(api, {
-          rules: new MasterPasscodeTries(policy),
-          hasher,
-          mail: new NoMail(),
-          clock: at,
-          requestNow: () => undefined,
-        });
-      // A monitor's password is exempt from the breached list (ADR-402 (5)): none is read here.
-      const monitors = new PhoneMonitors(api, {
-        passcode: passcodeAt(clock),
-        rules: new PasswordRules(policy, BreachedPasswords.from('')),
-        hasher,
-        offline,
-        clock,
-      });
-      const signInsAt = (at: { now: () => Date }) =>
-        new PhoneSignIns(api, {
-          tokens: new SessionTokens(storySigningSecret, policy.accessTokenMinutes),
-          hasher,
-          offline,
-          tries: new WrongTries(api, {
-            rules: new SignInTries(policy),
-            clock: at,
-            mail: new NoMail(),
-            requestNow: () => undefined,
-          }),
-          assignments: new PhoneAssignments(api),
-          clock: at,
-          hours: policy.monitorSessionHours,
-          requestNow: () => undefined,
-        });
       const created = new Map<string, StoryMonitor>();
-      // The phone as the server has it now, as its proof's token would say.
-      const phoneNow = async (deviceId: string) => ({
-        deviceId,
-        status: (await api.device.findUniqueOrThrow({ where: { id: deviceId } })).status,
-      });
-      // The API's `Sync`, as `api-process.ts` builds it.
-      const serverOn = (at: { now: () => Date }): PhoneServer => {
-        const taking = new Intake(api, at, policy);
-        const sync = new Sync(api, {
-          intake: taking,
-          certifications: new Certifications(api, at, policy),
-          unplanned: new UnplannedAssignments(api, { clock: at, requestNow: () => undefined }),
-          uses: new PasscodeUses(api, { clock: at, requestNow: () => undefined }),
-          numbers: new NumberAllocator(api, at, policy),
-          loginList: new PhoneLoginList(api, {
-            assignments: new PhoneAssignments(api),
-            offline,
-            clock: at,
-            entriesPerCall: policy.loginListEntriesPerCall,
-          }),
-          clock: at,
-        });
+      const media = new StoryMedia();
+      storyApi = new StoryApi({ database, clock, policy, media });
+      const served = storyApi;
+      const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
+      const browsers = new Map<string, OfficeBrowser>();
+      // Every request of a story's phones on one clock, through the story's API.
+      const phonesOn = (on: { now: () => Date }, startedAgain: boolean): StoryPhones => {
+        const asked = served.requests(on, startedAgain);
         return {
-          received: (deviceId, sent) => sync.received(deviceId, sent),
-          receive: (record) => taking.receive(record),
+          server: asked.server,
+          async enrolled(name, moment) {
+            const key = new SoftwareKey();
+            // At a moment of its own, where one is given: the API's clock is then that moment.
+            const enrolment = moment === undefined ? asked : served.requests({ now: () => moment });
+            const { deviceId } = await enrolment.enrol({
+              name,
+              passcode: storyMasterPasscode,
+              publicKey: key.publicKey,
+            });
+            served.enrolled(deviceId, key);
+            return { id: deviceId, name, key };
+          },
+          async monitor(name, onPhone) {
+            const known = created.get(name);
+            if (known !== undefined) return known;
+            if (onPhone === undefined)
+              throw new Error(`No monitor ${name}, and no phone to create one on.`);
+            // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…
+            const password = `555${String(101 + created.size).padStart(4, '0')}`;
+            const answer = await asked.monitorCreated(onPhone, {
+              name,
+              password,
+              passcode: storyMasterPasscode,
+            });
+            const monitor = {
+              id: answer.userId,
+              monitorNumber: answer.monitorNumber,
+              name,
+              password,
+            };
+            created.set(name, monitor);
+            return monitor;
+          },
+          async signedIn(monitor, onPhone) {
+            return takenAt(
+              await asked.signedIn(onPhone, {
+                monitorNumber: monitor.monitorNumber,
+                password: monitor.password,
+              }),
+            );
+          },
+          underPasscode: {
+            choices: (onPhone, projectId) =>
+              asked.setupChoices(onPhone, {
+                passcode: storyMasterPasscode,
+                projectId,
+                monitorsAfter: null,
+              }),
+            async session(monitor, onPhone, kind) {
+              return takenAt(
+                await asked.passcodeSession(onPhone, {
+                  personId: monitor.id,
+                  kind,
+                  passcode: storyMasterPasscode,
+                }),
+              );
+            },
+            // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
+            turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
+            proves: async (onPhone) => (await served.proves(onPhone, storyMasterPasscode)).answer,
+            async turnInNaming(onPhone, holds, lastUsed = []) {
+              const { server } = asked;
+              if (server.turnIn === undefined) {
+                throw new Error('The story’s server turns no phone in.');
+              }
+              return turnInAnswerSchema.parse(
+                await server.turnIn(onPhone, { passcode: storyMasterPasscode, holds, lastUsed }),
+              );
+            },
+          },
+          lists: {
+            async held({ assignmentId, deviceId }) {
+              const answer = await asked.lists(deviceId);
+              if (answer.assignment?.id !== assignmentId || answer.lists === null) {
+                throw new Error(
+                  `The phone’s lists are of ${answer.assignment?.id ?? answer.noAssignment ?? 'nothing'}, ` +
+                    'not of the assignment the story names.',
+                );
+              }
+              return answer.lists;
+            },
+          },
         };
       };
       const context: StoryContext = {
         clock,
         api,
         worker,
-        viewed,
         policy,
-        server: serverOn(clock),
-        serverOn,
+        ...phonesOn(clock, false),
+        phonesOn: (on) => phonesOn(on, true),
+        media,
         at(time, what) {
           clock.set(time);
           out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);
         },
         phone: (setup) => new SimulatedDevice(setup, clock),
-        async enrolled(name, at) {
-          const key = new SoftwareKey();
-          const enrolledAt = at === undefined ? clock : { now: () => at };
-          const outcome = await new Enrolment(api, {
-            passcode: passcodeAt(enrolledAt),
-            keys,
-            clock: enrolledAt,
-          }).enrol({ name, passcode: storyMasterPasscode, publicKey: key.publicKey });
-          if (!outcome.enrolled) throw new Error(`${name} was not enrolled: ${outcome.why}.`);
-          return { id: outcome.deviceId, name, key };
+        proofs: { proves: (deviceId, passcode) => served.proves(deviceId, passcode) },
+        openWorker() {
+          const another = opened.open('worker');
+          open.push(another);
+          return another;
         },
-        async monitor(name, onPhone) {
-          const known = created.get(name);
-          if (known !== undefined) return known;
-          if (onPhone === undefined)
-            throw new Error(`No monitor ${name}, and no phone to create one on.`);
-          // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…
-          const password = `555${String(101 + created.size).padStart(4, '0')}`;
-          const outcome = await monitors.create(await phoneNow(onPhone), {
-            name,
-            password,
-            passcode: storyMasterPasscode,
-          });
-          if (!outcome.created) throw new Error(`${name} was not created: ${outcome.why}.`);
-          const monitor = {
-            id: outcome.userId,
-            monitorNumber: outcome.monitorNumber,
-            name,
-            password,
-          };
-          created.set(name, monitor);
-          return monitor;
+        apiPool: {
+          connections: policy.databasePoolConnections,
+          waitedMs: () => served.waitedMs(),
         },
-        async signedIn(monitor, onPhone, at) {
-          const outcome = await signInsAt(at === undefined ? clock : { now: () => at }).signIn(
-            await phoneNow(onPhone),
-            monitor.monitorNumber,
-            monitor.password,
-          );
-          if (!outcome.signedIn) {
-            throw new Error(`${monitor.name} was not signed in: ${outcome.why}.`);
-          }
-          return outcome.assignment;
-        },
-        underPasscode: {
-          async choices(onPhone, projectId) {
-            const outcome = await new SetupChoices(api, {
-              passcode: passcodeAt(clock),
-              clock,
-              // The contracts' number (`setupChoicesMonitorsAtMost`, ADR-463).
-              monitorsAtMost: 1000,
-            }).read(await phoneNow(onPhone), {
-              passcode: storyMasterPasscode,
-              projectId,
-              monitorsAfter: null,
-            });
-            if (!outcome.read)
-              throw new Error(`The setup’s choices were not read: ${outcome.why}.`);
-            return outcome;
+        backOffice: {
+          async admin(person) {
+            const held = browsers.get(person.id);
+            if (held !== undefined) return held;
+            const password = await setOnTheServer(api, clock, policy, person);
+            const browser = await OfficeBrowser.signIn(send, clock, person, password);
+            browsers.set(person.id, browser);
+            return browser;
           },
-          async session(monitor, onPhone, kind) {
-            const outcome = await new PasscodeSessions(api, {
-              passcode: passcodeAt(clock),
-              tokens: new SessionTokens(storySigningSecret, policy.accessTokenMinutes),
-              rules: new PasscodeSessionRules(policy.monitorSessionHours),
-              assignments: new PhoneAssignments(api),
-              clock,
-            }).open(await phoneNow(onPhone), {
-              personId: monitor.id,
-              kind,
-              passcode: storyMasterPasscode,
+          async person(by, person) {
+            const held = browsers.get(person.id);
+            if (held !== undefined) return held;
+            const password = madeUpPassword();
+            await by.answered(setPersonPasswordEndpoint, {
+              ids: { userId: person.id },
+              json: { password },
             });
-            if (!outcome.opened) {
-              throw new Error(`No session was opened for ${monitor.name}: ${outcome.why}.`);
-            }
-            return { sessionId: outcome.sessionId, expiresAt: outcome.expiresAt };
+            const browser = await OfficeBrowser.signIn(send, clock, person, password);
+            browsers.set(person.id, browser);
+            return browser;
           },
+          signedOut: signedOut(send),
         },
-        lists: new PhoneLists(api, { assignments: new PhoneAssignments(api), clock }),
-        proofs: new PhoneProofs(api, {
-          rules: proofRules,
-          challenges: new PhoneChallenges(storySigningSecret, proofRules),
-          keys,
-          tokens: new PhoneTokens(storySigningSecret, policy.phoneTokenMinutes),
-          clock,
-          challengeSeconds: policy.phoneChallengeSeconds,
-        }),
         check(what, actual, expected) {
           if (isDeepStrictEqual(actual, expected)) {
             passed += 1;
@@ -367,6 +383,7 @@ export class Runner {
       error = redacted(caught instanceof Error ? caught.message : String(caught));
       out(`  ✗ stopped: ${error}`);
     } finally {
+      await storyApi?.close();
       for (const client of open) await client.$disconnect();
       if (database !== undefined) {
         if (this.options.keep === true) {
@@ -384,6 +401,16 @@ export class Runner {
     );
     return { name: story.name, database: database?.name, passed, failed, error };
   }
+}
+
+// What a sign-in or a session opened on a phone tells it of its assignment.
+function takenAt(answer: {
+  readonly assignment: PhoneAssignmentAnswer | null;
+  readonly noAssignment: NoAssignmentReason | null;
+}): TakenAtSignIn {
+  if (answer.assignment !== null) return { taken: true, assignment: answer.assignment };
+  if (answer.noAssignment === null) throw new Error('A sign-in was answered neither way.');
+  return { taken: false, why: answer.noAssignment };
 }
 
 function show(value: unknown): string {

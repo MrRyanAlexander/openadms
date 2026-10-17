@@ -166,7 +166,7 @@ export async function p1Priced(api: Served, dana: Browser, tx: Tx, more: object 
       createFormEndpoint,
       await ask(api, dana, createFormEndpoint, {
         ids,
-        payload: { documentType, name, enabled: true, ...more },
+        payload: { documentType, name, ...more },
       }),
     ).record;
   const forms = {

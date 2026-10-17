@@ -1,5 +1,5 @@
 // Who may do what at the back office, and the rules of the firm's people (ARCHITECTURE §6,
-// Authorization, §7.0; AC-02-08, 11, 12, 13, 72; AC-10-27; ADR-050, 105, 169, 315, 415).
+// Authorization, §7.0; AC-02-08, 11, 12, 13, 72; AC-10-27, 107; ADR-050, 105, 169, 315, 415, 539).
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -9,7 +9,9 @@ import {
   actorOnly,
   actorsOnly,
   backOfficeCreated,
+  grantsInWords,
   permissions,
+  viewPermissions,
   type Holder,
 } from '../src/index.ts';
 
@@ -19,14 +21,14 @@ const dana: Holder = { role: 'ADMIN', archived: false, granted: [] };
 const luis: Holder = {
   role: 'MANAGER_ANALYST',
   archived: false,
-  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED'],
+  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED', 'VIEW_REVIEW'],
 };
 const ana: Holder = { role: 'MONITOR', archived: false, granted: [] };
 const viewer: Holder = { role: 'READ_ONLY_VIEWER', archived: false, granted: [] };
 const backOffice = ['ADMIN', 'MANAGER_ANALYST'];
 
 describe('who holds a permission', () => {
-  it('AC-02-11 the permissions are one closed set of ten, and an admin needs none granted', () => {
+  it('AC-02-11 the permissions are one closed set of thirteen, three of them views, and an admin needs none granted', () => {
     expect(permissions).toEqual([
       'CORRECT',
       'RENUMBER',
@@ -38,7 +40,11 @@ describe('who holds a permission', () => {
       'APPROVE_HOURS',
       'SETUP',
       'DISPATCH',
+      'VIEW_REVIEW',
+      'VIEW_SETUP',
+      'VIEW_DISPATCH',
     ]);
+    expect(viewPermissions).toEqual(['VIEW_REVIEW', 'VIEW_SETUP', 'VIEW_DISPATCH']);
     expect(permissions.every((permission) => new Access(dana).holds(permission))).toBe(true);
   });
 
@@ -46,6 +52,38 @@ describe('who holds a permission', () => {
     const access = new Access(luis);
     expect(permissions.filter((permission) => access.holds(permission))).toEqual(luis.granted);
     expect(access.holds('UNLOCK_INVOICED')).toBe(false);
+  });
+
+  it('AC-10-107 an act needs its area’s view beside its own grant: without “view review” Luis holds none of his review acts', () => {
+    const blind = { ...luis, granted: luis.granted.filter((held) => held !== 'VIEW_REVIEW') };
+    expect(permissions.filter((permission) => new Access(blind).holds(permission))).toEqual([]);
+    const setup = { ...luis, granted: ['SETUP'] };
+    expect(new Access(setup).holds('SETUP')).toBe(false);
+    expect(new Access({ ...setup, granted: ['SETUP', 'VIEW_SETUP'] }).holds('SETUP')).toBe(true);
+    const dispatch = { ...luis, granted: ['DISPATCH', 'VIEW_REVIEW'] };
+    expect(new Access(dispatch).holds('DISPATCH')).toBe(false);
+    expect(
+      new Access({ ...dispatch, granted: ['DISPATCH', 'VIEW_DISPATCH'] }).holds('DISPATCH'),
+    ).toBe(true);
+    // A view and approving hours need nothing beside them.
+    expect(new Access({ ...luis, granted: ['VIEW_SETUP'] }).holds('VIEW_SETUP')).toBe(true);
+    expect(new Access({ ...luis, granted: ['APPROVE_HOURS'] }).holds('APPROVE_HOURS')).toBe(true);
+    expect(grantsInWords('QC')).toBe('"QC" and "view review"');
+    expect(grantsInWords('VIEW_DISPATCH')).toBe('"view dispatch"');
+  });
+
+  it('AC-10-107 what the back office sees: an admin every area, a manager/analyst the views granted, nobody else any', () => {
+    const areas = [null, ...viewPermissions];
+    expect(areas.map((view) => new Access(dana).sees(view))).toEqual([true, true, true, true]);
+    expect(areas.map((view) => new Access(luis).sees(view))).toEqual([true, true, false, false]);
+    expect(
+      areas.map((view) => new Access({ ...luis, granted: ['VIEW_DISPATCH'] }).sees(view)),
+    ).toEqual([true, false, false, true]);
+    for (const person of [ana, viewer, { ...dana, archived: true }, { ...luis, archived: true }]) {
+      expect(
+        areas.some((view) => new Access({ ...person, granted: [...permissions] }).sees(view)),
+      ).toBe(false);
+    }
   });
 
   it('AC-02-12 one taken away is no longer held', () => {
@@ -105,11 +143,16 @@ describe('who may change the setup', () => {
 
   it('an admin may, and a manager/analyst who holds Setup now; a manager/analyst without it is told who may, in plain words', () => {
     expect(refusal(dana, 'Dana Reyes')).toBeNull();
-    expect(refusal({ ...luis, granted: [...luis.granted, 'SETUP'] }, 'Luis Ortega')).toBeNull();
+    expect(
+      refusal({ ...luis, granted: [...luis.granted, 'SETUP', 'VIEW_SETUP'] }, 'Luis Ortega'),
+    ).toBeNull();
+    expect(refusal({ ...luis, granted: [...luis.granted, 'SETUP'] }, 'Luis Ortega')?.code).toBe(
+      'NOT_ALLOWED',
+    );
     expect(refusal(luis, 'Luis Ortega')).toEqual({
       code: 'NOT_ALLOWED',
       message:
-        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup" and "view setup". Nothing was changed.',
     });
   });
 
@@ -121,7 +164,7 @@ describe('who may change the setup', () => {
     }
     expect(refusal({ ...dana, archived: true }, 'Dana Reyes')?.code).toBe('NOT_ALLOWED');
     expect(new SetupRights(null).refusal()?.message).toBe(
-      'Somebody the firm has no record of may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+      'Somebody the firm has no record of may not change the setup: it takes an admin, or a manager/analyst granted "setup" and "view setup". Nothing was changed.',
     );
   });
 });

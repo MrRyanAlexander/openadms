@@ -3,7 +3,9 @@
 // 338, 467, 468, 472). Three things only, since sync refuses nothing over eligibility: whether a
 // GPS fix can be one, what a record kept in quarantine is told, and what one that could not be
 // saved is told. Everything else about a record is taken as sent and judged later, by the worker.
+import type { UnplannedAssignmentRefusal } from './assignments.ts';
 import type { FieldEventKindName } from './field-event-details.ts';
+import type { LoggedPasscodeUseRefusal } from './passcode-uses.ts';
 
 // A fix as a phone sends it: whatever it had for each half.
 export interface SentFix {
@@ -108,8 +110,10 @@ export class Quarantine implements QuarantineNotice {
 }
 
 // Why a record a phone sent is not saved (ADR-467): it isn't a record at all, something it
-// names is no record the server has, the assignment it was made under was itself not saved, or
-// it is a certification its own rules refuse (ADR-469). The server holds it exactly as sent for
+// names is no record the server has, the assignment it was made under was itself not saved, it
+// is a certification its own rules refuse (ADR-469), or it is a photograph whose record the
+// server doesn't have saved (ADR-481), or it is for a project closed before it arrived (ADR-529
+// (b)). The server holds it exactly as sent for
 // a person (ADR-468, 471, 472), and it stays on its phone too. Never a judgement of the work:
 // nothing is refused over eligibility (ADR-052).
 export const notSavedReasons = [
@@ -117,6 +121,8 @@ export const notSavedReasons = [
   'NAMES_NO_RECORD',
   'ASSIGNMENT_NOT_SAVED',
   'CERTIFICATION_REFUSED',
+  'OWNER_NOT_SAVED',
+  'PROJECT_CLOSED',
 ] as const;
 export type NotSavedReason = (typeof notSavedReasons)[number];
 
@@ -125,6 +131,36 @@ export interface NotSavedNotice {
   readonly reason: NotSavedReason;
   readonly message: string;
 }
+
+// Why something a phone sent is held for a person: a record's or a photograph's reason above,
+// or a report the server could not keep (an unplanned assignment, a use of the master
+// passcode), which its phone is answered with the report's own reason (ADR-526 (5)).
+export const heldReasons = [...notSavedReasons, 'REPORT_NOT_SAVED'] as const;
+export type HeldReason = (typeof heldReasons)[number];
+
+// The words a held thing is kept with.
+export interface HeldNotice {
+  readonly reason: HeldReason;
+  readonly message: string;
+}
+
+// What a report a phone sent says it is.
+export type ReportKind = 'UNPLANNED_ASSIGNMENT' | 'PASSCODE_USE';
+
+const reportInWords: Record<ReportKind, string> = {
+  UNPLANNED_ASSIGNMENT: 'this unplanned assignment',
+  PASSCODE_USE: 'this use of the master passcode',
+};
+
+const reportRefusalInWords: Record<UnplannedAssignmentRefusal | LoggedPasscodeUseRefusal, string> =
+  {
+    UNKNOWN_PROJECT: 'names a project the server doesn’t have',
+    NOT_A_MONITOR: 'is for someone who isn’t a monitor the server has',
+    NOT_THE_PROJECTS_SITE: 'names a site that isn’t its project’s',
+    NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM: 'names a unit rate pay item that isn’t its project’s',
+    ID_ALREADY_HELD: 'was made under an id the server already holds for something else',
+    PROJECT_CLOSED: 'is for a project that was closed before it arrived',
+  };
 
 const notSavedLead = 'Not saved: ';
 const heldForReview = 'Held on the server for review.';
@@ -150,6 +186,15 @@ export class NotSaved implements NotSavedNotice {
     return new NotSaved(
       'NAMES_NO_RECORD',
       'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
+    );
+  }
+
+  // Its project was closed before it arrived (ADR-529 (b)): nothing is written to a closed
+  // project, so it waits for a person, who closes it for its phone to be turned in.
+  static projectClosed(project: string, closedOn: string): NotSaved {
+    return new NotSaved(
+      'PROJECT_CLOSED',
+      `Not saved: ${project} was closed on ${closedOn}, before this arrived.`,
     );
   }
 
@@ -187,9 +232,31 @@ export class NotSaved implements NotSavedNotice {
     );
   }
 
+  // A photograph whose record the server has not saved: held, kept in quarantine elsewhere,
+  // not yet sent, or not of the kind the photograph says (ADR-481). Sent again once its record
+  // is saved, it is saved with it.
+  static ownerNotSaved(): NotSaved {
+    return new NotSaved(
+      'OWNER_NOT_SAVED',
+      `${notSavedLead}the record this photograph belongs to isn’t saved on the server.`,
+    );
+  }
+
+  // A report the server could not keep (ADR-526 (5)): what it is and why, in plain words. Its
+  // phone is answered with the report's own reason; these are the words it is held with.
+  static reportNotSaved(
+    report: ReportKind,
+    why: UnplannedAssignmentRefusal | LoggedPasscodeUseRefusal,
+  ): HeldNotice {
+    return {
+      reason: 'REPORT_NOT_SAVED',
+      message: `${notSavedLead}${reportInWords[report]} ${reportRefusalInWords[why]}.`,
+    };
+  }
+
   // The same notice once the server holds what was sent for a person (ADR-468, 472): its words
   // say so, and only then. Still never "saved".
-  static heldForReview(notice: NotSavedNotice): NotSavedNotice {
-    return { reason: notice.reason, message: `${notice.message} ${heldForReview}` };
+  static heldForReview<N extends HeldNotice>(notice: N): N {
+    return { ...notice, message: `${notice.message} ${heldForReview}` };
   }
 }

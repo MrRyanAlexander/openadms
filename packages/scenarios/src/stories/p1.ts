@@ -11,6 +11,10 @@ import type { Prisma } from '@open-adms/db';
 import { NewProjectNumbers, NewProjectSettings, type Policy } from '@open-adms/domain';
 
 export const p1TimeZone = 'America/New_York';
+
+// The address each of the firm's back office signs in with (CONVENTIONS §6).
+export const danasEmail = 'dana.reyes@gates.example';
+export const luissEmail = 'luis.ortega@gates.example';
 export const p1KindsOfWork = ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'];
 
 // Where P1's number series start (spec/CONVENTIONS.md §6): loads, haul-outs, unit rate tickets,

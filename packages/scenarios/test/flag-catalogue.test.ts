@@ -142,6 +142,10 @@ const examples: Example = {
   ROE_OUT_OF_SCOPE: [ticket('102005'), { roe: 'R-0008' }],
   NO_PRE_WORK_SURVEY: [{ surveyOnRoe: 'R-0008' }, {}],
   CERTIFICATION_PHOTO_MISSING: [{ certNumber: '730416' }, { view: 'LEFT' }],
+  SUB_NAME_ALIKE: [
+    { certNumber: '730416' },
+    { sub: 'Rivera Trucking Co', alike: 'Rivera Trucking' },
+  ],
   PERMIT_OUTSTANDING: [{ site: 'Marsh Road TDSR' }, {}],
   NO_PRICING_RULE: [ticket('101010'), { prime: 'Summit' }],
   DUPLICATE_TRANSACTION_NUMBER: [
@@ -167,6 +171,8 @@ const examples: Example = {
   SPLIT_NOT_ALLOWED: [ticket('101042'), { split: 'load' }],
   OUTSIDE_CONTROL_RANGES: [ticket('109999'), {}],
   ASSIGNMENT_ON_ANOTHER_PROJECT: [ticket('101043'), {}],
+  MONITOR_NOT_SIGNED_IN: [ticket('101044'), { monitor: 'Ana Brooks' }],
+  ASSIGNMENT_OF_ANOTHER_PERSON: [ticket('101045'), {}],
   SCALE_NET_DISAGREES: [
     ticket('101054'),
     { receipt: 'BCL-88251', netTons: '17.60', grossLessTareTons: '17.10' },
@@ -181,9 +187,9 @@ const raised = (code: FlagCode): string => {
 };
 
 describe('the flag catalogue, against spec/FLAGS.md', () => {
-  it('AC-06-137 the domain’s codes are the page’s, in its order: 78, and a flag that isn’t on the page can’t be raised', () => {
+  it('AC-06-137 the domain’s codes are the page’s, in its order: 81, and a flag that isn’t on the page can’t be raised', () => {
     expect(rows.map(([code]) => code)).toEqual([...flagCodes]);
-    expect(rows).toHaveLength(78);
+    expect(rows).toHaveLength(81);
   });
 
   it.each(rows)('AC-06-136 %s reads as the page words it', (code, shown) => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  endpoints,
   errorAnswerSchema,
   healthAnswerSchema,
   phoneListsSchema,
@@ -47,7 +48,43 @@ function keysOf(schema: z.ZodType): string[] {
   return [];
 }
 
+// Every property name an answer's JSON Schema holds, however deep: through unions, records and
+// arrays as well as objects (what `keysOf` doesn't walk).
+function propertyNames(node: unknown): string[] {
+  if (Array.isArray(node)) return node.flatMap(propertyNames);
+  if (typeof node !== 'object' || node === null) return [];
+  const properties = (node as { properties?: unknown }).properties;
+  const named =
+    typeof properties === 'object' && properties !== null ? Object.keys(properties) : [];
+  return [...named, ...Object.values(node).flatMap(propertyNames)];
+}
+
 describe('the lists a phone takes', () => {
+  it('AC-07-91, the phase exit (task 2.7.4): no answer to anything a phone calls has a place for a rate, a rule, a transaction, a price or an amount, the login list and a sync’s answer included', () => {
+    // A phone's calls: those open to a proven phone or a monitor on one, and every path under
+    // `/phones`, which holds the three it makes before it is proven (enrolment, a challenge, a
+    // proof); the back office's own reads of phones there are held to it too.
+    const phones = endpoints.filter(
+      (defined) =>
+        defined.access === 'PROVEN_PHONE' ||
+        defined.access === 'MONITOR_ON_PHONE' ||
+        defined.path.startsWith('/phones'),
+    );
+    expect(phones.length).toBeGreaterThan(15);
+    expect(phones.map((defined) => defined.name)).toContain('phoneLoginList');
+    expect(phones.map((defined) => defined.name)).toContain('syncPhone');
+    expect(phones.map((defined) => defined.name)).toContain('enrolPhone');
+    const words = phones.flatMap((defined) =>
+      propertyNames(z.toJSONSchema(defined.answer, { io: 'output' })).flatMap((key) =>
+        key.split(/(?=[A-Z])|_/).map((word) => `${defined.name}.${key}:${word.toLowerCase()}`),
+      ),
+    );
+    expect(words.length).toBeGreaterThan(100);
+    expect(
+      words.filter((said) => /:(rates?|rules?|transactions?|prices?|amounts?)$/.test(said)),
+    ).toEqual([]);
+  });
+
   it('AC-07-91: the lists’ shape has no place for a rate, a rule, a transaction, a price or a description, and it is strict, so nothing more can be sent', () => {
     const keys = keysOf(phoneListsSchema);
     expect(keys.length).toBeGreaterThan(20);

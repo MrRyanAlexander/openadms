@@ -9,6 +9,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  changeMonitorSessionHoursEndpoint,
   endpoints,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
@@ -22,9 +23,16 @@ import { masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
+import {
+  enrolledPhone,
+  passcode,
+  proven,
+  provenBoth,
+  senderOf,
+  type TestPhone,
+} from './support/phones.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
-import { p1Priced, told } from './support/setup.ts';
+import { ask, p1Priced, saved, told } from './support/setup.ts';
 
 let db: Database;
 
@@ -40,6 +48,8 @@ const world = worldOn(() => db);
 const wrongPasscode = 'heron-landing-marsh';
 const refused = [401, 'MASTER_PASSCODE_REFUSED'];
 const notSignedIn = [401, 'NOT_SIGNED_IN'];
+// A monitor's own sign-in, as the firm's settings ship (ADR-531), and as a firm may set it.
+const aDay = 24 * 3600;
 const twelveHours = 12 * 3600;
 // 6:30 am on Monday in Bayline County (UTC−04:00 in October), and 6 pm that day.
 const mondayMorning = new Date('2026-10-12T10:30:00Z');
@@ -77,7 +87,7 @@ async function theTowersPhone(served: Served, tx: Tx, at = mondayMorning) {
   const dana = await served.signedIn(danasEmail, long);
   const priced = await p1Priced(served, dana, tx);
   const phone = await enrolledPhone(served, tx, 'P1-TWR-LF');
-  const token = await proven(served, phone);
+  const token = await provenBoth(served, phone);
   const created = async (name: string, password: string): Promise<Monitor> => {
     const made = await served.ask('POST', '/phones/current/monitors', {
       bearer: token,
@@ -91,8 +101,9 @@ async function theTowersPhone(served: Served, tx: Tx, at = mondayMorning) {
   // The supervisor sets the phone up for a monitor, on Monday by its own clock: reported.
   const setUpFor = async (monitor: Monitor): Promise<string> => {
     const id = randomUUID();
+    // The supervisor at the phone: the master user, by the passcode beside its proof (ADR-531).
     const answer = await served.ask('POST', reportUnplannedAssignmentEndpoint.path, {
-      bearer: token,
+      bearer: senderOf(token),
       payload: {
         id,
         projectId: priced.project.id,
@@ -209,7 +220,11 @@ describe('who may open a session under the master passcode', () => {
       const { phone, tariq } = await theTowersPhone(served, tx);
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00.000Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00.000Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00.000Z'),
+        },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);
@@ -221,7 +236,8 @@ describe('who may open a session under the master passcode', () => {
         });
         expect([told(answer), (answer.body as { message?: string }).message]).toEqual([
           [409, 'PHONE_OUT_OF_SERVICE'],
-          'Not opened: this phone was taken out of service. A session is opened on a phone in service.',
+          // The door's, before the service is asked (ADR-531).
+          'Not done: this phone was taken out of service. It only sends what it holds and is turned in.',
         ]);
         expect(await audited(tx, answer.requestId)).toEqual([]);
       }
@@ -284,13 +300,13 @@ describe('a session opened under the master passcode', () => {
         tariq.monitorNumber,
         'Tariq Patel',
         'AS_MONITOR',
-        twelveHours,
+        aDay,
         assignmentId,
         null,
       ]);
       const at = mondayMorning.toISOString();
       expect(await sessions(tx, phone)).toEqual([
-        [tariq.userId, 'AS_MONITOR', at, '2026-10-12T22:30:00.000Z', null],
+        [tariq.userId, 'AS_MONITOR', at, '2026-10-13T10:30:00.000Z', null],
       ]);
       // Whoever held the passcode is not known: the records name the passcode, never Tariq.
       const written = [masterPasscodeActorId, 'DEVICE', phone.id];
@@ -308,7 +324,7 @@ describe('a session opened under the master passcode', () => {
         userId: tariq.userId,
         monitorNumber: tariq.monitorNumber,
         name: 'Tariq Patel',
-        expiresInSeconds: twelveHours,
+        expiresInSeconds: aDay,
         masterPasscodeSession: 'AS_MONITOR',
       });
       // Nothing the server keeps is the token.
@@ -342,11 +358,11 @@ describe('a session opened under the master passcode', () => {
       });
       served.clock.at = new Date(mondayEnds);
       expect(told(await whoIsOn(served, late, made.token))).toEqual(notSignedIn);
-      // Lee's own sign-in is unmarked and lasts its twelve hours.
+      // Lee's own sign-in is unmarked and lasts the firm's hours.
       const own = await signedIn(served, late, lee);
       expect(phoneMonitorAnswerSchema.parse((await whoIsOn(served, late, own)).body)).toMatchObject(
         {
-          expiresInSeconds: twelveHours,
+          expiresInSeconds: aDay,
           masterPasscodeSession: null,
         },
       );
@@ -355,8 +371,13 @@ describe('a session opened under the master passcode', () => {
 
   it('ADR-462 a temporary session never outlasts a monitor’s own sign-in, and with no assignment for the phone to take there is no project’s day: the hours alone end it', async () => {
     await world(async (served, tx) => {
-      // 6:30 am: midnight is seventeen and a half hours off.
-      const { phone, token, tariq, lee, setUpFor } = await theTowersPhone(served, tx);
+      // 6:30 am: midnight is seventeen and a half hours off, and Dana has set a monitor's
+      // sign-in to twelve hours (ADR-531): read as each session is opened.
+      const { dana, phone, token, tariq, lee, setUpFor } = await theTowersPhone(served, tx);
+      saved(
+        changeMonitorSessionHoursEndpoint,
+        await ask(served, dana, changeMonitorSessionHoursEndpoint, { payload: { hours: 12 } }),
+      );
       await setUpFor(tariq);
       const early = await opened(served, token, tariq.userId, 'TEMPORARY');
       expect([early.expiresInSeconds, early.assignment === null]).toEqual([twelveHours, false]);
@@ -369,8 +390,8 @@ describe('a session opened under the master passcode', () => {
         null,
         'NONE_THAT_DAY',
       ]);
-      // As the phone's monitor it lasts its hours whatever the day: Tariq's, opened at 6 pm
-      // with six hours of Monday left, is twelve; the temporary one then would be six.
+      // As the phone's monitor it lasts the firm's hours whatever the day: Tariq's, opened at
+      // 6 pm with six hours of Monday left, is twelve; the temporary one then would be six.
       const asTariq = await opened(served, late, tariq.userId, 'AS_MONITOR');
       expect(asTariq.expiresInSeconds).toBe(twelveHours);
       expect((await opened(served, late, tariq.userId, 'TEMPORARY')).expiresInSeconds).toBe(
@@ -462,7 +483,7 @@ describe('the passcode it is opened under', () => {
     });
   });
 
-  it('AC-10-22 while the passcode waits after wrong tries the right one opens nothing either, and nothing is written; one address is stopped at its own fourth', async () => {
+  it('AC-10-22, AC-10-108 while the passcode waits after wrong tries the right one opens nothing either from an address that tried it wrong, and nothing is written; one address is stopped at its own fourth', async () => {
     await world(async (served, tx) => {
       const { phone, token, tariq } = await theTowersPhone(served, tx);
       const asked = { personId: tariq.userId, kind: 'AS_MONITOR' };
@@ -479,8 +500,8 @@ describe('the passcode it is opened under', () => {
       expect(told(await open(served, token, { ...asked, passcode: wrongPasscode }))).toEqual(
         refused,
       );
-      // The fifth wrong try in a row: the passcode waits, wherever the next comes from.
-      served.from = '198.51.100.12';
+      // The fifth wrong try in a row: the passcode waits for every address that tried it wrong
+      // (ADR-541), this one among them.
       const waiting = await open(served, token, { ...asked, passcode });
       expect(told(waiting)).toEqual(refused);
       expect(await audited(tx, waiting.requestId)).toEqual([]);

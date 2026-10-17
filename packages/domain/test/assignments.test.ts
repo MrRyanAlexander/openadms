@@ -2,7 +2,14 @@
 // ADR-240, 241, 308, 429).
 import { describe, expect, it } from 'vitest';
 
-import { AssignmentRules, assignableRoles, assignmentFormDocumentTypes } from '../src/index.ts';
+import {
+  AssignmentRules,
+  BoardWarnings,
+  assignableRoles,
+  assignmentFormDocumentTypes,
+  boardWarningCodes,
+  type AssignmentOnTheBoard,
+} from '../src/index.ts';
 
 const rules = new AssignmentRules();
 
@@ -64,6 +71,18 @@ describe('an assignment changed or withdrawn on the board', () => {
       code: 'ALREADY_WITHDRAWN',
       message: 'Kim Nguyen’s assignment was already withdrawn. Nothing was changed.',
     });
+  });
+
+  it('ADR-527 (13) a withdrawn one is put back; one that stands has nothing to put back; one made on a phone is never the board’s', () => {
+    expect(rules.putBackRefusal({ ...kims, withdrawn: true })).toBeNull();
+    expect(rules.putBackRefusal(kims)).toEqual({
+      code: 'NOT_WITHDRAWN',
+      message: 'Kim Nguyen’s assignment stands: there is nothing to put back. Nothing was changed.',
+    });
+    expect(
+      rules.putBackRefusal({ personName: 'Tariq Patel', origin: 'UNPLANNED', withdrawn: true })
+        ?.code,
+    ).toBe('MADE_ON_A_PHONE');
   });
 
   it('AC-02-26 one made on a phone under the master passcode is the phone’s, withdrawn or not', () => {
@@ -238,6 +257,113 @@ describe('an unplanned assignment a phone reports', () => {
     );
     expect(rules.reportedAgain({ origin: 'PLANNED', deviceId: null }, 'P1-TWR-LF')).toBe(
       'ID_ALREADY_HELD',
+    );
+  });
+});
+
+describe('what the board warns of (ADR-535 (1))', () => {
+  const warnings = new BoardWarnings();
+  const ana: AssignmentOnTheBoard = {
+    id: 'a1',
+    personId: 'ana',
+    personName: 'Ana Brooks',
+    workDate: '2026-10-12',
+    withdrawn: false,
+    deviceId: 'p1-col-1',
+    deviceName: 'P1-COL-1',
+    fieldEventKinds: ['COLLECTION'],
+    payItemCount: 0,
+    project: { name: 'Bayline ROW', activeFrom: '2026-10-12', activeTo: null, closed: false },
+    site: null,
+  };
+
+  it('the six warnings, each a plain sentence and never a refusal', () => {
+    expect(boardWarningCodes).toEqual([
+      'PERSON_TWICE_THAT_DAY',
+      'PHONE_TWICE_THAT_DAY',
+      'OUTSIDE_THE_ACTIVE_WINDOW',
+      'PROJECT_CLOSED',
+      'PAY_ITEMS_WITHOUT_UNIT_RATE_WORK',
+      'SITE_NOT_ACTIVE',
+    ]);
+  });
+
+  it('AC-02-29 nothing to say of one assignment that fits its day', () => {
+    expect(
+      warnings.of(ana, [
+        { id: 'a1', personId: 'ana', deviceId: 'p1-col-1', projectName: 'Bayline ROW' },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('AC-02-29 a second assignment for the same person that day, and the same phone, each said with the other project', () => {
+    expect(
+      warnings.of(ana, [
+        { id: 'a2', personId: 'ana', deviceId: 'p2-col-1', projectName: 'Bayline PPDR' },
+        { id: 'a3', personId: 'lee', deviceId: 'p1-col-1', projectName: 'Bayline ROW' },
+      ]),
+    ).toEqual([
+      {
+        code: 'PERSON_TWICE_THAT_DAY',
+        message:
+          'Ana Brooks has 1 other assignment on 2026-10-12 (Bayline PPDR). A phone takes one assignment at a time.',
+      },
+      {
+        code: 'PHONE_TWICE_THAT_DAY',
+        message: 'P1-COL-1 is named on 1 other assignment on 2026-10-12 (Bayline ROW).',
+      },
+    ]);
+  });
+
+  it('a day outside the active window, a closed project, pay items with no unit rate work, a site not yet active or closed', () => {
+    expect(
+      warnings
+        .of(
+          {
+            ...ana,
+            workDate: '2026-10-11',
+            deviceId: null,
+            payItemCount: 2,
+            project: { ...ana.project, closed: true },
+            site: { name: 'Bayline Landfill', activeFrom: '2026-10-13', closedOn: null },
+          },
+          [],
+        )
+        .map((warning) => warning.message),
+    ).toEqual([
+      '2026-10-11 is outside Bayline ROW’s active window (2026-10-12 to no end): its tickets will be flagged "project not active".',
+      'Bayline ROW is closed: field work sent for it is held for a person.',
+      'Ana Brooks’s assignment names 2 unit rate pay items but no unit rate work: the phone won’t offer them.',
+      'Bayline Landfill isn’t active until 2026-10-13.',
+    ]);
+    expect(
+      warnings.of(
+        {
+          ...ana,
+          workDate: '2026-10-20',
+          project: { ...ana.project, activeTo: '2026-10-31' },
+          site: { name: 'Bayline Landfill', activeFrom: '2026-10-01', closedOn: '2026-10-19' },
+        },
+        [],
+      ),
+    ).toEqual([{ code: 'SITE_NOT_ACTIVE', message: 'Bayline Landfill was closed on 2026-10-19.' }]);
+  });
+
+  it('a day past the window’s end is outside it too', () => {
+    expect(
+      warnings
+        .of(
+          { ...ana, workDate: '2026-11-02', project: { ...ana.project, activeTo: '2026-10-31' } },
+          [],
+        )
+        .map((warning) => warning.code),
+    ).toEqual(['OUTSIDE_THE_ACTIVE_WINDOW']);
+  });
+
+  it('a withdrawn assignment is warned of nothing; unit rate work with its pay items is nothing to say', () => {
+    expect(warnings.of({ ...ana, withdrawn: true, workDate: '2020-01-01' }, [])).toEqual([]);
+    expect(warnings.of({ ...ana, fieldEventKinds: ['UNIT_RATE'], payItemCount: 3 }, [])).toEqual(
+      [],
     );
   });
 });

@@ -17,6 +17,11 @@ const shipped = {
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
   DATABASE_POOL_CONNECTIONS: '10',
+  DATABASE_CONNECTION_WAIT_MS: '2000',
+  DATABASE_WORK_LONGEST_MS: '5000',
+  DATABASE_BUSY_RETRY_SECONDS: '5',
+  MAP_FILE_RING_PAIRS_AT_MOST: '50000000',
+  ESRI_LAYER_ANSWER_SECONDS: '60',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -35,21 +40,36 @@ const shipped = {
   LOGIN_LIST_ENTRIES_PER_CALL: '50',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
+  MEDIA_FILE_BYTES_AT_MOST: '33554432',
+  MEDIA_PART_BYTES_AT_MOST: '4194304',
+  MEDIA_RECEIVING_BYTES_AT_MOST: '268435456',
+  RATE_LIMIT_FILE_PARTS_PER_PHONE: '300',
+  MAP_FILE_BYTES_AT_MOST: '16777216',
+  MAP_FILE_UNZIPPED_BYTES_AT_MOST: '67108864',
+  MAP_FILE_ENTRIES_AT_MOST: '1000',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
+  RATE_LIMIT_REQUESTS_PER_PHONE: '600',
   RATE_LIMIT_COUNTS_KEPT: '100000',
   SIGN_IN_ADDRESS_WINDOW_MINUTES: '60',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS: '30',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN: '4',
   PASSWORD_RESET_ASKS_PER_ADDRESS: '10',
   PASSWORD_RESET_ASKS_PER_LOGIN: '3',
+  MASTER_PASSCODE_MINIMUM_LENGTH: '8',
+  MASTER_PASSCODE_MAXIMUM_LENGTH: '128',
+  PHONE_KEY_REVOKED_AFTER_HOURS: '24',
   JOB_TRIES_BEFORE_SET_ASIDE: '5',
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
   DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
+  PHONE_HELD_BYTES_PER_DAY: '16777216',
+  PHONE_HELD_RECORDS_PER_DAY: '1000',
+  MAP_FILE_READ_SECONDS: '60',
+  MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
 };
 const noon = new Date('2026-10-12T16:00:00Z');
 const later = (seconds: number): Date => new Date(noon.getTime() + seconds * 1000);
@@ -95,6 +115,8 @@ describe('the limits, from the policy', () => {
     ).toEqual([
       ['REQUESTS_BY_ADDRESS', 3000, 60],
       ['REQUESTS_BY_ACCOUNT', 600, 60],
+      ['FILE_PARTS_BY_PHONE', 300, 60],
+      ['REQUESTS_BY_PHONE', 600, 60],
       ['WRONG_TRIES_BY_ADDRESS', 30, 3600],
       ['WRONG_TRIES_BY_ADDRESS_AT_LOGIN', 4, 3600],
       ['RESET_ASKS_BY_ADDRESS', 10, 3600],
@@ -129,6 +151,7 @@ describe('the limits, from the policy', () => {
     for (const name of [
       'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+      'RATE_LIMIT_REQUESTS_PER_PHONE',
       'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
       'PASSWORD_RESET_ASKS_PER_ADDRESS',
       'PASSWORD_RESET_ASKS_PER_LOGIN',
@@ -165,6 +188,42 @@ describe('the limits, from the policy', () => {
         SIGN_IN_TRIES_BEFORE_WAIT: '6',
       }),
     ).not.toThrow();
+  });
+
+  it('ADR-482 the API holds at least one whole photograph’s file while its parts come, and a phone’s parts are a limit of their own', () => {
+    expect(() => Policy.from({ ...shipped, MEDIA_RECEIVING_BYTES_AT_MOST: '33554431' })).toThrow(
+      'The policy value MEDIA_RECEIVING_BYTES_AT_MOST must be at least MEDIA_FILE_BYTES_AT_MOST.',
+    );
+    expect(() =>
+      Policy.from({ ...shipped, MEDIA_RECEIVING_BYTES_AT_MOST: '33554432' }),
+    ).not.toThrow();
+    // A part larger than a file is harmless: no part goes past its file's length.
+    expect(() => Policy.from({ ...shipped, MEDIA_FILE_BYTES_AT_MOST: '1048576' })).not.toThrow();
+    for (const [name, below] of [
+      ['MEDIA_FILE_BYTES_AT_MOST', '1048575'],
+      ['MEDIA_PART_BYTES_AT_MOST', '65535'],
+      ['RATE_LIMIT_FILE_PARTS_PER_PHONE', '0'],
+      ['RATE_LIMIT_REQUESTS_PER_PHONE', '0'],
+    ] as const) {
+      expect(() => Policy.from({ ...shipped, [name]: below }), name).toThrow(name);
+    }
+  });
+
+  it('ADR-485 a map’s file, and its parts unzipped, are each at least a mebibyte; a zip may hold a shapefile’s four files at least, and no more than a zip can', () => {
+    for (const name of ['MAP_FILE_BYTES_AT_MOST', 'MAP_FILE_UNZIPPED_BYTES_AT_MOST'] as const) {
+      expect(() => Policy.from({ ...shipped, [name]: '1048575' }), name).toThrow(name);
+      expect(() => Policy.from({ ...shipped, [name]: '1048576' }), name).not.toThrow();
+    }
+    for (const [entries, taken] of [
+      ['3', false],
+      ['4', true],
+      ['65535', true],
+      ['65536', false],
+    ] as const) {
+      const read = () => Policy.from({ ...shipped, MAP_FILE_ENTRIES_AT_MOST: entries });
+      if (taken) expect(read, entries).not.toThrow();
+      else expect(read, entries).toThrow('MAP_FILE_ENTRIES_AT_MOST');
+    }
   });
 });
 

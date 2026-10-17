@@ -1,7 +1,7 @@
 // Setup's endpoints, steps 3, 4 and 7 and the setup as it stands, against the database
-// (spec/parts/01-setup.md; ARCHITECTURE §6; acceptance file 01, AC-01-21 and sections F and H;
-// file 10, AC-10-27; BACKLOG 2.4.2, C97, C98, C99; ADR-321, 422, 423, 426): a contractor merged
-// into another; disposal sites, a site's own shape and its tipping fee pay item; the project's
+// (spec/parts/01-setup.md; ARCHITECTURE §6; acceptance file 01, sections F and H; file 10,
+// AC-10-27; BACKLOG 2.4.2, C97, C98, C99; ADR-321, 422, 423, 426, 529): disposal sites, a site's
+// own shape and its tipping fee pay item; the project's
 // map; the setup check and what each site's phones ask for. OWASP ASVS 5.0 V2, V8, V16. The real
 // process, in this test's own memory, on the installation's database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
@@ -17,7 +17,6 @@ import {
   createSiteEndpoint,
   linkTippingFeeEndpoint,
   loadMapEndpoint,
-  mergeContractorEndpoint,
   quantityLookupEndpoint,
   savePaysWhenEndpoint,
   setupCheckEndpoint,
@@ -343,7 +342,7 @@ describe('step 7: Dana enters P1’s disposal sites through the endpoints', () =
     });
   });
 
-  it('AC-01-57 Bayline County Landfill keeps the link to its tipping fee pay item TIP-FEE-CY-BCL, and to a second, TIP-FEE-TN-BCL; the same pay item linked twice is told plainly', async () => {
+  it('AC-01-57 Bayline County Landfill keeps the link to its tipping fee pay item TIP-FEE-CY-BCL, and to a second, TIP-FEE-TN-BCL; the same pay item linked again is the link it has, never a second (ADR-527 (9))', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
       const { project, landfill, enter, payItem, payableType } = await p1Sites(api, dana, tx);
@@ -373,9 +372,9 @@ describe('step 7: Dana enters P1’s disposal sites through the endpoints', () =
       });
       saved(linkTippingFeeEndpoint, await link(await fee('TIP-FEE-TN-BCL', 'TN')));
       expect(await tx.disposalSiteTippingFee.count({ where: { siteId: bcl.id } })).toBe(2);
-      const twice = await link(perCy);
-      expect(told(twice)).toEqual([409, 'ALREADY_HELD']);
-      expect(plainly(twice)).toBe('Not saved: the site is already linked to that pay item.');
+      const twice = saved(linkTippingFeeEndpoint, await link(perCy));
+      expect([twice.record, twice.queued]).toEqual([first.record, undefined]);
+      expect(await tx.disposalSiteTippingFee.count({ where: { siteId: bcl.id } })).toBe(2);
     });
   });
 });
@@ -462,99 +461,18 @@ describe('step 3: Dana loads P1’s map through the endpoint', () => {
   });
 });
 
-describe('step 4: a sub typed twice at certification is merged through the endpoint', () => {
-  it('AC-01-21 "Rivera Trucking Inc" is merged into "Rivera Trucking": it is archived, pointing at the one kept, its place on P1 taken off, each row audited with Dana as the actor and nothing deleted; merged again, into itself, or a prime merged, it is not saved and she is told why', async () => {
-    await world(async (api, tx, who) => {
-      const dana = await api.signedIn(danasEmail, long);
-      const { project, coastline, contractor } = await p1Priced(api, dana, tx);
-      const kept = await contractor('Rivera Trucking');
-      const typedAgain = await contractor('Rivera Trucking Inc');
-      // As certifying a truck places the sub it was typed with (ADR-108): tier 1 under Coastline.
-      for (const contractorId of [kept, typedAgain]) {
-        await tx.projectContractor.create({
-          data: {
-            projectId: project.id,
-            contractorId,
-            position: 'SUB_TIER_1',
-            primeId: coastline,
-          },
-        });
-      }
-      const merge = (duplicate: string, into: string) =>
-        ask(api, dana, mergeContractorEndpoint, {
-          ids: { contractorId: duplicate },
-          payload: { intoContractorId: into },
-        });
-      expect(notSaved(await merge(kept, kept))).toEqual([
-        'MERGE_INTO_ITSELF',
-        'Not merged: Rivera Trucking can’t be merged into itself.',
-      ]);
-      expect(notSaved(await merge(coastline, kept))[0]).toBe('MERGE_OF_A_PRIME');
-      const answer = await merge(typedAgain, kept);
-      const merged = saved(mergeContractorEndpoint, answer);
-      expect(merged.record).toMatchObject({
-        id: typedAgain,
-        name: 'Rivera Trucking Inc',
-        mergedIntoId: kept,
-        archived: true,
-      });
-      // No certification named it: nothing to queue, and the answer says so by saying nothing.
-      expect(merged.queued).toBeUndefined();
-      expect(
-        (
-          await tx.auditRecord.findMany({
-            where: { requestId: answer.requestId },
-            select: { tableName: true, operation: true, actorId: true },
-            orderBy: { id: 'asc' },
-          })
-        ).map((record) => [record.tableName, record.operation, record.actorId === who.dana]),
-      ).toEqual([
-        ['project_contractor', 'UPDATE', true],
-        ['contractor', 'UPDATE', true],
-      ]);
-      expect(
-        (
-          await tx.projectContractor.findMany({
-            where: { projectId: project.id, position: 'SUB_TIER_1' },
-            orderBy: { id: 'asc' },
-          })
-        ).map((place) => [place.contractorId === kept, place.archivedAt === null]),
-      ).toEqual([
-        [true, true],
-        [false, false],
-      ]);
-      expect(notSaved(await merge(typedAgain, kept))).toEqual([
-        'MERGE_ALREADY_MERGED',
-        'Not merged: Rivera Trucking Inc was already merged into another contractor.',
-      ]);
-      expect(notSaved(await merge(kept, typedAgain))[0]).toBe('MERGE_INTO_ARCHIVED');
-      // A contractor nobody has is not found; a body that names no contractor is refused.
-      expect(told(await merge(project.id, kept))).toEqual([404, 'NOT_FOUND']);
-      expect(
-        told(
-          await ask(api, dana, mergeContractorEndpoint, {
-            ids: { contractorId: kept },
-            payload: { into: typedAgain },
-          }),
-        ),
-      ).toEqual([400, 'BAD_REQUEST']);
-      expect(await tx.contractor.count({ where: { name: { startsWith: 'Rivera' } } })).toBe(2);
-    });
-  });
-});
-
 describe('the setup as it stands', () => {
   const standing = [setupCheckEndpoint, quantityLookupEndpoint, siteQuantityLookupEndpoint];
 
-  it('AC-10-27 the setup check and the lookups are open to an admin and to a manager/analyst, with or without Setup; nobody not signed in and no read-only viewer is answered', async () => {
+  it('AC-10-27, AC-10-107 the setup check and the lookups are open to an admin and to a manager/analyst let see setup, with or without Setup; nobody not signed in, no read-only viewer and no manager/analyst without the view is answered', async () => {
     await world(async (api, tx, who, within) => {
       for (const served of standing) {
-        const { name, access, roles, method } = served;
-        expect([name, access, roles, 'permission' in served, method]).toEqual([
+        const { name, access, roles, permission, method } = served;
+        expect([name, access, roles, permission, method]).toEqual([
           name,
           'SIGNED_IN',
           backOfficeRoles,
-          false,
+          'VIEW_SETUP',
           'GET',
         ]);
       }
@@ -583,6 +501,16 @@ describe('the setup as it stands', () => {
           told(await ask(api, luis, served, { ...more, query: '?archived=true' })),
           served.name,
         ).toEqual([400, 'BAD_REQUEST']);
+      }
+      // "View setup" taken from him, his very next ask of each is refused, Setup or not (ADR-539).
+      await tx.userPermission.updateMany({
+        where: { userId: who.luis, permission: 'VIEW_SETUP' },
+        data: { archivedAt: new Date() },
+      });
+      await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
+      for (const served of standing) {
+        const more = { ids: { ...ids, siteId: tdsr.id } };
+        expect(told(await ask(api, luis, served, more)), served.name).toEqual([403, 'NOT_ALLOWED']);
       }
     });
   });

@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { MapServers } from '../src/index.ts';
 import { Health } from '../src/process/health.ts';
+import type { WorkerStanding } from '../src/process/job-loop.ts';
 import { WorkerLog } from '../src/process/logs.ts';
 import { builtInPolicy, installationPolicy } from '../src/process/policy.ts';
 import { Settings, SettingsProblem } from '../src/process/settings.ts';
@@ -21,8 +22,10 @@ import { Settings, SettingsProblem } from '../src/process/settings.ts';
 // Made-up values, this test's own; the login's URL is put together here so that no file holds one.
 const word = ['made', 'up', 'for', 'this', 'test'].join('-');
 const sha256 = '08c07f96ad5863a267cb09c0921d9b6dd6904d8b2fe0704f67ec866af11d1888';
+// The login asks TLS alone, its server's certificate and name checked (KD-78; ADR-517).
+const tls = '?sslmode=verify-full';
 const good: Record<string, string> = {
-  DATABASE_URL: `postgresql://adms_worker:${word}@127.0.0.1:55432/adms`,
+  DATABASE_URL: `postgresql://adms_worker:${word}@127.0.0.1:55432/adms${tls}`,
   ADMS_ROUTING_URL: 'https://routing.adms.localhost',
   ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost:8443',
   ADMS_MAP_EXTRACT_SHA256: sha256,
@@ -85,7 +88,18 @@ describe('the settings the worker starts with', () => {
 
   it('AC-10-55: each one that is malformed is named, never with its value', () => {
     const off: Record<string, string[]> = {
-      DATABASE_URL: ['not-a-url-9f3c', 'https://9f3c.example', 'postgresql://adms_worker@h/adms'],
+      DATABASE_URL: [
+        'not-a-url-9f3c',
+        'https://9f3c.example',
+        `postgresql://adms_worker@h/adms${tls}`,
+        // TLS alone, the certificate and name checked: no URL that asks less (KD-78).
+        `postgresql://adms_worker:${word}@h/adms-9f3c`,
+        `postgresql://adms_worker:${word}@h/adms-9f3c?sslmode=require`,
+        `postgresql://adms_worker:${word}@h/adms-9f3c?sslmode=prefer`,
+        `postgresql://adms_worker:${word}@h/adms-9f3c${tls}&sslmode=disable`,
+        `postgresql://adms_worker:${word}@h/adms-9f3c${tls}&sslrootcert=/nowhere/9f3c.crt`,
+      ],
+      ADMS_DATABASE_CA_FILE: ['/nowhere/9f3c.crt'],
       // A map server is asked over HTTPS only (ADR-098), by its address alone.
       ADMS_ROUTING_URL: ['http://routing-9f3c.adms.localhost', 'https://h-9f3c/route', '9f3c'],
       ADMS_ADDRESSES_URL: ['http://addresses-9f3c.adms.localhost', 'https://u:9f3c@h'],
@@ -112,8 +126,24 @@ describe('the settings the worker starts with', () => {
       ADMS_DATABASE_ADDRESS: 'postgres:5432',
       ADMS_MAP_SERVERS_ADDRESS: '172.30.213.2:443',
     });
-    expect(settings.databaseUrl).toBe(`postgresql://adms_worker:${word}@postgres:5432/adms`);
+    expect(settings.databaseUrl).toBe(`postgresql://adms_worker:${word}@postgres:5432/adms${tls}`);
     expect(settings.mapServersAt).toEqual({ host: '172.30.213.2', port: 443 });
+    // Inside the stack the root its certificate is checked against is the stack's own path to it,
+    // whatever this machine's path the installer wrote.
+    const root = fileWith('root.crt', '-----BEGIN CERTIFICATE-----\nMIIB\n');
+    const inStack = new URL(
+      Settings.from({
+        ...good,
+        DATABASE_URL: `${good['DATABASE_URL'] ?? ''}&sslrootcert=%2Fnowhere%2Fhost%2Froot.crt`,
+        ADMS_DATABASE_ADDRESS: 'postgres:5432',
+        ADMS_DATABASE_CA_FILE: root,
+      }).databaseUrl,
+    );
+    expect([
+      inStack.host,
+      inStack.searchParams.get('sslmode'),
+      inStack.searchParams.get('sslrootcert'),
+    ]).toEqual(['postgres:5432', 'verify-full', root]);
     expect(settings.routingUrl).toBe('https://routing.adms.localhost');
   });
 
@@ -156,7 +186,9 @@ describe('the policy the worker runs with (ADR-395, 419)', () => {
       shipped.mapServerAnswerSeconds,
       shipped.databasePoolConnections,
       shipped.deviceClockOffLimitMinutes,
-    ]).toEqual([5, 10, 5, 30, 10, 5]);
+      shipped.databaseConnectionWaitMs,
+      shipped.databaseWorkLongestMs,
+    ]).toEqual([5, 10, 5, 30, 10, 5, 2000, 5000]);
   });
 
   it('takes the installation’s own value under the same name, held to the same range', () => {
@@ -297,19 +329,35 @@ describe('the worker’s health answer (ADR-419)', () => {
       req.end();
     });
 
-  it('says that the process answers and how its queue stands, and nothing else; any other question is not found', async () => {
-    let standing = { jobsWaiting: 0, jobsSetAside: 0 };
+  it('says how the worker and its queue stand, and nothing else: 200 when it is well, 503 when it isn’t, with the problem named; any other question is not found', async () => {
+    let standing: WorkerStanding = {
+      status: 'ok',
+      jobsWaiting: 0,
+      jobsSetAside: 0,
+      oldestJobWaitingSeconds: 0,
+    };
     const health = new Health(() => standing);
     await health.listen('127.0.0.1', 0);
     try {
       expect(await asked(health.port, 'GET', '/health')).toEqual({
         status: 200,
-        body: '{"status":"ok","jobsWaiting":0,"jobsSetAside":0}',
+        body: '{"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}',
       });
-      standing = { jobsWaiting: 2, jobsSetAside: 1 };
+      standing = { status: 'ok', jobsWaiting: 2, jobsSetAside: 1, oldestJobWaitingSeconds: 42 };
       expect(await asked(health.port, 'GET', '/health')).toEqual({
         status: 200,
-        body: '{"status":"ok","jobsWaiting":2,"jobsSetAside":1}',
+        body: '{"status":"ok","jobsWaiting":2,"jobsSetAside":1,"oldestJobWaitingSeconds":42}',
+      });
+      standing = {
+        status: 'unavailable',
+        problem: 'QUEUE_NOT_READ',
+        jobsWaiting: 2,
+        jobsSetAside: 1,
+        oldestJobWaitingSeconds: 42,
+      };
+      expect(await asked(health.port, 'GET', '/health')).toEqual({
+        status: 503,
+        body: '{"status":"unavailable","problem":"QUEUE_NOT_READ","jobsWaiting":2,"jobsSetAside":1,"oldestJobWaitingSeconds":42}',
       });
       for (const [method, path] of [
         ['GET', '/'],

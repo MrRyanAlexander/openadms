@@ -13,10 +13,16 @@
 // ticket's lines, and the ticket stays void, out of every later run, until a person unvoids it.
 //
 // Not here: correcting, voiding and locking as a reviewer's actions, with their permissions and
-// reasons (Milestone 1.8): where this story needs one it writes it as the API's login may, to
+// reasons (Milestone 1.8): where this story needs one it is Luis's request at its endpoint, to
 // show what the worker does when the ticket comes back. A person's void and unvoid (1.8.4).
 // The golden mission in full, with P2, is 1.9.1.
 import { ContractorSetup, PayItemSetup, RuleSetup, SiteSetup } from '@open-adms/api';
+import {
+  correctFieldEventEndpoint,
+  lockAsInvoicedEndpoint,
+  readTicketDecisionsEndpoint,
+  setQcStatusEndpoint,
+} from '@open-adms/contracts';
 import { Prisma, systemActorId, type Database } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -29,9 +35,11 @@ import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -41,16 +49,14 @@ const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-0
 
 // What a run did with each ticket, as lines a person reads.
 const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
-        [
-          ticket.ticketNumber,
-          ticket.status,
-          ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
-          ...ticket.flags,
-        ].join(' · '),
-      )
-    : [outcome.message];
+  outcome.tickets.map((ticket) =>
+    [
+      ticket.ticketNumber,
+      ticket.status,
+      ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
+      ...ticket.flags,
+    ].join(' · '),
+  );
 
 const dollars = (cents: number): string =>
   `$${Math.trunc(cents / 100).toLocaleString('en-US')}.${String(cents % 100).padStart(2, '0')}`;
@@ -136,9 +142,9 @@ export const p1Priced: Story = {
     };
     const mileages = new Mileages(new MapServers(localMapServers()));
     const reconciliation = new Reconciliation(worker, clock, settings, mileages);
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
-    const setupChange = { projectId: p1, trigger: 'SETUP_CHANGE' } as const;
-    const askedByLuis = { projectId: p1, trigger: 'CORRECTION', requestedById: luis } as const;
+    // The worker's own job loop: it takes up what each sync and setup change queued.
+    const queue = new QueueRuns(story, reconciliation);
+    const load = (ticketNumber: string) => ({ workflow: 'LOAD', ticketNumber }) as const;
 
     // The ledger as it stands: every line with its ticket (and property or pile), its #, its
     // pay item, quantity × rate = amount, and whose work it is.
@@ -225,9 +231,8 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(mondayEvening.toISOString(), 'Monday evening at the yard: the phones find signal');
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     story.at(on('12', '18:45'), 'The worker runs on P1');
-    const monday = await reconciliation.run(sync);
+    const monday = await queue.settled(p1);
     story.check(
       'Monday’s tickets: all whole but the preload 101004; 101003 in review for its 96% call',
       told(monday),
@@ -266,7 +271,7 @@ export const p1Priced: Story = {
         '301003: Coastline Haulers LLC',
       ],
     );
-    const mondayRun = monday.ran ? monday.runId : '';
+    const mondayRun = monday.runId;
     story.check(
       'AC-07-92, 107 each ticket’s lines were written in the same run, and the same piece of work, as its completed record, flags and status: every line names Monday’s run, and each was audited as written by the system actor',
       [
@@ -298,9 +303,9 @@ export const p1Priced: Story = {
       'Tuesday evening: every phone but the Marsh Road tower’s finds signal',
     );
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
     story.at(on('13', '18:45'), 'The worker runs');
-    const tuesday = await reconciliation.run(sync);
+    await queue.settle(p1);
+    const tuesday = await queue.standing(p1);
     story.check(
       'Tuesday night: 101004, 101005 and 101006 wait for the disposals on the tower’s dead phone; 301005, a 20 in stump no band fits, is in review',
       told(tuesday),
@@ -355,7 +360,7 @@ export const p1Priced: Story = {
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
     const beforeWednesday = await ids();
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     const afterWednesday = await ids();
     story.check(
       'AC-07-112 P1’s Monday and Tuesday priced, before any review: the tower’s disposals pair 101004 (24.0 CY, $180.00) and 101005 (45.5 CY, $341.25); 101006 still waits for the disposal typed as 101060',
@@ -377,10 +382,20 @@ export const p1Priced: Story = {
       [0, 2, 0],
     );
 
-    story.at(on('14', '07:30'), 'The worker runs again, with nothing changed');
+    story.at(
+      on('14', '07:30'),
+      'Dana grants Luis correct; at his browser he asks for every ticket of P1 to be reprocessed, with nothing changed; the worker takes the job up',
+    );
+    // Dana and Luis at their browsers (ADR-497, 498): a reprocess with nothing changed is his
+    // request at its endpoint, part of correcting; each correction queues its own job, the
+    // ticket and its neighbours, at its endpoint.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
+    const luiss = await backOffice.luiss();
     const standing = await ids();
     const auditedLines = await audited('transaction');
-    await reconciliation.run({ projectId: p1, trigger: 'REPROCESS', requestedById: luis });
+    await backOffice.reprocess((await queue.standing(p1)).tickets);
+    await queue.settle(p1);
     story.check(
       'AC-07-101 the ledger shows the same lines, each the same record: nothing was removed, nothing written, and the audit log holds no new record of a line',
       [await ids(), await audited('transaction'), await total()],
@@ -390,19 +405,22 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '08:00'),
-      'Luis corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s). The worker runs, and the database refuses the new line (the story makes it so)',
+      'At his browser Luis corrects 101001’s load call from 80% to 70% (the correction itself is Part 8’s), which queues its job. The worker runs, and the database refuses the new line (the story makes it so)',
     );
-    const correct = (where: Prisma.FieldEventWhereInput, data: { loadCall?: number }) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE', reason: 'Correction' }, async (tx) => {
-        const event = await tx.fieldEvent.findFirstOrThrow({ where });
-        await tx.fieldEvent.update({ where: { id: event.id }, data });
+    const dis101001 = await api.fieldEvent.findFirstOrThrow({
+      where: { projectId: p1, ticketNumber: '101001', kind: 'DISPOSAL' },
+    });
+    const correctCall = async (loadCall: number): Promise<void> => {
+      await luiss.answered(correctFieldEventEndpoint, {
+        ids: { fieldEventId: dis101001.id },
+        json: { changes: { loadCall } },
       });
-    const dis101001 = { ticketNumber: '101001', kind: 'DISPOSAL' } as const;
+    };
     const lineOf101001 = (await lines()).find((each) => each.ticket === '101001');
     const loadOf101001 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101001' },
     });
-    await correct(dis101001, { loadCall: 70 });
+    await correctCall(70);
     // The worker's own client, but no line can be written: the old line was removed just before,
     // inside the same piece of work.
     const refusingALine: Database = new Proxy(worker, {
@@ -429,9 +447,10 @@ export const p1Priced: Story = {
         return write;
       },
     });
-    const failed = await new Reconciliation(refusingALine, clock, settings, mileages).run(
-      askedByLuis,
-    );
+    const failed = await new QueueRuns(
+      story,
+      new Reconciliation(refusingALine, clock, settings, mileages),
+    ).settled(p1);
     story.check(
       'AC-07-102 none of 101001’s work is kept: its $390.00 line is still there, the same record, no removal is in the audit log, and its completed load still says 52.0 CY; the ticket is flagged "could not be processed", and the flag says its lines are as of its last run (the user, ADR-360)',
       [
@@ -453,9 +472,29 @@ export const p1Priced: Story = {
         '52.0',
       ],
     );
+    // What the failed run decided, as Luis reads it at its endpoint (AC-10-106; ADR-536): that
+    // it could not be processed, in the worker's words, and never the error's own text.
+    const { decisions: failedDecisions } = await luiss.answered(readTicketDecisionsEndpoint, {
+      ids: { projectId: p1, workflow: 'LOAD', ticketNumber: '101001' },
+      query: { limit: '1' },
+    });
+    story.check(
+      'AC-10-106 Luis reads what the failed run decided for 101001: the ticket stood COMPLETED and could not be processed, in the worker’s words; the error’s own text is the server’s log, never the answer',
+      failedDecisions.map((decision) => [
+        decision.status,
+        decision.processed,
+        decision.why,
+        JSON.stringify(decision).includes('refused'),
+      ]),
+      [['COMPLETED', false, 'It could not be processed.', false]],
+    );
 
-    story.at(on('14', '08:10'), 'The worker runs again, with nothing in its way');
-    await reconciliation.run(askedByLuis);
+    story.at(
+      on('14', '08:10'),
+      'Luis asks for 101001 to be reprocessed; the worker runs again, with nothing in its way',
+    );
+    await backOffice.reprocess([load('101001')]);
+    await queue.settle(p1);
     const [removed390] = await removals();
     story.check(
       'AC-07-93, 94 101001 was COMPLETED and is reprocessed in place: one completed load, the same record, now 45.5 CY; one line, 45.5 × $7.50 = $341.25; no reversal row',
@@ -517,8 +556,8 @@ export const p1Priced: Story = {
     );
 
     story.at(on('14', '08:30'), 'The call was right: Luis puts 80% back; the worker runs');
-    await correct(dis101001, { loadCall: 80 });
-    await reconciliation.run(askedByLuis);
+    await correctCall(80);
+    await queue.settle(p1);
     story.check(
       '101001 bills $390.00 again, a new line; the $341.25 one is in the audit log beside the first',
       [await linesOf('101001'), (await removals()).map((each) => Number(each.row['amount']))],
@@ -528,16 +567,21 @@ export const p1Priced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '09:00'),
-      'Luis locks 101004 as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
+      'Luis asks for 101004 to be reprocessed; before the worker takes his job up, Dana grants him QC and lock as invoiced, and he sets 101004 QC Approved and locks it as invoiced (the lock itself is Part 9’s). Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
     );
+    // Asked for before the lock, 101004 is on his job: the worker looks for its lock as the
+    // ticket's turn comes (ADR-090), whatever queued it, and leaves it as it is. The QC mark
+    // and the lock are his requests at their endpoints, and queue nothing (ADR-500).
+    await backOffice.reprocess([load('101004')]);
     const loadOf101004 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101004' },
     });
-    await api.$write({ actorId: luis, source: 'BACK_OFFICE' }, (tx) =>
-      tx.invoiceLock.create({
-        data: { projectId: p1, completedLoadId: loadOf101004.id, lockedById: luis },
-      }),
-    );
+    await backOffice.grantLuis('QC', 'LOCK_INVOICED', 'VIEW_REVIEW');
+    const ticket101004 = { completedLoadId: loadOf101004.id };
+    await luiss.answered(setQcStatusEndpoint, {
+      json: { record: ticket101004, status: 'QC_APPROVED' },
+    });
+    await luiss.answered(lockAsInvoicedEndpoint, { json: { ticket: ticket101004 } });
     const rateTo = (rate: string) =>
       saved(
         new PayItemSetup(api, clock, story.policy).rate(
@@ -549,17 +593,25 @@ export const p1Priced: Story = {
       );
     const beforeRate = await lines();
     await rateTo('7.75');
-    const rated = await reconciliation.run(setupChange);
+    const rateJobs = await queue.waiting(p1);
+    const rated = await queue.settled(p1);
     const afterRate = await lines();
+    // Asked for by name now, while it is locked, it is on no job: the request leaves it off
+    // and counts it (ADR-090, 498).
+    const askedLocked = await backOffice.reprocess([load('101004')]);
     story.check(
-      'AC-07-98 every un-invoiced ticket with a line on the pay item is regenerated: 101001 52.0 × $7.75 = $403.00, 101003 $483.60, 101005 $352.63 (45.5 × $7.75 = $352.625, a half up). 101004, locked, keeps its line at $7.50 and is left as it is',
+      'AC-07-98 every un-invoiced ticket with a line on the pay item is regenerated: 101001 52.0 × $7.75 = $403.00, 101003 $483.60, 101005 $352.63 (45.5 × $7.75 = $352.625, a half up). 101004, locked, is on no job the change queued; Luis’s job, asked for before the lock, names it, and the run that takes both up leaves it as it is: it keeps its line at $7.50. Asked for by name again while it is locked, it is left off: no job, counted as locked, and nothing waits',
       [
         afterRate.filter((each) => each.line.includes('VEG-HAUL-CY-15')).map((each) => each.line),
+        rateJobs.map((job) => [job.trigger, job.tickets.includes('101004')]),
         (
           await api.reconciliationDecision.findMany({
-            where: { reconciliationRunId: rated.ran ? rated.runId : '', ticketNumber: '101004' },
+            where: { reconciliationRunId: rated.runId, ticketNumber: '101004' },
           })
         ).map((decision) => (decision.summary as { why?: string }).why),
+        [askedLocked.queued, askedLocked.record.lockedAsInvoiced],
+        (await queue.waiting(p1)).length,
+        await linesOf('101004'),
       ],
       [
         [
@@ -568,7 +620,14 @@ export const p1Priced: Story = {
           '101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00',
           '101005 #1 VEG-HAUL-CY-15 45.5 × $7.75 = $352.63',
         ],
+        [
+          ['REPROCESS', true],
+          ['SETUP_CHANGE', false],
+        ],
         ['Locked as invoiced: left as it is.'],
+        [{ jobs: [], tickets: 0, lockedAsInvoiced: 1 }, [load('101004')]],
+        0,
+        ['101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00'],
       ],
     );
     story.check(
@@ -582,7 +641,7 @@ export const p1Priced: Story = {
     );
     story.at(on('14', '09:20'), 'The rate was right: Dana puts $7.50 back; the worker runs');
     await rateTo('7.50');
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check('the ledger is Wednesday morning’s again', await total(), [19, '$5,400.25']);
 
     // ------------------------------------------------------------------------------------------
@@ -594,7 +653,7 @@ export const p1Priced: Story = {
     const fill = { ...pricing.fillRule.input, id: pricing.fillRule.id };
     const stumpLine = (await lines()).find((each) => each.line.startsWith('301004 #1'));
     await saved(rules.save(dana, { ...fill, active: false }));
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-07-99 the one ticket the rule touched is regenerated: 301004 loses its fill line, copied to the audit log first, and keeps its stump line, the same record; nothing is flagged, since a rule still adds a line',
       [
@@ -608,7 +667,7 @@ export const p1Priced: Story = {
     );
     story.at(on('14', '09:50'), 'She switches it back on; the worker runs');
     await saved(rules.save(dana, { ...fill, active: true }));
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'the fill line is written again, 4.8 × $22.00 = $105.60',
       [await linesOf('301004'), await total()],
@@ -701,7 +760,7 @@ export const p1Priced: Story = {
       endLongitude: '-75.65000000',
     });
     story.at(on('14', '12:10'), 'The worker runs');
-    const noon = await reconciliation.run(sync);
+    const noon = await queue.settled(p1);
     story.check(
       'AC-07-84 Summit’s 101044 has no line: no rule on a Summit contract adds one, and the flag names the ticket’s prime. No Coastline rule ran on it. 101009 is flagged for the ineligible site and bills',
       [
@@ -757,7 +816,7 @@ export const p1Priced: Story = {
       [[1, 1, 0], true, ['Coastline, Bayline ROW 2026', 'Summit, Bayline ROW 2026'], 0],
     );
     const beforeSummit = await lines();
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     const afterSummit = await lines();
     story.check(
       'AC-07-84, 64 the flag is cleared and stays in the ticket’s history; 101044 is COMPLETED and bills 14.0 × $7.80 = $109.20, prime Summit, while Coastline’s loads keep $7.50 on the same pay item, every one of their lines the same record',
@@ -796,14 +855,14 @@ export const p1Priced: Story = {
       actions: [{ kind: 'VOID_TICKET' }],
     } as const;
     const quarryRule = await saved(rules.save(dana, voidRule));
-    const voided = await reconciliation.run(setupChange);
+    const voided = await queue.settled(p1);
     story.check(
       'AC-07-44, 95 the worker voids 101009: it is VOID, the run’s decision names the rule as the reason, and its line is gone, copied in full to the audit log first by the system actor. No other ticket is touched',
       [
         await statusOf('101009'),
         (
           await api.reconciliationDecision.findMany({
-            where: { reconciliationRunId: voided.ran ? voided.runId : '', ticketNumber: '101009' },
+            where: { reconciliationRunId: voided.runId, ticketNumber: '101009' },
           })
         ).map((decision) => {
           const summary = decision.summary as { why?: string; voidedBy?: { name: string }[] };
@@ -848,7 +907,7 @@ export const p1Priced: Story = {
     story.at(on('14', '13:10'), 'Dana switches the rule off; the worker runs');
     const auditedBefore = [await audited('transaction'), await audited('field_event')];
     await saved(rules.save(dana, { ...voidRule, id: quarryRule.id, active: false }));
-    const afterVoid = await reconciliation.run(setupChange);
+    const afterVoid = await queue.settled(p1);
     story.check(
       'a voided ticket stays void until a person unvoids it (the user, ADR-360): 101009 is out of the run, which doesn’t work it or write anything for it, though the rule that voided it is off',
       [

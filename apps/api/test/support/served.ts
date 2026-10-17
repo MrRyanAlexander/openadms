@@ -26,7 +26,14 @@ import type { Mail } from '../../src/sign-in/mail.ts';
 import { OneTimeCodes } from '../../src/sign-in/one-time-codes.ts';
 import { undone, ViewedWithin, type Tx } from './database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './process.ts';
-import { NoServer, signingSecret, signInOn, TestClock } from './sign-in.ts';
+import {
+  NoServer,
+  passwordKey,
+  sealingKey,
+  signingSecret,
+  signInOn,
+  TestClock,
+} from './sign-in.ts';
 
 export const long = 'marsh heron delphine ferry';
 export const longer = 'ferry delphine heron marsh';
@@ -104,12 +111,21 @@ export interface People {
   readonly kimsId: string;
 }
 
-async function people(tx: Tx, dana: string): Promise<People> {
+// The views the test world grants Luis from the start.
+export const luisSees = ['VIEW_REVIEW', 'VIEW_SETUP', 'VIEW_DISPATCH'] as const;
+
+async function people(tx: Tx, dana: string, sees: boolean): Promise<People> {
   await tx.user.create({
     data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: 'dana.reyes@gates.example' },
   });
+  // Luis is let see the whole back office (ADR-539); what he may do is granted test by test.
   const luis = await tx.user.create({
-    data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: 'Luis.Ortega@gates.example' },
+    data: {
+      name: 'Luis Ortega',
+      role: 'MANAGER_ANALYST',
+      email: 'Luis.Ortega@gates.example',
+      permissions: { create: (sees ? luisSees : []).map((permission) => ({ permission })) },
+    },
   });
   const viewer = await tx.user.create({
     data: {
@@ -139,6 +155,8 @@ export interface Answer {
   readonly headers: Readonly<Record<string, unknown>>;
   readonly body: unknown;
   readonly text: string;
+  // The answer's bytes as they came: a file's, where one is answered (ADR-483).
+  readonly bytes: Buffer;
   readonly code: string | undefined;
   readonly requestId: string;
   // The cookies the answer set, by name; a cleared one is the empty string.
@@ -170,14 +188,14 @@ export class Served {
     within: Database,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    more: Pick<ProcessParts, 'addresses'> = {},
+    more: Pick<ProcessParts, 'addresses' | 'media' | 'esri'> = {},
   ): Promise<Served> {
     const served = new Served();
     const viewed = new ViewedWithin(within);
     served.viewerStated = viewed.stated;
     served.api = await ApiProcess.create(
       WritingModule,
-      { ...madeUpSettings, tokenSigningSecret: signingSecret },
+      { ...madeUpSettings, tokenSigningSecret: signingSecret, passwordKey, sealingKey },
       policy,
       {
         stream: { write: (line) => served.lines.push(line) },
@@ -203,6 +221,9 @@ export class Served {
       cookies?: Cookies;
       csrf?: string;
       payload?: object;
+      // A part of a file, sent as bytes of its own type (ADR-482).
+      bytes?: Uint8Array;
+      contentType?: string;
       bearer?: string;
       monitorSession?: string;
     } = {},
@@ -224,17 +245,23 @@ export class Served {
         ...(more.monitorSession === undefined
           ? {}
           : { 'x-adms-monitor-session': more.monitorSession }),
+        ...(more.contentType === undefined ? {} : { 'content-type': more.contentType }),
       },
       ...(more.payload === undefined ? {} : { payload: more.payload }),
+      ...(more.bytes === undefined ? {} : { payload: Buffer.from(more.bytes) }),
     });
     const setCookie = [answered.headers['set-cookie'] ?? []].flat().map(String);
-    const body: unknown = answered.json();
+    // A file is answered as bytes of its own type, never JSON, and always a download (ADR-483,
+    // 535 (2)): a photograph's, or a kept map's.
+    const file = (answered.headers['content-disposition'] ?? '').startsWith('attachment');
+    const body: unknown = file ? undefined : answered.json();
     const refused = errorAnswerSchema.safeParse(body);
     return {
       status: answered.statusCode,
       headers: answered.headers,
       body,
       text: answered.body,
+      bytes: answered.rawPayload,
       code: refused.success ? refused.data.code : undefined,
       requestId: String(answered.headers['x-request-id']),
       setCookie,
@@ -301,17 +328,20 @@ export const luissSecret = Buffer.from('09876543210987654321');
 // up, as an admin and a manager/analyst must (ADR-412).
 export type Work = (served: Served, tx: Tx, who: People, within: Database) => Promise<void>;
 
-export function worldOn(db: () => Database) {
+// `luisSees`: whether Luis starts with the three views (`luisSees`); the people's own tests start
+// him with no grant at all.
+export function worldOn(db: () => Database, { luisSees: sees = true } = {}) {
   return (
     work: Work,
     mail: Mail = new NoServer(),
     policy: ProcessPolicy = shippedPolicy,
-    // Who a phone's address lookup asks, where a test has an address server of its own.
-    more: Pick<ProcessParts, 'addresses'> = {},
+    // Who a phone's address lookup asks, where a test has an address server of its own; where
+    // files are kept, where a test has a store of its own; and who an Esri layer is fetched from.
+    more: Pick<ProcessParts, 'addresses' | 'media' | 'esri'> = {},
   ): Promise<void> => {
     const dana = randomUUID();
     return undone(db(), dana, async (within, tx) => {
-      const who = await people(tx, dana);
+      const who = await people(tx, dana, sees);
       const { hasher, check } = signInOn(within, mail);
       const served = await Served.on(within, mail, policy, more);
       for (const [userId, password, email, secret] of [

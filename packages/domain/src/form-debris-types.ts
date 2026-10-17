@@ -22,10 +22,21 @@ export interface DebrisTypeEntry {
 // type not marked Reduced on the haul-out form; a stretch between a payable type's size bands that
 // falls in none (size-bands.ts); two rules that add the same transaction # on a ticket both could
 // meet (rules.ts; ADR-125); a sub typed at certification whose name already has another place on
-// the project (certifications.ts; ADR-321).
+// the project (certifications.ts; ADR-321); a crew day's steps on a pay item that isn't paid in
+// them (setup-records.ts; ADR-527); what is still open on a project as an admin closes it
+// (setup-records.ts; ADR-529).
 export interface SetupWarning {
   readonly code:
-    'UNREDUCED_ON_HAUL_OUT' | 'SIZE_BAND_GAP' | 'RULES_OVERLAP' | 'SUB_PLACED_ELSEWHERE';
+    | 'UNREDUCED_ON_HAUL_OUT'
+    | 'SIZE_BAND_GAP'
+    | 'RULES_OVERLAP'
+    | 'SUB_PLACED_ELSEWHERE'
+    | 'CREW_DAY_STEPS_UNREAD'
+    | 'PHONES_NOT_TURNED_IN'
+    | 'TICKETS_NOT_QC_APPROVED'
+    | 'TICKETS_NOT_INVOICED'
+    | 'HELD_WAITING'
+    | 'QUARANTINED_WAITING';
   readonly message: string;
 }
 

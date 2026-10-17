@@ -1,14 +1,18 @@
 // The one error filter (ARCHITECTURE §6, Output; AC-10-33; T-26; ADR-385): whatever is thrown,
 // the caller gets a plain code and the request's id. No stack trace, query, file path or internal
 // message leaves the server; what failed inside is logged, by its kind (logs.ts). What the
-// database's own constraints refused is a refusal, not a failure (database-refusal.ts).
+// database's own constraints refused is a refusal, not a failure (database-refusal.ts); and a
+// database that couldn't do the work in time is busy, not failed: the caller is told to wait
+// (database-busy.ts; ADR-524).
 import { errorAnswerSchema, type ErrorCode } from '@open-adms/contracts';
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { databaseBusyOf } from './database-busy.ts';
 import { databaseRefusalOf } from './database-refusal.ts';
 import { Limited } from './limits.ts';
 import { errorLogged } from './logs.ts';
+import { Unavailable } from './readiness.ts';
 import { Refusal } from './refusal.ts';
 
 const codes: Readonly<Record<number, ErrorCode>> = {
@@ -20,10 +24,44 @@ const codes: Readonly<Record<number, ErrorCode>> = {
 
 @Catch()
 export class ErrorFilter implements ExceptionFilter {
+  // How many seconds a caller told the database is busy waits: `DATABASE_BUSY_RETRY_SECONDS`.
+  private readonly busyRetrySeconds: number;
+
+  constructor(busyRetrySeconds: number) {
+    this.busyRetrySeconds = busyRetrySeconds;
+  }
+
   catch(thrown: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const request = http.getRequest<FastifyRequest>();
     const reply = http.getResponse<FastifyReply>();
+    // The database couldn't do the work in time (ADR-524). No connection came free: the log says
+    // so, as a limit's does. The work or a statement ran out of time: the log says where, as a
+    // failure's does, since a piece of work that always runs too long is the server's to mend;
+    // the caller is told to wait all the same, since nothing of that work was kept.
+    const busy = databaseBusyOf(thrown);
+    if (busy !== undefined) {
+      if (busy === 'CONNECTION_WAIT') {
+        request.log.warn({ why: busy }, 'The database was busy: the caller was told to wait.');
+      } else {
+        request.log.error(
+          { why: busy, err: errorLogged(thrown) },
+          'A piece of work ran out of time: the caller was told to wait.',
+        );
+      }
+      void reply
+        .status(503)
+        .header('retry-after', String(this.busyRetrySeconds))
+        .header('content-type', 'application/json; charset=utf-8')
+        .send(
+          errorAnswerSchema.parse({
+            code: 'BUSY',
+            requestId: request.id,
+            retryAfterSeconds: this.busyRetrySeconds,
+          }),
+        );
+      return;
+    }
     // What the database's own constraints refused is the caller's to hear, plainly (ADR-424).
     const refused = databaseRefusalOf(thrown);
     if (refused !== undefined) {
@@ -41,6 +79,15 @@ export class ErrorFilter implements ExceptionFilter {
             message: refused.said,
           }),
         );
+      return;
+    }
+    // The API can't serve now: its database didn't answer the readiness question (ADR-507).
+    if (thrown instanceof Unavailable) {
+      request.log.warn('The API was asked whether it can serve, and its database did not answer.');
+      void reply
+        .status(503)
+        .header('content-type', 'application/json; charset=utf-8')
+        .send(errorAnswerSchema.parse({ code: thrown.code, requestId: request.id }));
       return;
     }
     const status = ErrorFilter.statusOf(thrown);

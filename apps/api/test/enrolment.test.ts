@@ -26,7 +26,7 @@ import { installationSettings, openInstallation, type Tx } from './support/datab
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, told } from './support/setup.ts';
-import { Outbox, signingSecret } from './support/sign-in.ts';
+import { Outbox, passwordKey } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -46,7 +46,7 @@ const newPasscode = 'delphine-ferry-marsh';
 // The firm's master passcode for this test: a version of the test's own, now the one in force.
 async function passcodeSet(tx: Tx): Promise<number> {
   const last = (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
-  const hash = await new PasswordHasher(signingSecret).hashWithoutKey(passcode);
+  const hash = await new PasswordHasher(passwordKey).hashWithoutKey(passcode);
   await tx.masterPasscode.create({ data: { version: last + 1, hash } });
   return last + 1;
 }
@@ -159,14 +159,29 @@ describe('a phone is enrolled', () => {
         masterPasscodeVersion: version,
         enrolledAt: new Date('2026-10-12T13:50:00Z'),
         outOfServiceAt: null,
+        outOfServiceMarkedAt: null,
+        outOfServiceReasonId: null,
         keyRevokedAt: null,
+        keyRevokedBy: null,
         lastAnsweredChallengeMadeAt: null,
       });
-      // No project, no monitor; and the audit log names the master passcode's own actor.
+      // No project, no monitor; and the audit log names the master passcode's own actor. Its
+      // first right use keys the installer's verifier and seals its offline seed (ADR-542).
       const written = { actorId: masterPasscodeActorId, source: 'DEVICE', deviceId };
       expect(await audited(tx, answer.requestId)).toEqual([
         { ...written, tableName: 'device', operation: 'INSERT', domain: 'SECURITY' },
+        { ...written, tableName: 'master_passcode', operation: 'UPDATE', domain: 'SECURITY' },
+        { ...written, tableName: 'master_passcode', operation: 'UPDATE', domain: 'SECURITY' },
         { ...written, tableName: 'security_event', operation: 'INSERT', domain: 'SECURITY' },
+      ]);
+      const upgraded = await tx.masterPasscode.findUniqueOrThrow({ where: { version } });
+      expect(upgraded.hash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$/);
+      expect(upgraded.offlineSeed).toMatch(/^v2\./);
+      // Its next use writes neither again.
+      const second = await enrol(served, { name: 'P1-COL-2', publicKey: softwareKey(), passcode });
+      expect((await audited(tx, second.requestId)).map(({ tableName }) => tableName)).toEqual([
+        'device',
+        'security_event',
       ]);
       expect(await events(tx, answer.requestId)).toEqual([
         {
@@ -226,7 +241,7 @@ describe('a phone is enrolled', () => {
 });
 
 describe('the master passcode entered wrong', () => {
-  it('AC-10-22 each wrong try is refused by one code, counted against the passcode’s version and written as a security event by the passcode’s own actor; the fifth in a row makes the next wait, and while it waits the right passcode is refused too and nothing is written; after the wait the right one enrols and the count starts again', async () => {
+  it('AC-10-22, AC-10-108 each wrong try is refused by one code, counted against the passcode’s version and written as a security event by the passcode’s own actor; the fifth in a row makes the next wait, and while it waits the right passcode is refused too, from an address that tried it wrong, and nothing is written; after the wait the right one enrols there and the count starts again', async () => {
     await world(async (served, tx) => {
       const version = await passcodeSet(tx);
       const publicKey = softwareKey();
@@ -262,8 +277,7 @@ describe('the master passcode entered wrong', () => {
       expect(
         (await events(tx)).map(({ kind, userId, deviceId }) => [kind, userId, deviceId]),
       ).toEqual(Array.from({ length: 5 }, () => ['MASTER_PASSCODE_FAILED', null, null]));
-      // While it waits: the right passcode too, from an address that has tried nothing.
-      served.from = '198.51.100.12';
+      // While it waits: the right passcode too, from the address that tried it wrong last.
       const during = await enrol(served, { ...phone, passcode });
       expect(told(during)).toEqual([401, 'ENROLMENT_REFUSED']);
       expect(await audited(tx, during.requestId)).toEqual([]);
@@ -317,10 +331,12 @@ describe('the master passcode entered wrong', () => {
           'MASTER_PASSCODE_FAILED',
           'MASTER_PASSCODE_LOCKOUT',
         ]);
+        // Told at the first wait, then at the lock.
         expect(outbox.sent.map(({ to, subject }) => [to, subject])).toEqual([
+          [danasEmail, 'Your firm’s master passcode is being entered wrong'],
           [danasEmail, 'Your firm’s master passcode is locked'],
         ]);
-        expect(outbox.sent[0]?.text).not.toContain(wrongPasscode);
+        expect(outbox.sent.some(({ text }) => text.includes(wrongPasscode))).toBe(false);
         // A day later, the right passcode, from an address that has tried nothing.
         served.from = '198.51.100.40';
         served.clock.later(24 * 60);
@@ -350,6 +366,84 @@ describe('the master passcode entered wrong', () => {
       outbox,
       installationPolicy({ SIGN_IN_TRIES_BEFORE_LOCK: '7' }),
     );
+  });
+});
+
+describe('a stranger at the master passcode (ADR-541)', () => {
+  it('AC-10-108 a stranger who keeps the passcode waiting holds only their own addresses: the right passcode from the office enrols while it waits, and every admin is told by mail at the first wait, never the passcode', async () => {
+    const outbox = new Outbox();
+    await world(async (served, tx) => {
+      const version = await passcodeSet(tx);
+      const phone = { name: 'P1-COL-1', publicKey: softwareKey() };
+      // Two addresses of a stranger's, four wrong tries and one: the passcode waits.
+      for (let wrong = 1; wrong <= 5; wrong += 1) {
+        served.from = wrong === 5 ? '203.0.113.6' : '203.0.113.5';
+        expect(told(await enrol(served, { ...phone, passcode: wrongPasscode }))).toEqual([
+          401,
+          'ENROLMENT_REFUSED',
+        ]);
+      }
+      expect((await tries(tx, version))?.failedTries).toBe(5);
+      expect(outbox.sent.map(({ to, subject }) => [to, subject])).toEqual([
+        [danasEmail, 'Your firm’s master passcode is being entered wrong'],
+      ]);
+      expect(outbox.sent[0]?.text).toContain('entered wrong 5 times in a row');
+      expect(outbox.sent[0]?.text).not.toContain(wrongPasscode);
+      // The stranger is held by the wait, the right passcode included.
+      expect(told(await enrol(served, { ...phone, passcode }))).toEqual([401, 'ENROLMENT_REFUSED']);
+      // A supervisor at the office, who tried nothing, enrols while it waits: the count starts
+      // again, and nobody is mailed again.
+      served.from = '198.51.100.30';
+      const enrolled = await enrol(served, { ...phone, passcode });
+      expect(told(enrolled)).toEqual([200, undefined]);
+      expect(await tries(tx, version)).toEqual({ failedTries: 0, lockedUntil: null });
+      expect(outbox.sent).toHaveLength(1);
+    }, outbox);
+  });
+
+  it('AC-10-108 a burst of wrong tries sent at once from one address is let through no further than the address’s limit, each try counted in turn: the rest are answered 429 and never tried', async () => {
+    await world(async (served, tx) => {
+      const version = await passcodeSet(tx);
+      served.from = '203.0.113.7';
+      const answers = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          enrol(served, { name: 'P1-COL-1', publicKey: softwareKey(), passcode: wrongPasscode }),
+        ),
+      );
+      const statuses = answers.map((answer) => answer.status).sort();
+      expect(statuses.filter((status) => status === 401)).toHaveLength(4);
+      expect(statuses.filter((status) => status === 429)).toHaveLength(8);
+      expect((await tries(tx, version))?.failedTries).toBe(4);
+      expect(
+        (await events(tx)).filter(({ kind }) => kind === 'MASTER_PASSCODE_FAILED'),
+      ).toHaveLength(4);
+    });
+  });
+
+  it('AC-10-108 a burst from many addresses at once is counted try by try: once the fifth puts the wait on it, the rest from addresses that tried it wrong are refused unchecked, and the count is never the burst’s', async () => {
+    await world(async (served, tx) => {
+      const version = await passcodeSet(tx);
+      // Each address tries twice at once: the second of each is held once the wait stands.
+      const answers = await Promise.all(
+        Array.from({ length: 16 }, (_, each) => {
+          served.from = `203.0.113.${String(20 + Math.floor(each / 2))}`;
+          return enrol(served, {
+            name: 'P1-COL-1',
+            publicKey: softwareKey(),
+            passcode: wrongPasscode,
+          });
+        }),
+      );
+      expect(answers.every((answer) => answer.status === 401)).toBe(true);
+      // Five checked before the wait, then at most one from each address not yet refused; the
+      // second try of every address that tried was held, unchecked.
+      const counted = (await tries(tx, version))?.failedTries ?? 0;
+      expect(counted).toBeGreaterThanOrEqual(5);
+      expect(counted).toBeLessThanOrEqual(10);
+      expect(
+        (await events(tx)).filter(({ kind }) => kind === 'MASTER_PASSCODE_FAILED'),
+      ).toHaveLength(counted);
+    });
   });
 });
 

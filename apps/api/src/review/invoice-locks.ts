@@ -50,6 +50,30 @@ export class InvoiceLocks extends ReviewService {
     }
   }
 
+  // A batch renamed (ADR-535 (4)): a name used once on its project, never blank; its locks are
+  // as they were, and nothing is queued. A batch is never archived (ADR-363).
+  async rename(
+    person: string,
+    invoiceBatchId: string,
+    name: string,
+  ): Promise<Outcome<InvoiceBatch>> {
+    const named = new BatchName(name);
+    try {
+      return await this.mark(person, 'LOCK_INVOICED', undefined, async (tx) => {
+        const refusal = named.refusal();
+        if (refusal !== null) throw new Refused(refusal);
+        await tx.invoiceBatch.findUniqueOrThrow({ where: { id: invoiceBatchId } });
+        return tx.invoiceBatch.update({
+          where: { id: invoiceBatchId },
+          data: { name: named.name },
+        });
+      });
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
+      return { saved: false, refusal: named.used() };
+    }
+  }
+
   // Locks the ticket as invoiced, in a batch of its project where one is named.
   lock(
     person: string,

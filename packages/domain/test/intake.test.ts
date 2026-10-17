@@ -2,7 +2,14 @@
 // 25, 39, 45, 46; ADR-022, 329 (5), 338, 467). The fixes are the example world's: Marsh Road TDSR.
 import { describe, expect, it } from 'vitest';
 
-import { GpsFix, NotSaved, notSavedReasons, Quarantine, quarantineReasons } from '../src/index.ts';
+import {
+  GpsFix,
+  heldReasons,
+  NotSaved,
+  notSavedReasons,
+  Quarantine,
+  quarantineReasons,
+} from '../src/index.ts';
 
 describe('a GPS fix as a phone sends it', () => {
   it('AC-05-39 a fix on the earth is kept as sent, exact decimals as text', () => {
@@ -112,12 +119,16 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'NAMES_NO_RECORD',
       'ASSIGNMENT_NOT_SAVED',
       'CERTIFICATION_REFUSED',
+      'OWNER_NOT_SAVED',
+      'PROJECT_CLOSED',
     ]);
     const told = [
       NotSaved.notARecord('fieldEvent.loadCall in this record can’t be more than 100'),
       NotSaved.namesNoRecord(),
       NotSaved.assignmentNotSaved(),
       NotSaved.certificationRefused('A crew is not measured: it has no boxes and no capacity.'),
+      NotSaved.ownerNotSaved(),
+      NotSaved.projectClosed('Bayline County ROW, Hurricane Delphine', '01-Feb-2027'),
     ];
     expect(told.map((notice) => notice.reason)).toEqual([...notSavedReasons]);
     expect(told.map((notice) => notice.message)).toEqual([
@@ -125,6 +136,8 @@ describe('what a phone is told of a record that could not be saved at all', () =
       'Not saved: this record names something the server doesn’t have: its project, its monitor, its assignment, or something picked from a list.',
       'Not saved: the assignment this record was made under was not saved.',
       'Not saved: A crew is not measured: it has no boxes and no capacity.',
+      'Not saved: the record this photograph belongs to isn’t saved on the server.',
+      'Not saved: Bayline County ROW, Hurricane Delphine was closed on 01-Feb-2027, before this arrived.',
     ]);
     // A certification its own rules refuse is told the rule's words, once; one whose number
     // is held, the number and nothing of the certification that holds it (ADR-469).
@@ -158,6 +171,7 @@ describe('what a phone is told of a record that could not be saved at all', () =
       NotSaved.assignmentNotSaved(),
       NotSaved.certNumberHeld('730415'),
       replaced,
+      NotSaved.ownerNotSaved(),
     ]) {
       expect(notice.message).not.toMatch(/held on the server/i);
       const held = NotSaved.heldForReview(notice);
@@ -167,5 +181,56 @@ describe('what a phone is told of a record that could not be saved at all', () =
       });
       expect(held.message.startsWith('Not saved: ')).toBe(true);
     }
+  });
+});
+
+describe('a report the server could not keep, held for a person (ADR-526 (5))', () => {
+  it('AC-10-76 is held for a reason of its own, beside a record’s, and its words say what it is and why, as its phone was answered', () => {
+    expect(heldReasons).toEqual([...notSavedReasons, 'REPORT_NOT_SAVED']);
+    expect(
+      [
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', 'UNKNOWN_PROJECT'),
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', 'NOT_A_MONITOR'),
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', 'NOT_THE_PROJECTS_SITE'),
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', 'NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM'),
+        NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', 'ID_ALREADY_HELD'),
+        NotSaved.reportNotSaved('PASSCODE_USE', 'NOT_A_MONITOR'),
+        NotSaved.reportNotSaved('PASSCODE_USE', 'ID_ALREADY_HELD'),
+      ].map((notice) => [notice.reason, notice.message]),
+    ).toEqual([
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this unplanned assignment names a project the server doesn’t have.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this unplanned assignment is for someone who isn’t a monitor the server has.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this unplanned assignment names a site that isn’t its project’s.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this unplanned assignment names a unit rate pay item that isn’t its project’s.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this unplanned assignment was made under an id the server already holds for something else.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this use of the master passcode is for someone who isn’t a monitor the server has.',
+      ],
+      [
+        'REPORT_NOT_SAVED',
+        'Not saved: this use of the master passcode was made under an id the server already holds for something else.',
+      ],
+    ]);
+    expect(
+      NotSaved.heldForReview(NotSaved.reportNotSaved('PASSCODE_USE', 'NOT_A_MONITOR')).message,
+    ).toBe(
+      'Not saved: this use of the master passcode is for someone who isn’t a monitor the server has. Held on the server for review.',
+    );
   });
 });

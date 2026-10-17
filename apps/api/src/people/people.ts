@@ -34,6 +34,7 @@ import {
   type PermissionName,
 } from '@open-adms/domain';
 
+import { backOfficeSees } from '../review/review-reads.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { Mail } from '../sign-in/mail.ts';
 import type { Sessions } from '../sign-in/sessions.ts';
@@ -49,7 +50,8 @@ export type PeopleRefused =
   | 'NOT_A_VIEWER'
   | 'NOT_BACK_OFFICE'
   | 'UNKNOWN_CONTRACTOR'
-  | 'UNKNOWN_PROJECT';
+  | 'UNKNOWN_PROJECT'
+  | 'EMAIL_SIGNS_IN';
 
 // A person as an answer says them. `phone` is undefined where the reader may not read it.
 export interface PersonRead {
@@ -62,6 +64,8 @@ export interface PersonRead {
   readonly monitorId: string | null;
   readonly email: string | null;
   readonly phone?: string | null;
+  readonly employerId: string | null;
+  readonly employerNumber: string | null;
   readonly archived: boolean;
   readonly permissions: readonly string[];
   readonly projectIds: readonly string[];
@@ -85,10 +89,13 @@ export interface NewPerson {
   readonly seesPrivateCitizens?: boolean | undefined;
 }
 
-// What an admin changes of a person: only what is stated. A phone number is cleared with null.
+// What an admin changes of a person: only what is stated. A phone number, an employer and its ID
+// are cleared with null; an email address only on a person who doesn't sign in with it.
 export interface PersonChanges {
   readonly name?: string | undefined;
-  readonly email?: string | undefined;
+  readonly email?: string | null | undefined;
+  readonly employerId?: string | null | undefined;
+  readonly employerNumber?: string | null | undefined;
   readonly phone?: string | null | undefined;
   readonly viewerKind?: 'CLIENT' | 'CONTRACTOR' | 'AUDITOR' | undefined;
   readonly contractorId?: string | undefined;
@@ -100,6 +107,9 @@ export interface PersonChanges {
 export interface PeopleAsked {
   readonly role?: PersonRead['role'] | undefined;
   readonly archived: boolean;
+  // What the name holds, anywhere in it, in any case; and in name order where asked (C101).
+  readonly name?: string | undefined;
+  readonly order?: 'ADDED' | 'NAME' | undefined;
   readonly after?: string | undefined;
   readonly limit: number;
 }
@@ -124,6 +134,8 @@ const personRead = {
   monitorNumber: true,
   email: true,
   phone: true,
+  employerId: true,
+  employerNumber: true,
   archivedAt: true,
   permissions: {
     where: { archivedAt: null },
@@ -228,10 +240,7 @@ export class People {
   async read(readerId: string, userId: string): Promise<PersonOutcome> {
     return this.db.$read(async (tx) => {
       const reader = await tx.user.findUnique({ where: { id: readerId }, select: personRead });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (reader?.archivedAt !== null || !(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const row = await tx.user.findUnique({ where: { id: userId }, select: personRead });
@@ -245,19 +254,20 @@ export class People {
   async list(readerId: string, asked: PeopleAsked): Promise<PeoplePage> {
     return this.db.$read(async (tx): Promise<PeoplePage> => {
       const reader = await tx.user.findUnique({ where: { id: readerId }, select: personRead });
-      if (
-        reader?.archivedAt !== null ||
-        (reader.role !== 'ADMIN' && reader.role !== 'MANAGER_ANALYST')
-      ) {
+      if (reader?.archivedAt !== null || !(await backOfficeSees(tx, readerId, 'VIEW_DISPATCH'))) {
         return { done: false, code: 'NOT_ALLOWED' };
       }
       const rows = await tx.user.findMany({
         where: {
           role: asked.role ?? { notIn: [...actorsOnly] },
           archivedAt: asked.archived ? { not: null } : null,
-          ...(asked.after === undefined ? {} : { id: { gt: asked.after } }),
+          ...(asked.name === undefined
+            ? {}
+            : { name: { contains: asked.name, mode: 'insensitive' as const } }),
         },
-        orderBy: { id: 'asc' },
+        // In the order they were added, or by name; a page follows the last person's id.
+        orderBy: asked.order === 'NAME' ? [{ name: 'asc' }, { id: 'asc' }] : { id: 'asc' },
+        ...(asked.after === undefined ? {} : { cursor: { id: asked.after }, skip: 1 }),
         // One more than the page, to know whether another follows.
         take: asked.limit + 1,
         select: personRead,
@@ -288,6 +298,30 @@ export class People {
         }
         if (changes.phone !== undefined && (changes.phone?.trim() ?? null) !== person.phone) {
           data.phone = changes.phone?.trim() ?? null;
+        }
+        // An address is cleared only on somebody who doesn't sign in with it (ADR-527 (12)).
+        if (changes.email === null) {
+          if (this.rules.signsInByEmail(person.role)) return { refused: 'EMAIL_SIGNS_IN' };
+          if (person.email !== null) data.email = null;
+        }
+        // Who employs them, a contractor the firm has in service, and the ID it gives them; an
+        // ID with no employer is the database's to refuse (AC-02-03).
+        if (changes.employerId !== undefined && changes.employerId !== person.employerId) {
+          if (changes.employerId !== null) {
+            const employer = await tx.contractor.findUnique({
+              where: { id: changes.employerId },
+              select: { archivedAt: true },
+            });
+            if (employer?.archivedAt !== null) return { refused: 'UNKNOWN_CONTRACTOR' };
+          }
+          data.employerId = changes.employerId;
+        }
+        const employerNumber =
+          changes.employerNumber === undefined
+            ? undefined
+            : (changes.employerNumber?.trim() ?? null);
+        if (employerNumber !== undefined && employerNumber !== person.employerNumber) {
+          data.employerNumber = employerNumber;
         }
         const email = changes.email?.trim();
         if (email !== undefined && email !== person.email) {
@@ -584,6 +618,8 @@ export class People {
       monitorId: row.monitorNumber,
       email: row.email,
       ...(this.rules.readsPhoneOf(reader, row.role) ? { phone: row.phone } : {}),
+      employerId: row.employerId,
+      employerNumber: row.employerNumber,
       archived: row.archivedAt !== null,
       permissions: row.permissions.map(({ permission }) => permission),
       projectIds: row.viewerProjects.map(({ projectId }) => projectId),

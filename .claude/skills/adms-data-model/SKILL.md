@@ -106,7 +106,7 @@ lengths of time (ADR-023).
   **sub**; monitoring subs and temp agencies are contractors of the monitoring kind (Q-97, ADR-102).
 - **Several primes per project; each prime's subs are its own, at most two tiers, and are typed in at
   certification** under the prime the monitor picks; the phone suggests known subs and the back
-  office merges duplicates, audited (ADR-108). **User, 2026-09-25 (Q-108):** "Projects can have more
+  office merges duplicates, audited (ADR-108; ⚠️ **retired by the user, ADR-529 (f)**: alike subs are flagged, `SUB_NAME_ALIKE`, and a person corrects the sub). **User, 2026-09-25 (Q-108):** "Projects can have more
   than one prime.. Build 1 was wrong. … But subs are never shared by Primes."
 - A **`Contract`** belongs to a project and holds **a name, its prime, and an optional link** to the
   signed copy; no number, dates or amount. **User, 2026-09-27 (Q-138):** "A contract is simple object
@@ -127,7 +127,7 @@ lengths of time (ADR-023).
   project and a contract written before its prime is on the project are all refused, and a prime
   that a sub or a contract names can't be made a sub. **Whoever adds a prime writes `asPrimeId` =
   its contractor**; a later table that names a prime (a rate, a certification) points at the same
-  key. A place is taken off a project by archiving. What a merge moves (the duplicate's place, its
+  key. A place is taken off a project by archiving (⚠️ **the user, ADR-529 (j): a prime is never taken off a project**). What a merge moved (⚠️ retired, ADR-529 (f)) (the duplicate's place, its
   certifications) is the certification task's (BACKLOG C56).
 
 ## 3.1b Four kinds of record, four ways to change

@@ -28,6 +28,7 @@ import {
   proofOf,
   proven,
   SoftwareKey,
+  turnedIn,
 } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -87,10 +88,22 @@ describe('who may ask', () => {
       'createMonitorOnPhone',
       'signInOnPhone',
       'openPasscodeSessionOnPhone',
-      'reportPasscodeUse',
+      // A sign-in made with no connection, reported (ADR-531).
+      'takeOfflineSignInOnPhone',
       'phoneSetupChoices',
+      // A phone turned in under the master passcode (ADR-488).
+      'turnInPhone',
+    ]);
+    // What a phone sends, with somebody signed in on it (ADR-531): a new one is added on purpose.
+    expect(
+      endpoints.filter(({ access }) => access === 'PHONE_IN_USE').map(({ name }) => name),
+    ).toEqual([
+      'reportPasscodeUse',
       'reportUnplannedAssignment',
       'syncPhone',
+      // A photograph's files, by the phone that took it (ADR-482).
+      'photoFile',
+      'sendPhotoFilePart',
     ]);
     await world(async (served) => {
       // Dana is signed in at the back office: her session is no phone's proof.
@@ -178,6 +191,7 @@ describe('a phone proves itself', () => {
         name: 'P1-COL-1',
         status: 'ACTIVE',
         outOfServiceAt: null,
+        keyRevoked: false,
         masterPasscodeVersion: phone.masterPasscodeVersion,
         masterPasscodeVersionInForce: phone.masterPasscodeVersion,
       });
@@ -318,7 +332,7 @@ describe('a proof that isn’t one', () => {
       const lostAt = new Date('2026-10-12T22:10:00.000Z');
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: lostAt },
+        data: { status: 'LOST', outOfServiceAt: lostAt, outOfServiceMarkedAt: lostAt },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);
@@ -327,11 +341,8 @@ describe('a proof that isn’t one', () => {
         status: 'LOST',
         outOfServiceAt: lostAt.toISOString(),
       });
-      // It synced, was confirmed and wiped: its key is revoked.
-      await tx.device.update({
-        where: { id: phone.id },
-        data: { keyRevokedAt: new Date('2026-10-13T12:05:00.000Z') },
-      });
+      // It synced, everything on it was confirmed, and it was turned in: its key is revoked.
+      await turnedIn(served, token);
       expect(told(await current(served, token))).toEqual(refused);
       served.clock.later(6);
       const after = await answered(served, phone);

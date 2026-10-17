@@ -1,32 +1,53 @@
 // One sync, whole, at the contracts package (spec/acceptance/05-sync.md AC-05-03, 15, 20, 45…47;
 // spec/acceptance/10-api-and-sync.md AC-10-35, 36, 37; T-12; BACKLOG 2.6.1 part 2, C69, C84 (9),
-// C122, C126, C127; ADR-022, 052, 065, 100, 457, 464, 467; REQ-004, 203): what a phone sends and
-// what it is answered, each record read on its own.
+// C122, C126, C127, C136; ADR-022, 052, 065, 100, 457, 464, 467, 481; REQ-004, 203): what a phone
+// sends and what it is answered, each record and each photograph's record read on its own.
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  assignmentFormDocumentTypes,
+  fieldEventKinds,
+  requestBodyBytesAtLeast,
+} from '@open-adms/domain';
+
+import {
+  fitByWeight,
   lastUsedSchema,
+  photoAnswerSchema,
+  heldSentAs,
+  photoNames,
+  photoRead,
   recordAnswerSchema,
   recordNames,
   recordRead,
+  reportNames,
+  sentWeight,
   syncAnsweredSchema,
+  syncBytesAtMost,
+  syncedRecordBytesAtMost,
   syncPasscodeUsesAtMost,
+  syncPhotosAtMost,
   syncRecordsAtMost,
   syncSentSchema,
   syncSeriesAtMost,
   syncUnplannedAssignmentsAtMost,
+  syncedPhotoSchema,
   type RecordAnswer,
   type SyncAnswered,
+  type SyncedRecord,
   type SyncSent,
 } from '../src/index.ts';
 import {
   ana,
   assignment,
+  certification,
+  certificationPhotos,
   collection,
   disposal,
   made,
   p1,
+  pilePhoto,
   records,
   switched,
   unplanned,
@@ -39,6 +60,7 @@ const sync: SyncSent = {
   unplannedAssignments: [unplanned],
   passcodeUses: [switched],
   records,
+  photos: [pilePhoto, ...certificationPhotos],
   lastUsed: [{ projectId: p1, series: 'LOAD', lastUsedNumber: 101006 }],
   holds: { masterPasscodeVersion: 3, listsProjectId: p1 },
 };
@@ -52,7 +74,7 @@ const refusals = (schema: z.ZodType, payload: unknown): string[] => {
 const taken = (payload: unknown): boolean => syncSentSchema.safeParse(payload).success;
 
 describe('what a phone sends at a sync', () => {
-  it('AC-05-03, AC-10-36 the phone’s clock, its unplanned assignments, the passcode’s uses it logged, its records, the last number it used of each series and what it holds that a sync may bring anew: one schema, in that order', () => {
+  it('AC-05-03, AC-05-05, AC-10-36 the phone’s clock, its unplanned assignments, the passcode’s uses it logged, its records, its photographs’ records after them, the last number it used of each series and what it holds that a sync may bring anew: one schema, in that order', () => {
     expect(refusals(syncSentSchema, sync)).toEqual([]);
     expect(Object.keys(syncSentSchema.shape)).toEqual([
       'clockAt',
@@ -60,6 +82,7 @@ describe('what a phone sends at a sync', () => {
       'unplannedAssignments',
       'passcodeUses',
       'records',
+      'photos',
       'lastUsed',
       'holds',
     ]);
@@ -68,7 +91,14 @@ describe('what a phone sends at a sync', () => {
     expect(read.records).toHaveLength(records.length);
     // A phone with nothing to report still says each part, empty.
     expect(
-      taken({ ...sync, unplannedAssignments: [], passcodeUses: [], records: [], lastUsed: [] }),
+      taken({
+        ...sync,
+        unplannedAssignments: [],
+        passcodeUses: [],
+        records: [],
+        photos: [],
+        lastUsed: [],
+      }),
     ).toBe(true);
     for (const part of Object.keys(sync)) {
       const rest = Object.fromEntries(Object.entries(sync).filter(([name]) => name !== part));
@@ -114,13 +144,14 @@ describe('what a phone sends at a sync', () => {
     expect(taken({ ...sync, passcodeUses: [{ ...switched, typed: '4417' }] })).toBe(false);
   });
 
-  it('API4 every part is bounded: 200 records, 20 unplanned assignments, 100 uses of the passcode, 20 series, each series once', () => {
+  it('API4 every part is bounded: 200 records, 200 photographs’ records, 20 unplanned assignments, 100 uses of the passcode, 20 series, each series once', () => {
     expect([
       syncRecordsAtMost,
+      syncPhotosAtMost,
       syncUnplannedAssignmentsAtMost,
       syncPasscodeUsesAtMost,
       syncSeriesAtMost,
-    ]).toEqual([200, 20, 100, 20]);
+    ]).toEqual([200, 200, 20, 100, 20]);
     const many = <T>(count: number, one: (index: number) => T): T[] =>
       Array.from({ length: count }, (_, index) => one(index));
     const record = (index: number): unknown => ({
@@ -131,8 +162,16 @@ describe('what a phone sends at a sync', () => {
     expect(refusals(syncSentSchema, { ...sync, records: many(201, record) })).toEqual([
       'records: Too big: expected array to have <=200 items',
     ]);
-    // A full sync of ordinary records is well inside the request's one mebibyte.
-    expect(JSON.stringify({ ...sync, records: many(200, record) }).length).toBeLessThan(524_288);
+    // A full sync of ordinary records, and of photographs' records beside them, is well inside
+    // the request's one mebibyte.
+    const photo = (index: number): unknown => ({ ...pilePhoto, id: made(String(5000 + index)) });
+    expect(taken({ ...sync, photos: many(200, photo) })).toBe(true);
+    expect(refusals(syncSentSchema, { ...sync, photos: many(201, photo) })).toEqual([
+      'photos: Too big: expected array to have <=200 items',
+    ]);
+    expect(
+      JSON.stringify({ ...sync, records: many(200, record), photos: many(200, photo) }).length,
+    ).toBeLessThan(655_360);
     const report = (index: number): unknown => ({ ...unplanned, id: made(String(2000 + index)) });
     expect(taken({ ...sync, unplannedAssignments: many(21, report) })).toBe(false);
     const use = (index: number): unknown => ({ ...switched, id: made(String(3000 + index)) });
@@ -151,6 +190,117 @@ describe('what a phone sends at a sync', () => {
     expect(lastUsedSchema.safeParse({ ...load, lastUsedNumber: 0 }).success).toBe(false);
     expect(lastUsedSchema.safeParse({ ...load, lastUsedNumber: 101006.5 }).success).toBe(false);
     expect(lastUsedSchema.safeParse({ ...load, series: 'TICKET' }).success).toBe(false);
+  });
+});
+
+describe('what a sync weighs (ADR-504)', () => {
+  // The survey of Monday's examples, its own answers filled to weigh exactly so many bytes as
+  // sent: each answer at most four thousand characters, the last one making up the rest.
+  const weighing = (bytes: number): SyncedRecord => {
+    const sent = records[4];
+    if (sent?.record !== 'SURVEY') throw new Error('The fifth example is no survey.');
+    const answers: Record<string, string> = {};
+    const record = (): SyncedRecord => ({ ...sent, survey: { ...sent.survey, answers } });
+    let index = 0;
+    while (sentWeight(record()) + 4000 < bytes) {
+      answers[`answer-${String(index).padStart(3, '0')}`] = 'x'.repeat(4000);
+      index += 1;
+    }
+    const last = `answer-${String(index).padStart(3, '0')}`;
+    answers[last] = '';
+    answers[last] = 'x'.repeat(bytes - sentWeight(record()));
+    return record();
+  };
+
+  it('AC-05-51 a sync weighs its JSON in UTF-8: a character one to four bytes, as it goes on the wire', () => {
+    expect(['a', 'é', '€', '🙂'].map((character) => sentWeight(character))).toEqual([3, 4, 5, 6]);
+    expect(sentWeight({ notes: '€'.repeat(2000), gone: undefined })).toBe(6012);
+  });
+
+  it('AC-05-51, AC-10-41 a sync weighs a mebibyte at most, the least body any installation’s API reads, and a record a quarter of it', () => {
+    expect(syncBytesAtMost).toBe(1_048_576);
+    expect(syncBytesAtMost).toBe(requestBodyBytesAtLeast);
+    expect(syncedRecordBytesAtMost).toBe(syncBytesAtMost / 4);
+  });
+
+  it('AC-05-51 a record of the heaviest a record may be is read; one a byte heavier is no record: not saved, under its id, in plain words, and held for a person like any other', () => {
+    const heaviest = weighing(syncedRecordBytesAtMost);
+    expect(sentWeight(heaviest)).toBe(syncedRecordBytesAtMost);
+    expect(recordRead(heaviest).read).toBe(true);
+    const heavier = weighing(syncedRecordBytesAtMost + 1);
+    expect(sentWeight(heavier)).toBe(syncedRecordBytesAtMost + 1);
+    expect(recordRead(heavier)).toEqual({
+      read: false,
+      id: made('6'),
+      notice: {
+        reason: 'NOT_A_RECORD',
+        message:
+          'Not saved: this record can’t be read: it weighs more than a record may, 256 KiB as sent.',
+      },
+    });
+  });
+
+  it('AC-05-51 the heaviest record goes beside the heaviest reports a sync may carry (twenty unplanned assignments of two hundred pay items each, a hundred uses of the passcode, twenty series), and so do two more: the sync is still within its weight', () => {
+    const many = <T>(count: number, one: (index: number) => T): T[] =>
+      Array.from({ length: count }, (_, index) => one(index));
+    const heaviest: SyncSent = {
+      ...sync,
+      deviceUtcOffsetMinutes: -720,
+      unplannedAssignments: many(syncUnplannedAssignmentsAtMost, (index) => ({
+        ...unplanned,
+        id: made(`9${String(index)}`),
+        fieldEventKinds: [...fieldEventKinds],
+        certifying: true,
+        formDocumentTypes: [...assignmentFormDocumentTypes],
+        payItemIds: many(200, (item) => made(`8${String(index)}${String(item).padStart(3, '0')}`)),
+        occasion: 'MONITOR_SWITCH',
+        deviceUtcOffsetMinutes: -720,
+      })),
+      passcodeUses: many(syncPasscodeUsesAtMost, (index) => ({
+        ...switched,
+        id: made(`7${String(index)}`),
+        deviceUtcOffsetMinutes: -720,
+      })),
+      records: [],
+      photos: [],
+      lastUsed: many(syncSeriesAtMost, (index) => ({
+        projectId: made(`6${String(index)}`),
+        series: 'CERTIFICATION',
+        lastUsedNumber: 2_000_000_000,
+      })),
+      holds: { masterPasscodeVersion: 2_000_000_000, listsProjectId: p1 },
+    };
+    expect(refusals(syncSentSchema, heaviest)).toEqual([]);
+    // 186,729 bytes on 2026-10-13: under three quarters of a sync, the rest a record's room.
+    expect(sentWeight(heaviest)).toBeLessThan(syncBytesAtMost - syncedRecordBytesAtMost);
+    const record = weighing(syncedRecordBytesAtMost);
+    expect(fitByWeight(heaviest, [record])).toBe(1);
+    expect(sentWeight({ ...heaviest, records: [record] })).toBeLessThanOrEqual(syncBytesAtMost);
+    // Three such records fit beside those reports; a fourth goes in the next sync.
+    expect(fitByWeight(heaviest, [record, record, record, record])).toBe(3);
+  });
+
+  it('AC-05-51 a client fills a sync by weight: as many as keep it within a mebibyte, each after the first with its comma, the rest for the next sync', () => {
+    const empty: SyncSent = { ...sync, records: [], photos: [] };
+    const heavy = (last: string): SyncedRecord => ({
+      record: 'FIELD_EVENT',
+      fieldEvent: { ...collection, id: made(last), notes: '€'.repeat(2000) },
+    });
+    const one = sentWeight(heavy('1'));
+    const room = syncBytesAtMost - sentWeight(empty);
+    const fits = Math.floor((room + 1) / (one + 1));
+    const going = Array.from({ length: fits + 5 }, (_, index) => heavy(String(index)));
+    expect(fitByWeight(empty, going)).toBe(fits);
+    expect(sentWeight({ ...empty, records: going.slice(0, fits) })).toBeLessThanOrEqual(
+      syncBytesAtMost,
+    );
+    expect(sentWeight({ ...empty, records: going.slice(0, fits + 1) })).toBeGreaterThan(
+      syncBytesAtMost,
+    );
+    expect(fitByWeight(empty, [])).toBe(0);
+    // Things of a byte each: with its comma, each after the first weighs two.
+    const ones = Array.from({ length: room }, () => 0);
+    expect(fitByWeight(empty, ones)).toBe(Math.floor((room + 1) / 2));
   });
 });
 
@@ -263,6 +413,17 @@ describe('what a phone is answered', () => {
   const answered: SyncAnswered = {
     unplannedAssignments: [{ assignmentId: unplanned.id, answer: 'SAVED', reason: null }],
     passcodeUses: [{ useId: switched.id, answer: 'ALREADY_SAVED', reason: null }],
+    photos: [
+      { answer: 'SAVED', id: pilePhoto.id, notes: [] },
+      { answer: 'ALREADY_SAVED', id: made('21') },
+      {
+        answer: 'NOT_SAVED',
+        id: made('22'),
+        reason: 'OWNER_NOT_SAVED',
+        message:
+          'Not saved: the record this photograph belongs to isn’t saved on the server. Held on the server for review.',
+      },
+    ],
     records: [
       saved,
       {
@@ -327,8 +488,9 @@ describe('what a phone is answered', () => {
     ).toEqual([]);
     const not = (more: object): boolean =>
       !syncAnsweredSchema.safeParse({ ...answered, ...more }).success;
+    // A phone not in service is brought nothing: `null` is an answer (ADR-531).
     expect([
-      not({ masterPasscode: null }),
+      !not({ masterPasscode: null }),
       not({ masterPasscode: { version: 4 } }),
       not({ masterPasscode: { version: 4, check: 'osprey-landing-marsh' } }),
       not({ setupVersion: { projectId: p1, version: 0 } }),
@@ -411,6 +573,7 @@ describe('what a phone is answered', () => {
       'parallelism',
       'passcodeUses',
       'passes',
+      'photos',
       'projectId',
       'reason',
       'records',
@@ -423,5 +586,121 @@ describe('what a phone is answered', () => {
       'version',
     ]);
     expect(assignment).not.toBe(unplanned.id);
+  });
+});
+
+describe('a photograph’s record', () => {
+  it('AC-05-05, ADR-101, 481 what it is of, who took it, when and where, and both fingerprints, the phone’s word: never where its file is kept, which the server makes; a certification’s five each say their view, and only a certification’s photograph has one', () => {
+    for (const photo of [pilePhoto, ...certificationPhotos]) {
+      expect(refusals(syncedPhotoSchema, photo), photo.id).toEqual([]);
+    }
+    const read = photoRead(pilePhoto);
+    if (!read.read) throw new Error('The example is no photograph.');
+    expect(read.photo.capturedAt).toEqual(new Date(pilePhoto.capturedAt));
+    expect(certificationPhotos.map(({ owner, view }) => [owner.id, view])).toEqual(
+      ['OPERATOR_WITH_PLACARD', 'INTERIOR_OR_BACK', 'RIGHT', 'LEFT', 'FRONT'].map((view) => [
+        certification.id,
+        view,
+      ]),
+    );
+    // The place, the file, an upload's time, the phone: never the phone's to say.
+    for (const forged of [
+      { objectKey: 'projects/x/photos/y' },
+      { depthObjectKey: 'y.depth' },
+      { uploadedAt: '2026-10-12T21:30:00.000Z' },
+      { deviceId: made('97') },
+      { file: 'aGVsbG8' },
+    ]) {
+      const [name] = Object.keys(forged);
+      expect(refusals(syncedPhotoSchema, { ...pilePhoto, ...forged }), name).toEqual([
+        `: Unrecognized key: "${String(name)}"`,
+      ]);
+    }
+    // A view is a certification's photograph's alone; a certification's may have none.
+    expect(refusals(syncedPhotoSchema, { ...pilePhoto, view: 'LEFT' })).toEqual([
+      'view: Only a certification’s photograph is one of its views.',
+    ]);
+    expect(refusals(syncedPhotoSchema, { ...certificationPhotos[0], view: null })).toEqual([]);
+    expect(refusals(syncedPhotoSchema, { ...certificationPhotos[0], view: 'TOP' })).toHaveLength(1);
+    // A fingerprint is a SHA-256 as 64 lower-case hexadecimal digits, as the database keeps one.
+    for (const sha of ['', 'a'.repeat(63), 'A'.repeat(64), `${'a'.repeat(63)}g`, 'a'.repeat(65)]) {
+      expect(refusals(syncedPhotoSchema, { ...pilePhoto, originalSha256: sha }), sha).toEqual([
+        'originalSha256: is not a SHA-256 in hex',
+      ]);
+      expect(refusals(syncedPhotoSchema, { ...pilePhoto, uploadedSha256: sha }), sha).toHaveLength(
+        1,
+      );
+    }
+    // What it is of is a kind of record a phone makes, by that record's id.
+    for (const owner of [
+      { kind: 'COMPLETED_LOAD', id: collection.id },
+      { kind: 'FIELD_EVENT', id: '101001' },
+      { kind: 'FIELD_EVENT' },
+      { kind: 'FIELD_EVENT', id: collection.id, ticketNumber: '101001' },
+    ]) {
+      expect(
+        syncedPhotoSchema.safeParse({ ...pilePhoto, owner }).success,
+        JSON.stringify(owner),
+      ).toBe(false);
+    }
+    expect(refusals(syncedPhotoSchema, { ...pilePhoto, depthSha256: 'yes' })).toHaveLength(1);
+  });
+
+  it('ADR-481 one that isn’t a photograph’s record is read as not saved, with what it names where that much can be read: its own id, its project and who took it, never what it is of', () => {
+    const read = photoRead({ ...pilePhoto, objectKey: 'x' });
+    expect(read.read).toBe(false);
+    if (read.read) return;
+    expect([read.id, read.notice.reason]).toEqual([pilePhoto.id, 'NOT_A_RECORD']);
+    expect(photoNames(pilePhoto)).toEqual({ id: pilePhoto.id, projectId: p1, monitorId: ana });
+    expect(photoNames({ owner: { id: collection.id } })).toEqual({
+      id: null,
+      projectId: null,
+      monitorId: null,
+    });
+    for (const none of [null, 'photo', 7, [pilePhoto]]) {
+      expect(photoNames(none)).toEqual({ id: null, projectId: null, monitorId: null });
+    }
+  });
+
+  it('ADR-481 its answer is saved, already saved or not saved: never quarantined, and never where its file is kept', () => {
+    const not = (answer: unknown): boolean => !photoAnswerSchema.safeParse(answer).success;
+    expect(not({ answer: 'SAVED', id: pilePhoto.id, notes: [] })).toBe(false);
+    expect(
+      not({
+        answer: 'QUARANTINED',
+        id: pilePhoto.id,
+        reason: 'DUPLICATE_FIELD_EVENT',
+        message: 'Not saved.',
+        heldBy: collection.id,
+      }),
+    ).toBe(true);
+    expect(
+      not({ answer: 'SAVED', id: pilePhoto.id, notes: [], objectKey: 'projects/x/photos/y' }),
+    ).toBe(true);
+  });
+});
+
+describe('what a held thing was sent as, and what a report names (ADR-526)', () => {
+  it('AC-10-73 a report by its reason, a photograph by its reason or by naming what it belongs to, a record by its kind; nothing where what was sent says none', () => {
+    expect(heldSentAs(switched, 'REPORT_NOT_SAVED')).toBe('REPORT');
+    expect(heldSentAs(pilePhoto, 'OWNER_NOT_SAVED')).toBe('PHOTO');
+    expect(heldSentAs(pilePhoto, 'NAMES_NO_RECORD')).toBe('PHOTO');
+    for (const record of records) {
+      expect(heldSentAs(record, 'NAMES_NO_RECORD')).toBe(record.record);
+    }
+    for (const sent of [null, 'a line', 42, [], {}, { record: 'TICKET' }, { record: 'PHOTO' }]) {
+      expect(heldSentAs(sent, 'NOT_A_RECORD'), JSON.stringify(sent)).toBeNull();
+    }
+    expect(reportNames(unplanned)).toEqual({
+      id: unplanned.id,
+      projectId: unplanned.projectId,
+      monitorId: unplanned.personId,
+    });
+    expect(reportNames(switched)).toEqual({
+      id: switched.id,
+      projectId: null,
+      monitorId: switched.personId,
+    });
+    expect(reportNames('a line')).toEqual({ id: null, projectId: null, monitorId: null });
   });
 });

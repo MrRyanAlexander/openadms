@@ -1,0 +1,21 @@
+# Open ADMS local stack: TLS for the routing server (KD-78; ADR-517). Valhalla speaks plain HTTP
+# and no TLS, so it listens on its container's loopback alone (start.sh), and this Caddy, sharing
+# that container's network (compose.yaml, `routing-tls`), is the only way to it: TLS on 8443, with
+# the stack's certificate for `routing`, handed to Valhalla over the loopback, which never leaves
+# the container's network.
+{
+	admin off
+	auto_https off
+	persist_config off
+	# A request with no name (a health check by address) is answered with the one certificate.
+	default_sni routing
+	servers {
+		protocols h1 h2
+	}
+}
+
+https://:8443 {
+	tls /run/adms/tls/routing.crt /run/adms/tls/routing.key
+	header -Server
+	reverse_proxy 127.0.0.1:8002
+}

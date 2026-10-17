@@ -8,13 +8,15 @@
 //
 // Then what happens later: a measuring mistake corrected in place, the capacity worked out again
 // (AC-03-51); a modified truck certified again, replacing its old certification; a revocation;
-// and two spellings of one sub merged by the back office. Along the way the service
+// and two spellings of one sub, never merged (ADR-529 (f)). Along the way the service
 // refuses only what can't be a certification (measurements that give no capacity, a crew with
 // boxes, a tier 2 sub with no tier 1, a revocation with no reason), saving nothing.
 //
 // Not here: the phone's screens and its sub suggestions (Phase 3); the phone's cert-number block
 // (the story `numbering`: the numbers Sam's phone gives out are stated here), photographs
 // (Milestone 1.3), the flags a certification raises on tickets (1.5.5) and QC (1.8.2).
+import { createHash } from 'node:crypto';
+
 import {
   type BoxInput,
   Certifications,
@@ -22,13 +24,19 @@ import {
   type NewCertification,
   type Outcome,
 } from '@open-adms/api';
-import { NewProjectSettings } from '@open-adms/domain';
+import {
+  correctCertificationBoxEndpoint,
+  revokeCertificationEndpoint,
+  setPermissionsEndpoint,
+} from '@open-adms/contracts';
+import { NewProjectSettings, SubNames } from '@open-adms/domain';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import { uuidv7 } from '../ids.ts';
+import { refusalOf } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import { assigned, taken } from './board.ts';
-import { p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const saturday = (time: string): string => on('10', time);
@@ -78,11 +86,12 @@ export const certification: Story = {
     const phone = await story.enrolled('P1-HO-TDSR');
     const dana = uuidv7(clock.now());
     const world = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
-      // He merges two spellings of a sub later: a contractor's record is setup's, and its
-      // service asks whether he holds Setup (ADR-424).
-      await tx.userPermission.create({ data: { userId: luis.id, permission: 'SETUP' } });
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      const luis = await tx.user.create({
+        data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
+      });
       const p1 = await setUpP1(tx, story.policy);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
       const p2 = await tx.project.create({
@@ -110,6 +119,11 @@ export const certification: Story = {
       };
     });
     const { luis, p1, p2, coastline } = world;
+    // Dana and Luis at their browsers (BACKLOG 2.7.1 part 4; ADR-496, 502), each signed in when
+    // first asked for: she is the firm's first admin, and sets his first password herself.
+    const danas = () => story.backOffice.admin({ id: dana, email: danasEmail });
+    const luiss = async () =>
+      story.backOffice.person(await danas(), { id: luis, email: luissEmail });
     // Created as real ones are: on the phone, online, under the master passcode (ADR-442).
     const samGrant = await story.monitor('Sam Grant', world.phone);
     const sam = samGrant.id;
@@ -301,13 +315,62 @@ export const certification: Story = {
       [48, false, false, ['CERTIFICATION']],
     );
     story.check(
-      'the phone syncs it: one record, answered "saved"',
+      'C82, AC-04-77 the phone syncs it with the five photographs Sam took of it, in one sync and after it: each answered "saved", and the phone holds nothing more',
       [
         await samsPhone.sync(story.server),
-        samsPhone.answers.map((one) => one.answer),
+        samsPhone.answers.map((one) => `${one.sent.record} ${one.answer.answer}`),
+        samsPhone.answers[0]?.answer,
         samsPhone.waitingRecords,
+        samsPhone.waitingPhotos,
       ],
-      [1, [{ answer: 'SAVED', id: selfLoader.record.id, notes: [] }], []],
+      [
+        6,
+        ['CERTIFICATION SAVED', ...Array<string>(5).fill('PHOTO SAVED')],
+        { answer: 'SAVED', id: selfLoader.record.id, notes: [] },
+        [],
+        [],
+      ],
+    );
+    const fivePhotos = await api.photo.findMany({
+      where: { certificationId: selfLoader.record.id },
+      orderBy: { view: 'asc' },
+    });
+    story.check(
+      'ADR-179, 481 its five photographs are one of each view, each where the server put it, under P1 and its own id: no phone named a place',
+      fivePhotos.map(
+        (photo) =>
+          `${String(photo.view)} ${photo.objectKey === `projects/${photo.projectId}/photos/${photo.id}` ? 'its place' : photo.objectKey}`,
+      ),
+      [
+        'OPERATOR_WITH_PLACARD its place',
+        'INTERIOR_OR_BACK its place',
+        'RIGHT its place',
+        'LEFT its place',
+        'FRONT its place',
+      ],
+    );
+    const sha256Of = (bytes: Uint8Array): string =>
+      createHash('sha256').update(bytes).digest('hex');
+    const filesOf: string[] = [];
+    for (const photo of fivePhotos) {
+      const kept = await story.media.read(photo.objectKey, story.policy.mediaFileBytesAtMost);
+      filesOf.push(
+        `${String(photo.view)} ${photo.uploadedAt === null ? 'not arrived' : 'arrived'}, ${kept !== null && sha256Of(kept.bytes) === photo.uploadedSha256 ? 'the file fingerprinted' : 'no such file'}`,
+      );
+    }
+    story.check(
+      'AC-04-77, C82 and each one’s file went up to the media endpoint after the sync that saved it: kept at its place, the very file whose SHA-256 Sam’s phone gave, its upload time written (ADR-482, 483)',
+      [filesOf, samsPhone.holdsFiles],
+      [
+        [
+          'OPERATOR_WITH_PLACARD arrived, the file fingerprinted',
+          'INTERIOR_OR_BACK arrived, the file fingerprinted',
+          'RIGHT arrived, the file fingerprinted',
+          'LEFT arrived, the file fingerprinted',
+          'FRONT arrived, the file fingerprinted',
+        ],
+        [],
+      ],
     );
     const loader = await api.certification.findUniqueOrThrow({
       where: { id: selfLoader.record.id },
@@ -346,12 +409,15 @@ export const certification: Story = {
       });
     }
     story.check(
-      'the two crews go in one sync from Sam’s phone, nothing measured, each answered "saved"',
+      'the two crews go in one sync from Sam’s phone, nothing measured, with their five photographs each after them; each answered "saved"',
       [
         await samsPhone.sync(story.server),
-        samsPhone.answers.slice(1).map((one) => one.answer.answer),
+        samsPhone.answers.slice(6).map((one) => `${one.sent.record} ${one.answer.answer}`),
       ],
-      [2, ['SAVED', 'SAVED']],
+      [
+        12,
+        [...Array<string>(2).fill('CERTIFICATION SAVED'), ...Array<string>(10).fill('PHOTO SAVED')],
+      ],
     );
     await saved(
       certifications.certify(
@@ -498,10 +564,6 @@ export const certification: Story = {
       ),
       ['SUB_PLACED_ELSEWHERE'],
     );
-    const riveras = await api.contractor.findMany({
-      where: { name: 'Rivera Trucking' },
-      orderBy: { createdAt: 'asc' },
-    });
     story.check(
       'AC-03-05 the sheet’s number is kept as written; Rivera’s own place on P1 is unmoved',
       await certified(p1),
@@ -519,18 +581,40 @@ export const certification: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('13', '16:20'),
-      'Tuesday: Luis finds the sideboards on 730423 were typed 21 high; they are 12',
+      'Tuesday: Dana gives Luis Setup and the grant to correct. He finds the sideboards on 730423 were typed 21 high; they are 12, and he corrects them at his browser',
     );
+    // A measuring mistake takes correct, and a contractor's record is setup's (ADR-424). Her request at his record; he holds nothing yet.
+    await (
+      await danas()
+    ).answered(setPermissionsEndpoint, {
+      ids: { userId: luis },
+      json: { permissions: ['SETUP', 'CORRECT', 'VIEW_SETUP', 'VIEW_REVIEW'] },
+    });
+    // The sideboards are its second box, after the primary (0); its dog box is the third.
+    const boxOf = (position: string, changes: { length?: number; height?: number }) => ({
+      ids: { certificationId: tidewaterTruck.id, position },
+      json: { changes },
+    });
+    const signedIn = await luiss();
+    const lastAudited = (await api.auditRecord.findFirstOrThrow({ orderBy: { id: 'desc' } })).id;
     story.check(
-      'a correction that leaves no capacity is refused, and nothing changes',
-      await refused(certifications.measure(luis, tidewaterTruck.id, 1, { height: 0 })),
-      'MEASUREMENT_INVALID: Box 1 (rectangle): its height is 0. Every measurement is a whole number of inches, 1 or more.',
+      'a correction that leaves no capacity is refused in the domain’s words, and nothing changes: the dog box typed 3,000 long, not 30, subtracts more than the truck holds',
+      refusalOf(
+        await signedIn.asked(correctCertificationBoxEndpoint, boxOf('2', { length: 3000 })),
+      ),
+      '422 NOT_SAVED · NOTHING_HELD: The boxes work out to -3650400.00 cu in: they subtract as much as the primary box holds, or more. Check the measurements.',
     );
-    const corrected = await saved(
-      certifications.measure(luis, tidewaterTruck.id, 1, { height: 12 }),
-    );
+    const corrected = (
+      await signedIn.answered(correctCertificationBoxEndpoint, boxOf('1', { height: 12 }))
+    ).record;
     const correction = await api.auditRecord.findMany({
-      where: { actorId: luis },
+      where: {
+        actorId: luis,
+        id: { gt: lastAudited },
+        // His browser's own session, refreshed as the story's clock moves on, is his sign-in's,
+        // not a change to a record (ADR-501).
+        tableName: { not: 'session' },
+      },
       orderBy: { id: 'asc' },
     });
     story.check(
@@ -600,18 +684,28 @@ export const certification: Story = {
     const summitTruck = await api.certification.findFirstOrThrow({
       where: { certNumber: '88120' },
     });
+    // An admin's alone: Dana's request at her browser (ADR-079).
+    const revoking = (reason: string) => ({
+      ids: { certificationId: summitTruck.id },
+      json: { from: '2026-10-15', reason },
+    });
     story.check(
-      'a date without a reason is refused',
-      await refused(certifications.revoke(dana, summitTruck.id, '2026-10-15', '')),
-      'REVOCATION_NEEDS_REASON: Not saved: certification 88120 is revoked from a date with a reason.',
+      'a date without a reason is refused before anything is read, and nothing changes',
+      [
+        refusalOf(await (await danas()).asked(revokeCertificationEndpoint, revoking(' '))),
+        (await api.certification.findUniqueOrThrow({ where: { id: summitTruck.id } })).revokedFrom,
+      ],
+      ['400 BAD_REQUEST', null],
     );
-    const revoked = await saved(
-      certifications.revoke(dana, summitTruck.id, '2026-10-15', 'Truck left the project'),
-    );
+    const revoked = (
+      await (
+        await danas()
+      ).answered(revokeCertificationEndpoint, revoking('Truck left the project'))
+    ).record;
     story.check(
       'AC-03-55 it keeps the date, the reason and who revoked it; nothing else on it changes',
       [
-        revoked.revokedFrom?.toISOString().slice(0, 10),
+        revoked.revokedFrom,
         revoked.revokedReason,
         revoked.revokedById === dana,
         revoked.capacityCy,
@@ -622,7 +716,7 @@ export const certification: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '10:15'),
-      'Another Rivera truck, 730425, is certified with its sub typed "Rivera Trucking Inc"; Luis merges the two spellings',
+      'Another Rivera truck, 730425, is certified with its sub typed "Rivera Trucking Inc": a second spelling, never merged (ADR-529 (f))',
     );
     const secondTruck = await saved(
       certifications.certify(
@@ -636,43 +730,32 @@ export const certification: Story = {
     const typedAgain = await api.contractor.findFirstOrThrow({
       where: { name: 'Rivera Trucking Inc' },
     });
-    const [kept, underSummit] = riveras;
-    if (kept === undefined || underSummit === undefined)
-      throw new Error('Two Rivera records were expected.');
     story.check(
-      'the Rivera under Summit isn’t merged into the Rivera under Coastline: a sub is never shared',
-      await refused(contractors.merge(luis, underSummit.id, kept.id)),
-      'MERGE_PLACES_DIFFER: Not merged: on Bayline County ROW, Hurricane Delphine, Rivera Trucking is Summit Debris Services’s tier 1 sub and Rivera Trucking is Coastline Haulers LLC’s tier 1 sub. A contractor has one place on a project, and a sub is never shared between primes.',
-    );
-    const merged = await saved(contractors.merge(luis, typedAgain.id, kept.id));
-    const renamed = await api.certification.findUniqueOrThrow({ where: { id: secondTruck.id } });
-    story.check(
-      'AC-01-21 "Rivera Trucking Inc" is archived, merged into "Rivera Trucking"; 730425 names the kept record; nothing was deleted',
+      'AC-01-21 (ADR-529 (f)) both spellings stand, each its own record and place; nothing merges them, and 730425 names the spelling Sam typed. The worker flags the certifications that name either, "Rivera Trucking" and "Rivera Trucking Inc" being alike, and Tidewater Hauling never (the story p1-reviewed)',
       [
-        merged.mergedIntoId === kept.id,
-        merged.archivedAt !== null,
-        renamed.firstTierSubId === kept.id,
+        secondTruck.firstTierSubId === typedAgain.id,
+        typedAgain.archivedAt,
         await api.contractor.count({ where: { name: { startsWith: 'Rivera' } } }),
         await placesOn(p1),
+        [
+          SubNames.alike('Rivera Trucking', 'Rivera Trucking Inc'),
+          SubNames.alike('Rivera Trucking Inc', 'Tidewater Hauling'),
+        ],
       ],
       [
         true,
-        true,
-        true,
+        null,
         3,
         [
           'Coastline Haulers LLC: prime',
           'Summit Debris Services: prime',
           'Rivera Trucking: tier 1 under Coastline Haulers LLC',
           'Rivera Trucking: tier 1 under Summit Debris Services',
+          'Rivera Trucking Inc: tier 1 under Coastline Haulers LLC',
           'Tidewater Hauling: tier 2 under Coastline Haulers LLC',
         ],
+        [true, false],
       ],
-    );
-    story.check(
-      'a record already merged is never merged again',
-      await refused(contractors.merge(luis, typedAgain.id, underSummit.id)),
-      'MERGE_ALREADY_MERGED: Not merged: Rivera Trucking Inc was already merged into another contractor.',
     );
 
     // ------------------------------------------------------------------------------------------
@@ -697,7 +780,8 @@ export const certification: Story = {
         'Sam: certification_box INSERT (DEVICE)': 14,
         'Sam: certification_helper INSERT (DEVICE)': 1,
         'Luis: certification_box UPDATE (BACK_OFFICE)': 1,
-        'Luis: certification UPDATE (BACK_OFFICE)': 2,
+        // His box corrected; no merge re-points one since ADR-529 (f).
+        'Luis: certification UPDATE (BACK_OFFICE)': 1,
         'Dana: certification UPDATE (BACK_OFFICE)': 1,
       },
     );

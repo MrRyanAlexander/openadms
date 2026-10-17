@@ -8,16 +8,34 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  changePhoneKeyHoursEndpoint,
+  firmSettingsEndpoint,
   addDebrisTypeEndpoint,
   addFieldTagEndpoint,
   addFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
+  addListValueEndpoint,
   addPayableTypeEndpoint,
   addPrimeEndpoint,
   addSiteShapeEndpoint,
+  addSiteShapeFileEndpoint,
+  addSiteShapeFromEsriEndpoint,
   archiveControlRangeEndpoint,
+  archiveListValueEndpoint,
   backOfficeRoles,
+  changeClientEndpoint,
+  changeContractEndpoint,
+  changeContractorEndpoint,
+  changeDeclarationEventEndpoint,
+  changeFormDebrisTypeEndpoint,
+  changeFormEndpoint,
   changePayItemEndpoint,
+  listPayItemRatesEndpoint,
+  previewNewRuleEndpoint,
+  previewPayItemChangeEndpoint,
+  previewPayItemRateEndpoint,
+  previewPaysWhenEndpoint,
+  previewRuleChangeEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   changeRuleEndpoint,
@@ -38,12 +56,21 @@ import {
   findClientsEndpoint,
   findContractorsEndpoint,
   findDeclarationEventsEndpoint,
+  giveSiteLabelEndpoint,
   linkTippingFeeEndpoint,
+  loadEsriMapEndpoint,
   loadMapEndpoint,
-  mergeContractorEndpoint,
+  loadMapFileEndpoint,
+  refreshEsriMapEndpoint,
+  removeSiteLabelEndpoint,
+  removeTippingFeeEndpoint,
+  renameListValueEndpoint,
   savePaysWhenEndpoint,
+  sendMapFileEndpoint,
+  setCrewDayStepsEndpoint,
   setPayItemRateEndpoint,
   startNumberSeriesEndpoint,
+  unarchiveListValueEndpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -76,41 +103,70 @@ afterAll(async () => {
 
 const world = worldOn(() => db);
 
-// Setup's endpoints of this task's first three parts, in the order the contracts list them.
+// Every setup endpoint, in the order the contracts list them (tasks 2.4.2, 2.6.4, 2.8.5).
 const setupEndpoints = [
   findClientsEndpoint,
   createClientEndpoint,
+  changeClientEndpoint,
   findDeclarationEventsEndpoint,
   createDeclarationEventEndpoint,
+  changeDeclarationEventEndpoint,
   createProjectEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
-  closeProjectEndpoint,
   startNumberSeriesEndpoint,
   enterControlRangeEndpoint,
   archiveControlRangeEndpoint,
   addFieldTagEndpoint,
   findContractorsEndpoint,
   createContractorEndpoint,
+  changeContractorEndpoint,
   addPrimeEndpoint,
   createContractEndpoint,
+  changeContractEndpoint,
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
+  addListValueEndpoint,
+  renameListValueEndpoint,
+  archiveListValueEndpoint,
+  unarchiveListValueEndpoint,
   createFormEndpoint,
+  changeFormEndpoint,
   addFormDebrisTypeEndpoint,
+  changeFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
   createPayItemEndpoint,
+  // A project's rates are read only by whoever may set one (ADR-535 (2)).
+  listPayItemRatesEndpoint,
   changePayItemEndpoint,
+  // What each save would change, before it is saved (ADR-229, 535 (3)).
+  previewPayItemChangeEndpoint,
   setPayItemRateEndpoint,
+  previewPayItemRateEndpoint,
+  setCrewDayStepsEndpoint,
   savePaysWhenEndpoint,
+  previewPaysWhenEndpoint,
   createRuleEndpoint,
+  previewNewRuleEndpoint,
   changeRuleEndpoint,
-  mergeContractorEndpoint,
+  previewRuleChangeEndpoint,
   createSiteEndpoint,
   changeSiteEndpoint,
+  giveSiteLabelEndpoint,
+  removeSiteLabelEndpoint,
   addSiteShapeEndpoint,
   linkTippingFeeEndpoint,
+  removeTippingFeeEndpoint,
   loadMapEndpoint,
+  sendMapFileEndpoint,
+  loadMapFileEndpoint,
+  addSiteShapeFileEndpoint,
+  loadEsriMapEndpoint,
+  refreshEsriMapEndpoint,
+  addSiteShapeFromEsriEndpoint,
+  // The firm's own settings: read, and the hours a lost phone keeps its key (task 2.8.6).
+  firmSettingsEndpoint,
+  changePhoneKeyHoursEndpoint,
 ] as const;
 
 describe('who may change the setup', () => {
@@ -128,37 +184,63 @@ describe('who may change the setup', () => {
     expect(setupEndpoints.map(({ method, path }) => `${method} ${path}`)).toEqual([
       'GET /clients',
       'POST /clients',
+      'PATCH /clients/:clientId',
       'GET /declaration-events',
       'POST /declaration-events',
+      'PATCH /declaration-events/:declarationEventId',
       'POST /projects',
       'PATCH /projects/:projectId/settings',
       'PATCH /projects/:projectId/active-window',
-      'POST /projects/:projectId/closings',
       'POST /projects/:projectId/number-series',
       'POST /projects/:projectId/control-ranges',
       'POST /control-ranges/:controlRangeId/archivings',
       'POST /projects/:projectId/field-tags',
       'GET /contractors',
       'POST /contractors',
+      'PATCH /contractors/:contractorId',
       'POST /projects/:projectId/primes',
       'POST /projects/:projectId/contracts',
+      'PATCH /contracts/:contractId',
       'POST /debris-types',
       'POST /payable-types',
+      'POST /lists/:list/values',
+      'PATCH /lists/:list/values/:valueId',
+      'POST /lists/:list/values/:valueId/archivings',
+      'POST /lists/:list/values/:valueId/unarchivings',
       'POST /projects/:projectId/forms',
+      'PATCH /forms/:formId',
       'POST /forms/:formId/debris-types',
+      'PATCH /form-debris-types/:formDebrisTypeId',
       'POST /forms/:formId/definitions',
       'POST /projects/:projectId/pay-items',
+      'GET /projects/:projectId/pay-item-rates',
       'PATCH /pay-items/:payItemId',
+      'POST /pay-items/:payItemId/previews',
       'PUT /pay-items/:payItemId/rates/:primeId',
+      'POST /pay-items/:payItemId/rates/:primeId/previews',
+      'PUT /pay-items/:payItemId/crew-day-steps',
       'PUT /pay-items/:payItemId/pays-when',
+      'POST /pay-items/:payItemId/pays-when/previews',
       'POST /projects/:projectId/rules',
+      'POST /projects/:projectId/rules/previews',
       'PUT /rules/:ruleId',
-      'POST /contractors/:contractorId/merges',
+      'POST /rules/:ruleId/previews',
       'POST /projects/:projectId/sites',
       'PATCH /sites/:siteId',
+      'PUT /sites/:siteId/labels/:siteLabelId',
+      'POST /sites/:siteId/labels/:siteLabelId/removals',
       'POST /sites/:siteId/shapes',
       'POST /sites/:siteId/tipping-fees',
+      'POST /sites/:siteId/tipping-fees/:payItemId/removals',
       'POST /projects/:projectId/map-versions',
+      'POST /projects/:projectId/map-files',
+      'POST /projects/:projectId/map-files/:mapFileId/map-versions',
+      'POST /sites/:siteId/map-files/:mapFileId/shapes',
+      'POST /projects/:projectId/esri-map-versions',
+      'POST /map-versions/:mapVersionId/esri-refreshes',
+      'POST /sites/:siteId/esri-shapes',
+      'GET /firm-settings',
+      'PATCH /firm-settings/phone-key',
     ]);
   });
 
@@ -239,7 +321,7 @@ describe('who may change the setup', () => {
       const clock = { now: () => new Date('2026-10-12T14:00:00Z') };
       const projects = new ProjectSetup(within, clock, shippedPolicy);
       const contractors = new ContractorSetup(within, clock, shippedPolicy);
-      const lists = new ListSetup(within, clock);
+      const lists = new ListSetup(within, clock, shippedPolicy);
       const gone = await tx.user.create({ data: { name: 'Morgan Ellis', role: 'ADMIN' } });
       await tx.user.update({ where: { id: gone.id }, data: { archivedAt: new Date() } });
       // A grant written beside somebody who is no manager/analyst grants nothing.
@@ -257,7 +339,7 @@ describe('who may change the setup', () => {
       }
       const luis = await projects.client(who.luis, { name: 'Bayline County' });
       expect(luis.saved ? '' : luis.refusal.message).toBe(
-        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup". Nothing was changed.',
+        'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup" and "view setup". Nothing was changed.',
       );
       expect([await tx.client.count(), await tx.contractor.count()]).toEqual([0, 0]);
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
@@ -437,6 +519,10 @@ describe('Dana sets P1 up through the endpoints', () => {
         [changeProjectWindowEndpoint, { activeFrom: '12 October 2026' }],
         [changeProjectSettingsEndpoint, { loadCallLowLimit: 5.5 }],
         [changeProjectSettingsEndpoint, { rate: '7.50' }],
+        // AC-10-63: past what the column holds, refused here, never a failure at the database.
+        [changeProjectSettingsEndpoint, { siteCircleMeters: 2 ** 31 }],
+        [changeProjectSettingsEndpoint, { stumpFillDepthInches: 1e30 }],
+        [changeProjectSettingsEndpoint, { loadCallHighLimit: -(2 ** 31) - 1 }],
       ] as const) {
         expect(told(await ask(api, dana, served, { ids, payload }))).toEqual([400, 'BAD_REQUEST']);
       }

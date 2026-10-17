@@ -128,7 +128,6 @@ const formOf = (projectId: string, documentType: string): Record<string, unknown
   project_id: projectId,
   name: `A ${documentType} form`,
   document_type: documentType,
-  enabled: true,
   ...(documentType === 'ROE' ? { gps_required: true } : {}),
   ...(documentType === 'INCIDENT' ? { incident_offers: '{}' } : {}),
 });
@@ -186,51 +185,25 @@ describe('a project’s forms', () => {
     expect(underDefinition.message).toContain('"form_definition_form_id_document_type_fkey"');
   });
 
-  it('AC-01-30 Dana switches incidents and drop-off logs on for P1: each is on for that project only', async () => {
+  it('AC-01-30 (ADR-529 (d)) P1 uses incidents and drop-off logs, so it has their forms; a project that doesn’t has none, and no form is switched on or off', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const dropOff = await add('form', { ...formOf(world.p1, 'DROP_OFF_LOG'), enabled: false });
-    await db.run(`UPDATE "form" SET "enabled" = true WHERE "id" = $1`, [dropOff]);
-    await add('form', { ...formOf(world.p2, 'INCIDENT'), enabled: false });
+    await add('form', formOf(world.p1, 'DROP_OFF_LOG'));
     expect(
       await db.rows(
-        `SELECT p."name" AS project, f."document_type"::text, f."enabled" FROM "form" f
+        `SELECT p."name" AS project, f."document_type"::text FROM "form" f
          JOIN "project" p ON p."id" = f."project_id"
          WHERE f."document_type" IN ('INCIDENT', 'DROP_OFF_LOG') ORDER BY p."name", f."document_type"`,
       ),
     ).toEqual([
-      {
-        project: 'Bayline County PPDR, Hurricane Delphine',
-        document_type: 'INCIDENT',
-        enabled: false,
-      },
-      {
-        project: 'Bayline County ROW, Hurricane Delphine',
-        document_type: 'INCIDENT',
-        enabled: true,
-      },
-      {
-        project: 'Bayline County ROW, Hurricane Delphine',
-        document_type: 'DROP_OFF_LOG',
-        enabled: true,
-      },
+      { project: 'Bayline County ROW, Hurricane Delphine', document_type: 'INCIDENT' },
+      { project: 'Bayline County ROW, Hurricane Delphine', document_type: 'DROP_OFF_LOG' },
     ]);
-    expect((await auditOf(dropOff)).at(-1)).toMatchObject({
-      operation: 'UPDATE',
-      changed: ['enabled'],
-      prior: { enabled: false },
-      actor: world.admin,
-      domain: 'OPERATIONS',
-    });
-    // Whoever writes a form says whether it's on: the database stands nothing in.
-    const unsaid = await db.refused(
-      ...insertOf('form', {
-        project_id: world.p2,
-        name: 'Drop-off log',
-        document_type: 'DROP_OFF_LOG',
-      }),
+    const columns = await db.rows<{ name: string }>(
+      `SELECT column_name AS name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'form' AND column_name = 'enabled'`,
     );
-    expect(unsaid.code).toBe(refusedBy.notNull);
+    expect(columns).toEqual([]);
   });
 
   it('AC-01-30 "GPS required" is a setting on the project’s ROE form, stated there and on no other form', async () => {
@@ -312,7 +285,7 @@ describe('a project’s forms', () => {
     expect(other.code).toBe(refusedBy.badValue);
   });
 
-  it.each(['project_id', 'name', 'document_type', 'enabled'])('needs its %s', async (column) => {
+  it.each(['project_id', 'name', 'document_type'])('needs its %s', async (column) => {
     const { db, world } = tested;
     await asTheApi();
     const none = await db.refused(

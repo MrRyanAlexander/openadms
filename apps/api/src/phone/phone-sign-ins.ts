@@ -17,9 +17,9 @@
 //   the password anew. Each is counted on the monitor's own sign-in record and is a security
 //   event naming the phone. Whatever is wrong, the caller is told the same thing in about the
 //   same time.
-// - **The session is a row** (ADR-443): the monitor and the phone, ending twelve hours after the
-//   sign-in whatever is asked of it (`MONITOR_SESSION_HOURS`), and never for quiet (ADR-441
-//   (6)(b)). Its token is the session's id and 32 random bytes; the server keeps only their
+// - **The session is a row** (ADR-443): the monitor and the phone, ending the firm's hours after
+//   the sign-in whatever is asked of it (its settings record, 24 as shipped from
+//   `MONITOR_SESSION_HOURS`, ADR-531), and never for quiet (ADR-441 (6)(b)). Its token is the session's id and 32 random bytes; the server keeps only their
 //   SHA-256. One monitor at a time on a phone: a sign-in ends any other on it.
 // - **Read on every request** (`onPhone`): an archived monitor, a password set anew (it ends their
 //   sessions), a sign-out, another monitor signed in on the phone, and a revoked key (the phone's
@@ -36,6 +36,7 @@ import { randomBytes } from 'node:crypto';
 import type { Database, DeviceStatus } from '@open-adms/db';
 import type { MasterPasscodeSessionKind } from '@open-adms/domain';
 
+import { FirmSettings } from '../firm/firm-settings.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { PasswordHasher } from '../sign-in/password-hasher.ts';
 import type { SessionTokens } from '../sign-in/session-tokens.ts';
@@ -82,8 +83,6 @@ export interface PhoneSignInsParts {
   readonly tries: WrongTries;
   readonly assignments: PhoneAssignments;
   readonly clock: Clock;
-  // How long a monitor's sign-in lasts, in hours (`MONITOR_SESSION_HOURS`).
-  readonly hours: number;
   readonly requestNow: () => string | undefined;
 }
 
@@ -98,12 +97,23 @@ export class PhoneSignIns {
     this.parts = parts;
   }
 
-  async signIn(
+  // One try at a time at one Monitor ID (ADR-541): each reads the count the one before it left.
+  signIn(
     phone: SigningInPhone,
     monitorNumber: string,
     password: string,
   ): Promise<PhoneSignInOutcome> {
-    const { tokens, hasher, offline, tries, assignments, clock, hours, requestNow } = this.parts;
+    return this.parts.tries.inTurn(`monitor ${monitorNumber.trim().toUpperCase()}`, () =>
+      this.signInNow(phone, monitorNumber, password),
+    );
+  }
+
+  private async signInNow(
+    phone: SigningInPhone,
+    monitorNumber: string,
+    password: string,
+  ): Promise<PhoneSignInOutcome> {
+    const { tokens, hasher, offline, tries, assignments, clock, requestNow } = this.parts;
     // Before the password is read: a phone out of service never spends a monitor's count.
     if (phone.status !== 'ACTIVE') return { signedIn: false, why: 'PHONE_OUT_OF_SERVICE' };
     const person = await this.named(monitorNumber);
@@ -134,6 +144,7 @@ export class PhoneSignIns {
         ? await offline.seedOf(person.id, password)
         : undefined;
     const now = clock.now();
+    const hours = await this.db.$read((tx) => FirmSettings.monitorSessionHours(tx));
     const expiresAt = new Date(now.getTime() + hours * 3_600_000);
     const made = tokens.newRefresh();
     const requestId = requestNow();

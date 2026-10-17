@@ -16,7 +16,7 @@ import { expect } from 'vitest';
 import { PasswordHasher } from '../../src/sign-in/password-hasher.ts';
 import type { Tx } from './database.ts';
 import type { Answer, Served } from './served.ts';
-import { signingSecret } from './sign-in.ts';
+import { passwordKey } from './sign-in.ts';
 
 export const passcode = 'osprey-landing-marsh';
 
@@ -25,7 +25,8 @@ const versions = new WeakMap<object, number>();
 // The firm's master passcode for this test: a version of the test's own, now the one in force.
 export async function passcodeSet(tx: Tx): Promise<number> {
   const last = (await tx.masterPasscode.aggregate({ _max: { version: true } }))._max.version ?? 0;
-  const hash = await new PasswordHasher(signingSecret).hashWithoutKey(passcode);
+  // As the installer makes it: no key, no seed, until its first right use (ADR-542).
+  const hash = await new PasswordHasher(passwordKey).hashWithoutKey(passcode);
   await tx.masterPasscode.create({ data: { version: last + 1, hash } });
   versions.set(tx, last + 1);
   return last + 1;
@@ -77,7 +78,7 @@ export const challengeFor = (served: Served, deviceId: string): Promise<Answer> 
 export const proofOf = (
   served: Served,
   deviceId: string,
-  proof: { challenge: string; signature: string },
+  proof: { challenge: string; signature: string; passcode?: string },
 ): Promise<Answer> => served.ask('POST', `/phones/${deviceId}/proofs`, { payload: proof });
 
 // A challenge asked for and answered by the phone's own key: what a sync begins with.
@@ -104,4 +105,75 @@ export async function proven(
   const { answer } = await answered(served, phone);
   expect([answer.status, answer.code]).toEqual([200, undefined]);
   return phoneProvenAnswerSchema.parse(answer.body).token;
+}
+
+// A proof that must work, made with the test's passcode beside the phone's signature: the master
+// user at the phone, which counts as somebody signed in on it for what it sends (ADR-531). The
+// token it gave.
+export async function provenWithPasscode(
+  served: Served,
+  phone: Pick<TestPhone, 'id' | 'key'>,
+): Promise<string> {
+  const asked = await challengeFor(served, phone.id);
+  expect([asked.status, asked.code]).toEqual([200, undefined]);
+  const { challenge } = phoneChallengeAnswerSchema.parse(asked.body);
+  const answer = await proofOf(served, phone.id, {
+    challenge,
+    signature: phone.key.signed(challenge),
+    passcode,
+  });
+  expect([answer.status, answer.code], 'proving the phone with the passcode').toEqual([
+    200,
+    undefined,
+  ]);
+  return phoneProvenAnswerSchema.parse(answer.body).token;
+}
+
+// The tokens of the master user at each phone, by the token of the phone's own proof.
+const senders = new Map<string, string>();
+
+// A phone proven both ways at once, as a test's phone that sends and does a monitor's things too
+// (ADR-531): by its key alone, the token returned, and with the passcode beside it, the token
+// `senderOf` gives for it. Two challenges a millisecond apart, the earlier answered first, since
+// a phone answers only a challenge made after the last it answered; the clock is put back.
+export async function provenBoth(
+  served: Served,
+  phone: Pick<TestPhone, 'id' | 'key'>,
+): Promise<string> {
+  const now = served.clock.now();
+  served.clock.at = new Date(now.getTime() - 1);
+  const earlier = phoneChallengeAnswerSchema.parse(
+    (await challengeFor(served, phone.id)).body,
+  ).challenge;
+  served.clock.at = now;
+  const asMaster = await proofOf(served, phone.id, {
+    challenge: earlier,
+    signature: phone.key.signed(earlier),
+    passcode,
+  });
+  expect([asMaster.status, asMaster.code], 'proving the phone with the passcode').toEqual([
+    200,
+    undefined,
+  ]);
+  const token = await proven(served, phone);
+  senders.set(token, phoneProvenAnswerSchema.parse(asMaster.body).token);
+  return token;
+}
+
+// What a phone proven both ways sends with: the master user at it. Any other token as it is.
+export const senderOf = (token: string): string => senders.get(token) ?? token;
+
+// A phone that holds nothing turned in under the test's passcode, as "Sync and turn in" does
+// once everything is on the server (ADR-488): from then on its key is revoked.
+export async function turnedIn(served: Served, token: string): Promise<void> {
+  const answer = await served.ask('POST', '/phones/current/turn-ins', {
+    bearer: token,
+    payload: {
+      passcode,
+      holds: { unplannedAssignments: [], passcodeUses: [], records: [], held: [], photos: [] },
+      lastUsed: [],
+    },
+  });
+  expect([answer.status, answer.code], 'turning the phone in').toEqual([200, undefined]);
+  expect(answer.body).toEqual({ turnedIn: true, wipe: true, numbers: [] });
 }

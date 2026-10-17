@@ -92,13 +92,10 @@ export {
 export {
   CertificationChanges,
   CertificationSubs,
-  ContractorMerge,
+  SubNames,
   type CertificationRefusal,
   type ContractorPlace,
   type KnownContractor,
-  type MergeMove,
-  type MergeParty,
-  type MergeRefusal,
   type SubPlacement,
   type SubTier,
 } from './certifications.ts';
@@ -123,16 +120,20 @@ export {
 export { IncidentOffers, incidentOffers, type IncidentOffer } from './incident-offers.ts';
 export {
   GpsFix,
+  heldReasons,
   NotSaved,
   notSavedReasons,
   Quarantine,
   quarantineReasons,
   type FixReading,
+  type HeldNotice,
+  type HeldReason,
   type NotSavedNotice,
   type NotSavedReason,
   type QuarantineNotice,
   type QuarantineReason,
   type ReadableFix,
+  type ReportKind,
   type SentFix,
 } from './intake.ts';
 export {
@@ -179,7 +180,7 @@ export {
   type NeighbourEvent,
   type TicketKey,
 } from './neighbours.ts';
-export { Policy, policyNames, type PolicyName } from './policy.ts';
+export { Policy, policyNames, requestBodyBytesAtLeast, type PolicyName } from './policy.ts';
 export {
   BreachedPasswords,
   PasswordRules,
@@ -199,7 +200,10 @@ export {
   actorsOnly,
   backOfficeCreated,
   backOfficeRolesChanged,
+  grantsInWords,
+  permissionInWords,
   permissions,
+  viewPermissions,
   type ActorOnly,
   type Asked,
   type BackOfficeCreated,
@@ -209,16 +213,22 @@ export {
   type PeopleRefusalCode,
   type PermissionName,
   type SetupRightsRefusal,
+  type ViewPermission,
 } from './people.ts';
 export {
   AssignmentRules,
+  BoardWarnings,
+  boardWarningCodes,
   assignableRoles,
   assignmentFormDocumentTypes,
   noAssignmentReasons,
   unplannedAssignmentRefusals,
   unplannedOccasions,
   type AssignmentFormDocumentType,
+  type AssignmentOnTheBoard,
   type AssignmentRefusal,
+  type BoardWarning,
+  type BoardWarningCode,
   type AssignmentRefusalCode,
   type AssignmentTaken,
   type NoAssignmentReason,
@@ -233,6 +243,12 @@ export {
   type MasterPasscodeSessionKind,
 } from './passcode-sessions.ts';
 export {
+  OfflineSignInRules,
+  offlineSignInKinds,
+  type OfflineSignInKind,
+  type OfflineSignInSaid,
+} from './offline-sign-ins.ts';
+export {
   PasscodeLogRules,
   loggedPasscodeUseRefusals,
   loggedPasscodeUses,
@@ -242,10 +258,17 @@ export {
 } from './passcode-uses.ts';
 export {
   MasterPasscodeRules,
+  phoneKeyHoursAtMost,
+  PhoneKeyRules,
   PhoneRules,
   phoneRemovals,
+  TurnInRules,
+  turnedInBlocks,
   type PhoneRemoval,
   type PhoneRemovalRefusal,
+  type PhoneStanding,
+  type RemovalAsked,
+  type TurnedInBlocks,
 } from './phones.ts';
 export { PhoneProofRules, phoneKeyKind, type PhoneProofPolicy } from './phone-proof.ts';
 export {
@@ -391,20 +414,51 @@ export {
   type WorkedOutPayItem,
 } from './size-bands.ts';
 export {
+  photoFileSignatureBytes,
+  photoFileTypeOf,
+  photoFileTypes,
+  type PhotoFileType,
+} from './photo-files.ts';
+export {
+  CrewDaySteps,
+  ListValues,
+  ProjectClosing,
+  listValueSettings,
+  type ClosingItem,
+  type ProjectOpenItems,
+  type CrewDayStep,
+  type CrewDayStepsCheck,
+  type ListValue,
+  type ListValueSetting,
+  type SetupRecordRefusal,
+} from './setup-records.ts';
+export {
+  mapFileSignatureBytes,
+  mapFileTypeOf,
+  mapFileTypes,
+  type MapFileType,
+} from './map-files.ts';
+export {
   NewProjectSettings,
   type ProgramTypeSetting,
   type ProjectSettings,
 } from './project-settings.ts';
 
 export {
+  AcceptanceWithdrawal,
+  BackOfficePhotograph,
   BatchName,
   FlagAccepting,
+  FormAnswersGiven,
   InvoiceLocking,
   LockedTicket,
   PickedReason,
   qcStatuses,
+  HeldResolution,
+  heldSentAs,
   QuarantineResolution,
   Renumber,
+  ReprocessAsking,
   Reviewer,
   reviewPermissions,
   TicketOnItsOwn,
@@ -413,6 +467,7 @@ export {
   type NumberWritten,
   type QcStatusName,
   type ReasonUseName,
+  type HeldSentAs,
   type ReviewPermission,
   type ReviewRefusal,
   type ReviewerRole,

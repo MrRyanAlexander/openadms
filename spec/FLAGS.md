@@ -190,7 +190,7 @@ A ticket's ROE flags still bill.
 **Retired:** `HELPER_NOT_FOUND` (ADR-294). A certification's helper is picked from the people assigned
 to the project, never typed, so an ID that matches no user can't happen.
 
-**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (78 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
+**Added:** `PILE_CALL_NOT_HIGHER` (§3.5, ADR-295; the agent's wording). The catalogue was 67 flags then (79 today: the count at the end of §3.10's notes; KD-71 (2) closed, ADR-373).
 
 ### 3.8 Pricing
 
@@ -240,11 +240,39 @@ scale receipt and a disposal's quantities, were approved the same day (ADR-348).
 (Listed last because the database keeps the codes in the order they were added; it belongs with
 §3.9's `NOT_PROCESSED`.)
 
+### 3.12 A certification, read across its project
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `SUB_NAME_ALIKE` | A sub it names has a name alike another sub's on the project, once case, spaces, punctuation, a leading The, an ampersand and a company ending (LLC, Inc, Co…) are set aside: perhaps one company spelled two ways. Never which spelling is right; a person corrects the sub on the certification, or accepts the flag as two companies | "Certification 730416: sub “Rivera Trucking Co” looks like “Rivera Trucking” on this project." | both names, the name as compared | 529 |
+
+(Listed last for the same reason; it belongs with §3.7's certification flags.)
+
+### 3.13 Who a phone's record names
+
+A phone's record names the person the phone says made it, and is saved as sent: a phone that
+changed hands carries an earlier monitor's records honestly, so nothing here is refused (ADR-052).
+When the server receives a field event from a phone it asks whether the person it names held
+that phone then: a session of theirs on it, begun before the field time ended and not ended
+before it started (a session past its hours still counts; one ended by a sign-out, another's
+sign-in or a password set anew doesn't); the phone set up for them under the master passcode
+(which is never flagged, ADR-540); or the board's assignment of theirs naming that very phone,
+with nobody else signed in on it then. It keeps the answer with the sync. Worded by the
+agent, **approved by the user on 2026-10-17** (ADR-543, 551; the Phase 2 audit's F4; T-13).
+
+| Code | Raised when | Message | Bills | Facts kept | ADR |
+|---|---|---|---|---|---|
+| `MONITOR_NOT_SIGNED_IN` | A phone's field event names a person who, when it arrived, didn't hold that phone over its field time (within the device clock's own allowance), as above. A reviewer who corrects who it names clears it | "Ticket 101044: recorded under Ana Brooks, who wasn't signed in on that phone." | yes | the person named | 543 |
+| `ASSIGNMENT_OF_ANOTHER_PERSON` | A phone's field event was recorded under an assignment of somebody other than the person it names | "Ticket 101045: recorded under another person's assignment." | yes | the person named, the assignment's person | 543 |
+
+(Listed last for the same reason as §3.11.)
+
 **Added:** the nine flags of §3.10 (ADR-345). The catalogue was 75 flags: 66 after ADR-328 withdrew
 one, and these nine. **Added:** `SCALE_NET_DISAGREES` and `TWO_QUANTITIES`, worded by the agent and
 approved by the user on 2026-10-05 ("Agree on both proposed in the two questions", ADR-348). The
 catalogue was 77 flags. **Added:** `NOT_PROCESSED_LINES_STAND` (the user, 2026-10-06: "KD-73
-recommended approved", ADR-360). The catalogue is 78 flags.
+recommended approved", ADR-360). The catalogue was 79 flags (`SUB_NAME_ALIKE` added by ADR-529);
+**81** with §3.13's two (ADR-543, approved by the user, ADR-551).
 
 ---
 

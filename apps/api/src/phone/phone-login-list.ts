@@ -170,7 +170,7 @@ export class PhoneLoginList {
     const { inForce, phone } = await this.db.$read(async (tx) => ({
       inForce: await tx.masterPasscode.findFirstOrThrow({
         orderBy: { version: 'desc' },
-        select: { version: true, hash: true },
+        select: { version: true, offlineSeed: true },
       }),
       phone: await tx.device.findUniqueOrThrow({
         where: { id: deviceId },
@@ -178,9 +178,15 @@ export class PhoneLoginList {
       }),
     }));
     if (heldVersion === inForce.version) return { version: inForce.version, check: null };
-    const check = await this.parts.offline.ofPasscode(inForce.hash);
+    // A version with no seed yet was never used, so no phone was set up under it; one this
+    // process can't open was sealed by another installation's key. Either way the phone keeps
+    // the check it holds, and is told nothing new (ADR-542).
+    const check =
+      inForce.offlineSeed === null
+        ? undefined
+        : await this.parts.offline.ofPasscode(inForce.version, inForce.offlineSeed);
     if (check === undefined) {
-      throw new Error('The master passcode’s hash is none a phone’s check can be made from.');
+      return { version: heldVersion ?? phone.masterPasscodeVersion, check: null };
     }
     // Written before the check is sent: a phone whose answer is lost asks again and is sent it
     // again, and the record never says less than was sent.

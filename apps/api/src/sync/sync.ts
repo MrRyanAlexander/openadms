@@ -4,14 +4,24 @@
 // C64, C69, C122, C126…C132; ADR-022, 052, 065, 100, 420, 453, 454, 457, 464, 466…473; KD-56;
 // REQ-016, 203, 308c). OWASP ASVS 5.0 V2, V16; API Security Top 10 API1, API3, API4.
 //
-// - **The phone is the one that proved itself.** Nothing sent says which phone it is: every
-//   record read is given `source: 'DEVICE'` and that phone's id here.
+// - **The phone is the one that proved itself, with somebody signed in on it** (the door's,
+//   ADR-531). Nothing sent says which phone it is: every record read is given `source: 'DEVICE'`
+//   and that phone's id here.
+// - **Its standing is the door's read, decided once, first** (ADR-531): a phone in service is
+//   received and given what it is due; a phone taken out of service, or proven with the passcode
+//   because the firm's time revoked its key, only sends. Its work is received (ADR-134) and each
+//   series it reports is answered with the blocks it already holds, never topped up (ADR-065:
+//   a lost or retired phone's blocks end; ADR-530: a revoked one's ended already), and it is
+//   brought nothing (ADR-473: a phone out of service or with a revoked key gets no check of the
+//   passcode). Nothing asks the database again what the door read. A phone marked out of service
+//   while its sync runs is held by the allocator and the database (number-allocator.ts).
 // - **A `Sync` is written first**, as the device key's actor on that phone, with the server's
 //   clock, the phone's, and the phone's less the server's in whole seconds (ADR-100, 471).
 //   One row a call, a retry too: it is the record that the phone connected.
 // - **Read in the payload's order, each thing after what it may name:** the unplanned
 //   assignments (`UnplannedAssignments.received`), the uses of the master passcode
-//   (`PasscodeUses.received`), the records, the numbers. Each is its own piece of work, so one
+//   (`PasscodeUses.received`), the records, the photographs' records, the numbers. Each is its
+//   own piece of work, so one
 //   refusal undoes nothing else, and each gets its own answer in the order sent (AC-05-45).
 // - **A record is stored once.** The idempotency ledger is asked first: an id it holds as
 //   saved is answered "already saved" and nothing is tried. Otherwise the record goes to
@@ -21,52 +31,57 @@
 // - **What could not be saved is held for a person, exactly as sent** (ADR-468, 471): what
 //   isn't a record, what names something the server doesn't have (the database's own
 //   constraints refuse it: never an internal error, and never the database's words), what was
-//   made under an unplanned assignment this sync answered "not saved" (not tried), and a
-//   certification its own rules refuse or whose number its project already has. The phone is
+//   made under an unplanned assignment this sync answered "not saved" (not tried), a
+//   certification its own rules refuse or whose number its project already has, and a
+//   photograph whose record the server doesn't have saved (not tried; ADR-481). The phone is
 //   answered `NOT_SAVED` with the reason and plain words that say it is held; never "saved".
 //   The same thing sent again by the same phone is the same held record: nothing is added.
-//   A report answered `NOT_SAVED` is not held (ADR-468 speaks of records).
+//   **A report answered `NOT_SAVED` is held too** (ADR-526 (5)): a phone holding one could
+//   otherwise never be turned in. Its phone is answered with the report's own reason, as before.
+// - **A photograph whose record is held is kept with it** (ADR-526 (4)), answered saved, so its
+//   files reach the server while its record waits for a person: intake's to find.
 // - **Nothing is refused over eligibility** (ADR-052), and nothing here concludes anything.
-// - **The numbers:** for each series reported, the phone is topped up to a full block and
-//   answered the blocks it holds now; where the report can't be taken (no such series, none
-//   left), `toppedUp: false` and the blocks it held before (ADR-065, 467 (8)).
-// - **What a sync brings besides** (§9 (6); AC-02-23, AC-05-48; ADR-473), last, and only what
-//   needs nobody signed in: the master passcode's version in force, with its check where the
-//   phone says it holds another (`PhoneLoginList.passcodeBrought`, the login list's own); and
-//   the setup version of the project whose lists the phone says it holds, as that project's
-//   phones are shown it now (`SetupVersions`), written once on the sync's own row. A number,
-//   never the lists: those are an assignment's, read by a signed-in monitor's phone.
-import { createHash } from 'node:crypto';
-
+// - **The numbers:** for each series reported, a phone in service is topped up to a full block
+//   and answered the blocks it holds now; where the report can't be taken (no such series, none
+//   left, the phone out of service), `toppedUp: false` and the blocks it held before (ADR-065,
+//   467 (8)).
+// - **What a sync brings besides** (§9 (6); AC-02-23, AC-05-48; ADR-473), last, to a phone in
+//   service only: the master passcode's version in force, with its check where the phone says it
+//   holds another (`PhoneLoginList.passcodeBrought`, the login list's own); and the setup version
+//   of the project whose lists the phone says it holds, as that project's phones are shown it now
+//   (`SetupVersions`), written once on the sync's own row. A number, never the lists: those are an
+//   assignment's, read by a signed-in monitor's phone online.
 import {
+  photoNames,
+  photoRead,
   recordNames,
   recordRead,
+  reportNames,
+  type PhotoAnswer,
   syncedRecordAssignment,
   syncedRecordId,
+  syncedRecordProject,
   type ReceivedCertification,
   type ReceivedRecord,
   type RecordAnswer,
+  type RecordNames,
   type SeriesHeld,
   type SyncAnswered,
   type SyncReceived,
 } from '@open-adms/contracts';
-import {
-  byDeviceKey,
-  deviceKeyActorId,
-  Prisma,
-  type Database,
-  type NumberBlock,
-} from '@open-adms/db';
-import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
+import { byDeviceKey, deviceKeyActorId, type Database, type NumberBlock } from '@open-adms/db';
+import { NotSaved, ProjectClock, type NotSavedNotice } from '@open-adms/domain';
 
 import type { Certifications } from '../certification/certifications.ts';
-import type { NumberAllocator } from '../numbering/number-allocator.ts';
+import { SeriesMovedOn, type NumberAllocator } from '../numbering/number-allocator.ts';
 import type { PasscodeUses } from '../phone/passcode-uses.ts';
 import type { PhoneLoginList } from '../phone/phone-login-list.ts';
 import type { UnplannedAssignments } from '../phone/unplanned-assignments.ts';
 import { databaseRefusalOf } from '../process/database-refusal.ts';
+import type { ProvenPhone } from '../phone/phone-proofs.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { SetupVersions } from '../setup/setup-versions.ts';
+import type { HeldThings } from './held.ts';
 import type { Intake } from './intake.ts';
 import type { Brought } from './ledger.ts';
 import { NamesNothing } from './record-write.ts';
@@ -80,8 +95,12 @@ export interface SyncParts {
   readonly numbers: NumberAllocator;
   // Whose `passcodeBrought` makes the master passcode's check for a phone.
   readonly loginList: PhoneLoginList;
+  // Where what can't be saved is held for a person.
+  readonly held: HeldThings;
   readonly clock: Clock;
 }
+
+export { sentFingerprint } from './held.ts';
 
 // What one sync came to: the server's row for it, and what the phone is answered.
 export interface Synced {
@@ -93,29 +112,13 @@ export interface Synced {
   readonly answered: SyncAnswered;
 }
 
-// A top-up that lost a race for its series is asked again (ADR-065, 323).
+// A top-up that lost a race for its series is asked again (ADR-065, 323); one that loses every
+// time is not taken at this sync (ADR-505).
 const topUpAttempts = 3;
-
-// What was sent, in one form whatever order its fields came in: the same record sent again is
-// the same text.
-function canonical(sent: unknown): string {
-  if (Array.isArray(sent)) return `[${sent.map(canonical).join(',')}]`;
-  if (typeof sent === 'object' && sent !== null) {
-    const fields = Object.entries(sent).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${fields.map(([name, value]) => `${JSON.stringify(name)}:${canonical(value)}`).join(',')}}`;
-  }
-  return JSON.stringify(sent);
-}
-
-// The fingerprint a held record is known by on its phone: the SHA-256, in hex, of what stood
-// in the record's place as canonical JSON in UTF-8 (ADR-472).
-export function sentFingerprint(sent: unknown): string {
-  return createHash('sha256').update(canonical(sent), 'utf8').digest('hex');
-}
 
 // A record as the server read it, with what the server says of it: that a phone made it, and
 // which (ADR-466).
-function fromPhone(
+export function fromPhone(
   deviceId: string,
   read: Exclude<ReceivedRecord, { record: 'CERTIFICATION' }>,
 ): SentRecord {
@@ -136,6 +139,9 @@ function fromPhone(
   }
 }
 
+// The phone a sync is from, as the door read it for this request.
+export type SyncingPhone = Pick<ProvenPhone, 'deviceId' | 'status' | 'keyRevoked'>;
+
 const blocksOf = (held: readonly NumberBlock[]): SeriesHeld['blocks'] =>
   held.map(({ firstNumber, lastNumber, lastUsedNumber }) => ({
     firstNumber,
@@ -155,7 +161,10 @@ export class Sync {
   }
 
   // One sync from the phone that proved itself.
-  async received(deviceId: string, sent: SyncReceived): Promise<Synced> {
+  async received(phone: SyncingPhone, sent: SyncReceived): Promise<Synced> {
+    const { deviceId } = phone;
+    // Decided once: a phone not in service only sends (ADR-531).
+    const inService = phone.status === 'ACTIVE' && !phone.keyRevoked;
     const startedAt = this.parts.clock.now();
     const clockDifferenceSeconds = Math.round(
       (sent.clockAt.getTime() - startedAt.getTime()) / 1000,
@@ -183,7 +192,16 @@ export class Sync {
         madeAt: new Date(report.madeAt),
       });
       const reason = received.answer === 'NOT_SAVED' ? received.reason : null;
-      if (received.answer === 'NOT_SAVED') notSavedAssignments.add(report.id);
+      if (received.answer === 'NOT_SAVED') {
+        notSavedAssignments.add(report.id);
+        await this.parts.held.held(
+          deviceId,
+          brought.syncId,
+          report,
+          NotSaved.reportNotSaved('UNPLANNED_ASSIGNMENT', received.reason),
+          reportNames(report),
+        );
+      }
       unplannedAssignments.push({ assignmentId: report.id, answer: received.answer, reason });
     }
 
@@ -194,6 +212,15 @@ export class Sync {
         loggedAt: new Date(report.loggedAt),
       });
       const reason = received.answer === 'NOT_SAVED' ? received.reason : null;
+      if (received.answer === 'NOT_SAVED') {
+        await this.parts.held.held(
+          deviceId,
+          brought.syncId,
+          report,
+          NotSaved.reportNotSaved('PASSCODE_USE', received.reason),
+          reportNames(report),
+        );
+      }
       passcodeUses.push({ useId: report.id, answer: received.answer, reason });
     }
 
@@ -202,14 +229,25 @@ export class Sync {
       records.push(await this.record(deviceId, brought, one, notSavedAssignments));
     }
 
-    const numbers: SeriesHeld[] = [];
-    for (const report of sent.lastUsed) numbers.push(await this.toppedUp(deviceId, report));
+    // After the records: a photograph names the record it belongs to (§9 (2)).
+    const photos: PhotoAnswer[] = [];
+    for (const one of sent.photos) photos.push(await this.photo(deviceId, brought, one));
 
-    const masterPasscode = await this.parts.loginList.passcodeBrought(
-      deviceId,
-      sent.holds.masterPasscodeVersion,
-    );
-    const setupVersion = await this.setupVersion(deviceId, brought, sent.holds.listsProjectId);
+    const numbers: SeriesHeld[] = [];
+    for (const report of sent.lastUsed) {
+      numbers.push(
+        inService
+          ? await this.toppedUp(deviceId, report)
+          : await this.notToppedUp(deviceId, report),
+      );
+    }
+
+    const masterPasscode = inService
+      ? await this.parts.loginList.passcodeBrought(deviceId, sent.holds.masterPasscodeVersion)
+      : null;
+    const setupVersion = inService
+      ? await this.setupVersion(deviceId, brought, sent.holds.listsProjectId)
+      : null;
 
     return {
       syncId: brought.syncId,
@@ -219,6 +257,7 @@ export class Sync {
         unplannedAssignments,
         passcodeUses,
         records,
+        photos,
         numbers,
         masterPasscode,
         setupVersion,
@@ -239,9 +278,10 @@ export class Sync {
     const shown = await this.db.$read(async (tx) => {
       const project = await tx.project.findUnique({
         where: { id: projectId },
-        select: { id: true },
+        select: { id: true, closedAt: true },
       });
-      return project === null ? null : SetupVersions.shownIn(tx, projectId);
+      // A closed project, like one not found, shows its phones nothing new (ADR-529 (b)).
+      return project?.closedAt !== null ? null : SetupVersions.shownIn(tx, projectId);
     });
     if (shown === null) return null;
     const version = await this.versions.numbered(projectId, shown, deviceId);
@@ -279,6 +319,10 @@ export class Sync {
     if (assignmentId !== null && notSavedAssignments.has(assignmentId)) {
       return this.held(deviceId, brought, sent, NotSaved.assignmentNotSaved());
     }
+    // Nothing is written to a closed project (ADR-529 (b)): what arrives for one waits for a
+    // person, who closes it so its phone can be turned in.
+    const closed = await this.closed(syncedRecordProject(record));
+    if (closed !== null) return this.held(deviceId, brought, sent, closed);
     try {
       if (record.record === 'CERTIFICATION') {
         return await this.certification(deviceId, brought, sent, record.certification);
@@ -290,6 +334,52 @@ export class Sync {
       if (notice === null) throw error;
       return this.held(deviceId, brought, sent, notice);
     }
+  }
+
+  // Whatever stood in one photograph's place: its own answer (ADR-481). A retry is known from
+  // the ledger. Where its files are kept is made by intake as it is saved; a photograph whose
+  // record isn't saved is held, never tried.
+  private async photo(deviceId: string, brought: Brought, sent: unknown): Promise<PhotoAnswer> {
+    const names = photoNames(sent);
+    const read = photoRead(sent);
+    if (!read.read) return this.held(deviceId, brought, sent, read.notice, names);
+    const { id } = read.photo;
+    const before = await this.db.$read((tx) =>
+      tx.syncedRecord.findUnique({ where: { recordId: id } }),
+    );
+    if (before?.answer === 'SAVED' && before.recordKind === 'PHOTO') {
+      return { answer: 'ALREADY_SAVED', id };
+    }
+    try {
+      const taken = await this.parts.intake.photo({ ...read.photo, deviceId }, brought);
+      if (taken.answer === 'OWNER_NOT_SAVED') {
+        return await this.held(deviceId, brought, sent, NotSaved.ownerNotSaved(), names);
+      }
+      return taken;
+    } catch (error) {
+      // What it names that the server doesn't have (its project, who took it, a record of
+      // another project): the database's own constraints. Anything else stays an error.
+      const refusal = databaseRefusalOf(error);
+      if (refusal === undefined || refusal.code === 'ALREADY_HELD') throw error;
+      return this.held(deviceId, brought, sent, NotSaved.namesNoRecord(), names);
+    }
+  }
+
+  // Why nothing is written for this project, where it is closed: its name and the day it closed,
+  // in its own time zone. None for one open, or one the server doesn't have (its constraints say
+  // so, as before).
+  private async closed(projectId: string): Promise<NotSaved | null> {
+    const project = await this.db.$read((tx) =>
+      tx.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, closedAt: true, timeZone: true },
+      }),
+    );
+    if (project?.closedAt == null) return null;
+    return NotSaved.projectClosed(
+      project.name,
+      new ProjectClock(project.timeZone).date(project.closedAt),
+    );
   }
 
   // A certification made on a phone: `Certifications.received` is the one way one is made.
@@ -358,48 +448,28 @@ export class Sync {
   }
 
   // Holds what was sent for a person, once for this phone and this fingerprint, and answers
-  // its phone: not saved, why, and that it is held. Written as the device key's actor on that
-  // phone: the monitor a record names may be nobody the server knows.
+  // its phone: not saved, why, and that it is held.
   private async held(
     deviceId: string,
     brought: Brought,
     sent: unknown,
     notice: NotSavedNotice,
-  ): Promise<RecordAnswer> {
-    const names = recordNames(sent);
-    const told = NotSaved.heldForReview(notice);
-    const sentSha256 = sentFingerprint(sent);
-    const where = { deviceId_sentSha256: { deviceId, sentSha256 } };
-    const kept = await this.db.$read((tx) =>
-      tx.heldRecord.findUnique({ where, select: { id: true } }),
-    );
-    if (kept === null) {
-      try {
-        await this.db.$write(byDeviceKey(deviceId), (tx) =>
-          tx.heldRecord.create({
-            data: {
-              deviceId,
-              syncId: brought.syncId,
-              sentId: names.id,
-              projectId: names.projectId,
-              sentMonitorId: names.monitorId,
-              payload: sent === null ? Prisma.JsonNull : (sent as Prisma.InputJsonValue),
-              sentSha256,
-              reason: told.reason,
-              message: told.message,
-              receivedAt: this.parts.clock.now(),
-            },
-            select: { id: true },
-          }),
-        );
-      } catch (error) {
-        // The same thing, sent by the same phone at the same moment: it is held already.
-        if (databaseRefusalOf(error)?.constraint !== 'held_record_device_id_sent_sha256_key') {
-          throw error;
-        }
-      }
-    }
+    names: RecordNames = recordNames(sent),
+  ): Promise<Extract<RecordAnswer, { answer: 'NOT_SAVED' }>> {
+    const told = await this.parts.held.held(deviceId, brought.syncId, sent, notice, names);
     return { answer: 'NOT_SAVED', id: names.id, reason: told.reason, message: told.message };
+  }
+
+  // A phone not in service: the blocks of the series it holds now, its report not taken. A
+  // read, and nothing more: its blocks end at its turn-in, or ended when the firm's time
+  // revoked its key (ADR-065, 488, 530).
+  private async notToppedUp(
+    deviceId: string,
+    report: SyncReceived['lastUsed'][number],
+  ): Promise<SeriesHeld> {
+    const { projectId, series } = report;
+    const held = await this.parts.numbers.held(deviceId, report);
+    return { projectId, series, toppedUp: false, blocks: blocksOf(held) };
   }
 
   // The phone's blocks of one series after its report: topped up to a full block, or, where
@@ -409,6 +479,10 @@ export class Sync {
     report: SyncReceived['lastUsed'][number],
   ): Promise<SeriesHeld> {
     const { projectId, series } = report;
+    // A closed project's numbers were retired at its close: none is issued again (ADR-529 (b)).
+    if ((await this.closed(projectId)) !== null) {
+      return { projectId, series, toppedUp: false, blocks: [] };
+    }
     for (let attempt = 1; ; attempt += 1) {
       try {
         // The phone's own act: whoever is signed in on it, if anyone, did not ask for it.
@@ -422,7 +496,14 @@ export class Sync {
         const before = await this.parts.numbers.held(deviceId, report);
         return { projectId, series, toppedUp: false, blocks: blocksOf(before) };
       } catch (error) {
-        if (attempt === topUpAttempts) throw error;
+        if (!(error instanceof SeriesMovedOn)) throw error;
+        // Every phone of a project syncing at once tops up from one series: one that loses the
+        // race every time keeps the blocks it holds, its report not taken, and is topped up at
+        // a later sync (ADR-505). Its records are saved all the same.
+        if (attempt === topUpAttempts) {
+          const before = await this.parts.numbers.held(deviceId, report);
+          return { projectId, series, toppedUp: false, blocks: blocksOf(before) };
+        }
       }
     }
   }

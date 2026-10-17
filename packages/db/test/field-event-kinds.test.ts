@@ -203,7 +203,6 @@ describe('a load', () => {
       project_id: world.p2,
       name: 'Load',
       document_type: 'LOAD',
-      enabled: true,
     });
     const p2Entry = await add('form_debris_type', {
       form_id: p2Form,
@@ -285,7 +284,16 @@ describe('a load', () => {
            WHERE tgrelid = 'field_event'::regclass AND NOT tgisinternal ORDER BY tgname`,
         )
       ).map((trigger) => trigger.name),
-    ).toEqual(['field_event_audit', 'field_event_refuse_delete', 'field_event_refuse_truncate']);
+    ).toEqual([
+      'field_event_audit',
+      // A ticket locked as invoiced keeps its field events as they are (ADR-534 (10)): a lock,
+      // never a rule of eligibility.
+      'field_event_locked_ticket',
+      // A closed project's field events change no more (ADR-529 (b)).
+      'field_event_project_open',
+      'field_event_refuse_delete',
+      'field_event_refuse_truncate',
+    ]);
   });
 
   it('AC-04-36 whose collection picked Vegetative and whose disposal picked C&D keeps both as picked', async () => {

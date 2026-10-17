@@ -1,14 +1,16 @@
 // Setup's endpoints, step 4 (spec/parts/01-setup.md; ARCHITECTURE §6; AC-01-21, 80; AC-10-27;
 // BACKLOG 2.4.2; ADR-108, 146, 305, 321, 424, 426): a contractor, searched for and picked or
-// created; a prime added to a project; a contract; a sub typed twice merged into one. The door
+// created and changed; a prime added to a project; a contract, its name and link changed
+// (ADR-527 (1), (2); ADR-529). The door
 // has already asked the caller's role and that they hold Setup; the service asks again inside
 // its own piece of work.
 import {
   addPrimeEndpoint,
+  changeContractEndpoint,
+  changeContractorEndpoint,
   createContractEndpoint,
   createContractorEndpoint,
   findContractorsEndpoint,
-  mergeContractorEndpoint,
   type BodyOf,
   type ParamsOf,
   type QueryOf,
@@ -19,7 +21,7 @@ import type { FastifyRequest } from 'fastify';
 import { Serves } from '../process/serves.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import { ContractorSetup } from './contractor-setup.ts';
-import { answered, stated } from './setup-answered.ts';
+import { answered, searched, stated } from './setup-answered.ts';
 import { contractorPlaceRecord, contractorRecord, contractRecord } from './setup-records.ts';
 
 export const apiContractorSetup = Symbol('the API’s contractor setup');
@@ -34,8 +36,11 @@ export class ContractorSetupController {
 
   @Serves(findContractorsEndpoint)
   async find(@Query() query: QueryOf<typeof findContractorsEndpoint>) {
-    const found = await this.contractors.findContractors(query.search ?? '');
-    return findContractorsEndpoint.answer.parse({ records: found.map(contractorRecord) });
+    const found = await this.contractors.findContractors(searched(query));
+    return findContractorsEndpoint.answer.parse({
+      records: found.records.map(contractorRecord),
+      next: found.next,
+    });
   }
 
   @Serves(createContractorEndpoint)
@@ -46,6 +51,22 @@ export class ContractorSetupController {
     const outcome = await this.contractors.contractor(callerOf(request).userId, stated(body));
     return createContractorEndpoint.answer.parse(
       answered(request, outcome, contractorRecord, 'A contractor was created.'),
+    );
+  }
+
+  @Serves(changeContractorEndpoint)
+  async change(
+    @Param() params: ParamsOf<typeof changeContractorEndpoint>,
+    @Body() body: BodyOf<typeof changeContractorEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.contractors.changeContractor(
+      callerOf(request).userId,
+      params.contractorId,
+      stated(body),
+    );
+    return changeContractorEndpoint.answer.parse(
+      answered(request, outcome, contractorRecord, 'A contractor was changed.'),
     );
   }
 
@@ -80,19 +101,19 @@ export class ContractorSetupController {
     );
   }
 
-  @Serves(mergeContractorEndpoint)
-  async merge(
-    @Param() params: ParamsOf<typeof mergeContractorEndpoint>,
-    @Body() body: BodyOf<typeof mergeContractorEndpoint>,
+  @Serves(changeContractEndpoint)
+  async changeContract(
+    @Param() params: ParamsOf<typeof changeContractEndpoint>,
+    @Body() body: BodyOf<typeof changeContractEndpoint>,
     @Req() request: FastifyRequest,
   ) {
-    const outcome = await this.contractors.merge(
+    const outcome = await this.contractors.changeContract(
       callerOf(request).userId,
-      params.contractorId,
-      body.intoContractorId,
+      params.contractId,
+      stated(body),
     );
-    return mergeContractorEndpoint.answer.parse(
-      answered(request, outcome, contractorRecord, 'A contractor was merged into another.'),
+    return changeContractEndpoint.answer.parse(
+      answered(request, outcome, contractRecord, 'A contract was changed.'),
     );
   }
 }

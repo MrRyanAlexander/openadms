@@ -109,11 +109,15 @@ model FieldEvent {
   // Where it came from. One created in the back office (a phone failed) says who created it and
   // why, picked from the firm's reasons (ADR-156, 173). None of these has a default: whoever
   // writes a field event says.
-  source           RecordSource
-  createdById      String?      @map("created_by_id") @db.Uuid
-  createdReasonId  String?      @map("created_reason_id") @db.Uuid
+  source                RecordSource
+  createdById           String?                @map("created_by_id") @db.Uuid
+  createdReasonId       String?                @map("created_reason_id") @db.Uuid
   // Made under the master passcode's temporary session for this monitor (ADR-120).
-  temporarySession Boolean      @map("temporary_session")
+  temporarySession      Boolean                @map("temporary_session")
+  // Made in a session opened under the master passcode, and which way: as the phone's monitor
+  // or the temporary session; none in a monitor's own (ADR-462, 534; AC-02-42). A temporary
+  // session's is TEMPORARY, and only its (a check in the guard migration).
+  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
 
   // The number typed instead of scanned, and the reason picked (ADR-111, 173).
   numberTyped         Boolean @map("number_typed")
@@ -250,6 +254,11 @@ model FieldEvent {
   @@unique([projectId, id])
   // So a viewer's "who recorded it" is found by the monitor.
   @@index([monitorId])
+  // So the other tickets a field event moves are found by its truck and by its scale receipt,
+  // within its project, without reading every field event of the installation (the neighbour
+  // read, `WorkQueue.neighbours`; measured at the burst, ADR-524; C154).
+  @@index([projectId, certNumber])
+  @@index([projectId, scaleReceiptId])
   @@map("field_event")
 }
 
@@ -372,6 +381,9 @@ model Photo {
   // While its record waits in quarantine; a reviewer's resolution moves the photograph to the
   // field event the record becomes (ADR-292 (5); BACKLOG 1.8.x).
   quarantinedRecordId String? @map("quarantined_record_id") @db.Uuid
+  // While the record it names is held for a person (ADR-526 (4)): the newest held from the same
+  // phone under that id. Saved as corrected, the photograph moves to that record; closed, it stays.
+  heldRecordId        String? @map("held_record_id") @db.Uuid
 
   // Which of the five views a certification's photograph is; no other photograph has one.
   view PhotoView?
@@ -393,10 +405,15 @@ model Photo {
   uploadedSha256 String  @map("uploaded_sha256")
   objectKey      String  @unique @map("object_key")
   depthObjectKey String? @unique @map("depth_object_key")
+  // The depth file's own fingerprint, the phone's word like the other two, where one goes beside
+  // the photograph: the media endpoint checks the depth file against it (ADR-482).
+  depthSha256    String? @map("depth_sha256")
 
-  deviceId   String?   @map("device_id") @db.Uuid
-  // When the file reached storage; empty until it has.
-  uploadedAt DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  deviceId        String?   @map("device_id") @db.Uuid
+  // When the file reached storage, and when the depth file did; each empty until it has, then
+  // written once, by the phone that took it (ADR-482).
+  uploadedAt      DateTime? @map("uploaded_at") @db.Timestamptz(3)
+  depthUploadedAt DateTime? @map("depth_uploaded_at") @db.Timestamptz(3)
 
   // The back office's two marks (ADR-329 (9), 337). Removed from the record: an archive mark, set
   // when it was removed and cleared to put it back; the record, the file and its fingerprints
@@ -414,9 +431,52 @@ model Photo {
   incident          Incident?          @relation(fields: [projectId, incidentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   dropOffLog        DropOffLog?        @relation(fields: [projectId, dropOffLogId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   quarantinedRecord QuarantinedRecord? @relation(fields: [projectId, quarantinedRecordId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  heldRecord        HeldRecord?        @relation(fields: [heldRecordId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   device            Device?            @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
+  setAsideFiles SetAsideFile[]
+
   @@map("photo")
+}
+
+// Which of a photograph's files: the photograph itself, or the depth file beside it.
+enum PhotoFile {
+  PHOTO
+  DEPTH
+
+  @@map("photo_file")
+}
+
+// A file the media endpoint received whole for a photograph that isn't the file its phone
+// fingerprinted (ADR-482; C84 (12)): kept aside in storage for a person, never at the
+// photograph's own place, and never thrown away. What it is (its fingerprint, size and type) and
+// where it is kept are the server's own reading of what arrived; written once, by the phone's
+// upload, and never changed. One row however often the same file arrives.
+model SetAsideFile {
+  id             String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  photoId        String    @map("photo_id") @db.Uuid
+  file           PhotoFile
+  deviceId       String    @map("device_id") @db.Uuid
+  receivedSha256 String    @map("received_sha256")
+  byteCount      Int       @map("byte_count")
+  contentType    String    @map("content_type")
+  objectKey      String    @unique @map("object_key")
+  // When the server received it whole (ADR-100).
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  // Closed by a person (ADR-526 (3)): who, when and why, all three or none, written once. It
+  // says the photograph's own file will not come; this one stays beside it, never the
+  // photograph's.
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
+  resolution   String?
+
+  photo      Photo  @relation(fields: [photoId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device     Device @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy User?  @relation("SetAsideFileResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([photoId, file, receivedSha256])
+  @@map("set_aside_file")
 }
 
 // Forms: records, never a ticket's field events (ADR-236). A survey, an incident and a drop-off
@@ -736,19 +796,26 @@ enum SyncAnswer {
 model SyncedRecord {
   // The id the phone made for the record: no default here. The column is `id`, as every
   // table's key is: the audit log names a row by it.
-  recordId   String     @id @map("id") @db.Uuid
+  recordId        String     @id @map("id") @db.Uuid
   // The contract's word for the kind of record (`FIELD_EVENT`, `ROE`…).
-  recordKind String     @map("record_kind")
-  syncId     String     @map("sync_id") @db.Uuid
-  deviceId   String     @map("device_id") @db.Uuid
-  answer     SyncAnswer
+  recordKind      String     @map("record_kind")
+  syncId          String     @map("sync_id") @db.Uuid
+  deviceId        String     @map("device_id") @db.Uuid
+  answer          SyncAnswer
+  // For a field event saved: the person it named as its monitor, and whether, when it arrived,
+  // they had a session on this phone over its field time or the phone was set up for them under
+  // the master passcode (ADR-543; the Phase 2 audit's F4). What the worker flags it from; none
+  // for any other record.
+  monitorId       String?    @map("monitor_id") @db.Uuid
+  monitorSignedIn Boolean?   @map("monitor_signed_in")
 
-  sync Sync @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  sync    Sync  @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  monitor User? @relation("SyncedRecordMonitor", fields: [monitorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
   @@map("synced_record")
 }
 
-// Why a record a phone sent was not saved (ADR-467, 469): the domain's `notSavedReasons`.
+// Why a record a phone sent was not saved (ADR-467, 469, 481): the domain's `notSavedReasons`.
 enum NotSavedReason {
   // What was sent fails the contract's schema.
   NOT_A_RECORD
@@ -758,6 +825,12 @@ enum NotSavedReason {
   ASSIGNMENT_NOT_SAVED
   // A certification its own rules refuse, or whose number its project already has.
   CERTIFICATION_REFUSED
+  // A photograph whose record the server has not saved (ADR-481).
+  OWNER_NOT_SAVED
+  // An unplanned assignment or a use of the passcode the server could not keep (ADR-526 (5)).
+  REPORT_NOT_SAVED
+  // Field work for a project that was closed before it arrived (ADR-529 (b)).
+  PROJECT_CLOSED
 
   @@map("not_saved_reason")
 }
@@ -769,9 +842,10 @@ enum NotSavedReason {
 // again by the same phone is the same held record. What was sent is never changed and never
 // deleted; only its resolution is written later, by a person.
 model HeldRecord {
-  id       String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  deviceId String @map("device_id") @db.Uuid
-  syncId   String @map("sync_id") @db.Uuid
+  id       String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  deviceId String  @map("device_id") @db.Uuid
+  // The sync that brought it; none for a report made to its own endpoint (ADR-526 (5)).
+  syncId   String? @map("sync_id") @db.Uuid
 
   // As sent, where that much could be read: the record's own id, its project and its monitor.
   sentId        String? @map("sent_id") @db.Uuid
@@ -782,6 +856,9 @@ model HeldRecord {
   payload    Json
   // The SHA-256 of what was sent, so a retry is the same held record.
   sentSha256 String         @map("sent_sha256")
+  // How many bytes what was sent is, as canonical JSON in UTF-8: what a phone's daily budget of
+  // held records counts (ADR-546). None on one held before it was counted.
+  sentBytes  Int?           @map("sent_bytes")
   reason     NotSavedReason
   // What the phone was told.
   message    String
@@ -793,8 +870,10 @@ model HeldRecord {
   resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(3)
   resolution   String?
 
-  sync       Sync  @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
-  resolvedBy User? @relation("HeldRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device     Device  @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  sync       Sync?   @relation(fields: [syncId, deviceId], references: [id, deviceId], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy User?   @relation("HeldRecordResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos     Photo[]
 
   @@unique([deviceId, sentSha256])
   @@map("held_record")

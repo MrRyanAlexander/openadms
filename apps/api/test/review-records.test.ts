@@ -12,14 +12,20 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import {
+  addFormDefinitionEndpoint,
   backOfficeRoles,
   correctDropOffLogEndpoint,
   correctIncidentEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,
   correctSurveyEndpoint,
+  createDropOffLogEndpoint,
   createFieldEventEndpoint,
+  createFormEndpoint,
+  createIncidentEndpoint,
+  createRoeEndpoint,
   createSiteEndpoint,
+  createSurveyEndpoint,
   markSecondCopyEndpoint,
   renumberQuarantinedRecordEndpoint,
   syncedFieldEventSchema,
@@ -76,6 +82,10 @@ const requests = [
   [renumberQuarantinedRecordEndpoint, 'RENUMBER'],
   [markSecondCopyEndpoint, 'RENUMBER'],
   [createFieldEventEndpoint, 'CORRECT'],
+  [createRoeEndpoint, 'CORRECT'],
+  [createSurveyEndpoint, 'CORRECT'],
+  [createIncidentEndpoint, 'CORRECT'],
+  [createDropOffLogEndpoint, 'CORRECT'],
 ] as const;
 
 const records = [
@@ -193,7 +203,7 @@ const disposal = async (
   source: 'DEVICE',
   ...phone,
   setupVersion: 1,
-  temporarySession: false,
+  masterPasscodeSession: null,
   numberTyped: false,
   numberTypedReasonId: null,
   certNumber: '730415',
@@ -401,6 +411,8 @@ describe('an ROE corrected', () => {
         madeById: who.dana,
         madeAt: null,
         notes: null,
+        answers: {},
+        formDefinitionId: null,
       });
       expect(queued).toMatchObject({ tickets: 1, lockedAsInvoiced: 0 });
       const [change] = await audited(tx, answer, 'roe');
@@ -466,7 +478,7 @@ describe('an ROE corrected', () => {
     });
   });
 
-  it('AC-10-37 what can’t be an ROE’s detail is refused by the schema, saying which field: a day that isn’t one, a blank owner, a count of nought, two picks at once, its number', async () => {
+  it('AC-10-37 what can’t be an ROE’s detail is refused by the schema, saying which field: a day that isn’t one, a blank owner, a count of nought, two picks at once, a blank number', async () => {
     await world(async (served, tx, who, within) => {
       const p = await p1WithTickets(served, tx, within, who);
       const roe = await r0007(tx, p.project.id, who.dana);
@@ -486,9 +498,9 @@ describe('an ROE corrected', () => {
       expect(notTaken(await correct({}))).toBe(
         'Not taken: changes in the body isn’t taken as it stands.',
       );
-      // Its number is corrected by no request yet (BACKLOG C79).
-      expect(notTaken(await correct({ notes: 'Seen', roeNumber: 'R-0009' }))).toBe(
-        'Not taken: changes in the body has a field this request doesn’t take.',
+      // Its number is corrected (AC-08-68), never to a blank.
+      expect(notTaken(await correct({ roeNumber: '  ' }))).toBe(
+        'Not taken: changes.roeNumber in the body is blank.',
       );
       const id = randomUUID();
       expect(
@@ -545,11 +557,15 @@ describe('a form corrected', () => {
         id: survey.id,
         projectId: p.project.id,
         source: 'BACK_OFFICE',
+        createdById: who.dana,
+        createdReasonId: made.createdReasonId,
         monitorId: who.kim,
         madeAt: wednesday.toISOString(),
         deviceUtcOffsetMinutes: -240,
         fix: null,
         notes: null,
+        answers: {},
+        formDefinitionId: null,
         workTypeId: postWork.id,
         surveyNumber: 'APN 14-0321-007',
         roeNumber: 'R-0007',
@@ -618,15 +634,18 @@ describe('a form corrected', () => {
       expect(await jobsFor(tx, p.project.id, who.luis)).toEqual([['CORRECTION']]);
       expect(served.lines.join('')).not.toMatch(/Jensen|Mailbox|Heron/);
 
-      // The answers to a form's own fields are corrected by no request yet (BACKLOG C79).
+      // A survey that answers no version of a form's own fields takes no answers (AC-08-69).
       expect(
-        notTaken(
+        notSaved(
           await ask(served, luis, correctSurveyEndpoint, {
             ids: { surveyId: survey.id },
-            payload: { changes: { notes: 'Seen', answers: { fenceDamaged: true } } },
+            payload: { changes: { answers: { answers: { fenceDamaged: true } } } },
           }),
         ),
-      ).toBe('Not taken: changes in the body has a field this request doesn’t take.');
+      ).toEqual([
+        'ANSWERS_DO_NOT_FIT',
+        'This record answers no version of a form’s own fields, so it takes no answers: name the version they answer. Nothing was saved.',
+      ]);
       expect(
         notTaken(
           await ask(served, luis, correctIncidentEndpoint, {
@@ -1084,6 +1103,363 @@ describe('a record created in the back office', () => {
 
 // The sync contract's own shape is what intake takes (task 2.6.1 part 1, ADR-466): a record
 // read by the contracts' schema, given the phone the server knows it came from, is saved.
+describe('an ROE’s number corrected', () => {
+  it('AC-08-68 R-0007 was typed in as R-0070: Luis corrects its number, and what names R-0007 finds it (a collection and a survey that were waiting), while the collection that named R-0070 finds no ROE; what each says it named never changes, both tickets are queued; a number another ROE holds is refused in words', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const typo = await tx.roe.create({
+        data: {
+          projectId: p.project.id,
+          roeNumber: 'R-0070',
+          address: '412 Cedar Ct',
+          signed: true,
+          answers: {},
+          source: 'BACK_OFFICE',
+          madeById: who.dana,
+        },
+      });
+      await tx.roe.create({
+        data: {
+          projectId: p.project.id,
+          roeNumber: 'R-0009',
+          signed: false,
+          answers: {},
+          source: 'BACK_OFFICE',
+          madeById: who.dana,
+        },
+      });
+      const waiting = await p.created('COLLECTION', '101032', { roeNumber: 'R-0007', ...thursday });
+      const found = await p.created('COLLECTION', '101033', {
+        roeNumber: 'R-0070',
+        startedAt: new Date('2026-10-16T14:10:00Z'),
+        endedAt: new Date('2026-10-16T14:40:00Z'),
+      });
+      expect([waiting.roeId, found.roeId]).toEqual([null, typo.id]);
+      const preWork = await tx.surveyWorkType.findUniqueOrThrow({ where: { key: 'PRE_WORK' } });
+      const survey = await tx.survey.create({
+        data: {
+          ...(await form(tx, p.project.id, who)),
+          workTypeId: preWork.id,
+          roeNumber: 'R-0007',
+        },
+      });
+      const luis = await luisHolds(served, tx, who.luis, 'CORRECT');
+      const correct = (roeNumber: string) =>
+        ask(served, luis, correctRoeEndpoint, {
+          ids: { roeId: typo.id },
+          payload: { changes: { roeNumber }, note: 'The paper says R-0007' },
+        });
+      expect(notSaved(await correct('R-0009'))).toEqual([
+        'ROE_NUMBER_HELD',
+        'ROE R-0009: this project already has an ROE with that number. Nothing was changed.',
+      ]);
+      const answer = await correct('R-0007');
+      const { record, queued } = saved(correctRoeEndpoint, answer);
+      expect([record.id, record.roeNumber]).toEqual([typo.id, 'R-0007']);
+      expect(queued).toMatchObject({ tickets: 2, lockedAsInvoiced: 0 });
+      const now = async (id: string) => tx.fieldEvent.findUniqueOrThrow({ where: { id } });
+      expect([(await now(waiting.id)).roeId, (await now(waiting.id)).roeNumber]).toEqual([
+        typo.id,
+        'R-0007',
+      ]);
+      expect([(await now(found.id)).roeId, (await now(found.id)).roeNumber]).toEqual([
+        null,
+        'R-0070',
+      ]);
+      expect((await tx.survey.findUniqueOrThrow({ where: { id: survey.id } })).roeId).toBe(typo.id);
+      const [change] = await audited(tx, answer, 'roe');
+      expect([change?.actorId, change?.reason, change?.before?.['roe_number']]).toEqual([
+        who.luis,
+        'The paper says R-0007',
+        'R-0070',
+      ]);
+      expect((await jobsFor(tx, p.project.id, who.luis)).at(-1)).toEqual([
+        'CORRECTION',
+        'LOAD 101032',
+        'LOAD 101033',
+      ]);
+    });
+  });
+});
+
+describe('the answers to a form’s own fields corrected', () => {
+  it('AC-08-69 Kim’s survey answered version 1 of P1’s survey form ("Fence damaged?", required): Luis corrects the answer, and then gives the answers to version 2 ("Photos taken?" added); answers that don’t fit, a field the version doesn’t have and another form’s version are refused in words, nothing saved', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const surveyForm = saved(
+        createFormEndpoint,
+        await ask(served, p.dana, createFormEndpoint, {
+          ids: p.ids,
+          payload: { documentType: 'SURVEY', name: 'Survey' },
+        }),
+      ).record;
+      const fence = {
+        id: 'fence-damaged',
+        label: 'Fence damaged?',
+        type: 'YES_NO',
+        required: true,
+      };
+      const photos = { id: 'photos-taken', label: 'Photos taken?', type: 'YES_NO', required: true };
+      const version = async (fields: object[]) =>
+        saved(
+          addFormDefinitionEndpoint,
+          await ask(served, p.dana, addFormDefinitionEndpoint, {
+            ids: { formId: surveyForm.id },
+            payload: { fields },
+          }),
+        ).record;
+      const first = await version([fence]);
+      const second = await version([fence, photos]);
+      const preWork = await tx.surveyWorkType.findUniqueOrThrow({ where: { key: 'PRE_WORK' } });
+      const survey = await tx.survey.create({
+        data: {
+          ...(await form(tx, p.project.id, who)),
+          workTypeId: preWork.id,
+          answers: { 'fence-damaged': false },
+          formDefinitionId: first.id,
+          formId: surveyForm.id,
+          formDocumentType: 'SURVEY',
+        },
+      });
+      const luis = await luisHolds(served, tx, who.luis, 'CORRECT');
+      const answered = (answers: object) =>
+        ask(served, luis, correctSurveyEndpoint, {
+          ids: { surveyId: survey.id },
+          payload: { changes: { answers }, note: 'Kim called it in' },
+        });
+      const fixed = await answered({ answers: { 'fence-damaged': true } });
+      expect(saved(correctSurveyEndpoint, fixed).record).toMatchObject({
+        answers: { 'fence-damaged': true },
+        formDefinitionId: first.id,
+      });
+      const [change] = await audited(tx, fixed, 'survey');
+      expect([change?.actorId, change?.before?.['answers']]).toEqual([
+        who.luis,
+        { 'fence-damaged': false },
+      ]);
+      expect(
+        saved(
+          correctSurveyEndpoint,
+          await answered({
+            answers: { 'fence-damaged': true, 'photos-taken': true },
+            formDefinitionId: second.id,
+          }),
+        ).record,
+      ).toMatchObject({
+        answers: { 'fence-damaged': true, 'photos-taken': true },
+        formDefinitionId: second.id,
+      });
+      expect(notSaved(await answered({ answers: { 'fence-damaged': true } }))).toEqual([
+        'ANSWERS_DO_NOT_FIT',
+        'The answers don’t fit the form’s own fields as version 2 has them (Photos taken?). Nothing was saved.',
+      ]);
+      expect(
+        notSaved(await answered({ answers: { 'fence-damaged': 'yes', 'photos-taken': true } })),
+      ).toEqual([
+        'ANSWERS_DO_NOT_FIT',
+        'The answers don’t fit the form’s own fields as version 2 has them (Fence damaged?). Nothing was saved.',
+      ]);
+      expect(
+        notSaved(
+          await answered({
+            answers: { 'fence-damaged': true, 'photos-taken': true, 'gate-open': true },
+          }),
+        ),
+      ).toEqual([
+        'ANSWERS_DO_NOT_FIT',
+        'The answers don’t fit the form’s own fields as version 2 has them (gate-open). Nothing was saved.',
+      ]);
+      const incidentForm = saved(
+        createFormEndpoint,
+        await ask(served, p.dana, createFormEndpoint, {
+          ids: p.ids,
+          payload: { documentType: 'INCIDENT', name: 'Incident', incidentOffers: [] },
+        }),
+      ).record;
+      const another = saved(
+        addFormDefinitionEndpoint,
+        await ask(served, p.dana, addFormDefinitionEndpoint, {
+          ids: { formId: incidentForm.id },
+          payload: { fields: [fence] },
+        }),
+      ).record;
+      expect(
+        notSaved(
+          await answered({ answers: { 'fence-damaged': true }, formDefinitionId: another.id }),
+        ),
+      ).toEqual([
+        'ANSWERS_DO_NOT_FIT',
+        'The version of a form’s own fields named isn’t one of this project’s survey form’s. Nothing was saved.',
+      ]);
+      expect(
+        (await tx.survey.findUniqueOrThrow({ where: { id: survey.id } })).formDefinitionId,
+      ).toBe(second.id);
+    });
+  });
+});
+
+describe('a form made on paper, entered in the back office', () => {
+  it('AC-08-71 Kim’s phone failed: Luis enters her ROE R-0011, a pre-work survey on it, an incident naming 730415 and R-0011, and a drop-off log, each with the reason "Device failed": each names Kim (the ROE, Luis) and the reason, no phone, assignment or lists’ version; what each number names is found; the collection that was waiting for R-0011 points at it and its ticket is queued, and the survey asks the run to check the project’s surveys; a number another ROE holds and a fix that can’t be one are refused', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const waiting = await p.created('COLLECTION', '101032', { roeNumber: 'R-0011', ...thursday });
+      const luis = await luisHolds(served, tx, who.luis, 'CORRECT');
+      const reasonId = await reasonNamed(tx, 'Device failed');
+      const entered = (endpoint: Endpoint, payload: object) =>
+        ask(served, luis, endpoint, { ids: p.ids, payload });
+      const roeAnswer = await entered(createRoeEndpoint, {
+        roeNumber: 'R-0011',
+        parcelId: 'APN 14-0321-011',
+        address: '420 Cedar Ct',
+        ownerName: 'Rosa Delgado',
+        signed: true,
+        signedDate: '2026-10-13',
+        fix: { latitude: '39.0891', longitude: '-75.6012' },
+        madeAt: null,
+        notes: null,
+        answers: { answers: {} },
+      });
+      const roe = saved(createRoeEndpoint, roeAnswer);
+      expect(roe.record).toMatchObject({
+        roeNumber: 'R-0011',
+        source: 'BACK_OFFICE',
+        madeById: who.luis,
+        // Kept to the database's eight places (invariant 15).
+        fix: { latitude: '39.08910000', longitude: '-75.60120000' },
+        answers: {},
+        formDefinitionId: null,
+      });
+      expect(roe.queued).toMatchObject({ tickets: 1 });
+      expect((await tx.fieldEvent.findUniqueOrThrow({ where: { id: waiting.id } })).roeId).toBe(
+        roe.record.id,
+      );
+      const [made] = await audited(tx, roeAnswer, 'roe');
+      expect([made?.operation, made?.actorId, made?.source]).toEqual([
+        'INSERT',
+        who.luis,
+        'BACK_OFFICE',
+      ]);
+      expect(served.lines.join('')).not.toMatch(/Delgado|Cedar/);
+
+      const shared = {
+        monitorId: who.kim,
+        madeAt: '2026-10-14T13:30:00Z',
+        deviceUtcOffsetMinutes: -240,
+        fix: null,
+        notes: null,
+        answers: { answers: {} },
+        reasonId,
+      };
+      const preWork = await tx.surveyWorkType.findUniqueOrThrow({ where: { key: 'PRE_WORK' } });
+      const survey = saved(
+        createSurveyEndpoint,
+        await entered(createSurveyEndpoint, {
+          ...shared,
+          workTypeId: preWork.id,
+          surveyNumber: 'APN 14-0321-011',
+          roeNumber: 'R-0011',
+        }),
+      );
+      expect(survey.record).toMatchObject({
+        source: 'BACK_OFFICE',
+        createdById: who.luis,
+        createdReasonId: reasonId,
+        monitorId: who.kim,
+        madeAt: '2026-10-14T13:30:00.000Z',
+        roeId: roe.record.id,
+      });
+      const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
+      const incident = saved(
+        createIncidentEndpoint,
+        await entered(createIncidentEndpoint, {
+          ...shared,
+          incidentTypeId: damage.id,
+          incidentSubTypeId: null,
+          description: 'Mailbox clipped by the trailer',
+          parties: null,
+          address: '420 Cedar Ct',
+          contractorId: null,
+          certNumber: '730415',
+          roeNumber: 'R-0011',
+        }),
+      );
+      expect(incident.record).toMatchObject({
+        createdById: who.luis,
+        certNumber: '730415',
+        certificationId: null,
+        roeId: roe.record.id,
+      });
+      expect(incident.queued).toMatchObject({ jobs: [], tickets: 0 });
+      const landfill = await site(served, p, tx, 'Bayline County Landfill', 'BCL');
+      const log = saved(
+        createDropOffLogEndpoint,
+        await entered(createDropOffLogEndpoint, {
+          ...shared,
+          siteId: landfill.id,
+          residentName: 'Carl Jensen',
+          originAddress: '14 Heron St',
+        }),
+      );
+      expect(log.record).toMatchObject({ siteId: landfill.id, createdById: who.luis });
+      for (const [table, id] of [
+        ['survey', survey.record.id],
+        ['incident', incident.record.id],
+        ['dropOffLog', log.record.id],
+      ] as const) {
+        const kept = await (
+          tx[table] as unknown as {
+            findUniqueOrThrow: (asked: object) => Promise<Record<string, unknown>>;
+          }
+        ).findUniqueOrThrow({ where: { id } });
+        expect([kept['deviceId'], kept['assignmentId'], kept['setupVersion']], table).toEqual([
+          null,
+          null,
+          null,
+        ]);
+      }
+      expect((await jobsFor(tx, p.project.id, who.luis)).map(([trigger]) => trigger)).toEqual([
+        'CORRECTION',
+        'CORRECTION',
+      ]);
+      expect(served.lines.join('')).not.toMatch(/Jensen|Mailbox|Heron/);
+
+      expect(
+        notSaved(
+          await entered(createRoeEndpoint, {
+            roeNumber: 'R-0011',
+            parcelId: null,
+            address: null,
+            ownerName: null,
+            signed: false,
+            signedDate: null,
+            fix: null,
+            madeAt: null,
+            notes: null,
+            answers: { answers: {} },
+          }),
+        ),
+      ).toEqual([
+        'ROE_NUMBER_HELD',
+        'ROE R-0011: this project already has an ROE with that number. Nothing was changed.',
+      ]);
+      expect(
+        notSaved(
+          await entered(createDropOffLogEndpoint, {
+            ...shared,
+            fix: { latitude: '139.1', longitude: '-75.6' },
+            siteId: landfill.id,
+            residentName: null,
+            originAddress: null,
+          }),
+        ),
+      ).toEqual([
+        'GPS_UNREADABLE',
+        'The GPS can’t be a fix: latitude "139.1", longitude "-75.6". Nothing was changed.',
+      ]);
+    });
+  });
+});
+
 describe('a record as a phone sends it', () => {
   it('AC-04-26, AC-10-36 Kim keys in 730415 and the capacity 60 read off the truck: sent as the sync contract says, with no phone named, it is read by the schema and saved with the 60 as her claim', async () => {
     await world(async (served, tx, who, within) => {

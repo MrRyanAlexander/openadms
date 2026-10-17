@@ -25,6 +25,7 @@ import {
   openViewerDatabase,
   Seed,
   type Database,
+  type PieceOfWork,
   type ViewerDatabase,
 } from '@open-adms/db';
 import pg from 'pg';
@@ -41,6 +42,7 @@ const logins = ['adms_api', 'adms_worker', 'adms_readonly'] as const;
 // the real one. Not a secret: no installation uses it.
 export const storyMasterPasscode = 'heron-marsh-delphine';
 const storyMasterPasscodeHash =
+  // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no installation's
   '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
 
 export type Service = 'api' | 'worker';
@@ -86,6 +88,12 @@ export class StoryTemplate {
   drop(): Promise<void> {
     return this.database.drop();
   }
+}
+
+// A pool's size and each piece of work's limits (ADR-524).
+export interface StoryPool {
+  readonly maxConnections: number;
+  readonly pieceOfWork: PieceOfWork;
 }
 
 export class StoryDatabase {
@@ -238,21 +246,25 @@ export class StoryDatabase {
   }
 
   // A service's own client on this database: its login, from its env file. The worker's takes
-  // more connections: each run holds one for its project's lock while it works (ADR-352).
-  open(service: Service): Database {
+  // more connections: each run holds one for its project's lock while it works (ADR-352). A
+  // pool of its own where one is given: the story's API runs on the policy's, as an
+  // installation's does (ADR-524).
+  open(service: Service, pool?: StoryPool): Database {
     return openDatabase({
       url: this.url(new URL(`apps/${service}/.env`, root)),
       maxConnections: service === 'worker' ? 4 : 2,
+      ...pool,
     });
   }
 
   // The API's second way in, on this database: the read-only login, for what a read-only
   // viewer reads, from the API's own env file (ADR-434, 435). It offers `$viewed` alone, and
   // sees what the story's services have committed.
-  openViewer(): ViewerDatabase {
+  openViewer(pool?: StoryPool): ViewerDatabase {
     return openViewerDatabase({
       url: this.url(new URL('apps/api/.env', root), 'READONLY_DATABASE_URL'),
       maxConnections: 2,
+      ...pool,
     });
   }
 
@@ -299,6 +311,8 @@ export class StoryDatabase {
       password,
       database,
       connectionTimeoutMillis: 5000,
+      // Over TLS alone, the server checked against the stack's own root (KD-78; ADR-517).
+      ssl: { ca: readFileSync(new URL('infra/local/.generated/caddy-root.crt', root), 'utf8') },
     });
     try {
       await admin.connect();

@@ -21,8 +21,17 @@ export class PhoneTokens {
   private readonly key: Buffer;
   private readonly minutes: number;
 
-  constructor(signingSecret: string, minutes: number) {
-    this.key = createHmac('sha256', signingSecret).update('open-adms/phone-token/v1').digest();
+  // `purpose`: the label the key is drawn under. A phone whose key the firm's time revoked is
+  // given tokens of its own purpose (`underPasscode`, ADR-530), so that no token of a proof by
+  // the key alone is ever one of those, nor the other way round.
+  constructor(
+    signingSecret: string,
+    minutes: number,
+    purpose: 'byKey' | 'underPasscode' = 'byKey',
+  ) {
+    const label =
+      purpose === 'byKey' ? 'open-adms/phone-token/v1' : 'open-adms/phone-token/under-passcode/v1';
+    this.key = createHmac('sha256', signingSecret).update(label).digest();
     this.minutes = minutes;
   }
 

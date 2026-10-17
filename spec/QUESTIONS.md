@@ -1186,7 +1186,7 @@ suggestion of any kind. *(ADR-111)* Whether **0** is accepted is **Q-109**.
 
 *(ADR-108)* **Agent proposal (mechanism, in ADR-108):** so one sub doesn't become three spellings
 ("ABC Hauling", "ABC Hauling LLC", "A.B.C."), the phone suggests subs already known under that
-prime as the monitor types, and the back office can merge duplicates (audited).
+prime as the monitor types, and the back office can merge duplicates (audited). ⚠️ **Replaced by the user, 2026-10-15 (ADR-529 (f)):** no merge; certifications naming alike subs are flagged (`SUB_NAME_ALIKE`) and a person corrects the sub.
 
 > **User, 2026-09-25 (inline answer):** Projects can have more than one prime.. Build 1 was wrong. And not only that but primes can have their own subs tiered. But
 > subs are never shared by Primes. Also and this is important, the creation of these subs happens during certification. The firm

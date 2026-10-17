@@ -33,9 +33,9 @@ The system of record for a debris mission, from declaration to audit:
 | To… | Read |
 |---|---|
 | Understand the system, then find the part you're touching | **`spec/INDEX.md`**, the book: what it is, nine parts, a step-by-step page each |
-| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**: its header, then the `###` topics you touch (grep them; never read it whole, ADR-445) |
+| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**: its header's topic index, then only the topics your task touches (never whole; ADR-445, 532) |
 | Know the next task, where the product ends up, and the road there | `agent_store/NEXT.md` (the Handoff, then the Next Atomic Task) |
-| Know how a layer is built and secured (install, database, API, devices, sync, storage, tests) | **`spec/ARCHITECTURE.md`** |
+| Know how a layer is built and secured (install, database, API, devices, sync, storage, tests) | **`spec/ARCHITECTURE.md`**: the sections for that layer (`grep -n '^## '`; never whole) |
 | Know the rules for a topic, and why | the skill (table below) |
 | Answer "how does it behave?" | `SUMMARY.md`, then the skill, then `spec/QUESTIONS.md` |
 | Explain, demo or test the domain | **`spec/golden/MISSION.md`**: one mission, every kind of record, each one's life. Never invent coverage |
@@ -59,7 +59,7 @@ other spec pages are approved (ADR-269). Phases are the build order; the spec is
 | Pricing, `Transaction`, `AuditRecord`, the ledger | `adms-ledger-audit`; the rule builder: `spec/RULES.md` |
 | Phone setup, sign-in, devices (Phase 0); field capture screens (later phases) | `adms-field-app` |
 | An architectural call, or code/docs that disagree with a skill | `adms-decisions` |
-| Any code, config, install, auth, device, sync or storage work | read **`spec/ARCHITECTURE.md`** first (not a skill) |
+| Any code, config, install, auth, device, sync or storage work | read **`spec/ARCHITECTURE.md`**'s sections for that layer first (not a skill) |
 | Running the checks | `adms-verify` |
 | Closing out a response that changed files | `adms-close-out` |
 
@@ -80,26 +80,29 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 
 | File | What | Yours to edit? |
 |---|---|---|
-| `SUMMARY.md` | Current rules by topic, superseded ADRs, open gaps. **Keep it current** | ✅ update |
+| `SUMMARY.md` | Current rules by topic (an index in its header), superseded ADRs, open gaps, what waits on the user. **Keep it current** | ✅ update |
 | `NEXT.md` | Active phase, exit criteria, next atomic task | ✅ tick |
 | `CHAIN.md` | The chain's counts today, the only place they are written (ADR-445) | ✅ replace |
-| `BACKLOG.md` | Milestone detail for the active phase | ✅ tick |
+| `BACKLOG.md` | The active phase's tasks; the carry-forward register (live items only, and the standing "every task that…" rules) | ✅ tick |
 | `DECISIONS.md` | Full ADR log + session log. Append-only, never renumber | ✅ append |
 | `DEVIATIONS.md` | Full code-vs-skill gap log | ✅ append |
-| `REQUIREMENTS.md` / `-LATER.md` | The active and finished phases' checklist (Phase 2 is active) / the gated phases, 3–5 | ✅ tick |
+| `ARCHIVE.md` | History moved word for word out of the pages above when they are trimmed (ADR-532). **Grep only, never read whole** | ✅ append |
+| `REQUIREMENTS.md` / `-LATER.md` | The active and finished phases' checklist (none active: Phase 2's exit is met, Phase 3 is the user's to open, ADR-518) / the gated phases, 3–5 | ✅ tick |
 | `ROADMAP.md` | The user's one-page roadmap, start to finish, in tables (ADR-280). Summarises the files above | ✅ update at close-out |
 
 ## Working loop
 
-1. **ORIENT** — read `NEXT.md`, and `SUMMARY.md`'s header and the topics your task touches (never
-   the whole page); load `adms-domain` on the first task; find your part in `spec/INDEX.md`. No
-   task given? `NEXT.md`'s Next Atomic Task is it.
+1. **ORIENT** — read `NEXT.md`, then `SUMMARY.md`'s header and only the topics your task touches;
+   your task's line in `BACKLOG.md` with the register's items for it and its standing rules; load
+   `adms-domain` on the first task; find your part in `spec/INDEX.md`. No task given? `NEXT.md`'s
+   Next Atomic Task is it.
 2. **SCOPE** — does this belong to the active phase and a permitted directory? If not, say which
    phase it belongs to and ask. Never silently widen scope.
 3. **GROUND** — read the actual files before editing. Never infer a field name, enum value or
    model name from prose; the schema is the source of truth.
 4. **EXECUTE** — minimal edits. No adjacent refactors, no building ahead. Every dependency is
    pinned; a new one needs an ADR. Answer in the form asked for (chat text, a file, an artifact).
+   Do the whole task: never cut it into parts ahead of time (ADR-516).
 5. **VERIFY** — load `adms-verify` (`pnpm ready` first; counts against `CHAIN.md`). Report real
    observed output, never "should pass".
 6. **CLOSE** — load `adms-close-out`.
@@ -186,6 +189,8 @@ One line each. Details and the ADRs to cite: `agent_store/SUMMARY.md`. Reasons: 
 ## Recording decisions
 
 Made a judgment call? Append an ADR to `DECISIONS.md` **in the same response**, update
-`SUMMARY.md`, and update the `spec/parts/` page if a step changed. Found code *or docs* that
+`SUMMARY.md`, and update the `spec/parts/` page if a step changed. **Each fact has one home**
+(`SUMMARY.md`, "Agent tooling"): the ADR says the decision and why; the summary the rule in a few
+lines; the BACKLOG tick that it's done; never a build log restated in another file (ADR-532). Found code *or docs* that
 disagree with a skill? Don't silently reconcile: append a KD to `DEVIATIONS.md`, update
 `SUMMARY.md`, and raise it. *`adms-decisions`*

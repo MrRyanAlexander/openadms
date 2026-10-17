@@ -9,9 +9,18 @@
 // project's un-invoiced tickets are queued in the same piece of work (ADR-090, 420). Which
 // tickets a pay item or a rate reaches is the firm's rules' to say, so every ticket of the
 // project that isn't void or locked as invoiced is named: the run writes only what differs.
-import type { BillingUnit, CrewTimeConversion, PayItem, PayItemRate, Prisma } from '@open-adms/db';
+import type {
+  BillingUnit,
+  CrewTimeConversion,
+  PayItem,
+  PayItemCrewDayStep,
+  PayItemRate,
+  Prisma,
+} from '@open-adms/db';
 import {
   type BandedPayItem,
+  type CrewDayStep,
+  CrewDaySteps,
   PaysWhen,
   type PaysWhenOnForm,
   ProjectRules,
@@ -194,6 +203,57 @@ export class PayItemSetup extends QueueingService {
       });
       await this.setupChanged(tx, person, payItem.projectId);
       return saved;
+    });
+  }
+
+  // A crew day's steps, stated whole (ADR-087, 355, 527 (7)): each matched to the row its first
+  // hour already has (one first hour, one row, archived ones included), changed or put back; one
+  // not named taken off. Two that share an hour aren't saved. The project's tickets are queued.
+  crewDaySteps(
+    person: string,
+    payItemId: string,
+    steps: readonly CrewDayStep[],
+  ): Promise<Outcome<PayItemCrewDayStep[]>> {
+    return this.setup(person, async (tx, warn) => {
+      const payItem = await tx.payItem.findUniqueOrThrow({ where: { id: payItemId } });
+      const check = new CrewDaySteps(steps).check(payItem);
+      if (check.refusal !== null) throw new Refused(check.refusal);
+      warn(check.warnings);
+      const held = await tx.payItemCrewDayStep.findMany({ where: { payItemId } });
+      const hundredths = (hours: { toString(): string }): number =>
+        Math.round(Number(hours.toString()) * 100);
+      const now = this.clock.now();
+      for (const row of held) {
+        const named = steps.some(
+          (step) => hundredths(step.fromHours) === hundredths(row.fromHours),
+        );
+        if (!named && row.archivedAt === null) {
+          await tx.payItemCrewDayStep.update({ where: { id: row.id }, data: { archivedAt: now } });
+        }
+      }
+      for (const step of steps) {
+        const row = held.find((each) => hundredths(each.fromHours) === hundredths(step.fromHours));
+        const wanted = { toHours: step.toHours, quantity: step.quantity };
+        if (row === undefined) {
+          await tx.payItemCrewDayStep.create({
+            data: { payItemId, fromHours: step.fromHours, ...wanted },
+          });
+        } else if (
+          row.archivedAt !== null ||
+          hundredths(row.toHours) !== hundredths(step.toHours) ||
+          !row.quantity.equals(step.quantity)
+        ) {
+          await tx.payItemCrewDayStep.update({
+            where: { id: row.id },
+            data: { ...wanted, archivedAt: null },
+          });
+        }
+      }
+      await this.setupChanged(tx, person, payItem.projectId);
+      return tx.payItemCrewDayStep.findMany({
+        where: { payItemId, archivedAt: null },
+        orderBy: { fromHours: 'asc' },
+      });
     });
   }
 

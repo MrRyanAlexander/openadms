@@ -8,6 +8,7 @@
 // a note.
 import {
   acceptFlagEndpoint,
+  withdrawAcceptanceEndpoint,
   createInvoiceBatchEndpoint,
   lockAsInvoicedEndpoint,
   setLockBatchEndpoint,
@@ -119,6 +120,27 @@ export class ReviewMarksController {
         outcome,
         ({ record }) => flagAcceptanceRecord(record),
         'A flag was accepted.',
+      ),
+    );
+  }
+
+  @Serves(withdrawAcceptanceEndpoint)
+  async withdraw(
+    @Param() params: ParamsOf<typeof withdrawAcceptanceEndpoint>,
+    @Body() body: BodyOf<typeof withdrawAcceptanceEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.acceptances.withdraw(
+      callerOf(request).userId,
+      params.flagAcceptanceId,
+      body.note,
+    );
+    return withdrawAcceptanceEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => flagAcceptanceRecord(record),
+        'A flag’s acceptance was taken back.',
       ),
     );
   }

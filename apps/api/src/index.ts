@@ -1,287 +1,76 @@
-// The API (ARCHITECTURE §6, §18). Phase 1 builds what a person or a phone writes as plain service
-// classes, with no HTTP and no sign-in: each takes the service's own database client (the login
-// adms_api) and writes through db.$write as the person it is told. Phase 2 wraps them in endpoints
-// (ADR-316). The setup services are spec/parts/01-setup.md's steps, one class per group of records;
-// certifying is spec/parts/03-certification.md's (ADR-321); the allocator of numbers is the
-// server's alone (ADR-065, 323); intake is spec/parts/05-sync.md's, what the server does with
-// each record a phone sends (ADR-338); the review services are
-// spec/parts/08-review-and-corrections.md's: a reviewer's corrections and renumbers, a
-// quarantined record resolved, a record created in the back office (ADR-364), a ticket voided
-// and unvoided, a flag accepted (ADR-365), each answering the run to ask the worker for; and setting a password is
-// ARCHITECTURE §6's (ADR-402…405), as two-step sign-in is (ADR-412), and the firm's people and
-// the server's own command for its admins are (ADR-415).
+// The API (ARCHITECTURE §6, §18). Its process is `main.ts`: every endpoint a phone, the back office
+// or a viewer reaches is served there, over HTTPS behind the proxy. This index is read by two
+// workspaces alone, the scenario harness and the dev stack's accounts (`pnpm local:accounts`), so
+// it exports what they read and nothing more (ADR-503; held to that by
+// `packages/scenarios/test/app-exports.test.ts`): the API as a process, which a story runs on its
+// own database and clock (task 2.7.1), and its settings; the setup services and certifying, which
+// every story's opening world is made through (spec/parts/01-setup.md, 03-certification.md;
+// ADR-316, 321), and the release's policy values they read (C53); the allocator of numbers
+// (ADR-065, 323); the server's own command for its admins and the sign-in parts it is built from
+// (ADR-415, 502 (d)), which the dev stack's accounts are written with too (ADR-412); the shapes of
+// what a phone sends; `Corrections`, for the one check whose job queue is made to fail
+// (AC-10-50, ADR-501 (b)); and three reads the burst story times (ADR-524).
 export {
   Certifications,
   type BoxInput,
-  type BoxMeasurements,
   type NewCertification,
 } from './certification/certifications.ts';
-export { NumberAllocator, type LastUsed, type PhoneAtSync } from './numbering/number-allocator.ts';
-export { builtInPolicy, installationPolicy } from './policy.ts';
-export { Settings, SettingsProblem, type MediaSettings } from './process/settings.ts';
-export {
-  ContractorSetup,
-  SubPlaces,
-  type NewContract,
-  type NewContractor,
-} from './setup/contractor-setup.ts';
-export { FormSetup, type NewForm, type NewFormDebrisType } from './setup/form-setup.ts';
+export { NumberAllocator } from './numbering/number-allocator.ts';
+export { builtInPolicy } from './policy.ts';
+export { ApiModule } from './process/api-module.ts';
+export { ApiProcess } from './process/api-process.ts';
+export { Settings } from './process/settings.ts';
+
+export { ContractorSetup } from './setup/contractor-setup.ts';
+export { FormSetup, type NewForm } from './setup/form-setup.ts';
 export { ListSetup } from './setup/list-setup.ts';
-export {
-  PayItemSetup,
-  type NewPayItem,
-  type PayItemChanges,
-  type PaysWhenInput,
-  type RulesKept,
-} from './setup/pay-item-setup.ts';
-export {
-  ProjectSetup,
-  type ActiveWindow,
-  type NewClient,
-  type NewControlRange,
-  type NewDeclarationEvent,
-  type NewMap,
-  type NewProject,
-} from './setup/project-setup.ts';
-export type { ActionInput, CriterionInput } from './setup/rule-book.ts';
-export { RuleSetup, type RuleInput, type SavedRule } from './setup/rule-setup.ts';
-export {
-  QueueingService,
-  SetupService,
-  type Clock,
-  type Outcome,
-  type QueuedBySetup,
-  type Refusal,
-} from './setup/setup-service.ts';
+export { PayItemSetup, type NewPayItem } from './setup/pay-item-setup.ts';
+export { ProjectSetup } from './setup/project-setup.ts';
+export type { CriterionInput } from './setup/rule-book.ts';
+export { RuleSetup } from './setup/rule-setup.ts';
+export { type Clock, type Outcome } from './setup/setup-service.ts';
 export { SetupStanding } from './setup/setup-standing.ts';
-export { WorkQueue, type WorkAsked, type WorkQueued } from './jobs/work-queue.ts';
-export {
-  SiteSetup,
-  type NewSite,
-  type NewSiteShape,
-  type SiteChanges,
-  type SiteFactSettings,
-} from './setup/site-setup.ts';
+export { SiteSetup } from './setup/site-setup.ts';
+// What the burst story measures at a real project's size (BACKLOG 2.8.2; ADR-524): the setup a
+// sync numbers, the passcode's check a phone's first sync is made, and a map's file read.
+export { SetupVersions } from './setup/setup-versions.ts';
+export { OfflineChecks } from './phone/offline-checks.ts';
+export { MapFileReader } from './setup/map-file-reader.ts';
+export { WorkQueue } from './jobs/work-queue.ts';
 
-export { Acceptances } from './review/acceptances.ts';
-export { BackOfficeRecords, type NewBackOfficeFieldEvent } from './review/back-office-records.ts';
-export {
-  Corrections,
-  type CorrectedFix,
-  type DropOffLogCorrection,
-  type FieldEventCorrection,
-  type IncidentCorrection,
-  type RoeCorrection,
-  type ScaleReceiptCorrection,
-  type ScopePick,
-  type SurveyCorrection,
-} from './review/corrections.ts';
-export { InvoiceLocks } from './review/invoice-locks.ts';
-export { QcMarks, type QcMarked } from './review/qc-marks.ts';
-export { QuarantineReview, type NewNumber } from './review/quarantine-review.ts';
-export {
-  ReviewService,
-  type Reprocess,
-  type Reviewed,
-  type TicketMarked,
-  type TicketNamed,
-} from './review/review-service.ts';
-export { Voids } from './review/voids.ts';
-
-export { ViewerReads } from './viewer/viewer-reads.ts';
+export { Corrections } from './review/corrections.ts';
 
 export { AdminCommand, type Questions } from './people/admin-command.ts';
-export {
-  People,
-  type NewPerson,
-  type PeopleParts,
-  type PeopleRefused,
-  type PersonOutcome,
-  type PersonRead,
-  type SessionsEnded,
-} from './people/people.ts';
-export {
-  ServerAdmin,
-  serverReason,
-  type AdminStanding,
-  type ServerAdminOutcome,
-  type ServerAdminParts,
-} from './people/server-admin.ts';
-
+export { People } from './people/people.ts';
+export { ServerAdmin, serverReason } from './people/server-admin.ts';
 export { shippedBreachedPasswords } from './sign-in/breached-list.ts';
-export {
-  mailFor,
-  NoMail,
-  SmtpMail,
-  type Mail,
-  type MailSettings,
-  type Message,
-} from './sign-in/mail.ts';
+export { NoMail } from './sign-in/mail.ts';
 export { OneTimeCodes } from './sign-in/one-time-codes.ts';
 export { PasswordHasher } from './sign-in/password-hasher.ts';
-export {
-  Passwords,
-  type PasswordOutcome,
-  type PasswordParts,
-  type PasswordRefusalCode,
-  type ResetAsked,
-} from './sign-in/passwords.ts';
-export { ResetCodes, type ResetNamed } from './sign-in/reset-codes.ts';
-export { SessionTokens, type RefreshRead } from './sign-in/session-tokens.ts';
-export {
-  Sessions,
-  signsInHere,
-  type Caller,
-  type Opened,
-  type RefreshOutcome,
-  type SessionParts,
-  type SessionPolicy,
-  type SignInOutcome,
-  type SignInRefused,
-  type SignsInHere,
-} from './sign-in/sessions.ts';
+export { SessionTokens } from './sign-in/session-tokens.ts';
+export { Sessions } from './sign-in/sessions.ts';
 export { TwoStepSecrets } from './sign-in/two-step-secrets.ts';
-export {
-  TwoStep,
-  TwoStepCheck,
-  type SetupBegun,
-  type SetupConfirmed,
-  type TwoStepCleared,
-  type TwoStepParts,
-} from './sign-in/two-step.ts';
-export {
-  WrongTries,
-  type Tried,
-  type TriedPerson,
-  type WrongTriesParts,
-} from './sign-in/wrong-tries.ts';
+export { TwoStepCheck } from './sign-in/two-step.ts';
+export { WrongTries } from './sign-in/wrong-tries.ts';
 
-export {
-  MasterPasscode,
-  type MasterPasscodeParts,
-  type PasscodeOutcome,
-  type PasscodeRefusalCode,
-} from './dispatch/master-passcode.ts';
-export {
-  Assignments,
-  type AssignedWork,
-  type AssignmentRead,
-  type AssignmentsAsked,
-  type AssignmentsPage,
-  type NewAssignment,
-} from './dispatch/assignments.ts';
-export {
-  Phones,
-  type PhoneRead,
-  type PhoneRemoved,
-  type PhonesAsked,
-  type PhonesPage,
-} from './dispatch/phones.ts';
-export { Intake } from './sync/intake.ts';
-export { Sync, type Synced, type SyncParts } from './sync/sync.ts';
+export { Assignments, type NewAssignment } from './dispatch/assignments.ts';
+export { Phones } from './dispatch/phones.ts';
+export { sentFingerprint } from './sync/sync.ts';
 export type {
-  IntakeNote,
-  PhotoOwnerKind,
-  SentAnswers,
   SentCertification,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
   SentIncident,
   SentItem,
-  SentPhoto,
   SentRecord,
   SentRoe,
   SentScaleReceipt,
   SentSurvey,
   SyncAnswer,
 } from './sync/sent.ts';
-
-export const workspace = 'api';
-// A phone's enrolment and its proof of itself (task 2.5.1): the harness's phone enrols and
-// proves itself through these, as a real one does through their endpoints.
-export { DeviceKeys } from './phone/device-keys.ts';
-export {
-  Enrolment,
-  type EnrolmentOutcome,
-  type EnrolmentParts,
-  type EnrolmentRefused,
-  type PhoneToEnrol,
-} from './phone/enrolment.ts';
-export {
-  MasterPasscodeCheck,
-  type MasterPasscodeCheckParts,
-  type PasscodeRefused,
-} from './phone/master-passcode-check.ts';
-export {
-  PhoneAssignments,
-  type AssignmentAtSignIn,
-  type PhoneAssignment,
-} from './phone/phone-assignments.ts';
-export { AddressLookups, type AddressLookedUp } from './phone/address-lookups.ts';
-export {
-  AddressServer,
-  type Addresses,
-  type AddressServerSettings,
-} from './phone/address-server.ts';
-export {
-  MediaStore,
-  MediaStoreProblem,
-  type KeptFile,
-  type Media,
-  type MediaStoreSettings,
-} from './media/media-store.ts';
-export {
-  PasscodeSessions,
-  type PasscodeSessionOutcome,
-  type PasscodeSessionToOpen,
-  type PasscodeSessionsParts,
-} from './phone/passcode-sessions.ts';
-export {
-  PasscodeUses,
-  type PasscodeUseReceived,
-  type PasscodeUsesParts,
-  type ReportedPasscodeUse,
-} from './phone/passcode-uses.ts';
-export {
-  SetupChoices,
-  type SetupChoicesAsked,
-  type SetupChoicesOutcome,
-  type SetupChoicesParts,
-  type SetupChoicesRead,
-} from './phone/setup-choices.ts';
-export { PhoneChallenges, type Challenged } from './phone/phone-challenges.ts';
-export { PhoneLists, type PhoneListsHeld, type PhoneListsTaken } from './phone/phone-lists.ts';
-export { OfflineChecks, type OfflineCheck } from './phone/offline-checks.ts';
-export {
-  PhoneLoginList,
-  type LoginListHeld,
-  type LoginListTaken,
-} from './phone/phone-login-list.ts';
-export {
-  PhoneMonitors,
-  type MonitorOutcome,
-  type MonitorToCreate,
-  type PhoneMonitorsParts,
-} from './phone/phone-monitors.ts';
-export {
-  PhoneProofs,
-  type Challenge,
-  type PhoneProofParts,
-  type ProofOutcome,
-  type ProofRefused,
-  type ProvenPhone,
-} from './phone/phone-proofs.ts';
-export {
-  PhoneSignIns,
-  type MonitorOnPhone,
-  type PhoneSignInOutcome,
-  type PhoneSignInRefused,
-  type PhoneSignInsParts,
-} from './phone/phone-sign-ins.ts';
-export { PhoneTokens } from './phone/phone-tokens.ts';
-export {
-  UnplannedAssignments,
-  type ReportedUnplannedAssignment,
-  type UnplannedAssignmentReceived,
-} from './phone/unplanned-assignments.ts';
+export type { Addresses } from './phone/address-server.ts';
+export { isMediaKey, type KeptFile, type Media } from './media/media-store.ts';
+export { PhotographFiles } from './media/photograph-files.ts';
+export type { ReportedPasscodeUse } from './phone/passcode-uses.ts';
+export type { ReportedUnplannedAssignment } from './phone/unplanned-assignments.ts';

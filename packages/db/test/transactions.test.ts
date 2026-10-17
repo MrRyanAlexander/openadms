@@ -310,7 +310,6 @@ describe('whatever a transaction names is its own project’s', () => {
       project_id: world.p2,
       name: 'Load',
       document_type: 'LOAD',
-      enabled: true,
     });
     const p2PayItem = await tickets.add(
       'pay_item',

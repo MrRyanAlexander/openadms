@@ -8,6 +8,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { request as overHttps } from 'node:https';
+import { createServer as plainServer, type AddressInfo, type Server, type Socket } from 'node:net';
+import { createSecureContext, TLSSocket } from 'node:tls';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { errorAnswerSchema } from '@open-adms/contracts';
@@ -23,13 +25,22 @@ import { Passwords } from '../src/sign-in/passwords.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
 import { installationSettings, openInstallation, undone, type Tx } from './support/database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
-import { NoServer, Outbox, signingSecret, signInOn, TestClock } from './support/sign-in.ts';
+import {
+  NoServer,
+  Outbox,
+  passwordKey,
+  sealingKey,
+  signingSecret,
+  signInOn,
+  TestClock,
+} from './support/sign-in.ts';
+import { hostCertFile, hostKeyFile, stackRootCert } from './support/stack-https.ts';
 
 const long = 'marsh heron delphine ferry';
 const longer = 'ferry delphine heron marsh';
 const keptOut = '[kept out of the audit]';
 const secret = signingSecret;
-const hasher = new PasswordHasher(secret);
+const hasher = new PasswordHasher(passwordKey);
 
 // The example world's people (CONVENTIONS §6): Gates Disaster Recovery's back office, Bayline
 // County's debris manager, and a monitor.
@@ -96,7 +107,7 @@ describe('an admin sets a password', () => {
       const set = await passwordsOn(within, new NoServer()).setByAdmin(dana, luis, long);
       expect(set).toEqual({ set: true, told: false });
       const kept = await tx.userCredential.findUniqueOrThrow({ where: { userId: luis } });
-      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$/);
+      expect(kept.passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$/);
       expect(await hasher.verify(long, kept.passwordHash ?? '')).toBe(true);
       const audited = await tx.auditRecord.findMany({
         where: { tableName: 'user_credential', recordId: kept.id },
@@ -368,7 +379,7 @@ describe('the reset endpoints, through the process', () => {
       const lines: string[] = [];
       const api = await ApiProcess.create(
         ApiModule,
-        { ...madeUpSettings, tokenSigningSecret: secret },
+        { ...madeUpSettings, tokenSigningSecret: secret, passwordKey, sealingKey },
         shippedPolicy,
         { stream: { write: (line) => lines.push(line) }, database: within, mail: outbox },
       );
@@ -428,6 +439,167 @@ describe('afterwards', () => {
   });
 });
 
+// A mail server of the test's own (API10:2023; spec/CHECKLIST-API.md §5.9; ADR-517): it takes TLS
+// by STARTTLS with the stack's certificate for this machine, or offers none, then refuses every
+// message in words of its own. It keeps the verbs it was sent, never their arguments.
+const refusal = 'refusing-9f3c relay denied for this sender';
+interface MailServer {
+  readonly port: number;
+  readonly heard: string[];
+  close(): Promise<void>;
+}
+async function refusingMailServer(offersTls: boolean): Promise<MailServer> {
+  const heard: string[] = [];
+  const sockets = new Set<Socket>();
+  const server: Server = plainServer((socket) => {
+    sockets.add(socket);
+    let over: Socket | TLSSocket = socket;
+    let buffered = '';
+    const say = (...lines: string[]) => {
+      over.write(lines.map((line) => `${line}\r\n`).join(''));
+    };
+    const read = (chunk: Buffer) => {
+      buffered += chunk.toString('utf8');
+      for (let at = buffered.indexOf('\r\n'); at !== -1; at = buffered.indexOf('\r\n')) {
+        const line = buffered.slice(0, at);
+        buffered = buffered.slice(at + 2);
+        const verb = (line.split(' ')[0] ?? '').toUpperCase();
+        heard.push(verb);
+        if (verb === 'EHLO' || verb === 'HELO') {
+          say(
+            ...(offersTls && over === socket
+              ? ['250-refusing.example', '250 STARTTLS']
+              : ['250 refusing.example']),
+          );
+        } else if (verb === 'STARTTLS' && offersTls && over === socket) {
+          say('220 2.0.0 Ready to start TLS');
+          socket.removeListener('data', read);
+          const secured = new TLSSocket(socket, {
+            isServer: true,
+            secureContext: createSecureContext({
+              cert: readFileSync(hostCertFile),
+              key: readFileSync(hostKeyFile),
+            }),
+          });
+          secured.on('data', read);
+          secured.on('error', () => undefined);
+          over = secured;
+        } else if (verb === 'MAIL') {
+          say(`550 5.7.1 ${refusal}`);
+        } else if (verb === 'RSET') {
+          say('250 2.0.0 OK');
+        } else if (verb === 'QUIT') {
+          say('221 2.0.0 Bye');
+          over.end();
+        } else {
+          say('502 5.5.2 Not here');
+        }
+      }
+    };
+    socket.on('data', read);
+    socket.on('error', () => undefined);
+    socket.on('close', () => sockets.delete(socket));
+    say('220 refusing.example ESMTP');
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    port: (server.address() as AddressInfo).port,
+    heard,
+    close: () => {
+      for (const socket of sockets) socket.destroy();
+      return new Promise((resolve) => {
+        server.close(() => {
+          resolve();
+        });
+      });
+    },
+  };
+}
+
+describe('AC-10-70 the mail server’s answers (API10)', () => {
+  const mailAt = (port: number) =>
+    new SmtpMail({
+      smtpUrl: `smtp://127.0.0.1:${String(port)}`,
+      smtpAddress: undefined,
+      smtpCaFile: stackRootCert,
+      mailFrom: Settings.defaultMailFrom,
+    });
+
+  it('API10 a refusal leaves a reset asked for answered as one that wasn’t, and the log holds no word of the server’s', async () => {
+    const refusing = await refusingMailServer(true);
+    try {
+      await world(async (within, _tx, { dana, luis }) => {
+        await passwordsOn(within, new NoServer()).setByAdmin(dana, luis, long);
+        const lines: string[] = [];
+        const api = await ApiProcess.create(
+          ApiModule,
+          { ...madeUpSettings, tokenSigningSecret: secret, passwordKey, sealingKey },
+          shippedPolicy,
+          {
+            stream: { write: (line) => lines.push(line) },
+            database: within,
+            mail: mailAt(refusing.port),
+          },
+        );
+        await ready(api);
+        try {
+          const post = (payload: object) =>
+            api.app.inject({ method: 'POST', url: '/password-resets', payload });
+          const known = await post({ email: 'luis.ortega@gates.example' });
+          const unknown = await post({ email: 'nobody@gates.example' });
+          expect([known.statusCode, known.json()]).toEqual([200, { status: 'accepted' }]);
+          expect([unknown.statusCode, unknown.json()]).toEqual([200, { status: 'accepted' }]);
+          expect(known.body).toBe(unknown.body);
+          // The message was offered over TLS and refused; nothing of the refusal went anywhere.
+          expect(refusing.heard).toEqual(expect.arrayContaining(['STARTTLS', 'MAIL']));
+          const log = lines.join('\n');
+          expect(log).toContain('A password reset by email was asked for.');
+          for (const word of ['9f3c', 'relay denied', 'refusing.example', '5.7.1']) {
+            expect(log, word).not.toContain(word);
+          }
+        } finally {
+          await api.close();
+        }
+      });
+    } finally {
+      await refusing.close();
+    }
+  });
+
+  it('ASVS 12.3.2 a server whose certificate isn’t of the root named is sent nothing: the machine’s own trust store, here, knows no such root', async () => {
+    const refusing = await refusingMailServer(true);
+    try {
+      const unnamed = new SmtpMail({
+        smtpUrl: `smtp://127.0.0.1:${String(refusing.port)}`,
+        smtpAddress: undefined,
+        smtpCaFile: null,
+        mailFrom: Settings.defaultMailFrom,
+      });
+      await expect(
+        unnamed.send({ to: 'luis.ortega@gates.example', subject: 'x', text: 'x' }),
+      ).rejects.toThrow();
+      for (const verb of ['MAIL', 'RCPT', 'DATA', 'AUTH'])
+        expect(refusing.heard).not.toContain(verb);
+    } finally {
+      await refusing.close();
+    }
+  });
+
+  it('KD-78 a server that offers no TLS is sent nothing in clear: TLS is asked for, and with none there is no message', async () => {
+    const plain = await refusingMailServer(false);
+    try {
+      await expect(
+        mailAt(plain.port).send({ to: 'luis.ortega@gates.example', subject: 'x', text: 'x' }),
+      ).rejects.toThrow();
+      // Its greeting answered and TLS asked for; never an address, a login or a message.
+      for (const verb of ['MAIL', 'RCPT', 'DATA', 'AUTH']) expect(plain.heard).not.toContain(verb);
+      expect(plain.heard).toContain('STARTTLS');
+    } finally {
+      await plain.close();
+    }
+  });
+});
+
 describe('the local stack’s mail catcher', () => {
   const stack = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'infra', 'local');
   const hostname = 'mail.adms.localhost';
@@ -465,6 +637,8 @@ describe('the local stack’s mail catcher', () => {
     const mail = new SmtpMail({
       smtpUrl: `smtp://127.0.0.1:${process.env['ADMS_SMTP_PORT'] ?? '1025'}`,
       smtpAddress: undefined,
+      // Over STARTTLS alone, the catcher's certificate checked against the stack's root (KD-78).
+      smtpCaFile: join(stack, '.generated', 'caddy-root.crt'),
       mailFrom: Settings.defaultMailFrom,
     });
     await mail.send({

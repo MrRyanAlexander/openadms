@@ -4,7 +4,9 @@
 // record of its own beside the ticket: none of these holds a status, a flag, a line or an amount,
 // which are the worker's to conclude in the run the action queued.
 import {
+  certificationViews,
   fieldEventKinds,
+  masterPasscodeSessions,
   measuredAs,
   qcStatuses,
   quarantineReasons,
@@ -51,6 +53,10 @@ export const flagAcceptanceRecordSchema = z.strictObject({
   note: z.string().nullable(),
   acceptedById: id,
   acceptedAt: at,
+  // Taken back: who, when and the note, or none while it stands (ADR-534 (8)).
+  withdrawnById: id.nullable(),
+  withdrawnAt: at.nullable(),
+  withdrawNote: z.string().nullable(),
 });
 
 export type FlagAcceptanceRecord = z.infer<typeof flagAcceptanceRecordSchema>;
@@ -104,6 +110,22 @@ export const invoiceLockRecordSchema = z.strictObject({
 
 export type InvoiceLockRecord = z.infer<typeof invoiceLockRecordSchema>;
 
+// A reprocess a person asked for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): no record is written but its job, so the answer is what was asked. The
+// tickets named, each once (a set-aside job's, where one was put back), and those of them locked
+// as invoiced, which the job leaves off and the worker leaves as they are.
+const ticketKey = { workflow: z.enum(workflows), ticketNumber: z.string() };
+export const reprocessRecordSchema = z.strictObject({
+  projectId: id,
+  // The job set aside whose tickets were put back; none where a person named them.
+  setAsideJobId: id.nullable(),
+  tickets: z.array(z.strictObject(ticketKey)),
+  lockedAsInvoiced: z.array(z.strictObject(ticketKey)),
+  requestedById: id,
+});
+
+export type ReprocessRecord = z.infer<typeof reprocessRecordSchema>;
+
 // What a correction answers with (spec/parts/08-review-and-corrections.md steps 2…4;
 // spec/DATA-MODEL.md §4; BACKLOG 2.4.4; ADR-051, 337, 364, 431): the record as it now stands, the
 // same one, its id unchanged. Only what a monitor recorded and a reviewer may correct: never a
@@ -122,6 +144,11 @@ export const fieldEventRecordSchema = z.strictObject({
   // Empty when not split.
   splitSuffix: z.string(),
   source: z.enum(recordSources),
+  // Made in a session opened under the master passcode, and which way; none in a monitor's own.
+  masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
+  // Made in the back office: who and why.
+  createdById: id.nullable(),
+  createdReasonId: id.nullable(),
   monitorId: id,
   startedAt: at,
   endedAt: at,
@@ -194,7 +221,10 @@ export const photographRecordSchema = z.strictObject({
   surveyId: id.nullable(),
   incidentId: id.nullable(),
   dropOffLogId: id.nullable(),
+  view: z.enum(certificationViews).nullable(),
   capturedAt: at,
+  // When its file reached storage; none until it has.
+  uploadedAt: at.nullable(),
   removedAt: at.nullable(),
   label: z.string().nullable(),
 });
@@ -220,10 +250,17 @@ export type ScaleReceiptRecord = z.infer<typeof scaleReceiptRecordSchema>;
 
 // What a correction to an ROE or a form answers with, and a quarantined record once resolved
 // (spec/parts/08-review-and-corrections.md steps 2, 9, "One review queue"; spec/DATA-MODEL.md
-// §4.3…4.5; BACKLOG 2.4.4; ADR-149, 327, 338, 364, 432): the record as it now stands, the same
-// one. Never the answers to the firm's own fields, which no request here corrects.
+// §4.3…4.5; BACKLOG 2.4.4, 2.8.7; ADR-149, 327, 338, 364, 432, 534): the record as it now stands,
+// the same one, with the answers to the firm's own fields and the version they answer.
 // A calendar day, 2026-10-09.
 const day = z.iso.date();
+
+// The answers to the firm's own fields, keyed by field id, and the version of its form's fields
+// they answer; none answers nothing.
+const answered = {
+  answers: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+  formDefinitionId: id.nullable(),
+};
 
 export const roeRecordSchema = z.strictObject({
   id,
@@ -240,6 +277,7 @@ export const roeRecordSchema = z.strictObject({
   madeById: id.nullable(),
   madeAt: at.nullable(),
   notes: z.string().nullable(),
+  ...answered,
 });
 
 export type RoeRecord = z.infer<typeof roeRecordSchema>;
@@ -258,16 +296,19 @@ export const roeScopeItemRecordSchema = z.strictObject({
 
 export type RoeScopeItemRecord = z.infer<typeof roeScopeItemRecordSchema>;
 
-// What every form records, whoever made it.
+// What every form records, whoever made it: one made in the back office says who and why.
 const form = {
   id,
   projectId: id,
   source: z.enum(recordSources),
+  createdById: id.nullable(),
+  createdReasonId: id.nullable(),
   monitorId: id,
   madeAt: at,
   deviceUtcOffsetMinutes: z.number().int(),
   fix,
   notes: z.string().nullable(),
+  ...answered,
 };
 
 export const surveyRecordSchema = z.strictObject({
@@ -325,7 +366,7 @@ export type QuarantinedRecordAnswer = z.infer<typeof quarantinedRecordSchema>;
 // What a change to a certification answers with (spec/parts/03-certification.md steps 10…13;
 // spec/DATA-MODEL.md §3; BACKLOG 2.4.4; ADR-079, 080, 433): the certification as it now stands,
 // the same one. Its capacity is what its boxes work out to, never a value anybody sent. Never
-// the driver's phone or licence number, which a change here neither reads nor moves.
+// the driver's phone or licence number, which a viewer never reads (a correction may move them).
 export const certificationRecordSchema = z.strictObject({
   id,
   projectId: id,
@@ -337,8 +378,26 @@ export const certificationRecordSchema = z.strictObject({
   secondTierSubId: id.nullable(),
   // Whole cubic yards; a crew has none.
   capacityCy: z.number().int().nullable(),
+  vehicleTypeId: id.nullable(),
+  vehicleTypeOther: z.string().nullable(),
+  crewTypeId: id.nullable(),
+  driverName: z.string().nullable(),
+  driverLicenceState: z.string().nullable(),
+  driverLicenceExpiry: day.nullable(),
+  tagNumber: z.string().nullable(),
+  tagState: z.string().nullable(),
+  tagExpiry: day.nullable(),
   certifiedAt: at,
+  deviceUtcOffsetMinutes: z.number().int(),
   certifiedById: id,
+  // Where it came from: its phone, or the back office from the paper sheet, with who entered it
+  // and why (ADR-521, 534).
+  deviceId: id.nullable(),
+  createdById: id.nullable(),
+  createdReasonId: id.nullable(),
+  clientRepresentativeName: z.string().nullable(),
+  contractorRepresentativeName: z.string().nullable(),
+  notes: z.string().nullable(),
   signaturesOnFile: z.boolean(),
   replacesId: id.nullable(),
   replacedReason: z.string().nullable(),

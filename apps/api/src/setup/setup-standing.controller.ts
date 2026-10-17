@@ -2,9 +2,8 @@
 // site's phones will ask for"; ARCHITECTURE §6; AC-01-69…77; BACKLOG 2.4.2, C97; ADR-229, 423,
 // 426, 453): the setup check's list and the sites' quantity lookup, one site's also as its
 // phones held it under a setup version. Each reads the project's setup and writes nothing;
-// neither holds a rate. The door has asked that the caller is an admin or a
-// manager/analyst: they take no permission, so whoever reviews tickets may ask them too. A
-// read-only viewer's sight of them is task 2.4.5's.
+// neither holds a rate. The door has asked that the caller is an admin, or a manager/analyst
+// granted "view setup" (the user, ADR-539). A read-only viewer's sight of them is task 2.4.5's.
 import {
   quantityLookupEndpoint,
   setupCheckEndpoint,

@@ -14,6 +14,9 @@ const tested = eachTestRolledBack();
 
 // Shaped like an Argon2id hash (a PHC string); nothing hashes to it.
 const aHash = '$argon2id$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA';
+// The same, keyed with the API's password key (ADR-542), and a seed as the API seals one.
+const aKeyedHash = '$argon2id$v=19$m=19456,t=2,p=1,keyid=djI$c2FsdA$aGFzaA';
+const aSeed = 'v2.bm9uY2U.aGlkZGVu.dGFn';
 const keptOut = '[kept out of the audit]';
 
 async function asTheApi(): Promise<void> {
@@ -41,10 +44,13 @@ describe('a phone', () => {
       'enrolled_at',
       'id',
       'key_revoked_at',
+      'key_revoked_by',
       'last_answered_challenge_made_at',
       'master_passcode_version',
       'name',
       'out_of_service_at',
+      'out_of_service_marked_at',
+      'out_of_service_reason_id',
       'public_key',
       'status',
     ]);
@@ -110,7 +116,7 @@ describe('a phone', () => {
   it('AC-02-59 is lost or retired exactly from its removal time; never deleted', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const mark = `UPDATE "device" SET "status" = $2, "out_of_service_at" = $3 WHERE "id" = $1`;
+    const mark = `UPDATE "device" SET "status" = $2, "out_of_service_at" = $3, "out_of_service_marked_at" = $3 WHERE "id" = $1`;
     for (const [status, removedAt] of [
       ['LOST', null],
       ['RETIRED', null],
@@ -139,41 +145,166 @@ describe('a phone', () => {
 });
 
 describe("a phone's key", () => {
+  const revoke = `UPDATE "device" SET "key_revoked_at" = $2, "key_revoked_by" = 'TURN_IN' WHERE "id" = $1`;
+  const markLost = `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z', "out_of_service_marked_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`;
+  const issue = `INSERT INTO "number_block" ("device_id", "project_id", "series", "first_number", "last_number")
+    VALUES ($1, $2, 'LOAD', $3, $4) RETURNING "id"::text`;
+  // Its turn-in: the master passcode's actor, on that phone (ADR-488).
+  const asItsTurnIn = (deviceId: string) =>
+    tested.db.actor(masterPasscodeActorId, 'DEVICE', { deviceId });
+
   it('AC-02-61 is revoked only once the phone is out of service, never before its removal time; the time is kept on its record', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const revoke = `UPDATE "device" SET "key_revoked_at" = $2 WHERE "id" = $1`;
+    await asItsTurnIn(world.device);
     // In service: its key can't be revoked.
     const inService = await db.refused(revoke, [world.device, '2026-10-12T22:10:00Z']);
     expect(inService.code).toBe(refusedBy.check);
     expect(inService.message).toContain('"device_key_revoked_check"');
-    // Luis marks it lost at 6:10 pm on Monday; it syncs, is confirmed and wiped on Wednesday.
-    await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T22:10:00Z' WHERE "id" = $1`,
-      [world.device],
-    );
+    // Luis marks it lost at 6:10 pm on Monday; it syncs and is turned in on Wednesday.
+    await db.actor(world.admin, 'BACK_OFFICE');
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
     expect((await db.refused(revoke, [world.device, '2026-10-12T22:09:59Z'])).code).toBe(
       refusedBy.check,
     );
     expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
-    // Back in service, it can't keep a revoked key.
-    expect(
-      (
-        await db.refused(
-          `UPDATE "device" SET "status" = 'ACTIVE', "out_of_service_at" = NULL WHERE "id" = $1`,
-          [world.device],
-        )
-      ).code,
-    ).toBe(refusedBy.check);
-    const audited = await db.rows<{ changed_fields: string[] }>(
-      `SELECT "changed_fields" FROM "audit_record"
+    const audited = await db.rows<{ changed_fields: string[]; actor_id: string }>(
+      `SELECT "changed_fields", "actor_id"::text FROM "audit_record"
        WHERE "table_name" = 'device' AND "record_id" = $1 AND "operation" = 'UPDATE' ORDER BY "id"`,
       [world.device],
     );
-    expect(audited.map((record) => record.changed_fields)).toEqual([
-      ['out_of_service_at', 'status'],
-      ['key_revoked_at'],
+    expect(audited.map((record) => [record.changed_fields, record.actor_id])).toEqual([
+      [['out_of_service_at', 'out_of_service_marked_at', 'status'], world.admin],
+      [['key_revoked_at', 'key_revoked_by'], masterPasscodeActorId],
     ]);
+  });
+
+  it('ADR-488 is revoked by the phone’s turn-in alone: under the master passcode on that same phone; never by a person, by the phone’s own key, for another phone, nor at enrolment', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    await db.run(markLost, [world.device]);
+    const { id: another } = await db.one<{ id: string }>(enrol, [
+      'P1-UR-1',
+      deviceKeyLike('jo-kim'),
+      1,
+    ]);
+    const others = [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device }),
+      () => asItsTurnIn(another),
+      () => db.actor(masterPasscodeActorId, 'DEVICE'),
+    ];
+    for (const [at, state] of others.entries()) {
+      await state();
+      const refusal = await db.refused(revoke, [world.device, '2026-10-14T13:30:00Z']);
+      expect([refusal.code, refusal.message], String(at)).toEqual([
+        refusedBy.grant,
+        "Only a phone's turn-in, under the master passcode on that phone, revokes its key",
+      ]);
+    }
+    // Enrolled lost and revoked at once: refused, whoever writes it.
+    await asItsTurnIn(world.device);
+    const enrolledRevoked = await db.refused(
+      `INSERT INTO "device" ("name", "public_key", "master_passcode_version", "status", "out_of_service_at", "out_of_service_marked_at", "key_revoked_at", "key_revoked_by")
+       VALUES ('P1-UR-2', $1, 1, 'LOST', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z', '2026-10-12T22:10:00Z', 'TURN_IN')`,
+      [deviceKeyLike('lee-morgan')],
+    );
+    expect([enrolledRevoked.code, enrolledRevoked.message]).toEqual([
+      refusedBy.trigger,
+      "A phone is enrolled with its key standing: only its turn-in or the firm's time revokes it",
+    ]);
+    expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
+  });
+
+  it('ADR-065, 488 is revoked only once the phone holds no block still issued; a phone turned in is issued no block, nor has one opened again, whoever asks', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    const { id: block } = await db.one<{ id: string }>(issue, [
+      world.device,
+      world.p1,
+      101001,
+      102000,
+    ]);
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
+    const stillIssued = await db.refused(revoke, [world.device, '2026-10-14T13:30:00Z']);
+    expect([stillIssued.code, stillIssued.message]).toEqual([
+      refusedBy.trigger,
+      "A phone's numbers are handed back or retired before its key is revoked",
+    ]);
+    expect(
+      await db.run(
+        `UPDATE "number_block" SET "status" = 'RETIRED', "ended_at" = '2026-10-14T13:30:00Z' WHERE "id" = $1`,
+        [block],
+      ),
+    ).toBe(1);
+    expect(await db.run(revoke, [world.device, '2026-10-14T13:30:00Z'])).toBe(1);
+    // Afterwards, for the back office or the phone's own key: no block, and none opened again.
+    for (const state of [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => db.actor(deviceKeyActorId, 'DEVICE', { deviceId: world.device }),
+    ]) {
+      await state();
+      for (const [sql, values] of [
+        [issue, [world.device, world.p1, 102001, 103000]],
+        [
+          `UPDATE "number_block" SET "status" = 'ISSUED', "ended_at" = NULL WHERE "id" = $1`,
+          [block],
+        ],
+      ] as const) {
+        const refusal = await db.refused(sql, [...values]);
+        expect([refusal.code, refusal.message], sql).toEqual([
+          refusedBy.trigger,
+          'A phone turned in is issued no numbers: its key is revoked',
+        ]);
+      }
+    }
+    // Another phone is issued numbers as before.
+    const { id: another } = await db.one<{ id: string }>(enrol, [
+      'P1-COL-2',
+      deviceKeyLike('jo-kim'),
+      1,
+    ]);
+    await db.actor(world.admin, 'BACK_OFFICE');
+    expect(await db.one(issue, [another, world.p1, 102001, 103000])).toHaveProperty('id');
+  });
+
+  it('ADR-488 once revoked, the phone stays as it was turned in: when its key was revoked, its status and its removal time never change; its name still may', async () => {
+    const { db, world } = tested;
+    await asTheApi();
+    await db.run(markLost, [world.device]);
+    await asItsTurnIn(world.device);
+    await db.run(revoke, [world.device, '2026-10-14T13:30:00Z']);
+    for (const state of [
+      () => db.actor(world.admin, 'BACK_OFFICE'),
+      () => asItsTurnIn(world.device),
+    ]) {
+      await state();
+      for (const change of [
+        `"key_revoked_at" = NULL, "key_revoked_by" = NULL`,
+        `"key_revoked_at" = '2026-10-14T14:00:00Z'`,
+        `"key_revoked_by" = 'FIRM_TIME'`,
+        `"status" = 'RETIRED', "out_of_service_marked_at" = '2026-10-14T14:00:00Z'`,
+        `"status" = 'ACTIVE', "out_of_service_at" = NULL, "out_of_service_marked_at" = NULL, "key_revoked_at" = NULL, "key_revoked_by" = NULL`,
+        `"out_of_service_at" = '2026-10-12T22:00:00Z'`,
+        `"out_of_service_marked_at" = '2026-10-14T14:00:00Z'`,
+      ]) {
+        const refusal = await db.refused(`UPDATE "device" SET ${change} WHERE "id" = $1`, [
+          world.device,
+        ]);
+        expect([refusal.code, refusal.message], change).toEqual([
+          refusedBy.trigger,
+          "A phone turned in stays as it was turned in: its key, its status and its removal time don't change",
+        ]);
+      }
+    }
+    await db.actor(world.admin, 'BACK_OFFICE');
+    expect(
+      await db.run(`UPDATE "device" SET "name" = 'P1-COL-1 (turned in)' WHERE "id" = $1`, [
+        world.device,
+      ]),
+    ).toBe(1);
   });
 });
 
@@ -195,13 +326,62 @@ describe('the master passcode', () => {
     expect(
       await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]),
     ).toBe(1);
+    for (const [sql, by] of [
+      [
+        `UPDATE "master_passcode" SET "hash" = '${aHash}Zm9v' WHERE "version" = 2`,
+        refusedBy.restrict,
+      ],
+      [`UPDATE "master_passcode" SET "version" = 3 WHERE "version" = 2`, refusedBy.restrict],
+      [
+        `UPDATE "master_passcode" SET "created_at" = "created_at" - interval '1 day' WHERE "version" = 2`,
+        refusedBy.restrict,
+      ],
+      [`DELETE FROM "master_passcode" WHERE "version" = 2`, refusedBy.grant],
+      [`TRUNCATE "master_passcode" CASCADE`, refusedBy.grant],
+    ] as const) {
+      expect((await db.refused(sql)).code, sql).toBe(by);
+    }
+  });
+
+  it('AC-10-109 the API keys the installer’s verifier once and writes a version’s sealed offline seed once, where it has none: never anything else, never again, never cleared (ADR-542)', async () => {
+    const { db } = tested;
+    await asTheApi();
+    await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1)`, [aHash]);
+    expect(
+      await db.run(
+        `UPDATE "master_passcode" SET "hash" = $1, "offline_seed" = $2 WHERE "version" = 2`,
+        [aKeyedHash, aSeed],
+      ),
+    ).toBe(1);
     for (const sql of [
-      `UPDATE "master_passcode" SET "hash" = '${aHash}' WHERE "version" = 1`,
-      `UPDATE "master_passcode" SET "version" = 3 WHERE "version" = 2`,
-      `DELETE FROM "master_passcode" WHERE "version" = 2`,
-      `TRUNCATE "master_passcode" CASCADE`,
+      // A keyed verifier made again, or taken back to none.
+      `UPDATE "master_passcode" SET "hash" = '${aKeyedHash.replace('c2FsdA', 'c2FsdB')}' WHERE "version" = 2`,
+      `UPDATE "master_passcode" SET "hash" = '${aHash}' WHERE "version" = 2`,
+      // A seed changed, or cleared.
+      `UPDATE "master_passcode" SET "offline_seed" = '${aSeed.replace('dGFn', 'dGFo')}' WHERE "version" = 2`,
+      `UPDATE "master_passcode" SET "offline_seed" = NULL WHERE "version" = 2`,
     ]) {
-      expect((await db.refused(sql)).code, sql).toBe(refusedBy.grant);
+      expect((await db.refused(sql)).code, sql).toBe(refusedBy.restrict);
+    }
+    // A verifier keyed with the signing secret's earlier key is no keyed one of the password key's.
+    await db.run(`INSERT INTO "master_passcode" ("version", "hash") VALUES (3, $1)`, [aHash]);
+    expect(
+      (
+        await db.refused(
+          `UPDATE "master_passcode" SET "hash" = '${aKeyedHash.replace('keyid=djI', 'keyid=djE')}' WHERE "version" = 3`,
+        )
+      ).code,
+    ).toBe(refusedBy.restrict);
+    // A seed that isn't one the API sealed.
+    for (const seed of ['v1.bm9uY2U.aGlkZGVu.dGFn', 'osprey-landing-marsh']) {
+      expect(
+        (
+          await db.refused(`UPDATE "master_passcode" SET "offline_seed" = $1 WHERE "version" = 3`, [
+            seed,
+          ])
+        ).code,
+        seed,
+      ).toBe(refusedBy.check);
     }
   });
 
@@ -237,15 +417,19 @@ describe('the master passcode', () => {
       `INSERT INTO "master_passcode" ("version", "hash") VALUES (2, $1) RETURNING "id"::text`,
       [aHash],
     );
-    // Only the owner could change one; even then the audit says that it changed, never to what.
-    await db.as('adms_owner');
+    // Keyed and sealed at its first use: the audit says that each changed, never from or to what.
     await db.actor(world.admin, 'BACK_OFFICE', { reason: 'A test of the audit capture' });
-    await db.run(`UPDATE "master_passcode" SET "hash" = $2 WHERE "id" = $1`, [id, `${aHash}Zm9v`]);
+    await db.run(`UPDATE "master_passcode" SET "hash" = $2, "offline_seed" = $3 WHERE "id" = $1`, [
+      id,
+      aKeyedHash,
+      aSeed,
+    ]);
     // The worker reads the audit log; this is all it sees of the passcode.
     await db.as('adms_worker');
     const audited = await db.rows(
       `SELECT "operation"::text, "domain"::text, "changed_fields", "prior_value" ->> 'hash' AS prior,
-         "new_value" ->> 'hash' AS new, "new_value" ->> 'version' AS version
+         "new_value" ->> 'hash' AS new, "new_value" ->> 'offline_seed' AS seed,
+         "new_value" ->> 'version' AS version
        FROM "audit_record" WHERE "table_name" = 'master_passcode' AND "record_id" = $1 ORDER BY "id"`,
       [id],
     );
@@ -253,17 +437,19 @@ describe('the master passcode', () => {
       {
         operation: 'INSERT',
         domain: 'SECURITY',
-        changed_fields: ['created_at', 'hash', 'id', 'version'],
+        changed_fields: ['created_at', 'hash', 'id', 'offline_seed', 'version'],
         prior: null,
         new: keptOut,
+        seed: keptOut,
         version: '2',
       },
       {
         operation: 'UPDATE',
         domain: 'SECURITY',
-        changed_fields: ['hash'],
+        changed_fields: ['hash', 'offline_seed'],
         prior: keptOut,
         new: keptOut,
+        seed: keptOut,
         version: '2',
       },
     ]);

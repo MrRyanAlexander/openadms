@@ -156,6 +156,10 @@ export const startingValues: StartingValues = {
     { name: 'Confirmed with the monitor', uses: ['ACCEPT_FLAG'] },
     { name: 'Device failed', uses: ['BACK_OFFICE_RECORD'] },
     { name: 'Device lost', uses: ['BACK_OFFICE_RECORD'] },
+    { name: 'Lost in the field', uses: ['PHONE_REMOVAL'] },
+    { name: 'Stolen', uses: ['PHONE_REMOVAL'] },
+    { name: 'Broken', uses: ['PHONE_REMOVAL'] },
+    { name: 'Replaced', uses: ['PHONE_REMOVAL'] },
   ],
   surveyWorkTypes: [
     { key: 'PRE_WORK', name: 'Pre-work survey' },

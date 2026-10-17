@@ -12,6 +12,8 @@
 // Who may change the setup (an admin, or a manager/analyst granted Setup) is read here, inside the
 // same piece of work and before anything is changed, whatever the door already asked (ADR-364,
 // 424): `setup` is what every setup service writes through.
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { Actor, Database, Prisma } from '@open-adms/db';
 import { SetupRights, type Policy, type SetupWarning } from '@open-adms/domain';
 
@@ -39,12 +41,76 @@ export type Outcome<T> =
       readonly warnings: readonly SetupWarning[];
       // Stated where the change queued work or passed a locked ticket by.
       readonly queued?: QueuedBySetup;
+      // A preview's: what the save would have answered, its piece of work undone (ADR-535 (3)).
+      readonly previewed?: true;
     }
   | { readonly saved: false; readonly refusal: Refusal };
 
 // The time a service states when it archives something: the server's, or a story's.
 export interface Clock {
   now(): Date;
+}
+
+// A search, a page at a time in name order (ADR-527 (3)): what the name holds, after the last
+// record of the page before, `limit` at most.
+export interface Searched {
+  readonly search: string;
+  readonly after?: string | undefined;
+  readonly limit: number;
+}
+
+export interface Found<T> {
+  readonly records: readonly T[];
+  // The last record's id, where another page follows.
+  readonly next: string | null;
+}
+
+// A page of rows read one past the page, to know whether another follows.
+export function paged<T extends { readonly id: string }>(
+  rows: readonly T[],
+  limit: number,
+): Found<T> {
+  const records = rows.slice(0, limit);
+  return { records, next: rows.length > limit ? (records.at(-1)?.id ?? null) : null };
+}
+
+// Where a page in name order starts: after the record of the page before, by its name then its id.
+export function afterInNameOrder(last: { readonly id: string; readonly name: string } | null): {
+  OR?: ({ name: { gt: string } } | { name: string; id: { gt: string } })[];
+} {
+  if (last === null) return {};
+  return { OR: [{ name: { gt: last.name } }, { name: last.name, id: { gt: last.id } }] };
+}
+
+// A record archived now, or put back: written only where it changes, so archiving one already
+// archived keeps its first time, and putting back one in service writes nothing (ADR-527 (1)).
+export function archiveChange(
+  archivedAt: Date | null,
+  archive: boolean,
+  now: Date,
+): { archivedAt: Date | null } | null {
+  if (archive === (archivedAt !== null)) return null;
+  return { archivedAt: archive ? now : null };
+}
+
+// "What it would change" before a setup save (ADR-229, 535 (3)): the save run as it would be, in
+// its own piece of work, which is then undone, so the preview can never say other than the save
+// would and nothing of it stays (no row, no audit record, no job: a job's notice goes only on
+// commit). Every save of a setup service runs as a preview inside `previewing`.
+const previews = new AsyncLocalStorage<true>();
+
+export function previewing<T>(save: () => Promise<T>): Promise<T> {
+  return previews.run(true, save);
+}
+
+// Thrown at the end of a preview's piece of work to undo it, carrying what it made.
+class Previewed extends Error {
+  readonly made: unknown;
+
+  constructor(made: unknown) {
+    super('A preview’s piece of work is undone.');
+    this.made = made;
+  }
 }
 
 // Thrown inside a piece of work to undo it; the service answers with the refusal.
@@ -58,6 +124,30 @@ export class Refused extends Error {
 }
 
 export type Warn = (warnings: readonly SetupWarning[]) => void;
+
+// Why this person may not change the setup now, or nothing: an admin, or a manager/analyst who
+// holds Setup at this moment (the domain's `SetupRights`), read inside the piece of work asking.
+// A read that takes Setup (a pay item's rates) asks it too (ADR-535 (2)).
+export async function setupRefusalOf(
+  tx: Prisma.TransactionClient,
+  person: string,
+): Promise<Refusal | null> {
+  const user = await tx.user.findUnique({ where: { id: person } });
+  const granted =
+    user === null
+      ? []
+      : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
+  return new SetupRights(
+    user === null
+      ? null
+      : {
+          name: user.name,
+          role: user.role,
+          archived: user.archivedAt !== null,
+          granted: granted.map((grant) => grant.permission),
+        },
+  ).refusal();
+}
 
 export abstract class SetupService {
   protected readonly db: Database;
@@ -83,24 +173,34 @@ export abstract class SetupService {
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     return this.write(person, async (tx, warn) => {
-      const user = await tx.user.findUnique({ where: { id: person } });
-      const granted =
-        user === null
-          ? []
-          : await tx.userPermission.findMany({ where: { userId: person, archivedAt: null } });
-      const refusal = new SetupRights(
-        user === null
-          ? null
-          : {
-              name: user.name,
-              role: user.role,
-              archived: user.archivedAt !== null,
-              granted: granted.map((grant) => grant.permission),
-            },
-      ).refusal();
+      const refusal = await setupRefusalOf(tx, person);
       if (refusal !== null) throw new Refused(refusal);
       return work(tx, warn);
     });
+  }
+
+  // An act only an admin does (closing a project, reopening one, ADR-529 (b)): refused, with
+  // nothing changed, to anybody else, asked inside the same piece of work. A reason, where the
+  // act takes one, is stated to the database with the actor, so the audit keeps it.
+  protected asAdmin<T>(
+    person: string,
+    act: string,
+    work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
+    reason?: string,
+  ): Promise<Outcome<T>> {
+    return this.writeAs(
+      { actorId: person, source: 'BACK_OFFICE', ...(reason === undefined ? {} : { reason }) },
+      async (tx, warn) => {
+        const user = await tx.user.findUnique({ where: { id: person } });
+        if (user?.role !== 'ADMIN' || user.archivedAt !== null) {
+          throw new Refused({
+            code: 'NOT_ALLOWED',
+            message: `${user?.name ?? 'Nobody on record'} may not ${act}: it takes an admin. Nothing was changed.`,
+          });
+        }
+        return work(tx, warn);
+      },
+    );
   }
 
   // The same, as whoever is stated: a monitor on a phone states the phone too (ADR-321).
@@ -109,15 +209,21 @@ export abstract class SetupService {
     work: (tx: Prisma.TransactionClient, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     const warnings: SetupWarning[] = [];
+    const preview = previews.getStore() === true;
     try {
-      const record = await this.db.$write(actor, (tx) =>
-        work(tx, (more) => {
+      const record = await this.db.$write(actor, async (tx) => {
+        const made = await work(tx, (more) => {
           warnings.push(...more);
-        }),
-      );
+        });
+        if (preview) throw new Previewed(made);
+        return made;
+      });
       return { saved: true, record, warnings };
     } catch (error) {
       if (error instanceof Refused) return { saved: false, refusal: error.refusal };
+      if (error instanceof Previewed) {
+        return { saved: true, record: error.made as T, warnings, previewed: true };
+      }
       throw error;
     }
   }
@@ -180,6 +286,26 @@ export abstract class QueueingService extends SetupService {
         lockedAsInvoiced: count((queued) => queued.lockedAsInvoiced),
       },
     };
+  }
+
+  // Every project whose rules (those not archived) pick the record, by the pick's own column: a
+  // rule that picks an archived record is not valid and never runs (ADR-357), so archiving it or
+  // putting it back moves what those projects' tickets bill (ADR-527).
+  protected async projectsPicking(
+    tx: Prisma.TransactionClient,
+    picked: Prisma.RuleCriterionPickWhereInput,
+  ): Promise<string[]> {
+    const picks = await tx.ruleCriterionPick.findMany({
+      where: {
+        ...picked,
+        archivedAt: null,
+        line: { archivedAt: null, rule: { archivedAt: null } },
+      },
+      select: { projectId: true },
+      distinct: ['projectId'],
+      orderBy: { projectId: 'asc' },
+    });
+    return picks.map((pick) => pick.projectId);
   }
 
   // A setup change by a person: every ticket of the project its query finds is queued, a void

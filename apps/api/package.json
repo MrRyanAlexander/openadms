@@ -15,10 +15,15 @@
     "@open-adms/db": "workspace:*",
     "@open-adms/domain": "workspace:*",
     "@smithy/node-http-handler": "4.12.1",
+    "@tmcw/togeojson": "7.1.2",
+    "@xmldom/xmldom": "0.9.12",
+    "but-unzip": "0.1.10",
     "fastify": "5.12.5",
     "nodemailer": "10.0.13",
+    "proj4": "2.22.0",
     "reflect-metadata": "0.2.2",
-    "rxjs": "7.8.2"
+    "rxjs": "7.8.2",
+    "shpjs": "6.2.0"
   },
   "devDependencies": {
     "@types/node": "24.13.6"

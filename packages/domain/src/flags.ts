@@ -19,7 +19,7 @@ import { sha256 } from './sha256.ts';
 export const flagBillings = ['BILLS', 'LINE_NOT_BILLED', 'NOT_BILLED'] as const;
 export type FlagBilling = (typeof flagBillings)[number];
 
-// spec/FLAGS.md §3, in the page's order: 77 codes (`FlagCode`, held to the page by a test).
+// spec/FLAGS.md §3, in the page's order: 81 codes (`FlagCode`, held to the page by a test).
 export const flagCodes = [
   // §3.1 Between a ticket's field events
   'DEBRIS_TYPE_MISMATCH',
@@ -110,6 +110,11 @@ export const flagCodes = [
   'TWO_QUANTITIES',
   // §3.11 The engine, on a ticket that was priced before (ADR-360)
   'NOT_PROCESSED_LINES_STAND',
+  // §3.12 A certification, read across its project (ADR-529)
+  'SUB_NAME_ALIKE',
+  // §3.13 Who a phone's record names (ADR-543)
+  'MONITOR_NOT_SIGNED_IN',
+  'ASSIGNMENT_OF_ANOTHER_PERSON',
 ] as const;
 export type FlagCode = (typeof flagCodes)[number];
 
@@ -229,6 +234,7 @@ export interface FlagTold {
   ROE_OUT_OF_SCOPE: { roe: string };
   NO_PRE_WORK_SURVEY: Nothing;
   CERTIFICATION_PHOTO_MISSING: { view: CertificationView };
+  SUB_NAME_ALIKE: { sub: string; alike: string };
   PERMIT_OUTSTANDING: Nothing;
   NO_PRICING_RULE: { prime: string };
   DUPLICATE_TRANSACTION_NUMBER: { slot: number; payItems: readonly string[] };
@@ -250,6 +256,9 @@ export interface FlagTold {
   SPLIT_NOT_ALLOWED: { split: 'load' | 'haul-out' };
   OUTSIDE_CONTROL_RANGES: Nothing;
   ASSIGNMENT_ON_ANOTHER_PROJECT: Nothing;
+  // The person the record names as its monitor, by name.
+  MONITOR_NOT_SIGNED_IN: { monitor: string };
+  ASSIGNMENT_OF_ANOTHER_PERSON: Nothing;
   // Tons as the message says them: "17.60", "17.10".
   SCALE_NET_DISAGREES: { receipt: string; netTons: string; grossLessTareTons: string };
   TWO_QUANTITIES: Nothing;
@@ -619,6 +628,12 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
     ending: 'RECORD',
     words: (told) => `no ${viewWords[told.view]} photo`,
   },
+  // Two spellings of one sub, never merged and never decided here (ADR-529 (f)).
+  SUB_NAME_ALIKE: {
+    billing: 'BILLS',
+    ending: 'RECORD',
+    words: (told) => `sub “${told.sub}” looks like “${told.alike}” on this project`,
+  },
   PERMIT_OUTSTANDING: { billing: 'BILLS', ending: 'RECORD', words: () => 'permit outstanding' },
   NO_PRICING_RULE: {
     billing: 'NOT_BILLED',
@@ -703,6 +718,17 @@ const catalogue: { readonly [Code in FlagCode]: Entry<Code> } = {
     billing: 'BILLS',
     ending: 'REVIEW',
     words: () => 'disposal has both a load call and a scale weight',
+  },
+  // Who a phone's record names (ADR-543): the record is kept as sent, never refused.
+  MONITOR_NOT_SIGNED_IN: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: (told) => `recorded under ${told.monitor}, who wasn't signed in on that phone`,
+  },
+  ASSIGNMENT_OF_ANOTHER_PERSON: {
+    billing: 'BILLS',
+    ending: 'REVIEW',
+    words: () => "recorded under another person's assignment",
   },
 };
 

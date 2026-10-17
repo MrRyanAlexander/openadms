@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto';
 
 import type { SyncAnswer } from '@open-adms/api';
 import {
+  photoRead,
   recordRead,
+  type FilePartSent,
+  type PhotoFileAnswer,
   type RecordAnswer,
   type SyncAnswered,
   type SyncReceived,
@@ -69,8 +72,6 @@ function idOf(sent: PhoneRecord): string {
       return sent.survey.id;
     case 'ROE':
       return sent.roe.id;
-    case 'PHOTO':
-      return sent.photo.id;
   }
 }
 
@@ -78,6 +79,9 @@ function idOf(sent: PhoneRecord): string {
 // record by the contract's own rule, given the phone that synced) and keeps what it is sent.
 class Received implements PhoneServer {
   readonly records: PhoneRecord[] = [];
+  readonly photos: string[] = [];
+  // Each photograph's file, whole, as its parts arrived.
+  readonly files = new Map<string, Buffer>();
   refuseAfter = Infinity;
   // The ids the server keeps in quarantine instead of saving.
   readonly quarantines = new Set<string>();
@@ -107,6 +111,23 @@ class Received implements PhoneServer {
     );
   }
 
+  // A part of a file, taken where it goes on from the last: kept once whole (ADR-482).
+  filePart(_deviceId: string, part: FilePartSent): Promise<PhotoFileAnswer> {
+    const name = `${part.photoId} ${part.file}`;
+    const so = this.files.get(name) ?? Buffer.alloc(0);
+    if (so.length === part.length) return Promise.resolve({ upload: 'KEPT' });
+    if (part.offset !== so.length) {
+      return Promise.resolve({ upload: 'RECEIVING', received: so.length, length: part.length });
+    }
+    const now = Buffer.concat([so, part.bytes]);
+    this.files.set(name, now);
+    return Promise.resolve(
+      now.length === part.length
+        ? { upload: 'KEPT' }
+        : { upload: 'RECEIVING', received: now.length, length: part.length },
+    );
+  }
+
   async received(deviceId: string, sent: SyncReceived): Promise<{ answered: SyncAnswered }> {
     const records: RecordAnswer[] = [];
     for (const one of sent.records) {
@@ -116,11 +137,19 @@ class Received implements PhoneServer {
       if (record.record === 'CERTIFICATION') throw new Error('No certification is sent here.');
       records.push(await this.receive(record));
     }
+    const photos: SyncAnswered['photos'] = [];
+    for (const one of sent.photos) {
+      const read = photoRead(one);
+      if (!read.read) throw new Error(read.notice.message);
+      this.photos.push(read.photo.id);
+      photos.push({ answer: 'SAVED', id: read.photo.id, notes: [] });
+    }
     return {
       answered: {
         unplannedAssignments: [],
         passcodeUses: [],
         records,
+        photos,
         // No report is taken: the phone holds what it held.
         numbers: sent.lastUsed.map(({ projectId, series }) => ({
           projectId,
@@ -703,24 +732,28 @@ describe('a simulated phone captures badge first, number last', () => {
         loadCall: 65,
       }),
     );
-    expect(phone.waitingRecords.map((sent) => sent.record)).toEqual([
-      'FIELD_EVENT',
-      'PHOTO',
-      'FIELD_EVENT',
+    expect([
+      phone.waitingRecords.map((sent) => sent.record),
+      phone.waitingPhotos.map(({ id }) => id),
+    ]).toEqual([['FIELD_EVENT', 'FIELD_EVENT'], [photo.id]]);
+    // Both fingerprints are taken by the phone, 64 hexadecimal digits; the photograph is its
+    // record's, and never says where its file is kept (ADR-481).
+    expect([photo.originalSha256, photo.uploadedSha256]).toEqual([
+      expect.stringMatching(/^[0-9a-f]{64}$/),
+      expect.stringMatching(/^[0-9a-f]{64}$/),
     ]);
-    // The fingerprint is taken at capture, 64 hexadecimal digits; the photograph is its record's.
-    expect(photo.originalSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect([photo.owner, uuidv7Time(photo.id)]).toEqual([
+    expect([photo.owner, uuidv7Time(photo.id), 'objectKey' in photo]).toEqual([
       { kind: 'FIELD_EVENT', id: first.id },
-      photo.capturedAt,
+      new Date(photo.capturedAt),
+      false,
     ]);
     const intake = new Received();
     intake.quarantines.add(second.id);
     expect(await phone.sync(intake)).toBe(3);
-    expect(intake.records.map((sent) => sent.record)).toEqual([
-      'FIELD_EVENT',
-      'FIELD_EVENT',
-      'PHOTO',
+    // One sync: the records first, the photograph after them.
+    expect([intake.records.map((sent) => sent.record), intake.photos]).toEqual([
+      ['FIELD_EVENT', 'FIELD_EVENT'],
+      [photo.id],
     ]);
     expect(phone.answers.map((told) => told.answer.answer)).toEqual([
       'SAVED',

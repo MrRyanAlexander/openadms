@@ -5,7 +5,7 @@
 // file; this package's tests, like its source, read none.
 import { describe, expect, it } from 'vitest';
 
-import { NewProjectSettings, Policy, policyNames } from '../src/index.ts';
+import { NewProjectSettings, Policy, policyNames, requestBodyBytesAtLeast } from '../src/index.ts';
 
 // The policy values as the release ships them.
 const shipped = {
@@ -20,6 +20,11 @@ const shipped = {
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
   DATABASE_POOL_CONNECTIONS: '10',
+  DATABASE_CONNECTION_WAIT_MS: '2000',
+  DATABASE_WORK_LONGEST_MS: '5000',
+  DATABASE_BUSY_RETRY_SECONDS: '5',
+  MAP_FILE_RING_PAIRS_AT_MOST: '50000000',
+  ESRI_LAYER_ANSWER_SECONDS: '60',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -38,21 +43,36 @@ const shipped = {
   LOGIN_LIST_ENTRIES_PER_CALL: '50',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
+  MEDIA_FILE_BYTES_AT_MOST: '33554432',
+  MEDIA_PART_BYTES_AT_MOST: '4194304',
+  MEDIA_RECEIVING_BYTES_AT_MOST: '268435456',
+  RATE_LIMIT_FILE_PARTS_PER_PHONE: '300',
+  MAP_FILE_BYTES_AT_MOST: '16777216',
+  MAP_FILE_UNZIPPED_BYTES_AT_MOST: '67108864',
+  MAP_FILE_ENTRIES_AT_MOST: '1000',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
+  RATE_LIMIT_REQUESTS_PER_PHONE: '600',
   RATE_LIMIT_COUNTS_KEPT: '100000',
   SIGN_IN_ADDRESS_WINDOW_MINUTES: '60',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS: '30',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN: '4',
   PASSWORD_RESET_ASKS_PER_ADDRESS: '10',
   PASSWORD_RESET_ASKS_PER_LOGIN: '3',
+  MASTER_PASSCODE_MINIMUM_LENGTH: '8',
+  MASTER_PASSCODE_MAXIMUM_LENGTH: '128',
+  PHONE_KEY_REVOKED_AFTER_HOURS: '24',
   JOB_TRIES_BEFORE_SET_ASIDE: '5',
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
   DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
+  PHONE_HELD_BYTES_PER_DAY: '16777216',
+  PHONE_HELD_RECORDS_PER_DAY: '1000',
+  MAP_FILE_READ_SECONDS: '60',
+  MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -125,6 +145,9 @@ describe('the policy values', () => {
       requestBodyLimitBytes: 'REQUEST_BODY_LIMIT_BYTES',
       statementTimeoutMs: 'STATEMENT_TIMEOUT_MS',
       databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
+      databaseConnectionWaitMs: 'DATABASE_CONNECTION_WAIT_MS',
+      databaseWorkLongestMs: 'DATABASE_WORK_LONGEST_MS',
+      databaseBusyRetrySeconds: 'DATABASE_BUSY_RETRY_SECONDS',
       passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
       passwordMaximumLength: 'PASSWORD_MAXIMUM_LENGTH',
       passwordResetMinutes: 'PASSWORD_RESET_MINUTES',
@@ -143,21 +166,38 @@ describe('the policy values', () => {
       loginListEntriesPerCall: 'LOGIN_LIST_ENTRIES_PER_CALL',
       addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
       mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
+      mediaFileBytesAtMost: 'MEDIA_FILE_BYTES_AT_MOST',
+      mediaPartBytesAtMost: 'MEDIA_PART_BYTES_AT_MOST',
+      mediaReceivingBytesAtMost: 'MEDIA_RECEIVING_BYTES_AT_MOST',
+      rateLimitFilePartsPerPhone: 'RATE_LIMIT_FILE_PARTS_PER_PHONE',
+      mapFileBytesAtMost: 'MAP_FILE_BYTES_AT_MOST',
+      mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
+      mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
+      mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
+      esriLayerAnswerSeconds: 'ESRI_LAYER_ANSWER_SECONDS',
       rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
       rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
       rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+      rateLimitRequestsPerPhone: 'RATE_LIMIT_REQUESTS_PER_PHONE',
       rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
       signInAddressWindowMinutes: 'SIGN_IN_ADDRESS_WINDOW_MINUTES',
       signInWrongTriesPerAddress: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS',
       signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
       passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
       passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+      masterPasscodeMinimumLength: 'MASTER_PASSCODE_MINIMUM_LENGTH',
+      masterPasscodeMaximumLength: 'MASTER_PASSCODE_MAXIMUM_LENGTH',
+      phoneKeyRevokedAfterHours: 'PHONE_KEY_REVOKED_AFTER_HOURS',
       jobTriesBeforeSetAside: 'JOB_TRIES_BEFORE_SET_ASIDE',
       reconciliationRunLongestMinutes: 'RECONCILIATION_RUN_LONGEST_MINUTES',
       jobQueuePollSeconds: 'JOB_QUEUE_POLL_SECONDS',
       mapServerAnswerSeconds: 'MAP_SERVER_ANSWER_SECONDS',
       deviceClockOffLimitMinutes: 'DEVICE_CLOCK_OFF_LIMIT_MINUTES',
       jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
+      phoneHeldBytesPerDay: 'PHONE_HELD_BYTES_PER_DAY',
+      phoneHeldRecordsPerDay: 'PHONE_HELD_RECORDS_PER_DAY',
+      mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
+      mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });
@@ -200,12 +240,24 @@ describe('the policy values', () => {
       policyNames.ticketNumberBlockSize,
       policyNames.certNumberBlockSize,
       policyNames.roeNumberBlockSize,
-      policyNames.requestBodyLimitBytes,
     ]) {
       expect(() => Policy.from({ ...shipped, [name]: '0' })).toThrow(
         `The policy value ${name} must be a whole number, 1 or more: "0".`,
       );
       expect(() => Policy.from({ ...shipped, [name]: '1' })).not.toThrow();
+    }
+  });
+
+  it('AC-05-51, ADR-504 the body a request may carry is a mebibyte unless changed, and never less: the heaviest sync a phone may send fits whatever an installation states', () => {
+    expect(requestBodyBytesAtLeast).toBe(1_048_576);
+    expect(Policy.from(shipped).requestBodyLimitBytes).toBe(requestBodyBytesAtLeast);
+    expect(
+      Policy.from({ ...shipped, REQUEST_BODY_LIMIT_BYTES: '2097152' }).requestBodyLimitBytes,
+    ).toBe(2_097_152);
+    for (const written of ['0', '1', '1048575']) {
+      expect(() => Policy.from({ ...shipped, REQUEST_BODY_LIMIT_BYTES: written })).toThrow(
+        `The policy value REQUEST_BODY_LIMIT_BYTES must be a whole number, 1048576 or more: "${written}".`,
+      );
     }
   });
 
@@ -234,6 +286,38 @@ describe('the policy values', () => {
     }
     for (const written of ['1', '2147483647']) {
       expect(() => Policy.from({ ...shipped, STATEMENT_TIMEOUT_MS: written })).not.toThrow();
+    }
+  });
+
+  it('AC-10-71 a piece of work waits 2 s for a connection and runs 5 s at most unless changed, and a caller told the database is busy waits 5 s; a shape of a shapefile pairs fifty million outer rings and holes at most; an Esri layer has 60 s (ADR-527): each held to its range (ADR-524)', () => {
+    const policy = Policy.from(shipped);
+    expect([
+      policy.databaseConnectionWaitMs,
+      policy.databaseWorkLongestMs,
+      policy.databaseBusyRetrySeconds,
+      policy.mapFileRingPairsAtMost,
+      policy.esriLayerAnswerSeconds,
+    ]).toEqual([2000, 5000, 5, 50_000_000, 60]);
+    for (const [name, outside, inside, range] of [
+      ['DATABASE_CONNECTION_WAIT_MS', ['99', '600001'], ['100', '600000'], 'from 100 to 600000'],
+      [
+        'DATABASE_WORK_LONGEST_MS',
+        ['999', '2147483648'],
+        ['1000', '2147483647'],
+        'from 1000 to 2147483647',
+      ],
+      ['DATABASE_BUSY_RETRY_SECONDS', ['0', '3601'], ['1', '3600'], 'from 1 to 3600'],
+      ['MAP_FILE_RING_PAIRS_AT_MOST', ['0'], ['1'], '1 or more'],
+      ['ESRI_LAYER_ANSWER_SECONDS', ['0', '601'], ['1', '600'], 'from 1 to 600'],
+    ] as const) {
+      for (const written of outside) {
+        expect(() => Policy.from({ ...shipped, [name]: written })).toThrow(
+          `The policy value ${name} must be a whole number, ${range}: "${written}".`,
+        );
+      }
+      for (const written of inside) {
+        expect(() => Policy.from({ ...shipped, [name]: written })).not.toThrow();
+      }
     }
   });
 

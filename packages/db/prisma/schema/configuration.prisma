@@ -338,10 +338,10 @@ model Form {
   projectId      String           @map("project_id") @db.Uuid
   name           String
   documentType   FormDocumentType @map("document_type")
-  // Read on the forms that aren't a workflow's: incidents and drop-off logs are switched on per
-  // project (ADR-188). Whether a load, haul-out or unit rate form is used is the project's
-  // workflows' to say (ADR-041, 308).
-  enabled        Boolean
+  // No Enabled box (ADR-529 (d)): whether a load, haul-out or unit rate form is used is the
+  // project's workflows' to say (ADR-041, 308), and which forms that are no ticket's a person may
+  // make is the day's assignment's (C42); a project has an incident or drop-off log form when it
+  // uses one.
   // "GPS required": a setting of the ROE form alone, which states it (ADR-181; a check in the
   // guard migration).
   gpsRequired    Boolean?         @map("gps_required")
@@ -529,6 +529,8 @@ model DisposalSiteTippingFee {
 enum SiteAreaSource {
   DRAWN
   UPLOAD
+  // Fetched from an Esri feature layer by the API (ADR-527).
+  ESRI_LAYER
 
   @@map("site_area_source")
 }
@@ -547,18 +549,22 @@ enum MapSource {
 // The shape is a GeoJSON Polygon or MultiPolygon in longitude and latitude, WGS84, with its
 // bounding box (ARCHITECTURE §3; ADR-311).
 model SiteAreaVersion {
-  id            String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  siteId        String         @map("site_id") @db.Uuid
-  version       Int
-  geometry      Json
-  westLongitude Decimal        @map("west_longitude") @db.Decimal(38, 8)
-  southLatitude Decimal        @map("south_latitude") @db.Decimal(38, 8)
-  eastLongitude Decimal        @map("east_longitude") @db.Decimal(38, 8)
-  northLatitude Decimal        @map("north_latitude") @db.Decimal(38, 8)
-  source        SiteAreaSource
-  createdById   String         @map("created_by_id") @db.Uuid
+  id              String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  siteId          String         @map("site_id") @db.Uuid
+  version         Int
+  geometry        Json
+  westLongitude   Decimal        @map("west_longitude") @db.Decimal(38, 8)
+  southLatitude   Decimal        @map("south_latitude") @db.Decimal(38, 8)
+  eastLongitude   Decimal        @map("east_longitude") @db.Decimal(38, 8)
+  northLatitude   Decimal        @map("north_latitude") @db.Decimal(38, 8)
+  source          SiteAreaSource
+  // Where it came from, as a map version keeps it (ADR-527 (10)): the file's name, or the Esri
+  // layer's address; and where the file it was loaded from is kept, in object storage.
+  sourceName      String?        @map("source_name")
+  uploadedFileKey String?        @map("uploaded_file_key")
+  createdById     String         @map("created_by_id") @db.Uuid
   // The site's area from then until its next version.
-  effectiveFrom DateTime       @default(now()) @map("effective_from") @db.Timestamptz(3)
+  effectiveFrom   DateTime       @default(now()) @map("effective_from") @db.Timestamptz(3)
 
   site      DisposalSite @relation(fields: [siteId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User         @relation("SiteAreaVersionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -587,6 +593,11 @@ model MapVersion {
   eastLongitude   Decimal   @map("east_longitude") @db.Decimal(38, 8)
   northLatitude   Decimal   @map("north_latitude") @db.Decimal(38, 8)
   uploadedFileKey String?   @map("uploaded_file_key")
+  // On a map fetched from Esri with zones, the zones' layer (the boundary's own or another): its
+  // address, and where the copy fetched from it is kept (ADR-527 (15)). Empty on a map loaded
+  // from a file or drawn.
+  zonesSourceName String?   @map("zones_source_name")
+  zonesFileKey    String?   @map("zones_file_key")
   loadedById      String    @map("loaded_by_id") @db.Uuid
   // The database's own time for the piece of work that loaded it, never the client's: a zone is
   // written only in that same piece of work, which the guard tells by this time (ADR-311, 316).
@@ -1059,6 +1070,7 @@ model User {
   // The certifications they made and measured, helped on, or revoked (ADR-079, 294).
   certificationsMade          Certification[]       @relation("CertificationCertifiedBy")
   certificationsRevoked       Certification[]       @relation("CertificationRevokedBy")
+  certificationsCreated       Certification[]       @relation("CertificationCreatedBy")
   certificationsHelped        CertificationHelper[]
   fieldEvents                 FieldEvent[]          @relation("FieldEventMonitor")
   fieldEventsCreated          FieldEvent[]          @relation("FieldEventCreatedBy")
@@ -1071,14 +1083,17 @@ model User {
   dropOffLogs                 DropOffLog[]          @relation("DropOffLogMonitor")
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
+  syncedRecordsNamed          SyncedRecord[]        @relation("SyncedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
   heldRecordsResolved         HeldRecord[]          @relation("HeldRecordResolvedBy")
+  setAsideFilesResolved       SetAsideFile[]        @relation("SetAsideFileResolvedBy")
   // The marks a person set (marks.prisma).
   qcMarksSet                  QcMark[]
   invoiceBatchesCreated       InvoiceBatch[]
   invoiceLocks                InvoiceLock[]         @relation("InvoiceLockLockedBy")
   invoiceLocksUnlocked        InvoiceLock[]         @relation("InvoiceLockUnlockedBy")
-  flagAcceptances             FlagAcceptance[]
+  flagAcceptances             FlagAcceptance[]      @relation("FlagAcceptanceAcceptedBy")
+  flagAcceptancesWithdrawn    FlagAcceptance[]      @relation("FlagAcceptanceWithdrawnBy")
   ticketVoids                 TicketVoid[]          @relation("TicketVoidVoidedBy")
   ticketVoidsLifted           TicketVoid[]          @relation("TicketVoidLiftedBy")
   ticketUnvoids               TicketUnvoid[]
@@ -1102,6 +1117,11 @@ enum Permission {
   APPROVE_HOURS
   SETUP
   DISPATCH
+  // What a manager/analyst is let see of the back office, granted apart from the acts; an act
+  // needs its area's view beside it (the user, ADR-539).
+  VIEW_REVIEW
+  VIEW_SETUP
+  VIEW_DISPATCH
 
   @@map("permission")
 }
@@ -1184,18 +1204,24 @@ model UserCredential {
 // this row; a monitor's session token on a phone, which never rotates. Revoked, the row is
 // history and never changes again. Only the API reads it; the hash is kept out of the audit log.
 model Session {
-  id                    String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  userId                String                 @map("user_id") @db.Uuid
-  refreshTokenHash      String                 @unique @map("refresh_token_hash")
+  id                       String                 @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId                   String                 @map("user_id") @db.Uuid
+  refreshTokenHash         String                 @unique @map("refresh_token_hash")
   // The proven phone a monitor signed in on (ARCHITECTURE §6, Device sessions; §7.2; ADR-443):
   // a monitor's session always names one and never changes it, and no other session names one
   // (the guard migration), so a monitor's ID and password open nothing but a phone's calls.
-  deviceId              String?                @map("device_id") @db.Uuid
+  deviceId                 String?                @map("device_id") @db.Uuid
   // Opened under the firm's master passcode, with a connection, and which way (ARCHITECTURE
   // §7.2, §7.3; AC-02-42; ADR-456 (5)(d), 462): empty on a person's own sign-in. It is no
   // authentication of the monitor it is for, so it is marked, written as the master passcode's
   // actor on that phone (the guard migration), and never changes.
-  masterPasscodeSession MasterPasscodeSession? @map("master_passcode_session")
+  masterPasscodeSession    MasterPasscodeSession? @map("master_passcode_session")
+  // A sign-in made on the phone with no connection, reported once it had one and proven by what
+  // only the password (or the passcode) typed could make (ADR-531): the phone's own id for it,
+  // the phone's clock when it was made and its offset (ADR-100). All three or none; never changed.
+  offlineSignInId          String?                @unique @map("offline_sign_in_id") @db.Uuid
+  signedInAt               DateTime?              @map("signed_in_at") @db.Timestamptz(3)
+  signedInUtcOffsetMinutes Int?                   @map("signed_in_utc_offset_minutes")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
@@ -1235,6 +1261,19 @@ enum SecurityEventKind {
   // A wrong try at the master passcode, and the lock its wrong tries put on it (ADR-438).
   MASTER_PASSCODE_FAILED
   MASTER_PASSCODE_LOCKOUT
+  // A phone turned in under the master passcode: every record it held confirmed, its numbers
+  // ended, its key revoked (ADR-488).
+  DEVICE_TURN_IN
+  // A phone out of service whose key the firm's time revoked: its blocks retired, its sessions
+  // ended, by the worker as the system actor (ADR-530).
+  DEVICE_KEY_REVOKED
+  // A sign-in made on a phone with no connection, reported and proven once it had one; and one
+  // whose proof the server could not take, which the back office is shown (ADR-531).
+  OFFLINE_SIGN_IN
+  OFFLINE_SIGN_IN_REFUSED
+  // A phone made the server hold more for a person in a day than the firm's budget: its records
+  // are still received (ADR-546).
+  PHONE_HELD_BUDGET_PASSED
 
   @@map("security_event_kind")
 }
@@ -1273,10 +1312,15 @@ model SecurityEvent {
 // change is a new version, never an edit: the highest version is the current one. The hash is
 // kept out of the audit log, and only the API may read it (the guard migrations, ADR-281).
 model MasterPasscode {
-  id      String @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  version Int    @unique
-  // Argon2id, as a PHC string.
-  hash    String
+  id          String  @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  version     Int     @unique
+  // Argon2id, as a PHC string: keyed with the API's password key (ADR-542), or with none where
+  // the installer made it and it has not yet been used.
+  hash        String
+  // What a phone's check of this version is made from, and a sign-in made offline under it is
+  // proven against: the first slow hash of the passcode, sealed with the API's sealing key and
+  // bound to the version (ADR-542). None until the API first has the passcode in hand.
+  offlineSeed String? @map("offline_seed")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
@@ -1305,6 +1349,23 @@ model MasterPasscodeTries {
   @@map("master_passcode_tries")
 }
 
+// The firm's own settings for the whole installation (ADR-520, 530; REQ-214, 215): one row, its id
+// 1 (a check). The seed writes it once from the release's values; the API changes it, audited; the
+// worker reads it.
+model FirmSettings {
+  id                        Int     @id @default(1)
+  // How many hours a phone marked lost or retired keeps its key before the worker revokes it,
+  // counted from the mark; null is off (ADR-520 (1)). 1 to 8,760 (a check).
+  phoneKeyRevokedAfterHours Int?    @map("phone_key_revoked_after_hours")
+  // Whether a read-only viewer must use two-step sign-in too (ADR-511, 530; ASVS 6.3.3).
+  viewerTwoStepRequired     Boolean @default(false) @map("viewer_two_step_required")
+  // How many hours a monitor's sign-in on a phone lasts (ADR-531, the user: a shift never runs
+  // past a day). 1 to 24 (a check; NIST SP 800-63B-4 §2.2.3 allows a day at most).
+  monitorSessionHours       Int     @default(24) @map("monitor_session_hours")
+
+  @@map("firm_settings")
+}
+
 // In service, or marked in the back office as lost or retired (ARCHITECTURE §7.4).
 enum DeviceStatus {
   ACTIVE
@@ -1314,33 +1375,55 @@ enum DeviceStatus {
   @@map("device_status")
 }
 
+// How a phone's key was revoked (ADR-530): by its turn-in under the master passcode (ADR-488), or by
+// the worker once the phone stood out of service past the firm's time (REQ-214). A key revoked by
+// the firm's time may then be turned in once; one turned in never changes again.
+enum DeviceKeyRevocation {
+  TURN_IN
+  FIRM_TIME
+
+  @@map("device_key_revocation")
+}
+
 // A phone, enrolled once with its device key; no project, no monitor (ADR-095, 240). What it may
 // make comes from the assignment it holds.
 model Device {
-  id                          String       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  id                          String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
   // What the dispatch board calls it, e.g. P1-COL-1.
   name                        String
   // The public half of the key pair made in the phone's secure hardware (ARCHITECTURE §7.4): one
   // key, one phone.
-  publicKey                   String       @unique @map("public_key")
-  status                      DeviceStatus @default(ACTIVE)
+  publicKey                   String               @unique @map("public_key")
+  status                      DeviceStatus         @default(ACTIVE)
   // Which version of the master passcode's check the phone holds; a change reaches it at its
   // next sync (ARCHITECTURE §7.5).
-  masterPasscodeVersion       Int          @map("master_passcode_version")
-  enrolledAt                  DateTime     @default(now()) @map("enrolled_at") @db.Timestamptz(3)
+  masterPasscodeVersion       Int                  @map("master_passcode_version")
+  enrolledAt                  DateTime             @default(now()) @map("enrolled_at") @db.Timestamptz(3)
   // Its removal time: what it made after this arrives flagged, never refused (ADR-134). Set
   // exactly when it's lost or retired (a check in the guard migrations).
-  outOfServiceAt              DateTime?    @map("out_of_service_at") @db.Timestamptz(3)
+  outOfServiceAt              DateTime?            @map("out_of_service_at") @db.Timestamptz(3)
+  // When it was last marked lost or retired (ADR-520 (1), 530): the firm's time for its key runs
+  // from here, never from its removal time, which may be stated by hand. Set exactly while it is
+  // out of service (a check in the guard migration).
+  outOfServiceMarkedAt        DateTime?            @map("out_of_service_marked_at") @db.Timestamptz(3)
+  // Why, from the firm's reasons list (use PHONE_REMOVAL), where the person picked one (ADR-530).
+  outOfServiceReasonId        String?              @map("out_of_service_reason_id") @db.Uuid
   // When its key was revoked: once a lost or retired phone has synced, been confirmed and wiped
-  // (ARCHITECTURE §7.4; C47). Only a phone out of service has one (a check in the guard
-  // migration); refusing the key is the API's (Phase 2).
-  keyRevokedAt                DateTime?    @map("key_revoked_at") @db.Timestamptz(3)
+  // (ARCHITECTURE §7.4; C47), or once it stood out of service past the firm's time (ADR-530).
+  // Only a phone out of service has one (a check in the guard migration); refusing the key is
+  // the API's. Written by the phone's turn-in, as the master passcode's actor for that phone, or
+  // by the worker as the system actor; only once it holds no block still issued; and never
+  // changed after (ADR-488, 530).
+  keyRevokedAt                DateTime?            @map("key_revoked_at") @db.Timestamptz(3)
+  // Which revoked it, set exactly when keyRevokedAt is (ADR-530).
+  keyRevokedBy                DeviceKeyRevocation? @map("key_revoked_by")
   // When the server made the last challenge this phone proved itself with (ARCHITECTURE §7.4;
   // AC-10-45; ADR-437, 440): a challenge is good once, so only one made after this is taken.
   // Written by the phone's own proof alone, and only ever later (the guard migration).
-  lastAnsweredChallengeMadeAt DateTime?    @map("last_answered_challenge_made_at") @db.Timestamptz(3)
+  lastAnsweredChallengeMadeAt DateTime?            @map("last_answered_challenge_made_at") @db.Timestamptz(3)
 
   masterPasscode     MasterPasscode      @relation(fields: [masterPasscodeVersion], references: [version], onDelete: Restrict, onUpdate: Restrict)
+  outOfServiceReason Reason?             @relation(fields: [outOfServiceReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   numberBlocks       NumberBlock[]
   assignments        Assignment[]
   certifications     Certification[]
@@ -1356,6 +1439,8 @@ model Device {
   securityEvents     SecurityEvent[]
   auditRecords       AuditRecord[]
   sessions           Session[]
+  setAsideFiles      SetAsideFile[]
+  heldRecords        HeldRecord[]
 
   @@map("device")
 }
@@ -1492,9 +1577,12 @@ model Assignment {
   deviceUtcOffsetMinutes Int?               @map("device_utc_offset_minutes")
   receivedAt             DateTime?          @map("received_at") @db.Timestamptz(3)
 
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  // Withdrawn from the board; never deleted.
-  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Withdrawn from the board; never deleted. Put back by clearing it (ADR-527 (13)).
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(3)
+  // Why it was withdrawn, as the dispatcher wrote it; cleared when it is put back (the audit
+  // keeps it). At most 500 characters (a check in the guard migration).
+  withdrawalNote String?   @map("withdrawal_note")
 
   person         User                @relation("AssignmentPerson", fields: [personId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   project        Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
@@ -1616,6 +1704,11 @@ model Certification {
   certifiedById          String   @map("certified_by_id") @db.Uuid
   deviceId               String?  @map("device_id") @db.Uuid
   assignmentId           String?  @map("assignment_id") @db.Uuid
+  // Entered in the back office from the paper sheet, its phone having failed (ADR-521, 534): who
+  // entered it and why, picked from the firm's reasons for a record made in the back office.
+  // Both or neither, and never with a phone or an assignment (a check in the guard migration).
+  createdById            String?  @map("created_by_id") @db.Uuid
+  createdReasonId        String?  @map("created_reason_id") @db.Uuid
 
   // The representatives: names only, no ID, no signature (ADR-080). Whether signatures are on
   // file (kept elsewhere) is marked at QC.
@@ -1650,6 +1743,8 @@ model Certification {
   replaces        Certification?        @relation("CertificationReplaced", fields: [projectId, replacesId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   replacedBy      Certification?        @relation("CertificationReplaced")
   revokedBy       User?                 @relation("CertificationRevokedBy", fields: [revokedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy       User?                 @relation("CertificationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdReason   Reason?               @relation(fields: [createdReasonId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   boxes           CertificationBox[]
   helpers         CertificationHelper[]
   fieldEvents     FieldEvent[]
@@ -1863,6 +1958,8 @@ enum ReasonUse {
   TYPED_NUMBER
   ACCEPT_FLAG
   BACK_OFFICE_RECORD
+  // Why a phone was taken out of service (ADR-530).
+  PHONE_REMOVAL
 
   @@map("reason_use")
 }
@@ -2117,7 +2214,7 @@ model Reason {
   key      String?     @unique
   name     String
   position Int
-  // Where it is offered: any of the four uses.
+  // Where it is offered: any of the five uses.
   uses     ReasonUse[] @default([])
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -2128,9 +2225,12 @@ model Reason {
   surveysCreated         Survey[]
   incidentsCreated       Incident[]
   dropOffLogsCreated     DropOffLog[]
+  certificationsCreated  Certification[]
   // Picked for a flag's acceptance and for a person's void (marks.prisma).
   flagAcceptances        FlagAcceptance[]
   ticketVoids            TicketVoid[]
+  // Picked when a phone was taken out of service (ADR-530).
+  devicesTakenOut        Device[]
 
   @@map("reason")
 }

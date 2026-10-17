@@ -47,9 +47,16 @@ export class PhoneProofsController {
     @Body() body: BodyOf<typeof provePhoneEndpoint>,
     @Req() request: FastifyRequest,
   ): Promise<PhoneProvenAnswer> {
-    const outcome = await this.proofs.prove(params.deviceId, body.challenge, body.signature);
+    const outcome = await this.proofs.prove(
+      params.deviceId,
+      body.challenge,
+      body.signature,
+      body.passcode,
+    );
     if (!outcome.proven) {
       request.log.info({ why: outcome.why }, 'A phone’s proof was refused.');
+      // Told only to a phone whose own key signed the challenge (ADR-530).
+      if (outcome.why === 'PASSCODE_NEEDED') throw new Refusal('MASTER_PASSCODE_NEEDED', 401);
       throw new Refusal('PHONE_NOT_PROVEN', 401);
     }
     request.log.info({ deviceId: params.deviceId }, 'A phone proved itself.');
@@ -67,6 +74,7 @@ export class PhoneProofsController {
       name: phone.name,
       status: phone.status,
       outOfServiceAt: phone.outOfServiceAt?.toISOString() ?? null,
+      keyRevoked: phone.keyRevoked,
       masterPasscodeVersion: phone.masterPasscodeVersion,
       masterPasscodeVersionInForce: await this.proofs.masterPasscodeVersionInForce(),
     });

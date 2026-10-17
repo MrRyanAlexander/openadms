@@ -30,6 +30,9 @@ import { IncidentOffers, RuleCriteria } from '@open-adms/domain';
 import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 
+// A search as the setup screen asks it: what was typed, those in service, the first page.
+const searchFor = (search: string) => ({ search, archived: false, limit: 50 });
+
 const timeZone = 'America/New_York';
 const thursday = (time: string): string => `2026-10-08T${time}:00-04:00`;
 const friday = (time: string): string => `2026-10-09T${time}:00-04:00`;
@@ -91,8 +94,8 @@ export const setup: Story = {
     const { api, clock } = story;
     const projects = new ProjectSetup(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock, story.policy);
-    const lists = new ListSetup(api, clock);
-    const forms = new FormSetup(api, clock);
+    const lists = new ListSetup(api, clock, story.policy);
+    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const sites = new SiteSetup(api, clock, story.policy);
     const rules = new RuleSetup(api, clock, story.policy);
@@ -258,12 +261,14 @@ export const setup: Story = {
         data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' },
       });
       await tx.userPermission.create({ data: { userId: person.id, permission: 'SETUP' } });
+      await tx.userPermission.create({ data: { userId: person.id, permission: 'VIEW_SETUP' } });
       return person.id;
     });
     names.set(dana, 'Dana').set(luis, 'Luis');
-    story.check('two people and one permission, each written by Dana', await audited(), {
+    // Setup takes "view setup" beside it (ADR-539).
+    story.check('two people and two permissions, each written by Dana', await audited(), {
       'Dana: user INSERT (BACK_OFFICE)': 2,
-      'Dana: user_permission INSERT (BACK_OFFICE)': 1,
+      'Dana: user_permission INSERT (BACK_OFFICE)': 2,
     });
 
     // ------------------------------------------------------------------------------------------
@@ -271,7 +276,11 @@ export const setup: Story = {
       thursday('08:10'),
       'Step 1, the client: Dana searches for Bayline County, finds none and creates it',
     );
-    story.check('no client is called Bayline yet', await projects.findClients('bayline'), []);
+    story.check(
+      'no client is called Bayline yet',
+      (await projects.findClients(searchFor('bayline'))).records,
+      [],
+    );
     const client = await saved(projects.client(dana, { name: 'Bayline County' }));
 
     story.at(
@@ -280,7 +289,7 @@ export const setup: Story = {
     );
     story.check(
       'no declaration event has that reference yet',
-      await projects.findDeclarationEvents('DR-9001'),
+      (await projects.findDeclarationEvents(searchFor('DR-9001'))).records,
       [],
     );
     const fema = await api.declarationReferenceType.findFirstOrThrow({
@@ -550,18 +559,14 @@ export const setup: Story = {
       'Step 5, forms and debris types: a form for each document type P1 uses; Mulch joins the firm’s library; field tags',
     );
     const p1Forms = {
-      load: (
-        await saved(
-          forms.form(dana, { projectId: p1, documentType: 'LOAD', name: 'Load', enabled: true }),
-        )
-      ).id,
+      load: (await saved(forms.form(dana, { projectId: p1, documentType: 'LOAD', name: 'Load' })))
+        .id,
       haulOut: (
         await saved(
           forms.form(dana, {
             projectId: p1,
             documentType: 'HAUL_OUT',
             name: 'Haul-out',
-            enabled: true,
           }),
         )
       ).id,
@@ -571,7 +576,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'UNIT_RATE',
             name: 'Unit rate',
-            enabled: true,
           }),
         )
       ).id,
@@ -581,7 +585,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'INCIDENT',
             name: 'Incident',
-            enabled: true,
             // P1 is right-of-way work: the contractor involved and a cert number, no ROE number.
             incidentOffers: IncidentOffers.startingFor({ requiresRoe: false }).list(),
           }),
@@ -593,7 +596,6 @@ export const setup: Story = {
             projectId: p1,
             documentType: 'DROP_OFF_LOG',
             name: 'Drop-off log',
-            enabled: true,
           }),
         )
       ).id,
@@ -607,7 +609,6 @@ export const setup: Story = {
           projectId: p1,
           documentType: 'LOAD',
           name: 'Load, again',
-          enabled: true,
         }),
       ),
       'form_project_id_document_type_key',
@@ -677,7 +678,6 @@ export const setup: Story = {
       formsRead.map((form) => [
         form.documentType,
         form.name,
-        form.enabled,
         form.debrisTypes.map((each) =>
           [
             each.debrisType.name,
@@ -694,11 +694,11 @@ export const setup: Story = {
         ]),
       ]),
       [
-        ['LOAD', 'Load', true, ['Vegetative', 'C&D'], []],
-        ['HAUL_OUT', 'Haul-out', true, ['Mulch, Reduced (Grinding)'], []],
-        ['UNIT_RATE', 'Unit rate', true, [], []],
-        ['INCIDENT', 'Incident', true, [], [[1, 'Dana Reyes', ['Police report number']]]],
-        ['DROP_OFF_LOG', 'Drop-off log', true, [], []],
+        ['LOAD', 'Load', ['Vegetative', 'C&D'], []],
+        ['HAUL_OUT', 'Haul-out', ['Mulch, Reduced (Grinding)'], []],
+        ['UNIT_RATE', 'Unit rate', [], []],
+        ['INCIDENT', 'Incident', [], [[1, 'Dana Reyes', ['Police report number']]]],
+        ['DROP_OFF_LOG', 'Drop-off log', [], []],
       ],
     );
     const tags = await api.fieldTag.findMany({
@@ -1591,8 +1591,9 @@ export const setup: Story = {
       friday('09:00'),
       'Luis Ortega sets up P2: he searches for the client and the declaration event, finds each, and picks it',
     );
-    const [found, ...otherClients] = await projects.findClients('bayline');
-    const [declared, ...otherEvents] = await projects.findDeclarationEvents('delphine');
+    const [found, ...otherClients] = (await projects.findClients(searchFor('bayline'))).records;
+    const [declared, ...otherEvents] = (await projects.findDeclarationEvents(searchFor('delphine')))
+      .records;
     if (found === undefined || declared === undefined)
       throw new Error('Luis found nothing to pick.');
     const ppdr = await picked.programType('PPDR');
@@ -1674,27 +1675,22 @@ export const setup: Story = {
       ),
       'contract_project_id_prime_id_fkey',
     );
-    const [known] = await contractors.findContractors('coastline');
+    const [known] = (await contractors.findContractors(searchFor('coastline'))).records;
     if (known === undefined) throw new Error('Luis found no Coastline to pick.');
     await saved(contractors.addPrime(luis, p2, known.id));
     await saved(contractors.contract(luis, p2ContractInput));
     const p2Load = (
-      await saved(
-        forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load', enabled: true }),
-      )
+      await saved(forms.form(luis, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
     ).id;
     await saved(
       forms.form(luis, {
         projectId: p2,
         documentType: 'ROE',
         name: 'ROE',
-        enabled: true,
         gpsRequired: true,
       }),
     );
-    await saved(
-      forms.form(luis, { projectId: p2, documentType: 'SURVEY', name: 'Survey', enabled: true }),
-    );
+    await saved(forms.form(luis, { projectId: p2, documentType: 'SURVEY', name: 'Survey' }));
     const p2Vegetative = (
       await saved(
         forms.debrisType(luis, {

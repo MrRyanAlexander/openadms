@@ -83,6 +83,10 @@ type Asked = 'a put' | 'a question of size' | 'a read';
 // with a letter or a digit: no empty segment, no "..", nothing a path could be climbed by.
 const key = /^[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/;
 const keyCharactersAtMost = 512;
+
+// Whether a name is a file's place this class takes: the form above, and no longer.
+export const isMediaKey = (named: string): boolean =>
+  named.length <= keyCharactersAtMost && key.test(named);
 // A media type, bare: a type and a subtype, no parameters, nothing a header could be made of.
 const mediaType = /^[a-z0-9][a-z0-9.+-]{0,62}\/[a-z0-9][a-z0-9.+-]{0,62}$/;
 
@@ -237,7 +241,7 @@ export class MediaStore implements Media {
   }
 
   private static held(named: string): void {
-    if (named.length > keyCharactersAtMost || !key.test(named)) {
+    if (!isMediaKey(named)) {
       throw new Error('A file’s place in the object store isn’t one.');
     }
   }

@@ -12,6 +12,7 @@ import { masterPasscodeActorId } from '@open-adms/db';
 
 import { projectTime } from '../clock.ts';
 import type { Story } from '../runner.ts';
+import { storyMasterPasscode } from '../story-database.ts';
 import { assigned, loggedUse, unplanned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 import { uuidv7 } from '../ids.ts';
@@ -39,6 +40,7 @@ export const underThePasscode: Story = {
       await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const sites = await setUpP1Sites(tx, p1.project);
       return { luis: luis.id, p1: p1.project, ...sites };
@@ -93,10 +95,13 @@ export const underThePasscode: Story = {
       at('06:45'),
       'Tariq can’t recall his password: the supervisor signs in as the phone’s monitor with the master passcode',
     );
-    const asTariq = await story.underPasscode.session(tariq, phone.id, 'AS_MONITOR');
-    const marked = await api.session.findUniqueOrThrow({ where: { id: asTariq.sessionId } });
+    await story.underPasscode.session(tariq, phone.id, 'AS_MONITOR');
+    // The session the server keeps for it: the phone is told only its token.
+    const marked = await api.session.findFirstOrThrow({
+      where: { deviceId: phone.id, userId: tariq.id, masterPasscodeSession: 'AS_MONITOR' },
+    });
     story.check(
-      'AC-02-42 the session is Tariq’s on P1-TWR-LF, marked as opened under the master passcode, and lasts a monitor’s own twelve hours',
+      'AC-02-42 the session is Tariq’s on P1-TWR-LF, marked as opened under the master passcode, and lasts a monitor’s own sign-in: the firm’s hours, a day as shipped (ADR-531)',
       [
         names.get(marked.userId),
         marked.deviceId === phone.id,
@@ -104,15 +109,16 @@ export const underThePasscode: Story = {
         projectTime(timeZone, marked.expiresAt),
         marked.revokedAt,
       ],
-      ['Tariq Patel', true, 'AS_MONITOR', 'Mon 12 Oct 18:45', null],
+      ['Tariq Patel', true, 'AS_MONITOR', 'Tue 13 Oct 06:45', null],
     );
 
     story.at(
       at('16:10'),
       'No signal since the yard. At 10:15 the phone was moved to Marsh Road TDSR; at 12:58 the passcode was typed wrong; at 13:00 the phone passed to Sam, who signed in with his own password; at 15:30 the temporary session was opened for Tariq. The phone finds signal, proves itself and reports each',
     );
-    const { challenge } = story.proofs.challenge(phone.id);
-    const proof = await story.proofs.prove(phone.id, challenge, phone.key.signed(challenge));
+    // Nobody signed in on it the server knows of: the supervisor types the passcode beside its
+    // proof, the master user at the phone (ADR-531).
+    const proof = await story.proofs.proves(phone.id, storyMasterPasscode);
     const atTheTdsr = await unplanned(
       story,
       phone.id,
@@ -133,9 +139,9 @@ export const underThePasscode: Story = {
     const reports: { id: string; answer: string }[] = [];
     for (const one of logged) reports.push(await loggedUse(story, phone.id, timeZone, one));
     story.check(
-      'AC-02-23 the phone proved itself with its device key, and each use it logged is saved: no passcode is sent, and nobody need be signed in',
-      [proof.proven, ...reports.map(({ answer }) => answer)],
-      [true, 'SAVED', 'SAVED', 'SAVED'],
+      'AC-02-23, ADR-531 the phone proved itself with its device key, the supervisor’s passcode beside it, and each use it logged is saved: no passcode is sent with them',
+      [proof.answer, ...reports.map(({ answer }) => answer)],
+      ['PROVEN', 'SAVED', 'SAVED', 'SAVED'],
     );
 
     const order = [
@@ -166,6 +172,9 @@ export const underThePasscode: Story = {
     const seen = 'the server saw it';
     const told = 'the phone reported it';
     const day = [
+      // The phone's proof, nobody yet signed in on it: the supervisor's passcode beside it
+      // (ADR-531); then the setup's read.
+      ['06:38', 'MASTER_PASSCODE_USE', 'nobody', seen, null, null],
       ['06:38', 'MASTER_PASSCODE_USE', 'nobody', seen, null, null],
       ['06:39', 'MASTER_PASSCODE_USE', 'nobody', seen, null, null],
       ['06:40', 'DEVICE_SETUP', 'Tariq Patel', told, -240, null],
@@ -177,6 +186,8 @@ export const underThePasscode: Story = {
       ['13:00', 'DEVICE_SWITCH', 'Sam Grant', told, -240, null],
       ['13:00', 'MASTER_PASSCODE_USE', 'Sam Grant', told, -240, null],
       ['15:30', 'MASTER_PASSCODE_USE', 'Tariq Patel', told, -240, 'TEMPORARY'],
+      // The phone's proof when it finds signal, with the supervisor's passcode beside it.
+      ['16:10', 'MASTER_PASSCODE_USE', 'nobody', seen, null, null],
     ];
     story.check(
       'REQ-202b the phone’s day in the security log, each use of the master passcode an event: the reads and the session the server saw at its own time, and what the phone logged at the phone’s time with its clock’s offset; a wrong try names nobody; the temporary session says it was one',
@@ -204,7 +215,7 @@ export const underThePasscode: Story = {
 
     const tries = await api.masterPasscodeTries.count();
     const locks = await api.securityEvent.count({ where: { kind: 'MASTER_PASSCODE_LOCKOUT' } });
-    const ended = await api.session.findUniqueOrThrow({ where: { id: asTariq.sessionId } });
+    const ended = await api.session.findUniqueOrThrow({ where: { id: marked.id } });
     story.check(
       'ADR-456 (5)(e), ADR-462 the wrong try on the phone moved no count on the server and locked nothing; the switch to Sam at 13:00, once reported, ended the session opened for Tariq at 06:45',
       [tries, locks, ended.revokedAt === null ? null : projectTime(timeZone, ended.revokedAt)],

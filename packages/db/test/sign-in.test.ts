@@ -27,6 +27,10 @@ const keptOut = '[kept out of the audit]';
 
 // A refresh token as a browser would hold it, and what the server keeps of it.
 const aToken = 'test-refresh-token-dana-monday';
+// When a session ends: a week after the test runs. The database holds an end after the session
+// began, and a session begins on its own clock, so a fixed date passes and fails a test with it
+// (seen 2026-10-12 at 22:00 UTC).
+const aWeekOn = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 
 const request = '0199c1f4-7a10-7c3e-9b1d-5e2f8a4c6d01';
@@ -244,7 +248,7 @@ describe('what sign-in keeps of a person', () => {
       ['5550142', 'user_credential_offline_seed_sealed_check'],
       [aHash, 'user_credential_offline_seed_sealed_check'],
       ['', 'user_credential_offline_seed_sealed_check'],
-      ['v2.a.b.c', 'user_credential_offline_seed_sealed_check'],
+      ['v3.a.b.c', 'user_credential_offline_seed_sealed_check'],
     ] as const) {
       const refusal = await db.refused(set, [id, anotherHash, value]);
       expect(refusal.code, value).toBe(refusedBy.check);
@@ -350,7 +354,7 @@ describe('what sign-in keeps of a person', () => {
     // Two checks refuse a blank; the database asks them by name, and "sealed" comes first.
     expect(refusal.message).toContain('"user_credential_two_step_sealed_check"');
     // Nor the secret an authenticator app is given: only what the API sealed (ADR-412).
-    for (const plain of ['JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'v1.only-two.parts', 'v2.a.b.c']) {
+    for (const plain of ['JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP', 'v1.only-two.parts', 'v3.a.b.c']) {
       const unsealed = await db.refused(
         `UPDATE "user_credential" SET "two_step_secret" = $2 WHERE "id" = $1`,
         [id, plain],
@@ -372,7 +376,7 @@ describe('what sign-in keeps of a person', () => {
     const credential = await db.refused(keep, [systemActorId, aHash]);
     expect(credential.code).toBe(refusedBy.check);
     expect(credential.message).toContain('"user_credential_system_actor_check"');
-    const session = await db.refused(open, [systemActorId, sha256(aToken), '2026-10-19T12:00:00Z']);
+    const session = await db.refused(open, [systemActorId, sha256(aToken), aWeekOn]);
     expect(session.code).toBe(refusedBy.check);
     expect(session.message).toContain('"session_system_actor_check"');
   });
@@ -411,8 +415,11 @@ describe('a session', () => {
       'expires_at',
       'id',
       'master_passcode_session',
+      'offline_sign_in_id',
       'refresh_token_hash',
       'revoked_at',
+      'signed_in_at',
+      'signed_in_utc_offset_minutes',
       'user_id',
     ]);
     await asTheApi();
@@ -423,15 +430,11 @@ describe('a session', () => {
       sha256(aToken).toUpperCase(),
       sha256(aToken).slice(1),
     ]) {
-      const refusal = await db.refused(open, [world.admin, value, '2026-10-19T12:00:00Z']);
+      const refusal = await db.refused(open, [world.admin, value, aWeekOn]);
       expect(refusal.code, value).toBe(refusedBy.check);
       expect(refusal.message).toContain('"session_refresh_token_hash_check"');
     }
-    const { id } = await db.one<{ id: string }>(open, [
-      world.admin,
-      sha256(aToken),
-      '2026-10-19T12:00:00Z',
-    ]);
+    const { id } = await db.one<{ id: string }>(open, [world.admin, sha256(aToken), aWeekOn]);
     // Nothing the database holds is the token: not the session, not the audit log.
     await db.administer();
     expect(
@@ -446,20 +449,16 @@ describe('a session', () => {
     ).toEqual([]);
     // One token, one session.
     await asTheApi();
-    expect(
-      (await db.refused(open, [world.admin, sha256(aToken), '2026-10-19T12:00:00Z'])).code,
-    ).toBe(refusedBy.unique);
+    expect((await db.refused(open, [world.admin, sha256(aToken), aWeekOn])).code).toBe(
+      refusedBy.unique,
+    );
     expect(id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('AC-10-10 a rotated token is a new hash on the same session, and the audit log says only that it changed', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const { id } = await db.one<{ id: string }>(open, [
-      world.admin,
-      sha256(aToken),
-      '2026-10-19T12:00:00Z',
-    ]);
+    const { id } = await db.one<{ id: string }>(open, [world.admin, sha256(aToken), aWeekOn]);
     expect(
       await db.run(`UPDATE "session" SET "refresh_token_hash" = $2 WHERE "id" = $1`, [
         id,
@@ -477,8 +476,11 @@ describe('a session', () => {
           'expires_at',
           'id',
           'master_passcode_session',
+          'offline_sign_in_id',
           'refresh_token_hash',
           'revoked_at',
+          'signed_in_at',
+          'signed_in_utc_offset_minutes',
           'user_id',
         ],
         prior: null,
@@ -497,11 +499,7 @@ describe('a session', () => {
   it('is revocable, and once revoked is history: no rotation, no second life', async () => {
     const { db, world } = tested;
     await asTheApi();
-    const { id } = await db.one<{ id: string }>(open, [
-      world.admin,
-      sha256(aToken),
-      '2026-10-19T12:00:00Z',
-    ]);
+    const { id } = await db.one<{ id: string }>(open, [world.admin, sha256(aToken), aWeekOn]);
     expect(await db.run(`UPDATE "session" SET "revoked_at" = now() WHERE "id" = $1`, [id])).toBe(1);
     for (const sql of [
       `UPDATE "session" SET "revoked_at" = NULL WHERE "id" = '${id}'`,
@@ -517,7 +515,7 @@ describe('a session', () => {
     await asTheApi();
     for (const [expires, revoked] of [
       ['2020-01-01T00:00:00Z', null],
-      ['2026-10-19T12:00:00Z', '2020-01-01T00:00:00Z'],
+      [aWeekOn, '2020-01-01T00:00:00Z'],
     ]) {
       const refusal = await db.refused(
         `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "revoked_at")
@@ -527,11 +525,7 @@ describe('a session', () => {
       expect(refusal.code).toBe(refusedBy.check);
       expect(refusal.message).toContain('"session_times_check"');
     }
-    const { id } = await db.one<{ id: string }>(open, [
-      world.admin,
-      sha256(aToken),
-      '2026-10-19T12:00:00Z',
-    ]);
+    const { id } = await db.one<{ id: string }>(open, [world.admin, sha256(aToken), aWeekOn]);
     for (const sql of [
       `UPDATE "session" SET "user_id" = '${world.monitor}' WHERE "id" = '${id}'`,
       `UPDATE "session" SET "created_at" = '2026-01-01T00:00:00Z' WHERE "id" = '${id}'`,
@@ -551,7 +545,7 @@ describe('a session', () => {
 describe('a monitor’s session on a phone (ADR-443)', () => {
   const onPhone = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id")
     VALUES ($1, $2, $3, $4) RETURNING "id"::text`;
-  const ends = '2026-10-12T22:00:00Z';
+  const ends = aWeekOn;
 
   // Ana signing in on her phone, as the API writes it: as Ana, from that phone.
   async function asAnaOnHerPhone(deviceId?: string): Promise<void> {
@@ -632,7 +626,7 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
     await asTheApi();
     await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
     await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z', "out_of_service_marked_at" = '2026-10-12T09:30:00Z'
        WHERE "id" = $1`,
       [world.device],
     );
@@ -642,10 +636,13 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
       refusedBy.trigger,
       'A phone out of service signs nobody in',
     ]);
+    // Turned in: only its turn-in revokes its key, under the master passcode on that phone.
     await asTheApi();
-    await db.run(`UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z' WHERE "id" = $1`, [
-      world.device,
-    ]);
+    await db.actor(masterPasscodeActorId, 'DEVICE', { deviceId: world.device });
+    await db.run(
+      `UPDATE "device" SET "key_revoked_at" = '2026-10-12T10:00:00Z', "key_revoked_by" = 'TURN_IN' WHERE "id" = $1`,
+      [world.device],
+    );
     await asAnaOnHerPhone();
     const revoked = await db.refused(onPhone, [world.monitor, sha256('c'), ends, world.device]);
     expect([revoked.code, revoked.message]).toEqual([
@@ -684,7 +681,7 @@ describe('a monitor’s session on a phone (ADR-443)', () => {
 describe('a session opened under the master passcode (ADR-462)', () => {
   const marked = `INSERT INTO "session" ("user_id", "refresh_token_hash", "expires_at", "device_id",
       "master_passcode_session") VALUES ($1, $2, $3, $4, $5) RETURNING "id"::text`;
-  const ends = '2026-10-12T22:00:00Z';
+  const ends = aWeekOn;
   const byThePasscode =
     "A session under the master passcode is opened as the master passcode's actor, on that phone";
   const byTheMonitor = "A monitor's session is opened by their own sign-in, on that phone";
@@ -832,7 +829,7 @@ describe('a session opened under the master passcode (ADR-462)', () => {
     await asTheApi();
     await db.run(`UPDATE "user" SET "archived_at" = NULL WHERE "id" = $1`, [world.monitor]);
     await db.run(
-      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z'
+      `UPDATE "device" SET "status" = 'LOST', "out_of_service_at" = '2026-10-12T09:30:00Z', "out_of_service_marked_at" = '2026-10-12T09:30:00Z'
        WHERE "id" = $1`,
       [world.device],
     );
@@ -962,6 +959,15 @@ describe('a security event', () => {
       'TWO_STEP_CLEARED',
       'MASTER_PASSCODE_FAILED',
       'MASTER_PASSCODE_LOCKOUT',
+      // A phone turned in (ADR-488).
+      'DEVICE_TURN_IN',
+      // A lost phone's key revoked after the firm's time (ADR-530).
+      'DEVICE_KEY_REVOKED',
+      // A sign-in made offline, taken, and one the server could not take (ADR-531).
+      'OFFLINE_SIGN_IN',
+      'OFFLINE_SIGN_IN_REFUSED',
+      // A phone past its daily budget of held records (ADR-546).
+      'PHONE_HELD_BUDGET_PASSED',
     ]);
     const at = '2026-10-12T12:05:00Z';
     expect((await db.refused(note, ['PASSWORD_GUESSED', world.admin, null, at])).code).toBe(

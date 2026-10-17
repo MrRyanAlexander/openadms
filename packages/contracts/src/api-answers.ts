@@ -2,7 +2,9 @@
 // Every answer's shape lives here, never in a controller.
 import {
   assignmentFormDocumentTypes,
+  certificationViews,
   fieldEventKinds,
+  flagCodes,
   incidentOffers,
   lookedUpAddressLongest,
   loggedPasscodeUseRefusals,
@@ -13,6 +15,7 @@ import {
   numberSeries,
   passwordProblemCodes,
   permissions,
+  qcStatuses,
   quantityAsks,
   quantitySources,
   unplannedAssignmentRefusals,
@@ -24,7 +27,8 @@ import { z } from 'zod';
 import { billingUnits, dumpedForms } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
-// word on the database. Anybody may ask (acceptance file 10, point 17).
+// word on the database. Anybody may ask (acceptance file 10, point 17). The readiness answer is
+// the same words, said only while the database answers too; otherwise `UNAVAILABLE` (ADR-507).
 export const healthAnswerSchema = z.strictObject({ status: z.literal('ok') });
 
 export type HealthAnswer = z.infer<typeof healthAnswerSchema>;
@@ -80,9 +84,13 @@ export const errorCodes = [
   // A role is changed between admin and manager/analyst only: never a monitor's, a read-only
   // viewer's or an archived person's, and never to one of theirs (ADR-427).
   'NOT_BACK_OFFICE',
-  // A contractor user's contractor, or a viewer's project, that the firm doesn't hold.
+  // A contractor user's contractor, or a viewer's project, that the firm doesn't hold; a
+  // person's employer the firm doesn't hold in service; a contractor user put back while their
+  // contractor is archived (ADR-527 (12)).
   'UNKNOWN_CONTRACTOR',
   'UNKNOWN_PROJECT',
+  // An email address cleared on a person who signs in with it (ADR-527 (12)): only a monitor's.
+  'EMAIL_SIGNS_IN',
   // The caller is over a rate limit (ADR-416): status 429, with how long to wait.
   'LIMITED',
   // A setup change the domain's rules won't save (AC-01-80; ADR-424): `reason` is the rule's own
@@ -105,6 +113,10 @@ export const errorCodes = [
   // answered, a signature the phone's key didn't make, a phone nobody enrolled, a key that is
   // revoked), or a call with no token of a proof, or one run out (AC-10-45, 46).
   'PHONE_NOT_PROVEN',
+  // The phone signed its challenge with its own key, and the firm's time has revoked that key
+  // (ADR-530): it proves itself again only with the master passcode beside its signature, for
+  // its sync and its turn-in alone. Told only once the signature is the phone's own.
+  'MASTER_PASSCODE_NEEDED',
   // An act under the master passcode on an enrolled phone (a monitor created, ADR-442). The
   // passcode wasn't taken: one code whatever the reason, as at enrolment.
   'MASTER_PASSCODE_REFUSED',
@@ -113,6 +125,12 @@ export const errorCodes = [
   // A session under the master passcode (ADR-462): the passcode was right, and the person it
   // was to be opened for is no monitor in service.
   'NOT_A_MONITOR',
+  // The API answers and can't serve now: its database didn't answer (status 503; ADR-507).
+  'UNAVAILABLE',
+  // The database couldn't do the request's work in time (status 503, with how long to wait;
+  // ADR-524): no connection came free, or the work or a statement ran out of time. What that
+  // work was doing was undone; the caller asks again after the seconds it is told.
+  'BUSY',
 ] as const;
 
 export type ErrorCode = (typeof errorCodes)[number];
@@ -123,8 +141,8 @@ export type ErrorCode = (typeof errorCodes)[number];
 // field and how, in the contracts' own words, ADR-431); never anything from inside the server,
 // and never anything the caller sent.
 // `reason`: only with `NOT_SAVED`, the domain's own code for the rule that refused.
-// `retryAfterSeconds`: only with `LIMITED`, the whole seconds until the caller may ask again, as
-// the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
+// `retryAfterSeconds`: only with `LIMITED` and `BUSY`, the whole seconds until the caller may ask
+// again, as the answer's `Retry-After` header says too (RFC 9110 §10.2.3).
 export const errorAnswerSchema = z.strictObject({
   code: z.enum(errorCodes),
   requestId: z.string().min(1),
@@ -134,6 +152,22 @@ export const errorAnswerSchema = z.strictObject({
 });
 
 export type ErrorAnswer = z.infer<typeof errorAnswerSchema>;
+
+// The answers that tell a caller to wait and ask again (ADR-416, 524): a limit reached, and the
+// database busy. Neither stored what it was asked; whatever came before it in the same request
+// and was answered stored stays stored.
+export const waitAnswers = ['LIMITED', 'BUSY'] as const;
+
+// How many seconds an answer, as it came off the wire, tells its caller to wait before asking
+// again; null where it tells nothing of the kind. Every client reads a wait this one way: it
+// keeps everything it sent, waits, and sends it again as it was (the sync contract's suite).
+export function toldToWait(answer: unknown): number | null {
+  const read = errorAnswerSchema.safeParse(answer);
+  if (!read.success || read.data.retryAfterSeconds === undefined) return null;
+  return (waitAnswers as readonly string[]).includes(read.data.code)
+    ? read.data.retryAfterSeconds
+    : null;
+}
 
 // A reset by email was asked for (ADR-404). The answer is the same whether or not anybody has
 // that address: it never says who has a login.
@@ -203,6 +237,9 @@ export const personAnswerSchema = z.strictObject({
   monitorId: z.string().nullable(),
   email: z.string().nullable(),
   phone: z.string().nullable().optional(),
+  // Who employs them when it isn't the firm, and the ID that employer gives them (AC-02-03).
+  employerId: z.uuid().nullable(),
+  employerNumber: z.string().nullable(),
   archived: z.boolean(),
   permissions: z.array(z.enum(permissions)),
   projectIds: z.array(z.uuid()),
@@ -238,12 +275,34 @@ export const phoneRecordSchema = z.strictObject({
   status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
   enrolledAt: z.iso.datetime(),
   outOfServiceAt: z.iso.datetime().nullable(),
+  // When it was last marked lost or retired: the firm's time for its key runs from here (ADR-530).
+  outOfServiceMarkedAt: z.iso.datetime().nullable(),
+  // Why it was taken out of service, from the firm's reasons list, where one was picked.
+  outOfServiceReasonId: z.uuid().nullable(),
+  // That reason's name, as the list has it now (C170).
+  outOfServiceReason: z.string().nullable(),
   keyRevokedAt: z.iso.datetime().nullable(),
+  // Which revoked its key: its turn-in, or the firm's time (ADR-530).
+  keyRevokedBy: z.enum(['TURN_IN', 'FIRM_TIME']).nullable(),
   masterPasscodeVersion: z.number().int().min(1),
   holdsCurrentPasscode: z.boolean(),
+  // The last time it made the server hold more for a person in a day than the firm's budget: a
+  // phone to look at (ADR-546). None where it never did.
+  heldBudgetPassedAt: z.iso.datetime().nullable(),
 });
 
 export type PhoneRecord = z.infer<typeof phoneRecordSchema>;
+
+// The firm's own settings (REQ-214, 215; ADR-520, 530, 531): how many hours a phone marked lost or
+// retired keeps its key (null: off), whether a read-only viewer must use two-step sign-in, and how
+// many hours a monitor's sign-in on a phone lasts.
+export const firmSettingsAnswerSchema = z.strictObject({
+  phoneKeyRevokedAfterHours: z.number().int().min(1).max(8760).nullable(),
+  viewerTwoStepRequired: z.boolean(),
+  monitorSessionHours: z.number().int().min(1).max(24),
+});
+
+export type FirmSettingsAnswer = z.infer<typeof firmSettingsAnswerSchema>;
 
 // A page of the firm's phones, in the order they were enrolled. `next` is what to send as
 // `after` for the page that follows; null when this is the last.
@@ -377,6 +436,57 @@ export const viewerLineSchema = z.strictObject({
 
 export type ViewerLine = z.infer<typeof viewerLineSchema>;
 
+// What a viewer reads beside a ticket's field events: its flags (a contractor user none), its
+// photographs' records, its scale receipts, item lines and carried tickets, its QC status and the
+// lock in force with its batch's name (a contractor user its own tickets').
+const viewerTicketBeside = {
+  flags: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      code: z.enum(flagCodes),
+      message: z.string(),
+      raisedAt: z.iso.datetime(),
+      clearedAt: z.iso.datetime().nullable(),
+      accepted: z.boolean(),
+    }),
+  ),
+  photographs: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      fieldEventId: z.uuid().nullable(),
+      scaleReceiptId: z.uuid().nullable(),
+      view: z.enum(certificationViews).nullable(),
+      capturedAt: z.iso.datetime(),
+      uploadedAt: z.iso.datetime().nullable(),
+      label: z.string().nullable(),
+    }),
+  ),
+  scaleReceipts: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      receiptNumber: z.string(),
+      site: z.string().nullable(),
+      grossWeightLb: exact.nullable(),
+      tareWeightLb: exact.nullable(),
+      netWeightLb: exact.nullable(),
+      netWeightTons: exact.nullable(),
+    }),
+  ),
+  itemLines: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      fieldEventId: z.uuid(),
+      item: z.string().nullable(),
+      quantity: exact,
+    }),
+  ),
+  carriedTickets: z.array(
+    z.strictObject({ id: z.uuid(), fieldEventId: z.uuid(), carriedTicketNumber: z.string() }),
+  ),
+  qcStatus: z.enum(qcStatuses).nullable(),
+  lock: z.strictObject({ lockedAt: z.iso.datetime(), batch: z.string().nullable() }).nullable(),
+};
+
 // One ticket, whole: its field events in the order of their field time, the completed record
 // if the worker has written one (never on a unit rate ticket), and its lines.
 export const viewerTicketAnswerSchema = z.strictObject({
@@ -386,6 +496,7 @@ export const viewerTicketAnswerSchema = z.strictObject({
   fieldEvents: z.array(viewerFieldEventSchema).min(1),
   completed: viewerCompletedSchema.nullable(),
   lines: z.array(viewerLineSchema),
+  ...viewerTicketBeside,
 });
 
 export type ViewerTicketAnswer = z.infer<typeof viewerTicketAnswerSchema>;
@@ -399,6 +510,20 @@ export const viewerRoeSchema = z.strictObject({
   signed: z.boolean(),
   signedDate: z.iso.date().nullable(),
   ownerName: z.string().nullable(),
+  // Where it is and what it allows (ADR-535 (6)): its parcel, its address, its fix as exact
+  // decimals, and each pick of its scope by name, with its count.
+  parcelId: z.string().nullable(),
+  address: z.string().nullable(),
+  latitude: exact.nullable(),
+  longitude: exact.nullable(),
+  scope: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      debrisType: z.string().nullable(),
+      payableType: z.string().nullable(),
+      count: z.int().nullable(),
+    }),
+  ),
 });
 
 export type ViewerRoe = z.infer<typeof viewerRoeSchema>;
@@ -434,6 +559,8 @@ export const assignmentRecordSchema = z.strictObject({
   origin: z.enum(['PLANNED', 'UNPLANNED']),
   madeBy: named.nullable(),
   withdrawnAt: z.iso.datetime().nullable(),
+  // Why it was withdrawn, where the dispatcher wrote a note (ADR-527 (13)).
+  withdrawalNote: z.string().nullable(),
 });
 
 export type AssignmentRecord = z.infer<typeof assignmentRecordSchema>;
@@ -491,6 +618,9 @@ export const provenPhoneAnswerSchema = z.strictObject({
   name: z.string(),
   status: z.enum(['ACTIVE', 'LOST', 'RETIRED']),
   outOfServiceAt: z.iso.datetime().nullable(),
+  // The firm's time revoked its key (ADR-530): it proved itself with the master passcode, and
+  // may only sync, send its photographs' files, report and be turned in.
+  keyRevoked: z.boolean(),
   masterPasscodeVersion: z.number().int().min(1),
   masterPasscodeVersionInForce: z.number().int().min(1),
 });
@@ -521,6 +651,38 @@ export const unplannedAssignmentAnswerSchema = z.strictObject({
 });
 
 export type UnplannedAssignmentAnswer = z.infer<typeof unplannedAssignmentAnswerSchema>;
+
+// Where a photograph's file stands, as its phone is told after each part it sends and whenever it
+// asks (ARCHITECTURE §9 (5), §11; AC-05-09; ADR-482). `KEPT`: the file arrived whole, is the
+// one the phone fingerprinted, and is kept; nothing more is sent, and a part sent again changes
+// nothing. `RECEIVING`: so many bytes of it are taken, of a file so long; the phone sends the
+// rest from there. Where the server holds none of it (never sent, or let go), that is none, of
+// no length yet, and the phone sends it from its first byte. `NOT_MATCHED`: the file arrived
+// whole and isn't the one the phone fingerprinted; it is set aside on the server for a person,
+// never kept as the photograph's, and the phone sends its file again from the first byte. Never
+// where a file is kept.
+export const photoUploads = ['KEPT', 'RECEIVING', 'NOT_MATCHED'] as const;
+
+// Which of a photograph's files: the photograph itself, or the depth file beside it (ADR-482).
+export const photoFiles = ['photo', 'depth'] as const;
+
+export type PhotoFileName = (typeof photoFiles)[number];
+
+export const photoFileAnswerSchema = z.discriminatedUnion('upload', [
+  z.strictObject({ upload: z.literal('KEPT') }),
+  z.strictObject({
+    upload: z.literal('RECEIVING'),
+    received: z.int().nonnegative(),
+    length: z.int().positive().nullable(),
+  }),
+  z.strictObject({ upload: z.literal('NOT_MATCHED') }),
+]);
+
+export type PhotoFileAnswer = z.infer<typeof photoFileAnswerSchema>;
+
+// A file as the back office is answered it (AC-10-48; ADR-483): the bytes that were kept, as
+// they were kept. Never JSON, so the OpenAPI description says it by its types.
+export const keptFileAnswerSchema = z.instanceof(Uint8Array);
 
 // What a phone is answered for a use of the master passcode it logged with no connection and
 // reported (ARCHITECTURE §7.5; AC-02-23; ADR-106, 464): saved; already saved, where the phone
@@ -580,6 +742,21 @@ export const passcodeSessionOpenedAnswerSchema = monitorSignedInAnswerSchema.ext
 });
 
 export type PasscodeSessionOpenedAnswer = z.infer<typeof passcodeSessionOpenedAnswerSchema>;
+
+// A sign-in made on a phone with no connection, taken once it was reported and proven (ADR-531):
+// the session's token for the x-adms-monitor-session header, whom it is for, how long it has left
+// from now, and which way it was opened under the master passcode, null on the monitor's own
+// password. The phone took its assignment when the sign-in was made: none is answered here.
+export const offlineSignInTakenAnswerSchema = z.strictObject({
+  token: z.string().min(1),
+  userId: z.uuid(),
+  monitorNumber: z.string().regex(/^M\d{6,}$/),
+  name: z.string(),
+  expiresInSeconds: z.number().int().min(1),
+  masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
+});
+
+export type OfflineSignInTakenAnswer = z.infer<typeof offlineSignInTakenAnswerSchema>;
 
 // The monitor signed in on a phone, as the server has them now, and how long their sign-in has
 // left. Never the token. `masterPasscodeSession`: how the session was opened where it was

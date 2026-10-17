@@ -6,6 +6,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  errorAnswerSchema,
+  fitByWeight,
+  photoFileAnswerRead,
+  photoFileGoesOnFrom,
+  sentCanonical,
   stored,
   syncAnswerRead,
   syncClientSuite,
@@ -14,6 +19,11 @@ import {
   syncPasscodeUsesAtMost,
   syncRecordsAtMost,
   syncUnplannedAssignmentsAtMost,
+  toldToWait,
+  toWipe,
+  turnInAnswerRead,
+  type FilePartSent,
+  type HeldPhotoFile,
   type ShownNotSaved,
   type SyncAnswered,
   type SyncClient,
@@ -22,7 +32,15 @@ import {
   type SyncedRecord,
   type SyncSent,
 } from '../src/index.ts';
-import { assignment, collection, disposal, made, records, switched } from '../src/sync-examples.ts';
+import {
+  assignment,
+  collection,
+  disposal,
+  made,
+  pilePhoto,
+  records,
+  switched,
+} from '../src/sync-examples.ts';
 
 // One way a client may fail the contract.
 const faults = [
@@ -37,8 +55,35 @@ const faults = [
   'TAKES_SENT_FOR_SAVED',
   'READS_ANSWERS_BY_PLACE',
   'TAKES_ANY_ANSWER',
+  'SENDS_PHOTOS_AHEAD',
+  'SENDS_FILE_AHEAD',
+  'SENDS_FILE_NOT_SAVED',
+  'SENDS_FILE_WHOLE',
+  'LEAVES_THE_DEPTH_FILE',
+  'TAKES_SENT_FOR_RECEIVED',
+  'TAKES_ANY_FILE_ANSWER',
+  'GOES_ON_FROM_ITS_OWN',
+  'DROPS_FILE_NOT_MATCHED',
+  'TURNS_IN_WHAT_WAITS',
+  'NAMES_UNREAD_BY_ID',
+  'WIPES_ON_ANY_ANSWER',
+  'KEEPS_WHAT_IT_SHOWS',
+  'PACKS_BY_COUNT_ONLY',
+  'SHOWS_A_WAIT_AS_NOT_SAVED',
 ] as const;
 type Fault = (typeof faults)[number];
+
+// What a client names a thing it sent with no id the server could read by. A real phone takes
+// the SHA-256 of `sentCanonical`; this one, with no hashing to hand, folds the same text into 64
+// hex digits, which is all the suite reads of it.
+const printOf = (sent: unknown): string => {
+  const text = sentCanonical(sent);
+  return Array.from({ length: 8 }, (_, seed) => {
+    let fold = 0x811c9dc5 ^ seed;
+    for (const unit of text) fold = Math.imul(fold ^ (unit.codePointAt(0) ?? 0), 0x01000193);
+    return (fold >>> 0).toString(16).padStart(8, '0');
+  }).join('');
+};
 
 // A client that keeps the contract, in memory; with a fault, one that breaks it in that way
 // alone.
@@ -48,12 +93,29 @@ const phone =
     let unplanned = [...holds.unplannedAssignments];
     let uses = [...holds.passcodeUses];
     let waiting = [...holds.records];
-    const kept: string[] = [];
-    const shown: ShownNotSaved[] = [];
+    let photos = [...holds.photos];
+    // Its photographs' files still to send: where each goes on from, and whether its
+    // photograph's record was answered saved.
+    const files = new Map<string, { held: HeldPhotoFile; from: number; saved: boolean }>(
+      holds.files.map((held) => [
+        `${held.photoId} ${held.file}`,
+        { held, from: 0, saved: !holds.photos.some(({ id }) => id === held.photoId) },
+      ]),
+    );
+    let lastPart: FilePartSent | undefined;
+    let kept: { id: string; as: 'ASSIGNMENT' | 'USE' | 'RECORD' | 'PHOTO'; print?: string }[] = [];
+    let shown: ShownNotSaved[] = [];
+    let wiped = false;
     let last: SyncSent | undefined;
     const all = fault === 'SENDS_ALL_AT_ONCE';
-    const notStored = (id: string, reason: string, message: string | null): void => {
-      kept.push(id);
+    const notStored = (
+      id: string,
+      reason: string,
+      message: string | null,
+      as: 'ASSIGNMENT' | 'USE' | 'RECORD' | 'PHOTO',
+      print?: string,
+    ): void => {
+      kept.push({ id, as, ...(print === undefined ? {} : { print }) });
       shown.push({ id, reason, message: fault === 'SHOWS_NO_WORDS' ? null : message });
     };
     return {
@@ -78,12 +140,24 @@ const phone =
           deviceUtcOffsetMinutes: -240,
           unplannedAssignments: first,
           passcodeUses: uses.slice(0, all ? undefined : syncPasscodeUsesAtMost),
-          records: ordered
-            .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
-            .slice(0, all ? undefined : syncRecordsAtMost),
+          records: [],
+          photos: [],
           lastUsed: [...holds.lastUsed],
           holds: { masterPasscodeVersion: null, listsProjectId: null },
         };
+        // As many as the counts let, then as many of those as the weight lets.
+        const byCount = ordered
+          .filter((record) => !later.has(syncedRecordAssignment(record) ?? ''))
+          .slice(0, all ? undefined : syncRecordsAtMost);
+        const byWeight = all || fault === 'PACKS_BY_COUNT_ONLY';
+        sync.records = byWeight ? byCount : byCount.slice(0, fitByWeight(sync, byCount));
+        // No photograph ahead of the sync that carries its record.
+        const going = new Set(sync.records.map(syncedRecordId));
+        const staying = new Set(waiting.map(syncedRecordId).filter((id) => !going.has(id)));
+        const photosGoing = photos.filter(
+          ({ owner }) => fault === 'SENDS_PHOTOS_AHEAD' || !staying.has(owner.id),
+        );
+        sync.photos = byWeight ? photosGoing : photosGoing.slice(0, fitByWeight(sync, photosGoing));
         last = sync;
         if (fault === 'LEAVES_OUT_AN_EMPTY_PART' && sync.passcodeUses.length === 0) {
           const { passcodeUses, ...rest } = sync;
@@ -112,6 +186,17 @@ const phone =
         if (sent === undefined) throw new Error('Answered before it sent.');
         if (fault === 'TAKES_SENT_FOR_SAVED' && answer === undefined) waiting = [];
         if (fault === 'TAKES_ANY_ANSWER' && answer !== undefined) waiting = [];
+        // Told to wait, it shows what it sent as not saved, under the wait's code.
+        const wait = errorAnswerSchema.safeParse(answer).data;
+        if (
+          fault === 'SHOWS_A_WAIT_AS_NOT_SAVED' &&
+          wait !== undefined &&
+          toldToWait(answer) !== null
+        ) {
+          for (const record of sent.records) {
+            shown.push({ id: syncedRecordId(record), reason: wait.code, message: null });
+          }
+        }
         const read =
           fault === 'READS_ANSWERS_BY_PLACE'
             ? (answer as SyncAnswered | undefined)
@@ -120,13 +205,13 @@ const phone =
         read.unplannedAssignments.forEach((each) => {
           unplanned = unplanned.filter((one) => one.id !== each.assignmentId);
           if (!stored(each) && fault !== 'DROPS_A_REPORT_NOT_SAVED') {
-            notStored(each.assignmentId, each.reason ?? '', null);
+            notStored(each.assignmentId, each.reason ?? '', null, 'ASSIGNMENT');
           }
         });
         read.passcodeUses.forEach((each) => {
           uses = uses.filter((one) => one.id !== each.useId);
           if (!stored(each) && fault !== 'DROPS_A_REPORT_NOT_SAVED') {
-            notStored(each.useId, each.reason ?? '', null);
+            notStored(each.useId, each.reason ?? '', null, 'USE');
           }
         });
         sent.records.forEach((record, place) => {
@@ -135,17 +220,117 @@ const phone =
           const id = syncedRecordId(record);
           waiting = waiting.filter((one) => syncedRecordId(one) !== id);
           if ('reason' in each && fault !== 'DROPS_WHAT_WAS_ANSWERED') {
-            notStored(id, each.reason, each.message);
+            // One answered under no id is named by its fingerprint when the phone is turned in.
+            const print = 'id' in each && each.id === null ? printOf(record) : undefined;
+            notStored(id, each.reason, each.message, 'RECORD', print);
+          }
+        });
+        sent.photos.forEach((photo, place) => {
+          const each = read.photos[place];
+          if (each === undefined) return;
+          photos = photos.filter((one) => one.id !== photo.id);
+          if ('reason' in each) notStored(photo.id, each.reason, each.message, 'PHOTO');
+          for (const file of files.values()) {
+            if (file.held.photoId !== photo.id) continue;
+            file.saved = stored(each) || fault === 'SENDS_FILE_NOT_SAVED';
           }
         });
       },
+      sendsFilePart() {
+        const most = fault === 'SENDS_FILE_WHOLE' ? Infinity : holds.filePartBytesAtMost;
+        for (const { held, from, saved } of files.values()) {
+          if (!saved && fault !== 'SENDS_FILE_AHEAD') continue;
+          if (held.file === 'depth' && fault === 'LEAVES_THE_DEPTH_FILE') continue;
+          const bytes = held.bytes.subarray(from, from + most);
+          lastPart = {
+            photoId: held.photoId,
+            file: held.file,
+            offset: from,
+            length: held.bytes.length,
+            bytes,
+          };
+          return lastPart;
+        }
+        return null;
+      },
+      filePartAnswered(answer) {
+        const part = lastPart;
+        if (part === undefined) throw new Error('Answered before it sent a part.');
+        const name = `${part.photoId} ${part.file}`;
+        const file = files.get(name);
+        if (file === undefined) return;
+        const sentTo = part.offset + part.bytes.byteLength;
+        const read =
+          fault === 'TAKES_ANY_FILE_ANSWER' && photoFileAnswerRead(answer) === null
+            ? { upload: 'KEPT' as const }
+            : photoFileAnswerRead(answer);
+        if (read === null && fault === 'TAKES_SENT_FOR_RECEIVED') {
+          file.from = sentTo;
+          return;
+        }
+        if (read?.upload === 'NOT_MATCHED' && fault === 'DROPS_FILE_NOT_MATCHED') {
+          files.delete(name);
+          return;
+        }
+        if (read?.upload === 'RECEIVING' && fault === 'GOES_ON_FROM_ITS_OWN') {
+          file.from = sentTo;
+          return;
+        }
+        const from = photoFileGoesOnFrom(read, part.offset);
+        if (from === null) files.delete(name);
+        else file.from = from;
+      },
+      holdsFiles: () => [...files.keys()],
       holds: () => [
         ...unplanned.map((each) => each.id),
         ...uses.map((each) => each.id),
         ...waiting.map(syncedRecordId),
-        ...kept,
+        ...photos.map(({ id }) => id),
+        ...kept.map(({ id }) => id),
       ],
       notSaved: () => shown,
+      turnsIn(passcode) {
+        const all = fault !== 'TURNS_IN_WHAT_WAITS';
+        const keptAs = (as: string) =>
+          all
+            ? kept
+                .filter((each) => each.as === as)
+                .filter((each) => each.print === undefined || fault === 'NAMES_UNREAD_BY_ID')
+                .map(({ id }) => id)
+            : [];
+        const photosWithFiles = [...files.values()].map(({ held }) => held.photoId);
+        return {
+          passcode,
+          holds: {
+            unplannedAssignments: [...unplanned.map(({ id }) => id), ...keptAs('ASSIGNMENT')],
+            passcodeUses: [...uses.map(({ id }) => id), ...keptAs('USE')],
+            records: [...waiting.map(syncedRecordId), ...keptAs('RECORD')],
+            held: all ? kept.flatMap(({ print }) => (print === undefined ? [] : [print])) : [],
+            photos: [
+              ...new Set([...photos.map(({ id }) => id), ...keptAs('PHOTO'), ...photosWithFiles]),
+            ],
+          },
+          lastUsed: [...holds.lastUsed],
+        };
+      },
+      turnInAnswered(answer) {
+        if (
+          !toWipe(turnInAnswerRead(answer)) &&
+          !(fault === 'WIPES_ON_ANY_ANSWER' && answer !== undefined)
+        ) {
+          return;
+        }
+        wiped = true;
+        unplanned = [];
+        uses = [];
+        waiting = [];
+        photos = [];
+        files.clear();
+        if (fault === 'KEEPS_WHAT_IT_SHOWS') return;
+        kept = [];
+        shown = [];
+      },
+      wiped: () => wiped,
     };
   };
 
@@ -173,17 +358,37 @@ describe('the suite any client of the sync contract must pass', () => {
     const caught: Record<string, number[]> = {};
     for (const fault of faults) caught[fault] = await failed(phone(fault));
     expect(caught).toEqual({
-      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8],
-      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8],
+      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17],
+      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18],
       TRIMS_A_NUMBER: [2],
       SENDS_AS_RECORDED: [3],
-      SENDS_ALL_AT_ONCE: [4],
-      DROPS_WHAT_WAS_ANSWERED: [5, 6],
-      DROPS_A_REPORT_NOT_SAVED: [6],
-      SHOWS_NO_WORDS: [5],
+      SENDS_ALL_AT_ONCE: [4, 9, 17],
+      DROPS_WHAT_WAS_ANSWERED: [5, 6, 14, 15],
+      DROPS_A_REPORT_NOT_SAVED: [6, 14],
+      SHOWS_NO_WORDS: [5, 10],
       TAKES_SENT_FOR_SAVED: [7],
-      READS_ANSWERS_BY_PLACE: [8],
-      TAKES_ANY_ANSWER: [4, 8],
+      READS_ANSWERS_BY_PLACE: [8, 18],
+      TAKES_ANY_ANSWER: [4, 8, 9, 17, 18],
+      // A photograph's record and its files (ADR-481…483): each check catches one fault no
+      // other does.
+      SENDS_PHOTOS_AHEAD: [9],
+      SENDS_FILE_AHEAD: [10],
+      SENDS_FILE_NOT_SAVED: [10],
+      SENDS_FILE_WHOLE: [10, 11, 12, 13],
+      LEAVES_THE_DEPTH_FILE: [11],
+      TAKES_SENT_FOR_RECEIVED: [12],
+      TAKES_ANY_FILE_ANSWER: [12],
+      GOES_ON_FROM_ITS_OWN: [12],
+      DROPS_FILE_NOT_MATCHED: [13],
+      // Turning the phone in (ADR-488): each check catches one fault no other does.
+      TURNS_IN_WHAT_WAITS: [14],
+      NAMES_UNREAD_BY_ID: [14],
+      WIPES_ON_ANY_ANSWER: [15],
+      KEEPS_WHAT_IT_SHOWS: [16],
+      // A sync's weight (ADR-504).
+      PACKS_BY_COUNT_ONLY: [17],
+      // Told to wait (ADR-524).
+      SHOWS_A_WAIT_AS_NOT_SAVED: [18],
     });
   });
 
@@ -206,6 +411,7 @@ describe('what a client reads of what it was answered', () => {
     unplannedAssignments: [],
     passcodeUses: [switched],
     records: [{ record: 'FIELD_EVENT', fieldEvent: collection }, second],
+    photos: [pilePhoto],
     lastUsed: [{ projectId: collection.projectId, series: 'LOAD', lastUsedNumber: 101006 }],
     holds: { masterPasscodeVersion: 3, listsProjectId: collection.projectId },
   };
@@ -222,6 +428,7 @@ describe('what a client reads of what it was answered', () => {
         heldBy: made('99'),
       },
     ],
+    photos: [{ answer: 'SAVED', id: pilePhoto.id, notes: [] }],
     numbers: [{ projectId: collection.projectId, series: 'LOAD', toppedUp: true, blocks: [] }],
     masterPasscode: { version: 3, check: null },
     setupVersion: { projectId: collection.projectId, version: 4 },
@@ -249,6 +456,17 @@ describe('what a client reads of what it was answered', () => {
     expect(not({ ...answered, records: [last, first] })).toBe(true);
     expect(not({ ...answered, records: [first, { ...last, id: made('98') }] })).toBe(true);
     expect(not({ ...answered, records: [{ ...first, id: null }, last] })).toBe(true);
+    // A photograph's record is answered in its own part, in its place, under its id.
+    expect(not({ ...answered, photos: [] })).toBe(true);
+    expect(not({ ...answered, photos: [{ answer: 'SAVED', id: made('98'), notes: [] }] })).toBe(
+      true,
+    );
+    expect(
+      not({
+        ...answered,
+        photos: [{ ...answered.photos[0], answer: 'QUARANTINED', reason: 'X', heldBy: made('1') }],
+      }),
+    ).toBe(true);
     expect(not({ ...answered, passcodeUses: [] })).toBe(true);
     expect(
       not({ ...answered, passcodeUses: [{ useId: made('98'), answer: 'SAVED', reason: null }] }),
@@ -257,10 +475,28 @@ describe('what a client reads of what it was answered', () => {
     expect(not({ ...answered, numbers: [{ ...answered.numbers[0], series: 'ROE' }] })).toBe(true);
     expect(not({ ...answered, setupVersion: { projectId: made('98'), version: 4 } })).toBe(true);
     const { masterPasscode, ...withoutPasscode } = answered;
-    expect([masterPasscode.version, not(withoutPasscode)]).toEqual([3, true]);
+    expect([masterPasscode?.version, not(withoutPasscode)]).toEqual([3, true]);
+    // A phone not in service is brought nothing (ADR-531): no passcode is an answer still.
+    expect(not({ ...answered, masterPasscode: null, setupVersion: null })).toBe(false);
     expect(not({ ...answered, status: 'COMPLETED' })).toBe(true);
     expect(not({ ...answered, records: [first, { answer: 'OK', id: disposal.id }] })).toBe(true);
     for (const nothing of [undefined, null, 'OK', 200, []]) expect(not(nothing)).toBe(true);
+  });
+
+  it('AC-05-09, ADR-482 a part of a file goes on from where the server says it stands: kept is done, receiving goes on from what it took, not matched starts again, and no answer leaves it where it stood', () => {
+    const read = (answer: unknown) => photoFileAnswerRead(answer);
+    expect(photoFileGoesOnFrom(read({ upload: 'KEPT' }), 1000)).toBeNull();
+    expect(
+      photoFileGoesOnFrom(read({ upload: 'RECEIVING', received: 2000, length: 2600 }), 1000),
+    ).toBe(2000);
+    expect(
+      photoFileGoesOnFrom(read({ upload: 'RECEIVING', received: 0, length: null }), 1000),
+    ).toBe(0);
+    expect(photoFileGoesOnFrom(read({ upload: 'NOT_MATCHED' }), 1000)).toBe(0);
+    for (const nothing of [undefined, null, 'OK', { upload: 'SAVED' }, { upload: 'KEPT', at: 1 }]) {
+      expect(read(nothing)).toBeNull();
+      expect(photoFileGoesOnFrom(read(nothing), 1000)).toBe(1000);
+    }
   });
 
   it('REQ-308c only "saved" and "already saved" say the server stored it', () => {

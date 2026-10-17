@@ -22,6 +22,7 @@ import {
   type FlagRaised,
   type FlagSubject,
 } from './flags.ts';
+import { SubNames } from './certifications.ts';
 import { timesOverlap } from './neighbours.ts';
 import type { GroupedFieldEvent, Ticket } from './tickets.ts';
 
@@ -67,6 +68,15 @@ export interface CheckedFieldEvent extends GroupedFieldEvent {
   readonly unreadableGps: Fact | null;
   // The project of the assignment it was recorded under; none on a back-office record.
   readonly assignmentProjectId: string | null;
+  // Who it names as its monitor, and the person of the assignment it was recorded under (none on
+  // a back-office record) (ADR-543).
+  readonly monitorId: string;
+  readonly assignmentPersonId: string | null;
+  // For a record a phone synced: the person it named when it arrived, by name, and whether they
+  // had a session on that phone over its field time then (or the phone was set up for them under
+  // the master passcode). None where nobody asked (a back-office record, a record stored by no
+  // sync), or where a reviewer has since corrected who it names (ADR-543).
+  readonly monitorAtSync: { readonly monitor: Named; readonly signedIn: boolean } | null;
 }
 
 // What the checks read of a certification of the project.
@@ -247,6 +257,32 @@ export class TicketChecks<E extends CheckedFieldEvent = CheckedFieldEvent> {
           subject,
           {},
           { projectId: event.projectId, assignmentProjectId: event.assignmentProjectId },
+          event.id,
+        ),
+      );
+    }
+    // §3.13 (ADR-543): a phone's record names whoever the phone says made it, and is kept as
+    // sent. One whose person wasn't signed in on that phone over its field time, or that names
+    // somebody else's assignment, is flagged for a person to look at: never refused, since a
+    // phone that changed hands carries an earlier monitor's records honestly.
+    if (event.monitorAtSync !== null && !event.monitorAtSync.signedIn) {
+      raised.push(
+        this.flags.raise(
+          'MONITOR_NOT_SIGNED_IN',
+          subject,
+          { monitor: event.monitorAtSync.monitor.name },
+          { monitorId: event.monitorAtSync.monitor.id },
+          event.id,
+        ),
+      );
+    }
+    if (event.assignmentPersonId !== null && event.assignmentPersonId !== event.monitorId) {
+      raised.push(
+        this.flags.raise(
+          'ASSIGNMENT_OF_ANOTHER_PERSON',
+          subject,
+          {},
+          { monitorId: event.monitorId, assignmentPersonId: event.assignmentPersonId },
           event.id,
         ),
       );
@@ -662,5 +698,28 @@ export class CertificationChecks {
           { missing: view, present: certificationViews.filter((seen) => present.has(seen)) },
         ),
       );
+  }
+
+  // One flag for each sub it names whose name is alike another sub's on the project (ADR-529
+  // (f)): the same company spelled two ways, perhaps. Never which spelling is right.
+  subs(
+    certNumber: string,
+    named: readonly (string | null)[],
+    projectSubs: readonly string[],
+  ): readonly FlagRaised[] {
+    return named.flatMap((sub) => {
+      if (sub === null) return [];
+      return projectSubs
+        .filter((other) => SubNames.alike(sub, other))
+        .sort()
+        .map((alike) =>
+          this.flags.raise(
+            'SUB_NAME_ALIKE',
+            { certNumber },
+            { sub, alike },
+            { sub, alike, key: SubNames.key(sub) },
+          ),
+        );
+    });
   }
 }

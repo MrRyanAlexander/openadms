@@ -5,7 +5,7 @@
 // not the name of a field nobody named.
 import { z } from 'zod';
 
-import type { Endpoint, Sent } from './endpoints.ts';
+import { isFilePart, type Endpoint, type Sent } from './endpoints.ts';
 
 type Issue = z.core.$ZodIssue;
 type Part = 'params' | 'query' | 'body';
@@ -134,7 +134,11 @@ export function notTaken(served: Endpoint, sent: Sent): string | undefined {
     ...new Set([
       ...refusals('params', served.params, sent.params),
       ...refusals('query', served.query, sent.query),
-      ...refusals('body', served.body, sent.body),
+      ...(served.file === true
+        ? isFilePart(sent.body)
+          ? []
+          : ['the body isn’t a part of a file: at least one byte, sent as a file’s part']
+        : refusals('body', served.body, sent.body)),
     ]),
   ];
   return all.length === 0 ? undefined : `Not taken: ${atMost(all)}.`;

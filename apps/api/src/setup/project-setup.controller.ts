@@ -7,9 +7,13 @@
 import {
   addFieldTagEndpoint,
   archiveControlRangeEndpoint,
+  changeClientEndpoint,
+  changeDeclarationEventEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closeProjectEndpoint,
+  closingCheckEndpoint,
+  reopenProjectEndpoint,
   createClientEndpoint,
   createDeclarationEventEndpoint,
   createProjectEndpoint,
@@ -28,7 +32,7 @@ import type { FastifyRequest } from 'fastify';
 import { Serves } from '../process/serves.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import { ProjectSetup } from './project-setup.ts';
-import { answered, stated } from './setup-answered.ts';
+import { answered, searched, stated } from './setup-answered.ts';
 import {
   clientRecord,
   controlRangeRecord,
@@ -53,8 +57,11 @@ export class ProjectSetupController {
 
   @Serves(findClientsEndpoint)
   async findClients(@Query() query: QueryOf<typeof findClientsEndpoint>) {
-    const found = await this.projects.findClients(query.search ?? '');
-    return findClientsEndpoint.answer.parse({ records: found.map(clientRecord) });
+    const found = await this.projects.findClients(searched(query));
+    return findClientsEndpoint.answer.parse({
+      records: found.records.map(clientRecord),
+      next: found.next,
+    });
   }
 
   @Serves(createClientEndpoint)
@@ -68,11 +75,28 @@ export class ProjectSetupController {
     );
   }
 
+  @Serves(changeClientEndpoint)
+  async changeClient(
+    @Param() params: ParamsOf<typeof changeClientEndpoint>,
+    @Body() body: BodyOf<typeof changeClientEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.projects.changeClient(
+      callerOf(request).userId,
+      params.clientId,
+      stated(body),
+    );
+    return changeClientEndpoint.answer.parse(
+      answered(request, outcome, clientRecord, 'A client was changed.'),
+    );
+  }
+
   @Serves(findDeclarationEventsEndpoint)
   async findDeclarationEvents(@Query() query: QueryOf<typeof findDeclarationEventsEndpoint>) {
-    const found = await this.projects.findDeclarationEvents(query.search ?? '');
+    const found = await this.projects.findDeclarationEvents(searched(query));
     return findDeclarationEventsEndpoint.answer.parse({
-      records: found.map(declarationEventRecord),
+      records: found.records.map(declarationEventRecord),
+      next: found.next,
     });
   }
 
@@ -84,6 +108,22 @@ export class ProjectSetupController {
     const outcome = await this.projects.declarationEvent(callerOf(request).userId, body);
     return createDeclarationEventEndpoint.answer.parse(
       answered(request, outcome, declarationEventRecord, 'A declaration event was created.'),
+    );
+  }
+
+  @Serves(changeDeclarationEventEndpoint)
+  async changeDeclarationEvent(
+    @Param() params: ParamsOf<typeof changeDeclarationEventEndpoint>,
+    @Body() body: BodyOf<typeof changeDeclarationEventEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.projects.changeDeclarationEvent(
+      callerOf(request).userId,
+      params.declarationEventId,
+      stated(body),
+    );
+    return changeDeclarationEventEndpoint.answer.parse(
+      answered(request, outcome, declarationEventRecord, 'A declaration event was changed.'),
     );
   }
 
@@ -131,6 +171,35 @@ export class ProjectSetupController {
     );
     return changeProjectWindowEndpoint.answer.parse(
       answered(request, outcome, projectRecord, 'A project’s active window was changed.'),
+    );
+  }
+
+  // What is still open on the project, before an admin closes it (ADR-529 (b)).
+  @Serves(closingCheckEndpoint)
+  async closingCheck(@Param() params: InProject, @Req() request: FastifyRequest) {
+    const outcome = await this.projects.closingCheck(callerOf(request).userId, params.projectId);
+    const { record } = answered(
+      request,
+      outcome,
+      (items) => items,
+      'A project’s close was checked.',
+    );
+    return closingCheckEndpoint.answer.parse({ items: record });
+  }
+
+  @Serves(reopenProjectEndpoint)
+  async reopen(
+    @Param() params: InProject,
+    @Body() body: BodyOf<typeof reopenProjectEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.projects.reopen(
+      callerOf(request).userId,
+      params.projectId,
+      body.reason,
+    );
+    return reopenProjectEndpoint.answer.parse(
+      answered(request, outcome, projectRecord, 'A project was reopened.'),
     );
   }
 

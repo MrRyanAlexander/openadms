@@ -8,6 +8,7 @@ import type { Policy } from '@open-adms/domain';
 
 import { MapServers } from './mileage/map-servers.ts';
 import { Mileages } from './mileage/mileages.ts';
+import { PhoneKeyBackstop } from './phones/phone-keys.ts';
 import { Health } from './process/health.ts';
 import { JobLoop } from './process/job-loop.ts';
 import { WorkerLog } from './process/logs.ts';
@@ -31,6 +32,7 @@ const log = new WorkerLog();
 const db = openDatabase({
   url: settings.databaseUrl,
   maxConnections: policy.databasePoolConnections,
+  pieceOfWork: { waitMs: policy.databaseConnectionWaitMs, longestMs: policy.databaseWorkLongestMs },
 });
 const reconciliation = new Reconciliation(
   db,
@@ -58,8 +60,11 @@ const loop = new JobLoop(
     triesBeforeSetAside: policy.jobTriesBeforeSetAside,
     ticketsARun: policy.jobTicketsAtMost,
     pollMs: policy.jobQueuePollSeconds * 1_000,
+    stalledAfterMs: JobLoop.stalledAfterMs(policy),
   },
   log,
+  { now: () => new Date() },
+  new PhoneKeyBackstop(db, log, { now: () => new Date() }),
 );
 const health = new Health(() => loop.standing);
 await health.listen(settings.host, settings.port);

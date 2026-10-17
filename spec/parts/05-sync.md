@@ -24,8 +24,19 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    hands (ADR-095). **It never sends a change to a record it already sent**: what a monitor
    submitted is sealed for them, and a record sent again is answered "already saved" as it was
    stored (ADR-477). Cancelled field events stay on the phone.
-   Photos follow, each upload **resumable**, each file's hash checked against the one taken at
-   capture (ADR-101).
+   Photos follow: first each photograph's **record**, in the same sync as its record or a later
+   one, with the hash taken at capture and the hash of the file it will upload, **never where the
+   file goes** (the server makes that place, and holds a photograph whose record it doesn't have
+   saved for a person, ADR-481); then each **file**, its upload **resumable**, its hash checked
+   against the record's (ADR-101). ⚠️ *ADR-482: the file goes to the media endpoint by the
+   photograph's id, in parts that go on where the last one ended; once whole and the one the
+   phone fingerprinted, it is kept and its upload time written; a whole file that isn't is set
+   aside on the server for a person, and the phone sends it again. The phone keeps every file
+   until it is told the file is kept. A depth file has its own fingerprint in the record.*
+   ⚠️ *ADR-483: a file goes only once its photograph's record is answered saved (one not saved
+   keeps its file with it); an interrupted upload goes on from where the server says the file
+   stands, and starts again where the server holds none of it. The back office reads a kept file
+   back as a download, never run, and never one that isn't the one fingerprinted.*
 4. **The server stores each record once.** Every record carries an ID the phone made; a retried
    upload is answered "already saved" and is **never** mistaken for a duplicate number (KD-56).
 5. **A duplicate?** A second field event of the **same kind on the same ticket** (project + workflow
@@ -37,6 +48,12 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    134).
 7. **The phone is told the truth, record by record**: saved, already saved, or not saved
    (quarantined). A quarantined record shows as **not saved**.
+   ⚠️ *ADR-526: what the server can't save (a record, a photograph whose record it has nowhere,
+   an unplanned assignment or a use of the passcode) is held on the server exactly as sent; a
+   photograph whose record is held is saved and kept with it, so its file comes. The back office
+   reads what is held, every file set aside and every quarantined record, and resolves each once,
+   with a reason: a held record **saved as corrected** (under the id its phone made) or **closed**;
+   a file set aside closed. A phone whose held things are resolved is turned in.*
 8. **The phone receives** its assignment's lists, freshly numbered as a setup version (the certified
    trucks and crews, sites and each site's lookup, ROEs, the roster and login list, control ranges),
    its **number blocks topped up** (ticket numbers and, for certifying, cert numbers), and any new

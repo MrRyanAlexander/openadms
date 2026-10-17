@@ -6,6 +6,7 @@ import type {
   ContractorRecord,
   ContractRecord,
   ControlRangeRecord,
+  CrewDayStepsRecord,
   DeclarationEventRecord,
   FieldTagRecord,
   FormDebrisTypeRecord,
@@ -20,6 +21,7 @@ import type {
   RulesKeptRecord,
   SavedRuleRecord,
   SiteAreaVersionRecord,
+  SiteLabelRecord,
   SiteRecord,
   SiteTippingFeeRecord,
 } from '@open-adms/contracts';
@@ -32,6 +34,7 @@ import type {
   DebrisType,
   DeclarationEvent,
   DisposalSite,
+  DisposalSiteLabel,
   DisposalSiteTippingFee,
   FieldTag,
   Form,
@@ -40,6 +43,7 @@ import type {
   MapVersion,
   PayableType,
   PayItem,
+  PayItemCrewDayStep,
   PayItemRate,
   Project,
   ProjectContractor,
@@ -147,9 +151,15 @@ export const contractRecord = (contract: Contract): ContractRecord => ({
   archived: contract.archivedAt !== null,
 });
 
-export const listValueRecord = (value: DebrisType | PayableType): ListValueRecord => ({
+// A value of one of the firm's lists, or a project's field tag (which has no key: it is the
+// project's own).
+export const listValueRecord = (
+  value:
+    | Pick<DebrisType | PayableType, 'id' | 'key' | 'name' | 'position' | 'archivedAt'>
+    | Pick<FieldTag, 'id' | 'name' | 'position' | 'archivedAt'>,
+): ListValueRecord => ({
   id: value.id,
-  key: value.key,
+  key: 'key' in value ? value.key : null,
   name: value.name,
   position: value.position,
   archived: value.archivedAt !== null,
@@ -160,7 +170,6 @@ export const formRecord = (form: Form): FormRecord => ({
   projectId: form.projectId,
   documentType: form.documentType,
   name: form.name,
-  enabled: form.enabled,
   gpsRequired: form.gpsRequired,
   incidentOffers: form.incidentOffers,
   archived: form.archivedAt !== null,
@@ -253,7 +262,32 @@ export const siteAreaVersionRecord = (version: SiteAreaVersion): SiteAreaVersion
   siteId: version.siteId,
   version: version.version,
   source: version.source,
+  sourceName: version.sourceName,
+  fileKept: version.uploadedFileKey !== null,
   effectiveFrom: version.effectiveFrom.toISOString(),
+});
+
+export const siteLabelRecord = (link: DisposalSiteLabel): SiteLabelRecord => ({
+  id: link.id,
+  siteId: link.siteId,
+  siteLabelId: link.siteLabelId,
+  archived: link.archivedAt !== null,
+});
+
+// A decimal as the firm wrote it, its places past the ones it has left off: `1.50` → `1.5`.
+const plain = (value: { toString(): string }): string => value.toString();
+
+export const crewDayStepsRecord = (
+  payItemId: string,
+  steps: readonly PayItemCrewDayStep[],
+): CrewDayStepsRecord => ({
+  payItemId,
+  steps: steps.map((step) => ({
+    id: step.id,
+    fromHours: plain(step.fromHours),
+    toHours: plain(step.toHours),
+    quantity: plain(step.quantity),
+  })),
 });
 
 export const siteTippingFeeRecord = (link: DisposalSiteTippingFee): SiteTippingFeeRecord => ({
@@ -271,5 +305,7 @@ export const mapVersionRecord = (version: MapVersion): MapVersionRecord => ({
   source: version.source,
   sourceName: version.sourceName,
   zoneNameField: version.zoneNameField,
+  fileKept: version.uploadedFileKey !== null,
+  zonesSourceName: version.zonesSourceName,
   loadedAt: version.loadedAt.toISOString(),
 });

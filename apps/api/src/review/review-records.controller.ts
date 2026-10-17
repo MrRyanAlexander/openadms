@@ -9,6 +9,10 @@
 import {
   correctDropOffLogEndpoint,
   correctIncidentEndpoint,
+  createDropOffLogEndpoint,
+  createIncidentEndpoint,
+  createRoeEndpoint,
+  createSurveyEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,
   correctSurveyEndpoint,
@@ -256,6 +260,91 @@ export class ReviewRecordsController {
         outcome,
         ({ record }) => fieldEventRecord(record),
         'A field event was created in the back office.',
+      ),
+    );
+  }
+
+  // A form made on paper: whose it was, when and where, and a reason picked.
+  @Serves(createRoeEndpoint)
+  async createRoe(
+    @Param() params: ParamsOf<typeof createRoeEndpoint>,
+    @Body() body: BodyOf<typeof createRoeEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.records.roe(callerOf(request).userId, {
+      ...body,
+      projectId: params.projectId,
+      madeAt: body.madeAt === null ? null : new Date(body.madeAt),
+    });
+    return createRoeEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => roeRecord(record),
+        'An ROE was entered in the back office.',
+      ),
+    );
+  }
+
+  @Serves(createSurveyEndpoint)
+  async createSurvey(
+    @Param() params: ParamsOf<typeof createSurveyEndpoint>,
+    @Body() body: BodyOf<typeof createSurveyEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.records.survey(callerOf(request).userId, {
+      ...body,
+      projectId: params.projectId,
+      madeAt: new Date(body.madeAt),
+    });
+    return createSurveyEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => surveyRecord(record),
+        'A survey was entered in the back office.',
+      ),
+    );
+  }
+
+  @Serves(createIncidentEndpoint)
+  async createIncident(
+    @Param() params: ParamsOf<typeof createIncidentEndpoint>,
+    @Body() body: BodyOf<typeof createIncidentEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.records.incident(callerOf(request).userId, {
+      ...body,
+      projectId: params.projectId,
+      madeAt: new Date(body.madeAt),
+    });
+    return createIncidentEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => incidentRecord(record),
+        'An incident was entered in the back office.',
+      ),
+    );
+  }
+
+  @Serves(createDropOffLogEndpoint)
+  async createDropOffLog(
+    @Param() params: ParamsOf<typeof createDropOffLogEndpoint>,
+    @Body() body: BodyOf<typeof createDropOffLogEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.records.dropOffLog(callerOf(request).userId, {
+      ...body,
+      projectId: params.projectId,
+      madeAt: new Date(body.madeAt),
+    });
+    return createDropOffLogEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => dropOffLogRecord(record),
+        'A drop-off log was entered in the back office.',
       ),
     );
   }

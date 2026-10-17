@@ -8,9 +8,8 @@
 // under a separate contractor record of the same name, with a warning for the back office.
 // Nothing here refuses field work over who a sub is.
 //
-// Two spellings of one sub are merged later by the back office (ContractorMerge): one record is
-// kept, the other is archived and points at it, and the certifications that named the duplicate
-// name the kept one.
+// Two spellings of one sub are never merged (ADR-529 (f)): the certifications that name subs whose
+// names are alike (`SubNames`) are flagged, and a person corrects the sub on the wrong one.
 
 import type { CertificationKind } from './capacity.ts';
 import type { SetupWarning } from './form-debris-types.ts';
@@ -51,7 +50,12 @@ export interface CertificationRefusal {
     | 'REPLACEMENT_NEEDS_REASON'
     | 'REVOCATION_NEEDS_REASON'
     | 'NOT_PERMITTED'
-    | 'NO_SUCH_BOX';
+    | 'NO_SUCH_BOX'
+    | 'NOT_REVOKED'
+    | 'UNREVOCATION_NEEDS_REASON'
+    | 'PRIMARY_STAYS'
+    | 'CREW_HAS_NO_BOX'
+    | 'CERT_NUMBER_HELD';
   readonly message: string;
 }
 
@@ -170,13 +174,57 @@ export class CertificationChanges {
     };
   }
 
-  // Only an admin revokes (ADR-079; AC-03-55): no permission opens it to anybody else. `person`
-  // is null where the database has nobody of that id.
-  revoker(person: Revoker | null): CertificationRefusal | null {
+  // Only an admin revokes (ADR-079; AC-03-55), and only an admin takes a revocation back
+  // (ADR-534 (7)): no permission opens either to anybody else. `person` is null where the
+  // database has nobody of that id.
+  revoker(
+    person: Revoker | null,
+    act: 'revoke' | 'un-revoke' = 'revoke',
+  ): CertificationRefusal | null {
     if (person !== null && person.role === 'ADMIN' && !person.archived) return null;
     return {
       code: 'NOT_PERMITTED',
-      message: `${person?.name ?? 'Somebody the firm has no record of'} may not revoke certification ${this.certNumber}: it takes an admin. Nothing was changed.`,
+      message: `${person?.name ?? 'Somebody the firm has no record of'} may not ${act} certification ${this.certNumber}: it takes an admin. Nothing was changed.`,
+    };
+  }
+
+  // A revocation taken back (ADR-534 (7)): only one that stands, and with a reason.
+  unrevocation(revoked: boolean, reason: string): CertificationRefusal | null {
+    if (!revoked) {
+      return {
+        code: 'NOT_REVOKED',
+        message: `Certification ${this.certNumber} isn’t revoked. Nothing was changed.`,
+      };
+    }
+    if (reason.trim() !== '') return null;
+    return {
+      code: 'UNREVOCATION_NEEDS_REASON',
+      message: `Not saved: certification ${this.certNumber}’s revocation is taken back with a reason.`,
+    };
+  }
+
+  // Box 0 is the primary, the main interior: corrected, never taken off (ADR-076).
+  primaryStays(): CertificationRefusal {
+    return {
+      code: 'PRIMARY_STAYS',
+      message: `Not saved: box 0 is certification ${this.certNumber}’s primary box, the main interior. It is corrected, never taken off.`,
+    };
+  }
+
+  // A crew is never measured (invariant 10): it takes no box.
+  crewHasNoBox(): CertificationRefusal {
+    return {
+      code: 'CREW_HAS_NO_BOX',
+      message: `Not saved: certification ${this.certNumber} is a crew’s, and a crew is never measured.`,
+    };
+  }
+
+  // A cert number once per project (ADR-045, 318): a sheet entered in the back office whose
+  // number another certification of the project already has.
+  numberHeld(): CertificationRefusal {
+    return {
+      code: 'CERT_NUMBER_HELD',
+      message: `Not saved: this project already has a certification ${this.certNumber}. A cert number is used once on a project.`,
     };
   }
 
@@ -190,110 +238,42 @@ export class CertificationChanges {
   }
 }
 
-// One of the two contractor records in a merge, with its place on each project it is on.
-export interface MergeParty {
-  readonly id: string;
-  readonly name: string;
-  readonly archived: boolean;
-  readonly mergedIntoId: string | null;
-  readonly places: readonly (ContractorPlace & {
-    readonly projectId: string;
-    readonly projectName: string;
-  })[];
-}
+// Whether two subs' names are one company's spelled two ways (ADR-529 (f)): alike once case,
+// spaces and punctuation, an "&" said as "and", a leading "The" and a company ending (LLC, Inc,
+// Co, Corp, Company, Corporation, Ltd, LP, LLP, PLLC) are set aside. It never says which spelling
+// is right: the certifications that name either are flagged for a person.
+const companyEndings = new Set([
+  'llc',
+  'inc',
+  'incorporated',
+  'co',
+  'company',
+  'corp',
+  'corporation',
+  'ltd',
+  'limited',
+  'lp',
+  'llp',
+  'pllc',
+]);
 
-export interface MergeRefusal {
-  readonly code:
-    | 'MERGE_INTO_ITSELF'
-    | 'MERGE_ALREADY_MERGED'
-    | 'MERGE_INTO_ARCHIVED'
-    | 'MERGE_OF_A_PRIME'
-    | 'MERGE_PLACES_DIFFER';
-  readonly message: string;
-}
+export const SubNames = {
+  // The name with what doesn't tell two companies apart set aside: "Rivera Trucking, LLC." →
+  // "rivera trucking".
+  key(name: string): string {
+    const words = name
+      .toLowerCase()
+      .replace(/&/g, ' and ')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .split(' ')
+      .filter((word) => word !== '');
+    if (words[0] === 'the' && words.length > 1) words.shift();
+    while (words.length > 1 && companyEndings.has(words.at(-1) ?? '')) words.pop();
+    return words.join(' ');
+  },
 
-// What a merge does on one project the duplicate is on: the kept contractor takes the duplicate's
-// place there (a new place, or its own, put back if it had been taken off), the certifications
-// that named the duplicate name the kept one, and the duplicate's place is taken off.
-export interface MergeMove {
-  readonly projectId: string;
-  readonly tier: SubTier;
-  readonly primeId: string;
-  readonly keptPlace: 'NEW' | 'ITS_OWN' | 'PUT_BACK';
-}
-
-// Two spellings of one sub, merged by the back office (ADR-108, 321): `duplicate` into `kept`.
-export class ContractorMerge {
-  private readonly duplicate: MergeParty;
-  private readonly kept: MergeParty;
-
-  constructor(duplicate: MergeParty, kept: MergeParty) {
-    this.duplicate = duplicate;
-    this.kept = kept;
-  }
-
-  check(): MergeRefusal | null {
-    const { duplicate, kept } = this;
-    if (duplicate.id === kept.id) {
-      return {
-        code: 'MERGE_INTO_ITSELF',
-        message: `Not merged: ${duplicate.name} can’t be merged into itself.`,
-      };
-    }
-    if (duplicate.mergedIntoId !== null) {
-      return {
-        code: 'MERGE_ALREADY_MERGED',
-        message: `Not merged: ${duplicate.name} was already merged into another contractor.`,
-      };
-    }
-    if (kept.archived || kept.mergedIntoId !== null) {
-      return {
-        code: 'MERGE_INTO_ARCHIVED',
-        message: `Not merged: ${kept.name} is archived${kept.mergedIntoId === null ? '' : ' (it was merged into another contractor)'}. Merge into the contractor that is kept.`,
-      };
-    }
-    const asPrime = duplicate.places.find((place) => place.tier === null);
-    if (asPrime !== undefined) {
-      return {
-        code: 'MERGE_OF_A_PRIME',
-        message: `Not merged: ${duplicate.name} is a prime on ${asPrime.projectName}; its contracts, rates and rules name it. Only a sub typed in at certification is merged.`,
-      };
-    }
-    for (const place of duplicate.places) {
-      const other = kept.places.find((candidate) => candidate.projectId === place.projectId);
-      if (other === undefined) continue;
-      if (other.tier !== place.tier || other.primeId !== place.primeId) {
-        return {
-          code: 'MERGE_PLACES_DIFFER',
-          message: `Not merged: on ${place.projectName}, ${duplicate.name} is ${ContractorMerge.said(place)} and ${kept.name} is ${ContractorMerge.said(other)}. A contractor has one place on a project, and a sub is never shared between primes.`,
-        };
-      }
-    }
-    return null;
-  }
-
-  // Project by project, once check() has passed.
-  moves(): MergeMove[] {
-    const moves: MergeMove[] = [];
-    for (const place of this.duplicate.places) {
-      if (place.tier === null || place.primeId === null) continue;
-      const other = this.kept.places.find((candidate) => candidate.projectId === place.projectId);
-      let keptPlace: MergeMove['keptPlace'] = 'NEW';
-      if (other !== undefined)
-        keptPlace = other.archived && !place.archived ? 'PUT_BACK' : 'ITS_OWN';
-      moves.push({
-        projectId: place.projectId,
-        tier: place.tier,
-        primeId: place.primeId,
-        keptPlace,
-      });
-    }
-    return moves;
-  }
-
-  private static said(place: ContractorPlace): string {
-    return place.tier === null
-      ? 'a prime'
-      : `${place.primeName ?? 'a prime'}’s tier ${String(place.tier)} sub`;
-  }
-}
+  alike(one: string, other: string): boolean {
+    return one !== other && SubNames.key(one) === SubNames.key(other);
+  },
+} as const;

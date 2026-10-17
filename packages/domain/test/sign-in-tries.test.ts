@@ -17,6 +17,11 @@ const shipped = {
   REQUEST_BODY_LIMIT_BYTES: '1048576',
   STATEMENT_TIMEOUT_MS: '30000',
   DATABASE_POOL_CONNECTIONS: '10',
+  DATABASE_CONNECTION_WAIT_MS: '2000',
+  DATABASE_WORK_LONGEST_MS: '5000',
+  DATABASE_BUSY_RETRY_SECONDS: '5',
+  MAP_FILE_RING_PAIRS_AT_MOST: '50000000',
+  ESRI_LAYER_ANSWER_SECONDS: '60',
   PASSWORD_MINIMUM_LENGTH: '15',
   PASSWORD_MAXIMUM_LENGTH: '128',
   PASSWORD_RESET_MINUTES: '60',
@@ -35,21 +40,36 @@ const shipped = {
   LOGIN_LIST_ENTRIES_PER_CALL: '50',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
+  MEDIA_FILE_BYTES_AT_MOST: '33554432',
+  MEDIA_PART_BYTES_AT_MOST: '4194304',
+  MEDIA_RECEIVING_BYTES_AT_MOST: '268435456',
+  RATE_LIMIT_FILE_PARTS_PER_PHONE: '300',
+  MAP_FILE_BYTES_AT_MOST: '16777216',
+  MAP_FILE_UNZIPPED_BYTES_AT_MOST: '67108864',
+  MAP_FILE_ENTRIES_AT_MOST: '1000',
   RATE_LIMIT_WINDOW_SECONDS: '60',
   RATE_LIMIT_REQUESTS_PER_ADDRESS: '3000',
   RATE_LIMIT_REQUESTS_PER_ACCOUNT: '600',
+  RATE_LIMIT_REQUESTS_PER_PHONE: '600',
   RATE_LIMIT_COUNTS_KEPT: '100000',
   SIGN_IN_ADDRESS_WINDOW_MINUTES: '60',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS: '30',
   SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN: '4',
   PASSWORD_RESET_ASKS_PER_ADDRESS: '10',
   PASSWORD_RESET_ASKS_PER_LOGIN: '3',
+  MASTER_PASSCODE_MINIMUM_LENGTH: '8',
+  MASTER_PASSCODE_MAXIMUM_LENGTH: '128',
+  PHONE_KEY_REVOKED_AFTER_HOURS: '24',
   JOB_TRIES_BEFORE_SET_ASIDE: '5',
   RECONCILIATION_RUN_LONGEST_MINUTES: '10',
   JOB_QUEUE_POLL_SECONDS: '5',
   MAP_SERVER_ANSWER_SECONDS: '30',
   DEVICE_CLOCK_OFF_LIMIT_MINUTES: '5',
   JOB_TICKETS_AT_MOST: '200',
+  PHONE_HELD_BYTES_PER_DAY: '16777216',
+  PHONE_HELD_RECORDS_PER_DAY: '1000',
+  MAP_FILE_READ_SECONDS: '60',
+  MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
 };
 
 // Monday 12 October 2026, 10:00 in Bayline County.
@@ -200,5 +220,28 @@ describe('wrong tries at the master passcode', () => {
     expect(tries.closed(5, waiting, waiting)).toBe(false);
     expect(tries.closed(50, null, new Date('2027-10-12T13:50:00Z'))).toBe(true);
     expect(tries.closed(0, null, now)).toBe(false);
+  });
+});
+
+describe('the master passcode’s wait, by address (ADR-541)', () => {
+  it('AC-10-108 its wait holds only an address that has tried it wrong; the lock holds everybody; the first wait is the fifth wrong try in a row, never the lock', () => {
+    const tries = new MasterPasscodeTries(Policy.from(shipped));
+    const now = new Date('2026-10-12T13:50:00Z');
+    const waiting = new Date('2026-10-12T13:50:30Z');
+    // A stranger who tried it wrong waits; a supervisor at the office, who hasn't, doesn't.
+    expect(tries.closedTo(5, waiting, now, true)).toBe(true);
+    expect(tries.closedTo(5, waiting, now, false)).toBe(false);
+    expect(tries.closedTo(5, waiting, waiting, true)).toBe(false);
+    // The lock refuses everybody, wherever they are, however long they wait.
+    expect(tries.closedTo(50, null, new Date('2027-10-12T13:50:00Z'), false)).toBe(true);
+    expect(tries.closedTo(0, null, now, true)).toBe(false);
+    expect([1, 4, 5, 6, 49, 50].map((count) => tries.firstWait(count))).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 });

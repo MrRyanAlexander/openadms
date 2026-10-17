@@ -2,7 +2,7 @@
 // login's URL, through the pg driver adapter, extended so every write states its actor.
 import { PrismaPg } from '@prisma/adapter-pg';
 
-import { statesTheActor } from './actor.ts';
+import { statesTheActor, type PieceOfWork } from './actor.ts';
 import { PrismaClient } from './generated/prisma/client.ts';
 
 export interface Connection {
@@ -10,6 +10,7 @@ export interface Connection {
   readonly url: string;
   // The most connections the pool opens.
   readonly maxConnections?: number;
+  readonly pieceOfWork?: PieceOfWork;
   // The request the work now running is for, if any: stated on a write whose actor names none.
   readonly requestNow?: () => string | undefined;
 }
@@ -19,7 +20,11 @@ export function openDatabase(connection: Connection) {
     connectionString: connection.url,
     ...(connection.maxConnections === undefined ? {} : { max: connection.maxConnections }),
   });
-  return statesTheActor(new PrismaClient({ adapter }), connection.requestNow);
+  return statesTheActor(
+    new PrismaClient({ adapter }),
+    connection.requestNow,
+    connection.pieceOfWork,
+  );
 }
 
 export type Database = ReturnType<typeof openDatabase>;

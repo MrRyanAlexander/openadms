@@ -6,14 +6,34 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import {
+  addPhotographEndpoint,
+  addSiteShapeFileEndpoint,
+  changePersonEndpoint,
+  changeProjectSettingsEndpoint,
+  createClientEndpoint,
+  createContractEndpoint,
+  loadEsriMapEndpoint,
+  createPersonEndpoint,
   endpoint,
   endpointMethods,
   endpoints,
   errorAnswerSchema,
+  filePartMediaType,
   healthAnswerSchema,
   healthEndpoint,
+  loadMapFileEndpoint,
+  mapVersionFileEndpoint,
   notTaken,
   openApiDocument,
+  answerFileTypes,
+  phoneLoginListEndpoint,
+  photoFileAnswerSchema,
+  photographFileEndpoint,
+  sendMapFileEndpoint,
+  setAsideFileEndpoint,
+  siteShapeFileEndpoint,
+  viewerPhotographFileEndpoint,
+  sendPhotoFilePartEndpoint,
   taken,
 } from '../src/index.ts';
 
@@ -192,6 +212,218 @@ describe('an endpoint is defined whole, or not at all', () => {
   });
 });
 
+describe('the endpoints that take a file', () => {
+  it('AC-10-47, ADR-482 takes a part of a file as bytes, never JSON; is defined with no body of its own and never as a GET; and is described as bytes', () => {
+    // The media endpoint, the map's file at the back office (ADR-485; KD-76), and a photograph
+    // added there to a record made there (ADR-534 (2)).
+    expect(endpoints.filter(({ file }) => file === true)).toEqual([
+      sendMapFileEndpoint,
+      sendPhotoFilePartEndpoint,
+      addPhotographEndpoint,
+    ]);
+    const read = {
+      params: { photoId: '01a1325e-741f-716f-b9d4-738fd7f66e2b', file: 'photo' },
+      query: { offset: '0', length: '3' },
+    };
+    const bytes = Uint8Array.from([0xff, 0xd8, 0xff]);
+    expect(taken(sendPhotoFilePartEndpoint, { ...read, body: bytes })?.body).toBe(bytes);
+    for (const body of [undefined, new Uint8Array(), { bytes: 'ffd8ff' }, 'ffd8ff', [0xff]]) {
+      expect(taken(sendPhotoFilePartEndpoint, { ...read, body }), JSON.stringify(body)).toBe(
+        undefined,
+      );
+      expect(notTaken(sendPhotoFilePartEndpoint, { ...read, body })).toBe(
+        'Not taken: the body isn’t a part of a file: at least one byte, sent as a file’s part.',
+      );
+    }
+    // Its query and path are read as any endpoint's.
+    expect(
+      taken(sendPhotoFilePartEndpoint, {
+        ...read,
+        query: { offset: '-1', length: '3' },
+        body: bytes,
+      }),
+    ).toBe(undefined);
+    expect(
+      taken(sendPhotoFilePartEndpoint, {
+        ...read,
+        query: { offset: '0', length: '0' },
+        body: bytes,
+      }),
+    ).toBe(undefined);
+    const base = {
+      name: 'test',
+      summary: 'A test’s own.',
+      access: 'ANYBODY',
+      path: '/a',
+      answer: healthAnswerSchema,
+    } as const;
+    expect(() => endpoint({ ...base, method: 'PUT', file: true })).not.toThrow();
+    expect(() => endpoint({ ...base, method: 'GET', file: true })).toThrow('takes a file');
+    expect(() =>
+      endpoint({ ...base, method: 'PUT', file: true, body: z.strictObject({}) }),
+    ).toThrow('takes a file');
+    const described = openApiDocument([sendPhotoFilePartEndpoint]) as {
+      paths: Record<string, Record<string, { requestBody?: unknown }>>;
+    };
+    expect(
+      described.paths['/phones/current/photos/{photoId}/files/{file}']?.['patch']?.requestBody,
+    ).toEqual({
+      required: true,
+      content: {
+        [filePartMediaType]: {
+          schema: { type: 'string', contentMediaType: 'application/octet-stream' },
+        },
+      },
+    });
+    expect(filePartMediaType).toBe('application/offset+octet-stream');
+  });
+
+  it('ADR-485 a map’s file is sent whole to its project, as bytes, named by nothing; a map and a site’s shape are loaded from it by its SHA-256 alone', () => {
+    const projectId = '01a1325e-741f-716f-b9d4-738fd7f66e2b';
+    const bytes = Uint8Array.from([0x50, 0x4b, 0x03, 0x04]);
+    const sent = { params: { projectId }, query: {} };
+    expect(taken(sendMapFileEndpoint, { ...sent, body: bytes })?.body).toBe(bytes);
+    for (const body of [undefined, new Uint8Array(), { type: 'FeatureCollection' }]) {
+      expect(taken(sendMapFileEndpoint, { ...sent, body }), JSON.stringify(body)).toBe(undefined);
+    }
+    // Nothing names it: no name, no place, no type.
+    for (const query of [{ name: 'bayline-row-zones-v1.zip' }, { place: 'maps/x' }]) {
+      expect(taken(sendMapFileEndpoint, { ...sent, query, body: bytes })).toBe(undefined);
+    }
+    const mapFileId = 'a'.repeat(64);
+    const load = {
+      params: { projectId, mapFileId },
+      query: {},
+      body: { sourceName: null, boundaryLayer: null, zones: null },
+    };
+    expect(taken(loadMapFileEndpoint, load)).toBeDefined();
+    for (const id of ['A'.repeat(64), 'a'.repeat(63), `${'a'.repeat(63)}g`, '../x']) {
+      expect(taken(loadMapFileEndpoint, { ...load, params: { projectId, mapFileId: id } })).toBe(
+        undefined,
+      );
+      expect(
+        taken(addSiteShapeFileEndpoint, {
+          params: { siteId: projectId, mapFileId: id },
+          query: {},
+          body: { layer: null },
+        }),
+      ).toBe(undefined);
+    }
+    expect(
+      taken(loadMapFileEndpoint, {
+        ...load,
+        body: { ...load.body, zones: { layer: 'zones.shp', nameField: '' } },
+      }),
+    ).toBe(undefined);
+    expect(
+      taken(addSiteShapeFileEndpoint, {
+        params: { siteId: projectId, mapFileId },
+        query: {},
+        body: { layer: 'marsh-road.shp' },
+      }),
+    ).toBeDefined();
+    const described = openApiDocument([sendMapFileEndpoint]) as {
+      paths: Record<string, Record<string, { requestBody?: unknown }>>;
+    };
+    expect(described.paths['/projects/{projectId}/map-files']?.['post']?.requestBody).toEqual({
+      required: true,
+      content: {
+        [filePartMediaType]: {
+          schema: { type: 'string', contentMediaType: 'application/octet-stream' },
+        },
+      },
+    });
+  });
+
+  it('ADR-482 answers where a file stands: kept, so many bytes of so many taken, or not the one fingerprinted; never where it is kept', () => {
+    for (const answer of [
+      { upload: 'KEPT' },
+      { upload: 'RECEIVING', received: 0, length: null },
+      { upload: 'RECEIVING', received: 60000, length: 150000 },
+      { upload: 'NOT_MATCHED' },
+    ]) {
+      expect(photoFileAnswerSchema.safeParse(answer).success, JSON.stringify(answer)).toBe(true);
+    }
+    for (const answer of [
+      { upload: 'KEPT', objectKey: 'projects/x/photos/y' },
+      { upload: 'RECEIVING', received: -1, length: 3 },
+      { upload: 'RECEIVING', received: 0 },
+      { upload: 'SAVED' },
+    ]) {
+      expect(photoFileAnswerSchema.safeParse(answer).success, JSON.stringify(answer)).toBe(false);
+    }
+  });
+});
+
+describe('the two endpoints that answer a file', () => {
+  it('AC-10-48, ADR-483, 526, 535 are the back office’s reads of a photograph’s file, of a file set aside and of a kept map’s file, and a viewer’s read of a photograph’s file: each a GET that takes no file and is described as bytes of the kinds of image a file is kept as, or a map’s file’s', () => {
+    expect(endpoints.filter(({ answersFile }) => answersFile === true)).toEqual([
+      siteShapeFileEndpoint,
+      mapVersionFileEndpoint,
+      photographFileEndpoint,
+      setAsideFileEndpoint,
+      viewerPhotographFileEndpoint,
+    ]);
+    expect([
+      viewerPhotographFileEndpoint.method,
+      viewerPhotographFileEndpoint.roles,
+      'permission' in viewerPhotographFileEndpoint,
+    ]).toEqual(['GET', ['READ_ONLY_VIEWER'], false]);
+    for (const each of [siteShapeFileEndpoint, mapVersionFileEndpoint]) {
+      expect(each.answersFileOf, each.name).toEqual([
+        'application/zip',
+        'application/geo+json',
+        'application/vnd.google-earth.kml+xml',
+      ]);
+    }
+    // Each the back office's, read with its area's view (ADR-539).
+    for (const [each, view] of [
+      [siteShapeFileEndpoint, 'VIEW_SETUP'],
+      [mapVersionFileEndpoint, 'VIEW_SETUP'],
+      [photographFileEndpoint, 'VIEW_REVIEW'],
+      [setAsideFileEndpoint, 'VIEW_REVIEW'],
+    ] as const) {
+      expect([each.method, each.access, each.roles, each.permission], each.name).toEqual([
+        'GET',
+        'SIGNED_IN',
+        ['ADMIN', 'MANAGER_ANALYST'],
+        view,
+      ]);
+    }
+    const base = {
+      name: 'test',
+      summary: 'A test’s own.',
+      access: 'ANYBODY',
+      path: '/a',
+      answer: healthAnswerSchema,
+      answersFile: true,
+    } as const;
+    expect(() => endpoint({ ...base, method: 'GET' })).not.toThrow();
+    expect(() => endpoint({ ...base, method: 'POST' })).toThrow('answers a file');
+    expect(() => endpoint({ ...base, method: 'PUT', file: true })).toThrow('answers a file');
+    const described = openApiDocument([photographFileEndpoint]) as {
+      paths: Record<string, Record<string, { responses: Record<string, { content: unknown }> }>>;
+    };
+    expect(
+      described.paths['/photographs/{photoId}/files/{file}']?.['get']?.responses['200']?.content,
+    ).toEqual(
+      Object.fromEntries(
+        ['image/jpeg', 'image/heic', 'image/heif', 'image/png', 'image/tiff'].map((type) => [
+          type,
+          { schema: { type: 'string', contentMediaType: type } },
+        ]),
+      ),
+    );
+    expect(answerFileTypes).toEqual([
+      'image/jpeg',
+      'image/heic',
+      'image/heif',
+      'image/png',
+      'image/tiff',
+    ]);
+  });
+});
+
 describe('the OpenAPI description', () => {
   it('AC-10-36: says each endpoint’s path, query, body and answer from its schemas', () => {
     const document = openApiDocument([correction]) as {
@@ -266,5 +498,183 @@ describe('the OpenAPI description', () => {
     expect(document.components.schemas.ErrorAnswer.properties.code.enum).toEqual(
       errorAnswerSchema.shape.code.options,
     );
+  });
+});
+
+// What every endpoint takes, read whole as the checklist reads it (spec/CHECKLIST-API.md §3.1;
+// task 2.7.3 part 4; ADR-513). Each schema as the OpenAPI description sees it, walked to its
+// leaves.
+type Described = Record<string, unknown>;
+const leaves = (
+  schema: unknown,
+  at: string,
+  found: (leaf: Described, at: string) => void,
+): void => {
+  if (schema === null || typeof schema !== 'object') return;
+  if (Array.isArray(schema)) {
+    schema.forEach((one, index) => {
+      leaves(one, `${at}[${String(index)}]`, found);
+    });
+    return;
+  }
+  found(schema as Described, at);
+  for (const [key, value] of Object.entries(schema)) leaves(value, `${at}.${key}`, found);
+};
+const parts = ['params', 'query', 'body'] as const;
+const described = endpoints.flatMap((served) =>
+  parts.flatMap((part) => {
+    const schema = served[part];
+    return schema === undefined
+      ? []
+      : [
+          {
+            served,
+            part,
+            json: z.toJSONSchema(schema, { io: 'input', unrepresentable: 'any' }),
+          },
+        ];
+  }),
+);
+
+describe('what every endpoint takes', () => {
+  it('AC-10-63 (ASVS 1.4.2): every number has a least and a most, and a whole number is one a column holds; only a shape’s positions are free, and the domain refuses one off the earth', () => {
+    const integer = 2_147_483_647;
+    const free: string[] = [];
+    for (const { served, part, json } of described) {
+      leaves(json, part, (leaf, at) => {
+        if (leaf['type'] !== 'number' && leaf['type'] !== 'integer') return;
+        const least = leaf['minimum'] ?? leaf['exclusiveMinimum'];
+        const most = leaf['maximum'] ?? leaf['exclusiveMaximum'];
+        const bound = leaf['type'] === 'integer' ? integer : 9_999_999_999.99;
+        if (
+          typeof least !== 'number' ||
+          typeof most !== 'number' ||
+          least < -bound - 1 ||
+          most > bound
+        ) {
+          free.push(`${served.name} ${at}`);
+        }
+      });
+    }
+    // A shape is GeoJSON, read by the domain's own reader (`MapShapes`), which refuses a position
+    // that isn't a finite longitude and latitude on the earth before anything is kept. And a
+    // record saved from a held one carries the answers to the firm's own fields as its monitor
+    // gave them: kept as sent, never refused, and checked against the form's own fields, which
+    // say what fits (ADR-052, 327, 526); a sync reads the same records from its loosely-read body.
+    const answers = (place: number, kind: string): string =>
+      `saveHeldRecord body.properties.record.anyOf[0].oneOf[${String(place)}].properties.${kind}.properties.answers.additionalProperties.anyOf[1]`;
+    expect(free).toEqual([
+      'addSiteShape body.$defs.__schema0.anyOf[1]',
+      'loadMap body.$defs.__schema0.anyOf[1]',
+      answers(2, 'incident'),
+      answers(3, 'dropOffLog'),
+      answers(4, 'survey'),
+      answers(5, 'roe'),
+    ]);
+    // What was free before (ADR-513): a project's settings and the passcode version a phone holds.
+    expect(
+      changeProjectSettingsEndpoint.body.safeParse({ siteCircleMeters: 2 ** 31 }).success,
+    ).toBe(false);
+    expect(
+      changeProjectSettingsEndpoint.body.safeParse({ siteCircleMeters: 2 ** 31 - 1 }).success,
+    ).toBe(true);
+    expect(
+      phoneLoginListEndpoint.body.safeParse({ masterPasscodeVersion: 2 ** 31, entries: [] })
+        .success,
+    ).toBe(false);
+  });
+
+  it('AC-10-64 (ASVS 14.2.1): no path parameter or query names a secret; a password, a code, a token or the passcode goes in a body or a header', () => {
+    const named = described
+      .filter(({ part }) => part !== 'body')
+      .flatMap(({ served, part, json }) =>
+        Object.keys((json.properties ?? {}) as Described).map(
+          (key) => `${served.name} ${part} ${key}`,
+        ),
+      );
+    expect(named.length).toBeGreaterThan(100);
+    const secret = /pass|token|secret|code|csrf|session|key|otp|email/i;
+    expect(named.filter((name) => secret.test(name.split(' ')[2] ?? ''))).toEqual([]);
+  });
+
+  it('AC-10-64 (ASVS 13.2.5), AC-10-79: the addresses an endpoint takes are a contract’s link to its signed copy and an Esri layer’s, HTTPS only; the layer’s, the one address the server asks, is a layer’s own, with no name, password, query or fragment (and held again where it is asked, ADR-527 (15))', () => {
+    const addresses: string[] = [];
+    for (const { served, part, json } of described) {
+      leaves(json, part, (leaf, at) => {
+        // An address is said by its format, or by the HTTPS pattern an Esri layer's is held to.
+        const pattern = leaf['pattern'];
+        if (
+          leaf['format'] === 'uri' ||
+          leaf['format'] === 'url' ||
+          (typeof pattern === 'string' && pattern.startsWith('^https:'))
+        )
+          addresses.push(`${served.name} ${at}`);
+      });
+    }
+    expect(addresses.sort()).toEqual(
+      [
+        'createContract body.properties.signedCopyUrl',
+        'changeContract body.properties.signedCopyUrl.anyOf[0]',
+        'loadEsriMap body.properties.boundaryLayer',
+        'loadEsriMap body.properties.zones.anyOf[0].properties.layer',
+        'addSiteShapeFromEsri body.properties.layer',
+      ].sort(),
+    );
+    const layer = (boundaryLayer: string) =>
+      loadEsriMapEndpoint.body.safeParse({ boundaryLayer, zones: null }).success;
+    expect(
+      layer('https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0'),
+    ).toBe(true);
+    for (const refused of [
+      'http://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0',
+      'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0?f=json',
+      'https://gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0#x',
+      'https://dana:secret@gis.baylinecounty.example/server/rest/services/ROW/FeatureServer/0',
+      'file:///etc/passwd',
+    ]) {
+      expect(layer(refused), refused).toBe(false);
+    }
+    const contract = (signedCopyUrl: string) =>
+      createContractEndpoint.body.safeParse({
+        name: 'Bayline ROW contract',
+        primeId: '00000000-0000-4000-8000-000000000001',
+        signedCopyUrl,
+      }).success;
+    expect(contract('https://files.bayline.example/row-contract.pdf')).toBe(true);
+    for (const refused of [
+      'http://files.bayline.example/row-contract.pdf',
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'file:///etc/passwd',
+    ]) {
+      expect(contract(refused), refused).toBe(false);
+    }
+  });
+
+  it('AC-10-65 (ASVS 1.3.11): an email address a person or a client is kept with is one address and nothing more: no line break, no second address, no name in brackets', () => {
+    const person = (email: string) =>
+      createPersonEndpoint.body.safeParse({ name: 'Dana Whitfield', email, role: 'ADMIN' }).success;
+    const changed = (email: string) => changePersonEndpoint.body.safeParse({ email }).success;
+    const client = (contactEmail: string) =>
+      createClientEndpoint.body.safeParse({ name: 'Bayline County', contactEmail }).success;
+    expect([person, changed, client].map((kept) => kept('dana@gates.example'))).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    for (const refused of [
+      'dana@gates.example\r\nBcc: everyone@elsewhere.example',
+      'dana@gates.example\nSubject: changed',
+      'dana@gates.example, everyone@elsewhere.example',
+      'dana@gates.example;everyone@elsewhere.example',
+      'Dana <dana@gates.example>',
+      'dana@gates.example ',
+      '"dana\r\n"@gates.example',
+    ]) {
+      expect(
+        [person, changed, client].map((kept) => kept(refused)),
+        refused,
+      ).toEqual([false, false, false]);
+    }
   });
 });

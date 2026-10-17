@@ -1,0 +1,25 @@
+# Open ADMS local stack: TLS for the object store (KD-78; ADR-517, 525). SeaweedFS's master,
+# volume, filer and S3 gateway, and their gRPC, listen on their container's loopback alone
+# (compose.yaml, `objectstore`), and this Caddy, sharing that container's network
+# (`objectstore-tls`), is the only way to any of it: TLS on 8333, with the stack's certificate for
+# `objectstore`, handed to S3 alone over the loopback, which never leaves the container's network.
+{
+	admin off
+	auto_https off
+	persist_config off
+	# A request with no name (a health check by address) is answered with the one certificate.
+	default_sni objectstore
+	servers {
+		protocols h1 h2
+		# S3 checks a signature against the name the caller signed for, which the stack's proxy
+		# names in X-Forwarded-Host (s3.adms.localhost): kept from that proxy alone, at the address
+		# the stack's network gives it (compose.yaml), and set afresh for any other caller.
+		trusted_proxies static 172.30.213.2/32
+	}
+}
+
+https://:8333 {
+	tls /run/adms/tls/objectstore.crt /run/adms/tls/objectstore.key
+	header -Server
+	reverse_proxy 127.0.0.1:8334
+}

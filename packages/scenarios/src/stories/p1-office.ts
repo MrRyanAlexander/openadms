@@ -18,18 +18,44 @@ import {
   type NewCertification,
   type NewPayItem,
 } from '@open-adms/api';
-import { recordRead, type SyncAnswered, type SyncReceived } from '@open-adms/contracts';
-import type { Reconciliation, RunOutcome } from '@open-adms/worker';
+import {
+  photoRead,
+  readPersonEndpoint,
+  recordRead,
+  reprocessTicketsEndpoint,
+  setPermissionsEndpoint,
+  type AnswerOf,
+  type SyncAnswered,
+  type SyncReceived,
+} from '@open-adms/contracts';
+import type { JobTicket } from '@open-adms/db';
+import { certificationViews, workflows, type PermissionName } from '@open-adms/domain';
+import {
+  JobLoop,
+  WorkerLog,
+  type ProjectPassed,
+  type Reconciliation,
+  type RunOutcome,
+  type TicketOutcome,
+} from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
 import { StoryClock, utcOffsetMinutes } from '../clock.ts';
-import { fromPhone, heldId, SimulatedDevice, type PhoneRecord } from '../device.ts';
+import {
+  fromPhone,
+  heldId,
+  NoSignal,
+  SimulatedDevice,
+  type PhoneRecord,
+  type RecordedPhoto,
+} from '../device.ts';
 import { uuidv7 } from '../ids.ts';
+import type { OfficeBrowser } from '../office-browser.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';
-import { assigned } from './board.ts';
-import { p1TimeZone as timeZone } from './p1.ts';
+import { assigned, synced } from './board.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone } from './p1.ts';
 import { p1Boundary, p1Zones } from './setup.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -52,44 +78,162 @@ export async function saved<T>(attempt: Saving<T>): Promise<T> {
   return outcome.record;
 }
 
-// The worker's side of the job queue in a story (BACKLOG 2.3.3; ADR-420): nobody asks the worker
-// for a run after a person's action. The action queued its job in its own piece of work, and
-// here the worker takes its project's waiting jobs up, as its process does every few seconds.
+// The worker's side of the job queue in a story (BACKLOG 2.3.3, 2.7.1 part 3; ADR-420, 494):
+// nobody asks the worker for a run. A sync, a person's action or a setup change queued its job
+// in its own piece of work, and here the worker's own job loop (`JobLoop`, as its process runs
+// it, under the release's policy) takes the waiting jobs up on the story's database and clock:
+// every project with a job waiting, one run each a pass. What a run did is its own answer, as
+// the pass hands it on.
 export class QueueRuns {
   private readonly story: StoryContext;
-  private readonly reconciliation: Reconciliation;
+  private readonly loop: JobLoop;
+  // Each project's runs the story hasn't read yet, the oldest first.
+  private readonly unread = new Map<string, RunOutcome[]>();
 
   constructor(story: StoryContext, reconciliation: Reconciliation) {
+    const { policy } = story;
     this.story = story;
-    this.reconciliation = reconciliation;
+    this.loop = new JobLoop(
+      story.worker,
+      reconciliation,
+      {
+        triesBeforeSetAside: policy.jobTriesBeforeSetAside,
+        ticketsARun: policy.jobTicketsAtMost,
+        pollMs: policy.jobQueuePollSeconds * 1_000,
+        stalledAfterMs: JobLoop.stalledAfterMs(policy),
+      },
+      // Its lines say only what a pass's answer says too; a story reads the answer.
+      new WorkerLog({ write: () => undefined }),
+      story.clock,
+    );
   }
 
-  // One run of the project's waiting jobs. A story that expects one and finds none has lost a
-  // job: it stops.
-  async next(projectId: string): Promise<Extract<RunOutcome, { ran: true }>> {
-    const { policy } = this.story;
-    const outcome = await this.reconciliation.waitingJobs(
-      projectId,
-      policy.jobTriesBeforeSetAside,
-      policy.jobTicketsAtMost,
-    );
-    if (!outcome.worked) {
+  // One pass of the job loop: what it did with each project, for the story to read here.
+  pass(): Promise<readonly ProjectPassed[]> {
+    return this.loop.pass();
+  }
+
+  // One pass; each run it made is kept for its project until the story reads it.
+  private async kept(): Promise<readonly ProjectPassed[]> {
+    const passed = await this.loop.pass();
+    for (const each of passed) {
+      if ('outcome' in each && each.outcome.worked) {
+        this.unread.set(each.projectId, [
+          ...(this.unread.get(each.projectId) ?? []),
+          each.outcome.run,
+        ]);
+      }
+    }
+    return passed;
+  }
+
+  // One pass; the project's run in it. A story that expects one and finds none has lost a job:
+  // it stops.
+  async next(projectId: string): Promise<RunOutcome> {
+    const passed = await this.kept();
+    const [run, ...more] = this.taken(projectId);
+    if (run === undefined || more.length > 0) {
       throw new Error(
-        `The worker found no job to work: ${outcome.reason}${'error' in outcome ? ` (${outcome.error})` : ''}.`,
+        `The worker’s pass made ${String(more.length + (run ? 1 : 0))} runs on the project, not one: ${QueueRuns.why(passed)}.`,
       );
     }
-    return outcome.run;
+    return run;
   }
 
-  // Every waiting job of the project worked, run after run; how many runs it took. What setup
-  // queued before the field days (a site's permit, a certification's views) is settled so.
+  // Every waiting job worked, pass after pass, as the loop goes on at once while a pass
+  // finished jobs and more wait; how many runs it took on the project. What setup queued before
+  // the field days (a site's permit, a certification's views) is settled so.
   async settle(projectId: string): Promise<number> {
-    let runs = 0;
-    while ((await this.waiting(projectId)).length > 0) {
-      await this.next(projectId);
-      runs += 1;
+    return (await this.ran(projectId)).length;
+  }
+
+  // As `settle`, answering the project's runs themselves, the oldest first.
+  async ran(projectId: string): Promise<readonly RunOutcome[]> {
+    await this.drained();
+    return this.taken(projectId);
+  }
+
+  // Every waiting job worked, as `settle`, in one run on the project: that run's answer. A story
+  // that expects the worker to run and finds no job has lost one, and one whose jobs took more
+  // than a run (more tickets than the policy lets one take up) is told so: it stops.
+  async settled(projectId: string): Promise<RunOutcome> {
+    await this.drained();
+    const [run, ...more] = this.taken(projectId);
+    if (run === undefined || more.length > 0) {
+      throw new Error(
+        `The worker made ${String(more.length + (run ? 1 : 0))} runs on the project, not one.`,
+      );
     }
-    return runs;
+    return run;
+  }
+
+  // Every ticket of the project as it stands, read from its records, not from a run: each
+  // number its field events are under, with their status, the flags standing on it, and what
+  // its last decision says it waits for and why it couldn't be processed; in a run's order
+  // (workflow, then number), a number that isn't one last. A void ticket is listed, VOID. The
+  // id and the counts are the project's last run's. A run the queue starts works only the
+  // tickets its jobs name, so what a whole run used to tell of a project is read here.
+  async standing(projectId: string): Promise<RunOutcome> {
+    const { api } = this.story;
+    const events = await api.fieldEvent.findMany({
+      where: { projectId },
+      select: { workflow: true, ticketNumber: true, status: true },
+    });
+    const statuses = new Map<string, Set<TicketOutcome['status']>>();
+    for (const event of events) {
+      const key = JSON.stringify([event.workflow, event.ticketNumber]);
+      statuses.set(key, (statuses.get(key) ?? new Set()).add(event.status));
+    }
+    const isNumber = (ticketNumber: string): boolean => /^[0-9]+$/.test(ticketNumber);
+    const named = [...statuses.keys()]
+      .map((key) => JSON.parse(key) as [TicketOutcome['workflow'], string])
+      .sort(
+        ([leftFlow, left], [rightFlow, right]) =>
+          Number(!isNumber(left)) - Number(!isNumber(right)) ||
+          workflows.indexOf(leftFlow) - workflows.indexOf(rightFlow) ||
+          left.length - right.length ||
+          (left < right ? -1 : left > right ? 1 : 0),
+      );
+    const tickets: TicketOutcome[] = [];
+    for (const [workflow, ticketNumber] of named) {
+      const [status, ...mixed] = statuses.get(JSON.stringify([workflow, ticketNumber])) ?? [];
+      if (status === undefined || mixed.length > 0) {
+        throw new Error(`Ticket ${ticketNumber}’s field events stand at more than one status.`);
+      }
+      const decided = await api.reconciliationDecision.findFirst({
+        where: { workflow, ticketNumber, reconciliationRun: { projectId } },
+        orderBy: { id: 'desc' },
+        select: { summary: true, error: true },
+      });
+      const flags = await api.flag.findMany({
+        where: { projectId, workflow, ticketNumber, clearedAt: null },
+        select: { message: true },
+        orderBy: { id: 'asc' },
+      });
+      const { waitingFor } = (decided?.summary ?? {}) as {
+        waitingFor?: TicketOutcome['waitingFor'];
+      };
+      tickets.push({
+        workflow,
+        ticketNumber,
+        status,
+        waitingFor: waitingFor ?? [],
+        flags: flags.map((flag) => flag.message),
+        error: decided?.error ?? null,
+      });
+    }
+    const last = await api.reconciliationRun.findFirst({
+      where: { projectId },
+      orderBy: { id: 'desc' },
+      select: { id: true, ticketsDone: true, ticketsFailed: true },
+    });
+    return {
+      runId: last?.id ?? '',
+      ticketsDone: last?.ticketsDone ?? 0,
+      ticketsFailed: last?.ticketsFailed ?? 0,
+      tickets,
+      pending: tickets.filter((ticket) => ticket.waitingFor.length > 0),
+    };
   }
 
   // The project's waiting jobs, the oldest first: what asked for each, and the tickets it names.
@@ -107,6 +251,46 @@ export class QueueRuns {
       requestedById: job.requestedById,
       tickets: job.tickets.map((ticket) => ticket.ticketNumber),
     }));
+  }
+
+  private taken(projectId: string): RunOutcome[] {
+    const runs = this.unread.get(projectId) ?? [];
+    this.unread.delete(projectId);
+    return runs;
+  }
+
+  // Passes until no job waits anywhere. A pass that leaves as many jobs waiting as before it (a
+  // try that failed whole, a project that couldn't be taken up, a run of another worker's under
+  // way, a run that finished none of its jobs) stops the story with why.
+  private async drained(): Promise<void> {
+    const waiting = (): Promise<number> =>
+      this.story.api.reconciliationJob.count({ where: { finishedAt: null, setAsideAt: null } });
+    let before = await waiting();
+    while (before > 0) {
+      const passed = await this.kept();
+      const after = await waiting();
+      if (after >= before) {
+        throw new Error(
+          `The worker’s pass finished no job while some wait: ${QueueRuns.why(passed)}.`,
+        );
+      }
+      before = after;
+    }
+  }
+
+  // Why a pass worked nothing, project by project, in its own words.
+  private static why(passed: readonly ProjectPassed[]): string {
+    return (
+      passed
+        .map((each) =>
+          'error' in each
+            ? `${each.projectId}: ${each.error instanceof Error ? each.error.message : String(each.error)}`
+            : each.outcome.worked
+              ? `${each.projectId}: worked`
+              : `${each.projectId}: ${each.outcome.reason}${'error' in each.outcome ? ` (${each.outcome.error})` : ''}`,
+        )
+        .join('; ') || 'no job waits'
+    );
   }
 }
 
@@ -152,13 +336,18 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
   const syncs: HeldSync[] = [];
   const held: HeldRecord[] = [];
   const fieldClock = new StoryClock(p1FieldDays.start);
-  const atTheYard = story.serverOn(fieldClock);
+  // Every request of the field days' phones on their own clock (enrolment, a monitor created,
+  // a sign-in, their lists): the story's API started again on it.
+  const atTheYard = story.phonesOn(fieldClock);
   await p1FieldDays.run({
     ...story,
+    ...atTheYard,
     clock: fieldClock,
     server: {
       received: (deviceId, sent) => {
-        if (sent.records.length === 0) return atTheYard.received(deviceId, sent);
+        if (sent.records.length === 0 && sent.photos.length === 0) {
+          return atTheYard.server.received(deviceId, sent);
+        }
         const syncedAt = fieldClock.now();
         syncs.push({ deviceId, sent, syncedAt });
         const records: SyncAnswered['records'] = sent.records.map((one) => {
@@ -179,6 +368,11 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
             unplannedAssignments: [],
             passcodeUses: [],
             records,
+            photos: sent.photos.map((one) => {
+              const read = photoRead(one);
+              if (!read.read) throw new Error(`A phone held what is no photograph's record.`);
+              return { answer: 'SAVED', id: read.photo.id, notes: [] };
+            }),
             numbers: sent.lastUsed.map(({ projectId, series }) => ({
               projectId,
               series,
@@ -190,10 +384,9 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
           },
         });
       },
-      receive: (sent: PhoneRecord) => {
-        held.push({ sent, syncedAt: fieldClock.now() });
-        return Promise.resolve({ answer: 'SAVED', id: heldId(sent), notes: [] });
-      },
+      // Its photographs' files wait on the phone: their records reach the server only when the
+      // held syncs are told, and the phone isn't there then (ADR-483).
+      filePart: () => Promise.reject(new NoSignal()),
     },
     at: (time) => {
       fieldClock.set(time);
@@ -227,6 +420,47 @@ export async function p1FieldDaysHeld(story: StoryContext): Promise<P1Office> {
   };
 }
 
+// P1's back office at their browsers (BACKLOG 2.7.1 part 4; ADR-496, 497): Dana, the firm's
+// first admin, and Luis Ortega, the manager/analyst she wrote, his first password set by her.
+// Each signs in at the story's clock when first asked for.
+export interface P1BackOffice {
+  danas(): Promise<OfficeBrowser>;
+  luiss(): Promise<OfficeBrowser>;
+  // Dana gives Luis more grants on his record: she reads what he holds, and states it with
+  // these (`setPermissions` takes the whole of it).
+  grantLuis(...more: PermissionName[]): Promise<void>;
+  // Luis asks for tickets of P1 to be reprocessed with nothing changed, at the reprocess
+  // endpoint (ADR-498): he holds correct. Its answer: what was asked and queued.
+  reprocess(tickets: readonly JobTicket[]): Promise<AnswerOf<typeof reprocessTicketsEndpoint>>;
+}
+
+export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffice {
+  const danas = () => story.backOffice.admin({ id: office.dana, email: danasEmail });
+  const luiss = async () =>
+    story.backOffice.person(await danas(), { id: office.luis, email: luissEmail });
+  return {
+    danas,
+    luiss,
+    async grantLuis(...more) {
+      const dana = await danas();
+      const ids = { userId: office.luis };
+      const held = (await dana.answered(readPersonEndpoint, { ids })).permissions;
+      await dana.answered(setPermissionsEndpoint, {
+        ids,
+        json: { permissions: [...new Set([...held, ...more])] },
+      });
+    },
+    async reprocess(tickets) {
+      return (await luiss()).answered(reprocessTicketsEndpoint, {
+        ids: { projectId: office.p1 },
+        json: {
+          tickets: tickets.map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber })),
+        },
+      });
+    },
+  };
+}
+
 // Dana loads P1's map: its boundary and three zones.
 export async function loadP1Map(story: StoryContext, office: P1Office): Promise<void> {
   await saved(
@@ -242,7 +476,9 @@ export async function loadP1Map(story: StoryContext, office: P1Office): Promise<
 }
 
 // A certification on Saturday 10 October, at a time of that day, as Sam Grant makes one on
-// P1-HO-TDSR with Lee Morgan helping. Coastline's unless told.
+// P1-HO-TDSR with Lee Morgan helping. Coastline's unless told. Its five photographs, one a
+// view, are taken with it and reach the server after it, through the API's own `Sync`
+// (ADR-179, 481).
 export type P1Certify = (
   time: string,
   more: Partial<NewCertification> & Pick<NewCertification, 'certNumber' | 'boxes'>,
@@ -265,7 +501,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
     (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
   const certify: P1Certify = async (time, more) => {
     clock.set(on('10', time));
-    await saved(
+    const made = await saved(
       certifications.certify({
         projectId: p1,
         kind: 'CONTAINER',
@@ -280,6 +516,7 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
         deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
       }),
     );
+    await photographed(story, { deviceId: samPhone, takenById: sam }, made);
   };
   await certify('09:10', {
     certNumber: '730415',
@@ -338,6 +575,40 @@ export async function certifyP1(story: StoryContext, office: P1Office): Promise<
   return certify;
 }
 
+// A certification's five photographs, one a view, taken as it was certified and sent after it
+// by the phone that took them, through the API's own `Sync` (ADR-179, 481). One not saved stops
+// the story.
+export async function photographed(
+  story: StoryContext,
+  by: { readonly deviceId: string; readonly takenById: string },
+  certification: { readonly id: string; readonly projectId: string; readonly certNumber: string },
+): Promise<void> {
+  const takenAt = story.clock.now();
+  const fingerprint = (view: string, as: string): string =>
+    createHash('sha256')
+      .update(`${certification.projectId} ${certification.certNumber} ${view} as ${as}`)
+      .digest('hex');
+  const { photos } = await synced(story, by.deviceId, timeZone, {
+    photos: certificationViews.map((view) => ({
+      id: uuidv7(takenAt),
+      projectId: certification.projectId,
+      owner: { kind: 'CERTIFICATION', id: certification.id },
+      view,
+      takenById: by.takenById,
+      capturedAt: takenAt.toISOString(),
+      deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, takenAt),
+      latitude: null,
+      longitude: null,
+      originalSha256: fingerprint(view, 'taken'),
+      uploadedSha256: fingerprint(view, 'uploaded'),
+      depthSha256: null,
+    })),
+  });
+  for (const answer of photos) {
+    if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+  }
+}
+
 // The phones' syncs, in the order the story `p1-field-days` has them: Monday evening, Tuesday
 // evening, and the Marsh Road tower's on Wednesday.
 export class P1Syncs {
@@ -366,7 +637,7 @@ export class P1Syncs {
         ...sent,
         clockAt: this.story.clock.now(),
       });
-      for (const answer of answered.records) {
+      for (const answer of [...answered.records, ...answered.photos]) {
         if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
       }
       records += answered.records.length;
@@ -374,38 +645,32 @@ export class P1Syncs {
     return records;
   }
 
-  // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as the ticket
-  // was completed and sent after that sync's records. The story `p1-field-days` takes none,
-  // so each photograph's record is made here as her phone would have sent it.
-  async crewPhotographs(syncedAt: Date): Promise<number> {
+  // The photographs' records the syncs sent at that time carried, each now in a sync of its own
+  // from its phone, after its record has arrived: a phone on a thin connection. How many; one
+  // not saved stops the story.
+  async photosArrive(syncedAt: Date): Promise<number> {
     let sent = 0;
-    for (const { sent: record, syncedAt: at } of this.held) {
+    for (const { deviceId, sent: held, syncedAt: at } of this.syncs) {
       if (at.getTime() !== syncedAt.getTime()) continue;
-      if (record.record !== 'FIELD_EVENT' || record.fieldEvent.kind !== 'UNIT_RATE') continue;
-      const event = record.fieldEvent;
-      const file = `P1-UR-1/${event.endedAt.toISOString()}/crew`;
-      const fingerprint = createHash('sha256').update(file).digest('hex');
-      const answer = await this.story.server.receive({
-        record: 'PHOTO',
-        photo: {
-          id: uuidv7(event.endedAt),
-          projectId: event.projectId,
-          owner: { kind: 'FIELD_EVENT', id: event.id },
-          takenById: event.monitorId,
-          deviceId: event.deviceId,
-          capturedAt: event.endedAt,
-          deviceUtcOffsetMinutes: event.deviceUtcOffsetMinutes,
-          latitude: null,
-          longitude: null,
-          originalSha256: fingerprint,
-          uploadedSha256: fingerprint,
-          objectKey: `photographs/${file}`,
-        },
-      });
-      if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
-      sent += 1;
+      for (const photo of held.photos) {
+        const { photos } = await synced(this.story, deviceId, timeZone, {
+          photos: [JSON.parse(JSON.stringify(photo)) as RecordedPhoto],
+        });
+        for (const answer of photos) {
+          if (answer.answer !== 'SAVED') throw new Error(`Not saved: ${answer.answer}`);
+        }
+        sent += photos.length;
+      }
     }
     return sent;
+  }
+
+  // How many photographs' records the syncs sent at that time carried, after their records:
+  // Jo's crew photograph with each unit rate ticket (golden mission §2).
+  photosAt(syncedAt: Date): number {
+    return this.syncs
+      .filter(({ syncedAt: at }) => at.getTime() === syncedAt.getTime())
+      .reduce((count, { sent }) => count + sent.photos.length, 0);
   }
 }
 
@@ -445,7 +710,7 @@ export async function setUpP1Pricing(story: StoryContext, office: P1Office): Pro
   const { api, clock } = story;
   const { dana, p1, coastline, contract, landfill, cypress } = office;
   const payItems = new PayItemSetup(api, clock, story.policy);
-  const lists = new ListSetup(api, clock);
+  const lists = new ListSetup(api, clock, story.policy);
 
   const payableType = async (name: string): Promise<string> =>
     (await api.payableType.findFirstOrThrow({ where: { name } })).id;

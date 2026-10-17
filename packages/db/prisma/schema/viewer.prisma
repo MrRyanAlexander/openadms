@@ -17,6 +17,33 @@ view ViewerTransactionMoney {
   @@map("viewer_transaction_money")
 }
 
+// A project's own settings, for a client user and an auditor alone (ADR-315): whether the viewer
+// is shown the project's setup at all (declared by ADR-535 (6)).
+view ViewerProjectSetup {
+  id                          String             @unique @db.Uuid
+  name                        String
+  clientId                    String             @map("client_id") @db.Uuid
+  declarationEventId          String             @map("declaration_event_id") @db.Uuid
+  programTypeId               String             @map("program_type_id") @db.Uuid
+  allowSplitLoads             Boolean            @map("allow_split_loads")
+  timeZone                    String             @map("time_zone")
+  activeFrom                  DateTime           @map("active_from") @db.Date
+  activeTo                    DateTime?          @map("active_to") @db.Date
+  ticketNumberSource          TicketNumberSource @map("ticket_number_source")
+  workflows                   Workflow[]
+  loadCallLowLimit            Int?               @map("load_call_low_limit")
+  loadCallHighLimit           Int?               @map("load_call_high_limit")
+  stumpFillDepthInches        Int                @map("stump_fill_depth_inches")
+  stumpCheckRootBallWider     Boolean            @map("stump_check_root_ball_wider")
+  stumpCheckFillNeedsExposure Boolean            @map("stump_check_fill_needs_exposure")
+  siteCircleMeters            Int                @map("site_circle_meters")
+  timeClockEnabled            Boolean            @map("time_clock_enabled")
+  createdAt                   DateTime           @map("created_at") @db.Timestamptz(3)
+  closedAt                    DateTime?          @map("closed_at") @db.Timestamptz(3)
+
+  @@map("viewer_project_setup")
+}
+
 // An ROE's owner: for a client user or an auditor the firm lets see private citizens by name
 // (ADR-336).
 view ViewerRoeCitizen {
@@ -25,6 +52,17 @@ view ViewerRoeCitizen {
   ownerName String? @map("owner_name")
 
   @@map("viewer_roe_citizen")
+}
+
+// A drop-off log's resident and where their debris came from: for a client user or an auditor
+// the firm lets see private citizens by name (ADR-336; declared by ADR-535 (6), C109).
+view ViewerDropOffLogCitizen {
+  id            String  @unique @db.Uuid
+  projectId     String  @map("project_id") @db.Uuid
+  residentName  String? @map("resident_name")
+  originAddress String? @map("origin_address")
+
+  @@map("viewer_drop_off_log_citizen")
 }
 
 // The three names of setup a ticket is read with, for every viewer given the project, a
@@ -63,4 +101,27 @@ view ViewerFieldEventMonitor {
   monitorNumber String? @map("monitor_number")
 
   @@map("viewer_field_event_monitor")
+}
+
+// What the audit log holds of a client user's or an auditor's projects' records (ADR-544; the
+// Phase 2 audit's F5): each change to a table the read-only login reads, of a row that names one
+// of their projects, with only the columns that login may read of it (the rest left out of the
+// values and of what changed); who made it and from where; never why or which request, and never
+// the log's security domain. A contractor user is shown none.
+view ViewerAuditRecord {
+  id            BigInt         @unique
+  occurredAt    DateTime       @map("occurred_at") @db.Timestamptz(3)
+  tableName     String         @map("table_name")
+  recordId      String         @map("record_id")
+  operation     AuditOperation
+  changedFields String[]       @map("changed_fields")
+  priorValue    Json?          @map("prior_value")
+  newValue      Json?          @map("new_value")
+  actorId       String?        @map("actor_id") @db.Uuid
+  actorName     String?        @map("actor_name")
+  source        AuditSource
+  deviceId      String?        @map("device_id") @db.Uuid
+  projectId     String         @map("project_id") @db.Uuid
+
+  @@map("viewer_audit_record")
 }

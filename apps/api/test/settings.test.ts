@@ -6,21 +6,38 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { builtInPolicy, installationPolicy } from '../src/policy.ts';
 import { Settings, SettingsProblem } from '../src/process/settings.ts';
 
 // Made-up values, this test's own; a login's URL is put together here so that no file holds one.
 const word = ['made', 'up', 'for', 'this', 'test'].join('-');
-const urlOf = (login: string) => `postgresql://${login}:${word}@127.0.0.1:55432/adms`;
+// Every login asks TLS alone, its server's certificate and name checked (KD-78; ADR-517).
+const tls = '?sslmode=verify-full';
+const urlOf = (login: string) => `postgresql://${login}:${word}@127.0.0.1:55432/adms${tls}`;
+// The files a setting names: made up, each holding what its setting asks for and no more.
+const files = mkdtempSync(join(tmpdir(), 'adms-api-files-'));
+const certFile = join(files, 'api.crt');
+const keyFile = join(files, 'api.key');
+writeFileSync(certFile, '-----BEGIN CERTIFICATE-----\nmade up\n-----END CERTIFICATE-----\n');
+writeFileSync(keyFile, '-----BEGIN PRIVATE KEY-----\nmade up\n-----END PRIVATE KEY-----\n', {
+  mode: 0o600,
+});
+afterAll(() => {
+  rmSync(files, { recursive: true, force: true });
+});
 const good: Record<string, string> = {
   DATABASE_URL: urlOf('adms_api'),
   READONLY_DATABASE_URL: urlOf('adms_readonly'),
   ADMS_TOKEN_SIGNING_SECRET: `${word}-${word}`,
+  ADMS_PASSWORD_KEY: `${word}-password-${word}`,
+  ADMS_SEALING_KEY: `${word}-sealing-${word}`,
   SMTP_URL: '',
   ADMS_API_HOST: '127.0.0.1',
   ADMS_API_PORT: '3000',
+  ADMS_API_TLS_CERT_FILE: certFile,
+  ADMS_API_TLS_KEY_FILE: keyFile,
   ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost:8443',
   ADMS_MEDIA_URL: 'https://s3.adms.localhost:8443',
   ADMS_MEDIA_BUCKET: 'adms-media',
@@ -49,6 +66,8 @@ describe('the settings the API starts with', () => {
     expect(settings.smtpUrl).toBe('');
     expect(settings.host).toBe('127.0.0.1');
     expect(settings.port).toBe(3000);
+    expect(settings.tls).toEqual({ certFile, keyFile });
+    expect(settings.smtpCaFile).toBeNull();
   });
 
   it('take a mail server, or none', () => {
@@ -86,6 +105,20 @@ describe('the settings the API starts with', () => {
     }
   });
 
+  it('AC-10-109 one secret a purpose: a password key or a sealing key that is the signing secret, or the one the other, is malformed, named and never said (ADR-542)', () => {
+    const signing = good['ADMS_TOKEN_SIGNING_SECRET'] ?? '';
+    for (const [shared, key] of [
+      [{ ADMS_PASSWORD_KEY: signing }, 'ADMS_PASSWORD_KEY'],
+      [{ ADMS_SEALING_KEY: signing }, 'ADMS_SEALING_KEY'],
+      [{ ADMS_SEALING_KEY: good['ADMS_PASSWORD_KEY'] ?? '' }, 'ADMS_SEALING_KEY'],
+    ] as const) {
+      const problem = problemOf({ ...good, ...shared });
+      expect(problem.keys).toEqual([key]);
+      expect(problem.message).toBe(`The API did not start: ${key} is malformed.`);
+      expect(problem.message).not.toContain(word);
+    }
+  });
+
   it.each(Object.keys(good))('AC-10-55: without %s the API does not start, and says so', (key) => {
     const problem = problemOf(without(key));
     expect(problem.keys).toEqual([key]);
@@ -95,9 +128,27 @@ describe('the settings the API starts with', () => {
   it.each([
     ['DATABASE_URL', 'not-a-url-9f3c'],
     ['DATABASE_URL', 'https://adms.localhost/9f3c'],
-    ['DATABASE_URL', 'postgresql://adms_api@127.0.0.1:55432/adms-9f3c'],
+    ['DATABASE_URL', `postgresql://adms_api@127.0.0.1:55432/adms-9f3c${tls}`],
+    // TLS alone, the certificate and name checked: a URL that asks less, or names a root that
+    // isn't one, would let a connection fall back to plain or take any certificate (KD-78).
+    ['DATABASE_URL', urlOf('adms_api-9f3c').replace(tls, '')],
+    ['DATABASE_URL', urlOf('adms_api-9f3c').replace('verify-full', 'require')],
+    ['DATABASE_URL', urlOf('adms_api-9f3c').replace('verify-full', 'verify-ca')],
+    ['DATABASE_URL', urlOf('adms_api-9f3c').replace('verify-full', 'prefer')],
+    ['DATABASE_URL', `${urlOf('adms_api-9f3c')}&sslmode=disable`],
+    ['DATABASE_URL', `${urlOf('adms_api-9f3c')}&sslrootcert=/no/such/root-9f3c.crt`],
+    ['READONLY_DATABASE_URL', urlOf('adms_readonly-9f3c').replace(tls, '')],
+    ['ADMS_DATABASE_CA_FILE', '/no/such/root-9f3c.crt'],
+    ['ADMS_DATABASE_CA_FILE', keyFile],
+    ['ADMS_SMTP_CA_FILE', '/no/such/root-9f3c.crt'],
+    ['ADMS_API_TLS_CERT_FILE', '/no/such/api-9f3c.crt'],
+    ['ADMS_API_TLS_CERT_FILE', keyFile],
+    ['ADMS_API_TLS_KEY_FILE', '/no/such/api-9f3c.key'],
+    ['ADMS_API_TLS_KEY_FILE', certFile],
     ['READONLY_DATABASE_URL', urlOf('adms_readonly-9f3c').replace('/adms', '')],
     ['ADMS_TOKEN_SIGNING_SECRET', 'short-9f3c'],
+    ['ADMS_PASSWORD_KEY', 'short-9f3c'],
+    ['ADMS_SEALING_KEY', 'short-9f3c'],
     ['SMTP_URL', 'mail-9f3c'],
     ['ADMS_API_HOST', 'api-9f3c.adms.localhost'],
     ['ADMS_API_PORT', '9f3c'],
@@ -232,12 +283,40 @@ describe('the settings the API starts with', () => {
     }
   });
 
-  it('reach the database where the stack says it is, with the same login', () => {
+  it('reach the database where the stack says it is, with the same login, over TLS checked against the root the stack names', () => {
     const settings = Settings.from({ ...good, ADMS_DATABASE_ADDRESS: 'postgres:5432' });
-    expect(settings.databaseUrl).toBe(`postgresql://adms_api:${word}@postgres:5432/adms`);
+    expect(settings.databaseUrl).toBe(`postgresql://adms_api:${word}@postgres:5432/adms${tls}`);
     expect(settings.readOnlyDatabaseUrl).toBe(
-      `postgresql://adms_readonly:${word}@postgres:5432/adms`,
+      `postgresql://adms_readonly:${word}@postgres:5432/adms${tls}`,
     );
+    // The installer names this machine's root; inside the stack its own path to the same file.
+    const root = join(files, 'root.crt');
+    writeFileSync(root, '-----BEGIN CERTIFICATE-----\nmade up\n-----END CERTIFICATE-----\n');
+    const written = `${urlOf('adms_api')}&sslrootcert=${encodeURIComponent('/no/such/host/root.crt')}`;
+    const inStack = Settings.from({
+      ...good,
+      DATABASE_URL: written,
+      ADMS_DATABASE_ADDRESS: 'postgres:5432',
+      ADMS_DATABASE_CA_FILE: root,
+    });
+    const url = new URL(inStack.databaseUrl);
+    expect([
+      url.host,
+      url.searchParams.get('sslmode'),
+      url.searchParams.get('sslrootcert'),
+    ]).toEqual(['postgres:5432', 'verify-full', root]);
+    // Where it isn't told one, the root the URL names is the one checked, and must be there.
+    expect(problemOf({ ...good, DATABASE_URL: written }).keys).toEqual(['DATABASE_URL']);
+    expect(
+      Settings.from({ ...good, DATABASE_URL: `${urlOf('adms_api')}&sslrootcert=${root}` })
+        .databaseUrl,
+    ).toBe(`${urlOf('adms_api')}&sslrootcert=${root}`);
+  });
+
+  it('name the root the mail server is checked against, only where stated (KD-78)', () => {
+    const root = join(files, 'mail-root.crt');
+    writeFileSync(root, '-----BEGIN CERTIFICATE-----\nmade up\n-----END CERTIFICATE-----\n');
+    expect(Settings.from({ ...good, ADMS_SMTP_CA_FILE: root }).smtpCaFile).toBe(root);
   });
 });
 
@@ -296,8 +375,12 @@ describe('the API as a process, started with settings that are off', () => {
       'DATABASE_URL=not-a-url-9f3c',
       `READONLY_DATABASE_URL=${urlOf('adms_readonly')}`,
       'ADMS_TOKEN_SIGNING_SECRET=short-9f3c',
+      `ADMS_PASSWORD_KEY=${good['ADMS_PASSWORD_KEY'] ?? ''}`,
+      `ADMS_SEALING_KEY=${good['ADMS_SEALING_KEY'] ?? ''}`,
       'ADMS_API_HOST=127.0.0.1',
       'ADMS_API_PORT=3000',
+      `ADMS_API_TLS_CERT_FILE=${certFile}`,
+      `ADMS_API_TLS_KEY_FILE=${keyFile}`,
       'ADMS_ADDRESSES_URL=https://addresses.adms.localhost',
       ...Object.entries(good)
         .filter(([key]) => key.startsWith('ADMS_MEDIA_'))

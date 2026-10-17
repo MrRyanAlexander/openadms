@@ -4,24 +4,29 @@
 // project closed. P1's Monday and Tuesday are the story `p1-field-days`' own, priced as the
 // story `p1-priced` prices them; Wednesday adds `adms-exceptions`' Scenario B.
 //
-// Every QC mark, lock, batch and unlock here is made through `apps/api`'s review services, as
-// Luis Ortega by his grants, and the unlock as Dana Reyes, the admin (the mission grants Luis no
-// unlock). A QC mark and a lock ask for no run; an unlock answers the run to ask the worker
-// for, and the story asks it.
+// Every QC mark, lock, batch and unlock here is a request at its endpoint, at Luis Ortega's
+// browser by the grants Dana gives him at hers, and the unlock at Dana Reyes's, the admin's (the
+// mission grants Luis no unlock); so are his voids, his acceptance and his correction (ADR-500).
+// A QC mark and a lock queue nothing; an unlock queues its ticket, and the worker takes it up.
 //
 // Not here: P2's split load 102001 and its ROEs and surveys under QC, and the mission's batch
 // of thirteen (1.9.1).
+import { PayItemSetup, ProjectSetup } from '@open-adms/api';
 import {
-  Acceptances,
-  Corrections,
-  InvoiceLocks,
-  PayItemSetup,
-  ProjectSetup,
-  QcMarks,
-  Voids,
-  type Outcome,
-  type Reviewed,
-} from '@open-adms/api';
+  acceptFlagEndpoint,
+  correctFieldEventEndpoint,
+  createInvoiceBatchEndpoint,
+  listInvoiceBatchesEndpoint,
+  lockAsInvoicedEndpoint,
+  readInvoiceBatchEndpoint,
+  renumberFieldEventEndpoint,
+  setLockBatchEndpoint,
+  setQcStatusEndpoint,
+  unlockInvoicedEndpoint,
+  voidTicketEndpoint,
+  type AnswerOf,
+  type Endpoint,
+} from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
@@ -29,11 +34,14 @@ import { utcOffsetMinutes } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
+import type { OfficeBrowser } from '../office-browser.ts';
+import { refusalOf, type AskedWith } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   QueueRuns,
@@ -45,19 +53,19 @@ import { p1TimeZone as timeZone } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 const isSame = (left: unknown, right: unknown): boolean =>
@@ -96,11 +104,6 @@ export const p1Invoiced: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const qc = new QcMarks(api, clock, story.policy);
-    const locks = new InvoiceLocks(api, clock, story.policy);
-    const voids = new Voids(api, clock, story.policy);
-    const acceptances = new Acceptances(api, clock, story.policy);
-    const corrections = new Corrections(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
 
     const names = new Map<string | null, string>([
@@ -192,37 +195,62 @@ export const p1Invoiced: Story = {
       api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind } });
     const reasonId = async (name: string): Promise<string> =>
       (await api.reason.findFirstOrThrow({ where: { name } })).id;
-    const decisionOf = async (run: RunOutcome, ticketNumber: string) =>
+    const decisionOf = async (run: RunOutcome | null, ticketNumber: string) =>
       (
         await api.reconciliationDecision.findMany({
-          where: { reconciliationRunId: run.ran ? run.runId : '', ticketNumber },
+          where: { reconciliationRunId: run?.runId ?? '', ticketNumber },
         })
       ).map((decision) => [decision.status, (decision.summary as { why?: string }).why]);
 
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
-    };
+    const last: { run: RunOutcome | null } = { run: null };
     // Nobody asks the worker: the action queued its job, and the worker takes it up.
     const queue = new QueueRuns(story, reconciliation);
-    const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
-      const done = await saved(attempt);
-      // An action that left no ticket to work queued no job, and no run follows it.
-      if (done.reprocess.jobs.length > 0) last.run = await queue.next(done.reprocess.projectId);
-      return done;
+    // Dana and Luis at their browsers (ADR-497, 500): every act here is on P1. An act, saved:
+    // its answer. One that queued a job is followed by the run the worker makes of it; one that
+    // left no ticket to work queued none, and no run follows it.
+    const backOffice = p1BackOffice(story, office);
+    const act = async <E extends Endpoint>(
+      by: () => Promise<OfficeBrowser>,
+      served: E,
+      more: AskedWith,
+    ): Promise<AnswerOf<E>> => (await by()).answered(served, more);
+    const byLuis = <E extends Endpoint>(served: E, more: AskedWith) =>
+      act(() => backOffice.luiss(), served, more);
+    const byDana = <E extends Endpoint>(served: E, more: AskedWith) =>
+      act(() => backOffice.danas(), served, more);
+    const reviewed = async <A extends { queued?: { jobs: string[] } | undefined }>(
+      done: Promise<A>,
+    ): Promise<A> => {
+      const answer = await done;
+      if ((answer.queued?.jobs.length ?? 0) > 0) last.run = await queue.next(p1);
+      return answer;
     };
-    const refusal = async <T>(attempt: Promise<Outcome<T>>): Promise<string> => {
-      const outcome = await attempt;
-      return outcome.saved ? 'saved' : `${outcome.refusal.code}: ${outcome.refusal.message}`;
-    };
-    const grant = (
-      ...permissions: ('CORRECT' | 'RENUMBER' | 'VOID' | 'ACCEPT_FLAG' | 'QC' | 'LOCK_INVOICED')[]
-    ) =>
-      api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-        for (const permission of permissions) {
-          await tx.userPermission.create({ data: { userId: luis, permission } });
-        }
-      });
+    // Luis's act as it was answered: refused at the door, or by the endpoint's rule in its
+    // words.
+    const refusal = async (served: Endpoint, more: AskedWith): Promise<string> =>
+      refusalOf(await (await backOffice.luiss()).asked(served, more));
+    // What each act sends.
+    type Ticket =
+      { completedLoadId: string } | { completedHaulOutId: string } | { unitRateTicketId: string };
+    type Marked =
+      Ticket | { incidentId: string } | { dropOffLogId: string } | { certificationId: string };
+    type Named = ReturnType<typeof load> | ReturnType<typeof unitRate>;
+    const qcing = (record: Marked, status: string, note?: string): AskedWith => ({
+      json: { record, status, note },
+    });
+    const locking = (ticket: Ticket, invoiceBatchId?: string): AskedWith => ({
+      json: { ticket, invoiceBatchId },
+    });
+    const batching = (name: string): AskedWith => ({ ids: { projectId: p1 }, json: { name } });
+    const intoBatch = (ticket: Ticket, invoiceBatchId: string): AskedWith => ({
+      json: { ticket, invoiceBatchId },
+    });
+    const unlocking = (ticket: Ticket, note: string): AskedWith => ({ json: { ticket, note } });
+    const voiding = (ticket: Named, reasonId: string): AskedWith => ({
+      ids: { projectId: p1 },
+      json: { ...ticket, reasonId },
+    });
     const loadOf = async (ticketNumber: string) => ({
       completedLoadId: (
         await api.completedLoad.findFirstOrThrow({
@@ -323,27 +351,25 @@ export const p1Invoiced: Story = {
     ) {
       throw new Error('The field days synced fewer than three times.');
     }
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
     story.at(
       mondayEvening.toISOString(),
       'Monday evening: the phones find signal; the worker runs',
     );
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(tuesdayEvening.toISOString(), 'Tuesday evening: the same');
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
-    await reconciliation.run(sync);
+    await queue.settle(p1);
     story.at(
       wednesdayMorning.toISOString(),
       'Wednesday: the Marsh Road tower’s phone is charged and syncs Tuesday’s work',
     );
     await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const before = await reconciliation.run(sync);
-    // What setup queued before the field days (each certification's own flags) is settled.
+    // Every job waiting is taken up: what setup queued before the field days (each
+    // certification's own flags) and what each sync queued.
     await queue.settle(p1);
+    const before = await queue.standing(p1);
     story.check(
       'P1 before any QC: 101001, 101002, 101004 and 101005 are COMPLETED, 101003 in review for its 96% call, 101006 waiting for its disposal; nobody has marked anything',
       [of(before, '10100'), await marks()],
@@ -364,25 +390,28 @@ export const p1Invoiced: Story = {
     story.at(on('14', '07:40'), 'Luis opens 101001 to QC it. Dana has granted him nothing yet');
     const l101001 = await loadOf('101001');
     story.check(
-      'AC-08-05 a manager/analyst without the grant can’t set a QC status, lock a ticket or make a batch: each is refused in plain words and nothing is saved',
+      'AC-08-05 a manager/analyst without the grant can’t set a QC status, lock a ticket or make a batch: each is refused at the door and nothing is saved',
       [
-        await refusal(qc.set(luis, l101001, 'QC_APPROVED')),
-        await refusal(locks.lock(luis, l101001)),
-        await refusal(locks.batch(luis, p1, 'Bayline ROW, week of 12 Oct')),
+        await refusal(setQcStatusEndpoint, qcing(l101001, 'QC_APPROVED')),
+        await refusal(lockAsInvoicedEndpoint, locking(l101001)),
+        await refusal(createInvoiceBatchEndpoint, batching('Bayline ROW, week of 12 Oct')),
         await marks(),
       ],
-      [
-        'NOT_PERMITTED: Luis Ortega may not set a QC status: it takes an admin, or a manager/analyst granted "QC". Nothing was changed.',
-        'NOT_PERMITTED: Luis Ortega may not lock a ticket as invoiced: it takes an admin, or a manager/analyst granted "lock as invoiced". Nothing was changed.',
-        'NOT_PERMITTED: Luis Ortega may not lock a ticket as invoiced: it takes an admin, or a manager/analyst granted "lock as invoiced". Nothing was changed.',
-        [0, 0, 0],
-      ],
+      ['403 NOT_ALLOWED', '403 NOT_ALLOWED', '403 NOT_ALLOWED', [0, 0, 0]],
     );
     story.at(
       on('14', '07:45'),
       'Dana grants Luis correct, renumber, void, accept flags, QC and lock as invoiced; nobody is granted unlock',
     );
-    await grant('CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED');
+    await backOffice.grantLuis(
+      'CORRECT',
+      'RENUMBER',
+      'VOID',
+      'ACCEPT_FLAG',
+      'QC',
+      'LOCK_INVOICED',
+      'VIEW_REVIEW',
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -391,19 +420,22 @@ export const p1Invoiced: Story = {
     );
     const lineOf101001 = await linesOf('101001');
     const beforeMark = await concluded();
-    const approved = await saved(qc.set(luis, l101001, 'QC_APPROVED', 'Photos checked'));
+    const approved = await byLuis(
+      setQcStatusEndpoint,
+      qcing(l101001, 'QC_APPROVED', 'Photos checked'),
+    );
     story.check(
       'AC-08-54, AC-08-07 the mark holds the status, Luis, the time and his note, and is audited under him from the back office; nothing else changes (the ticket’s status, its completed load, its flags, its $390.00 line) and no run is asked for or started',
       [
         [
-          approved.completedLoadId === l101001.completedLoadId,
-          approved.status,
-          names.get(approved.setById),
-          approved.setAt.toISOString(),
-          approved.note,
+          approved.record.completedLoadId === l101001.completedLoadId,
+          approved.record.status,
+          names.get(approved.record.setById),
+          approved.record.setAt,
+          approved.record.note,
         ],
-        await auditOf('qc_mark', approved.id),
-        'reprocess' in approved,
+        await auditOf('qc_mark', approved.record.id),
+        'queued' in approved,
         await statusOf('101001'),
         [lineOf101001, await linesOf('101001')],
         isSame(await concluded(), beforeMark),
@@ -422,17 +454,17 @@ export const p1Invoiced: Story = {
     );
 
     story.at(on('14', '08:05'), 'He isn’t sure of the pile’s photograph: QC Issues');
-    await saved(qc.set(luis, l101001, 'QC_ISSUES', 'Pile photograph is dark'));
-    const atIssues = await refusal(locks.lock(luis, l101001));
+    await byLuis(setQcStatusEndpoint, qcing(l101001, 'QC_ISSUES', 'Pile photograph is dark'));
+    const atIssues = await refusal(lockAsInvoicedEndpoint, locking(l101001));
     story.at(on('14', '08:07'), 'QC Void');
-    await saved(qc.set(luis, l101001, 'QC_VOID'));
+    await byLuis(setQcStatusEndpoint, qcing(l101001, 'QC_VOID'));
     story.check(
       'AC-08-60 QC Issues and QC Void void nothing: 101001 stays COMPLETED and its $390.00 line stands; it is the same mark changed, the status before kept in the audit log; no run was started',
       [
         await statusOf('101001'),
         await linesOf('101001'),
         await api.qcMark.count(),
-        await auditOf('qc_mark', approved.id),
+        await auditOf('qc_mark', approved.record.id),
         isSame(await concluded(), beforeMark),
       ],
       [
@@ -451,33 +483,36 @@ export const p1Invoiced: Story = {
       'AC-09-02 only a QC Approved ticket can be locked: 101001 at QC Issues and at QC Void, and 101002, which nobody has marked (QC Review), are each refused and nothing is locked',
       [
         atIssues,
-        await refusal(locks.lock(luis, l101001)),
-        await refusal(locks.lock(luis, await loadOf('101002'))),
+        await refusal(lockAsInvoicedEndpoint, locking(l101001)),
+        await refusal(lockAsInvoicedEndpoint, locking(await loadOf('101002'))),
         await api.invoiceLock.count(),
       ],
       [
-        'NOT_QC_APPROVED: Ticket 101001 is at QC Issues: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
-        'NOT_QC_APPROVED: Ticket 101001 is at QC Void: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
-        'NOT_QC_APPROVED: Ticket 101002 is at QC Review: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_QC_APPROVED: Ticket 101001 is at QC Issues: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_QC_APPROVED: Ticket 101001 is at QC Void: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_QC_APPROVED: Ticket 101002 is at QC Review: only a QC Approved ticket can be locked as invoiced. Nothing was locked.',
         0,
       ],
     );
     story.at(on('14', '08:10'), 'The second photograph shows the pile: QC Approved again');
-    await saved(qc.set(luis, l101001, 'QC_APPROVED', 'Photos checked'));
+    await byLuis(setQcStatusEndpoint, qcing(l101001, 'QC_APPROVED', 'Photos checked'));
 
     const col101006 = await eventOf('101006', 'COLLECTION');
     story.check(
       'AC-08-62 the pending collection 101006 has nothing to QC or lock: its ticket has no completed load until it is whole, and a load’s single field event is never QC’d or locked on its own',
       [
         await api.completedLoad.count({ where: { projectId: p1, ticketNumber: '101006' } }),
-        await refusal(qc.set(luis, { unitRateTicketId: col101006.id }, 'QC_APPROVED')),
-        await refusal(locks.lock(luis, { unitRateTicketId: col101006.id })),
+        await refusal(
+          setQcStatusEndpoint,
+          qcing({ unitRateTicketId: col101006.id }, 'QC_APPROVED'),
+        ),
+        await refusal(lockAsInvoicedEndpoint, locking({ unitRateTicketId: col101006.id })),
         await marks(),
       ],
       [
         0,
-        'NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
-        'NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+        '422 NOT_SAVED · NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+        '422 NOT_SAVED · NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
         [1, 0, 0],
       ],
     );
@@ -488,31 +523,29 @@ export const p1Invoiced: Story = {
       'Luis sets 101003 QC Approved while its 96% flag is still open, and tries to lock it',
     );
     const l101003 = await loadOf('101003');
-    await saved(qc.set(luis, l101003, 'QC_APPROVED'));
-    const inReview = await refusal(locks.lock(luis, l101003));
+    await byLuis(setQcStatusEndpoint, qcing(l101003, 'QC_APPROVED'));
+    const inReview = await refusal(lockAsInvoicedEndpoint, locking(l101003));
     story.at(
       on('14', '08:25'),
       'He accepts the flag: Photos confirm, "Heaped; photos confirm"; the worker runs; he locks it',
     );
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101003')).id,
-        await reasonId('Photos confirm'),
-        'Heaped; photos confirm',
-      ),
+      byLuis(acceptFlagEndpoint, {
+        ids: { flagId: (await standingFlag('101003')).id },
+        json: { reasonId: await reasonId('Photos confirm'), note: 'Heaped; photos confirm' },
+      }),
     );
-    const locked101003 = await saved(locks.lock(luis, l101003));
+    const locked101003 = await byLuis(lockAsInvoicedEndpoint, locking(l101003));
     story.check(
       'AC-09-03 a ticket in review is resolved first: QC Approved with its flag open, 101003 isn’t locked; its flag accepted and the ticket COMPLETED, it locks. AC-09-10 no batch is named, and it is locked all the same',
       [
         inReview,
         of(last.run, '101003'),
-        [names.get(locked101003.lockedById), locked101003.invoiceBatchId],
+        [names.get(locked101003.record.lockedById), locked101003.record.invoiceBatchId],
         await locksOf(l101003),
       ],
       [
-        'NOT_COMPLETED: Ticket 101003 is in review: every flag on it is fixed or accepted before it is locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 101003 is in review: every flag on it is fixed or accepted before it is locked as invoiced. Nothing was locked.',
         ['101003 · COMPLETED · Ticket 101003: load call 96%. Flagged for review.'],
         ['Luis', null],
         ['locked by Luis · no batch · in force'],
@@ -522,18 +555,21 @@ export const p1Invoiced: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(on('14', '08:30'), 'Luis locks 101001 as invoiced');
     const beforeLock = await concluded();
-    const locked101001 = await saved(locks.lock(luis, l101001));
+    const locked101001 = await byLuis(lockAsInvoicedEndpoint, locking(l101001));
     story.check(
       'AC-09-01, AC-08-07 the lock is recorded (the completed load, Luis, when) and audited under him from the back office. That is all invoicing is: the lock holds no amount, nothing the worker wrote changes, and no run is asked for or started',
       [
         [
-          locked101001.completedLoadId === l101001.completedLoadId,
-          names.get(locked101001.lockedById),
-          locked101001.lockedAt.toISOString(),
-          Object.keys(locked101001).filter((key) => /amount|rate|quantity|total/i.test(key)),
+          locked101001.record.completedLoadId === l101001.completedLoadId,
+          names.get(locked101001.record.lockedById),
+          locked101001.record.lockedAt,
+          // A key that names money; a unit rate ticket's id is the ticket's.
+          Object.keys(locked101001.record).filter((key) =>
+            /amount|^rate|quantity|total/i.test(key),
+          ),
         ],
-        await auditOf('invoice_lock', locked101001.id),
-        'reprocess' in locked101001,
+        await auditOf('invoice_lock', locked101001.record.id),
+        'queued' in locked101001,
         await linesOf('101001'),
         isSame(await concluded(), beforeLock),
       ],
@@ -547,9 +583,9 @@ export const p1Invoiced: Story = {
     );
     story.check(
       'AC-09-07 a ticket has one lock in force: locking 101001 a second time is refused in plain words',
-      [await refusal(locks.lock(luis, l101001)), await locksOf(l101001)],
+      [await refusal(lockAsInvoicedEndpoint, locking(l101001)), await locksOf(l101001)],
       [
-        'ALREADY_LOCKED: Ticket 101001 is already locked as invoiced. Nothing was changed.',
+        '422 NOT_SAVED · ALREADY_LOCKED: Ticket 101001 is already locked as invoiced. Nothing was changed.',
         ['locked by Luis · no batch · in force'],
       ],
     );
@@ -560,22 +596,41 @@ export const p1Invoiced: Story = {
       'Luis makes the batch "Bayline ROW, week of 12 Oct" and puts the two locks in it; he QCs the haul-out 201004 and the hanger ticket 301001 and locks each in the batch',
     );
     const batchName = 'Bayline ROW, week of 12 Oct';
-    const batch = await saved(locks.batch(luis, p1, batchName));
-    const sameName = await refusal(locks.batch(luis, p1, ` ${batchName} `));
-    await saved(locks.intoBatch(luis, l101001, batch.id));
-    await saved(locks.intoBatch(luis, l101003, batch.id));
+    const { record: batch } = await byLuis(createInvoiceBatchEndpoint, batching(batchName));
+    const sameName = await refusal(createInvoiceBatchEndpoint, batching(` ${batchName} `));
+    // The batch at its endpoints, read as it is made and once its four are locked in it: a
+    // batch holds its own locks, never the project's others (ADR-536; C172).
+    const batchRead = async () => [
+      (await byLuis(readInvoiceBatchEndpoint, { ids: { invoiceBatchId: batch.id } })).locks
+        .map((each) => each.ticket.ticketNumber)
+        .sort(),
+      (await byLuis(listInvoiceBatchesEndpoint, { ids: { projectId: p1 } })).batches.map((each) => [
+        each.batch.name,
+        each.locksInForce,
+      ]),
+    ];
+    const madeEmpty = await batchRead();
+    await byLuis(setLockBatchEndpoint, intoBatch(l101001, batch.id));
+    await byLuis(setLockBatchEndpoint, intoBatch(l101003, batch.id));
     const h201004 = await haulOutOf('201004');
     const u301001 = await unitRateOf('301001');
     const pileOf201004 = await api.fieldEvent.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '201004', kind: 'HAUL_OUT_COLLECTION' },
     });
     const onePile = await refusal(
-      qc.set(luis, { unitRateTicketId: pileOf201004.id }, 'QC_APPROVED'),
+      setQcStatusEndpoint,
+      qcing({ unitRateTicketId: pileOf201004.id }, 'QC_APPROVED'),
     );
-    await saved(qc.set(luis, h201004, 'QC_APPROVED'));
-    await saved(qc.set(luis, u301001, 'QC_APPROVED'));
-    const lockedHaulOut = await saved(locks.lock(luis, h201004, batch.id));
-    const lockedHanger = await saved(locks.lock(luis, u301001, batch.id));
+    await byLuis(setQcStatusEndpoint, qcing(h201004, 'QC_APPROVED'));
+    await byLuis(setQcStatusEndpoint, qcing(u301001, 'QC_APPROVED'));
+    const { record: lockedHaulOut } = await byLuis(
+      lockAsInvoicedEndpoint,
+      locking(h201004, batch.id),
+    );
+    const { record: lockedHanger } = await byLuis(
+      lockAsInvoicedEndpoint,
+      locking(u301001, batch.id),
+    );
     story.check(
       'AC-09-09 the batch is a record of its own (its project, its name, Luis, when), with no amount, and each lock names it; a second batch of that name on P1 is refused. Read by its name, it holds the four tickets',
       [
@@ -583,7 +638,7 @@ export const p1Invoiced: Story = {
           batch.projectId === p1,
           batch.name,
           names.get(batch.createdById),
-          batch.createdAt.toISOString(),
+          batch.createdAt,
           Object.keys(batch).filter((key) => /amount|rate|quantity|total/i.test(key)),
         ],
         await auditOf('invoice_batch', batch.id),
@@ -594,9 +649,17 @@ export const p1Invoiced: Story = {
       [
         [true, batchName, 'Luis', new Date(on('14', '08:40')).toISOString(), []],
         ['Luis · BACK_OFFICE · INSERT'],
-        'BATCH_NAME_USED: This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
+        '422 NOT_SAVED · BATCH_NAME_USED: This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
         ['101001', '101003', '201004', '301001'],
         ['locked by Luis · Bayline ROW, week of 12 Oct · in force'],
+      ],
+    );
+    story.check(
+      'AC-10-98 read at its endpoints as it is made, the batch holds no lock, though 101001 and 101003 stand locked in no batch; with its four locked in it, it holds those four',
+      [madeEmpty, await batchRead()],
+      [
+        [[], [[batchName, 0]]],
+        [['101001', '101003', '201004', '301001'], [[batchName, 4]]],
       ],
     );
     story.check(
@@ -611,7 +674,7 @@ export const p1Invoiced: Story = {
         await locksOf(h201004),
       ],
       [
-        'NOT_QCD_ALONE: A haul-out collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+        '422 NOT_SAVED · NOT_QCD_ALONE: A haul-out collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
         3,
         1,
         true,
@@ -621,7 +684,11 @@ export const p1Invoiced: Story = {
     story.check(
       'AC-09-06 the unit rate ticket 301001, QC Approved, locks on its own: the lock names its one field event',
       [
-        [lockedHanger.fieldEventId === u301001.unitRateTicketId, lockedHanger.fieldEventKind],
+        [
+          lockedHanger.unitRateTicketId === u301001.unitRateTicketId,
+          (await api.invoiceLock.findUniqueOrThrow({ where: { id: lockedHanger.id } }))
+            .fieldEventKind,
+        ],
         [lockedHanger.completedLoadId, lockedHanger.completedHaulOutId],
       ],
       [
@@ -640,9 +707,11 @@ export const p1Invoiced: Story = {
       where: { projectId: p1, certNumber: '730415' },
     });
     const beforeOthers = await concluded();
-    const onIncident = await saved(qc.set(luis, { incidentId: incident.id }, 'QC_APPROVED'));
-    const onDropOff = await saved(qc.set(luis, { dropOffLogId: dropOff.id }, 'QC_APPROVED'));
-    const onCert = await saved(qc.set(luis, { certificationId: cert730415.id }, 'QC_APPROVED'));
+    const approvedOn = async (record: Marked) =>
+      (await byLuis(setQcStatusEndpoint, qcing(record, 'QC_APPROVED'))).record;
+    const onIncident = await approvedOn({ incidentId: incident.id });
+    const onDropOff = await approvedOn({ dropOffLogId: dropOff.id });
+    const onCert = await approvedOn({ certificationId: cert730415.id });
     story.check(
       'AC-08-58 an incident, a drop-off log and a certification are each QC’d on their own, never with a ticket; on the certification, whoever set the mark is its "checked by"; none of it reruns anything, and the tickets on truck 730415 are as they were',
       [
@@ -650,7 +719,7 @@ export const p1Invoiced: Story = {
           mark.status,
           mark.completedLoadId,
           mark.completedHaulOutId,
-          mark.fieldEventId,
+          mark.unitRateTicketId,
         ]),
         names.get(onCert.setById),
         isSame(await concluded(), beforeOthers),
@@ -676,10 +745,19 @@ export const p1Invoiced: Story = {
     story.check(
       'AC-09-15 101001 is locked as invoiced: each is refused in plain words and nothing is changed; a locked ticket is unlocked first',
       [
-        await refusal(corrections.fieldEvent(luis, dis101001.id, { loadCall: 70 })),
-        await refusal(corrections.renumber(luis, dis101001.id, { ticketNumber: '101090' })),
-        await refusal(voids.ticket(luis, p1, load('101001'), await reasonId('Duplicate ticket'))),
-        await refusal(qc.set(luis, l101001, 'QC_ISSUES')),
+        await refusal(correctFieldEventEndpoint, {
+          ids: { fieldEventId: dis101001.id },
+          json: { changes: { loadCall: 70 } },
+        }),
+        await refusal(renumberFieldEventEndpoint, {
+          ids: { fieldEventId: dis101001.id },
+          json: { ticketNumber: '101090' },
+        }),
+        await refusal(
+          voidTicketEndpoint,
+          voiding(load('101001'), await reasonId('Duplicate ticket')),
+        ),
+        await refusal(setQcStatusEndpoint, qcing(l101001, 'QC_ISSUES')),
         [
           (await eventOf('101001', 'DISPOSAL')).loadCall,
           (await api.qcMark.findFirstOrThrow({ where: l101001 })).status,
@@ -687,10 +765,10 @@ export const p1Invoiced: Story = {
         isSame([await concluded(), await api.ticketVoid.count()], beforeTries),
       ],
       [
-        'LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
-        'LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
-        'LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
-        'LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
+        '422 NOT_SAVED · LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
+        '422 NOT_SAVED · LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
+        '422 NOT_SAVED · LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
+        '422 NOT_SAVED · LOCKED_AS_INVOICED: Ticket 101001 is locked as invoiced: unlock it first. Nothing was changed.',
         [80, 'QC_APPROVED'],
         true,
       ],
@@ -765,37 +843,42 @@ export const p1Invoiced: Story = {
 
     // ------------------------------------------------------------------------------------------
     story.at(on('14', '09:50'), 'The new rate is agreed. Luis tries to unlock 101001');
-    const unlockRefused = await refusal(locks.unlock(luis, l101001, 'Rate agreed'));
+    const unlockRefused = await refusal(unlockInvoicedEndpoint, unlocking(l101001, 'Rate agreed'));
     story.at(on('14', '09:55'), 'Dana, the admin, unlocks it: "Rate agreed"; the worker runs');
     const removedBefore = (await removed()).length;
-    const unlocked = await reviewed(locks.unlock(dana, l101001, 'Rate agreed'));
+    const unlocked = await byDana(unlockInvoicedEndpoint, unlocking(l101001, 'Rate agreed'));
+    // The job her unlock queued, read before the worker takes it up.
+    const unlockJobs = await queue.waiting(p1);
+    last.run = await queue.next(p1);
     story.check(
       'AC-09-17, AC-08-07 unlocking is a grant of its own, which Luis doesn’t hold; Dana’s unlock is kept on the lock’s own record (who, when, her note), nothing is deleted, and it is audited under her from the back office',
       [
         unlockRefused,
         [
-          unlocked.record.id === locked101001.id,
+          unlocked.record.id === locked101001.record.id,
           names.get(unlocked.record.lockedById),
           names.get(unlocked.record.unlockedById),
-          unlocked.record.unlockedAt?.toISOString(),
+          unlocked.record.unlockedAt,
           unlocked.record.unlockNote,
         ],
-        await auditOf('invoice_lock', locked101001.id),
+        await auditOf('invoice_lock', locked101001.record.id),
         [
-          unlocked.reprocess.trigger,
-          unlocked.reprocess.tickets,
-          unlocked.reprocess.lockedAsInvoiced,
+          unlocked.queued,
+          unlockJobs.map((job) => [job.trigger, names.get(job.requestedById), job.tickets]),
         ],
       ],
       [
-        'NOT_PERMITTED: Luis Ortega may not unlock an invoiced ticket: it takes an admin, or a manager/analyst granted "unlock". Nothing was changed.',
+        '403 NOT_ALLOWED',
         [true, 'Luis', 'Dana', new Date(on('14', '09:55')).toISOString(), 'Rate agreed'],
         [
           'Luis · BACK_OFFICE · INSERT',
           'Luis · BACK_OFFICE · UPDATE · invoice_batch_id',
           'Dana · BACK_OFFICE · UPDATE · unlocked_at, unlocked_by_id, unlock_note · Rate agreed',
         ],
-        ['REPROCESS', [{ workflow: 'LOAD', ticketNumber: '101001' }], []],
+        [
+          { jobs: unlockJobs.map((job) => job.id), tickets: 1, lockedAsInvoiced: 0 },
+          [['REPROCESS', 'Dana', ['101001']]],
+        ],
       ],
     );
     story.check(
@@ -824,16 +907,21 @@ export const p1Invoiced: Story = {
     );
     await rateTo('7.50');
     await queue.next(p1);
-    const relocked = await saved(locks.lock(luis, l101001, batch.id));
+    const { record: relocked } = await byLuis(lockAsInvoicedEndpoint, locking(l101001, batch.id));
     const stoodAt = await linesOf('101001');
     story.at(
       on('14', '10:30'),
       'A small fix before the package goes out: the tower keyed 80% for 70%. Dana unlocks 101001; Luis corrects the load call; the worker runs',
     );
-    await reviewed(locks.unlock(dana, l101001, 'Load call keyed wrong'));
+    await reviewed(byDana(unlockInvoicedEndpoint, unlocking(l101001, 'Load call keyed wrong')));
     const markBefore = await api.qcMark.findFirstOrThrow({ where: l101001 });
     const fixRemoved = (await removed()).length;
-    await reviewed(corrections.fieldEvent(luis, dis101001.id, { loadCall: 70 }, 'Keyed 80 for 70'));
+    await reviewed(
+      byLuis(correctFieldEventEndpoint, {
+        ids: { fieldEventId: dis101001.id },
+        json: { changes: { loadCall: 70 }, note: 'Keyed 80 for 70' },
+      }),
+    );
     const markAfter = await api.qcMark.findFirstOrThrow({ where: l101001 });
     story.check(
       'AC-08-61 the reprocess draws the completed load again and loses no mark: 101001 is still QC Approved, still Luis’s, set when he set it; looking at it again is a person’s step',
@@ -849,15 +937,21 @@ export const p1Invoiced: Story = {
       on('14', '10:40'),
       'Luis looks at 101001 again, leaves it QC Approved and locks it in the same batch',
     );
-    await saved(qc.set(luis, l101001, 'QC_APPROVED', 'Checked after the correction'));
-    const lockedAgain = await saved(locks.lock(luis, l101001, batch.id));
+    await byLuis(
+      setQcStatusEndpoint,
+      qcing(l101001, 'QC_APPROVED', 'Checked after the correction'),
+    );
+    const { record: lockedAgain } = await byLuis(
+      lockAsInvoicedEndpoint,
+      locking(l101001, batch.id),
+    );
     story.check(
       'AC-09-20 unlock, fix, lock again: locked at $390.00, unlocked, corrected from 80% to 70%, 101001 reprocesses at 45.5 × $7.50 = $341.25, the old line kept in the audit log; the new lock is a new record, and each earlier lock is still there with its unlock',
       [
         stoodAt,
         await linesOf('101001'),
         (await removed()).slice(fixRemoved),
-        [lockedAgain.id !== relocked.id, relocked.id !== locked101001.id],
+        [lockedAgain.id !== relocked.id, relocked.id !== locked101001.record.id],
         await locksOf(l101001),
         await lockedIn(batchName),
       ],
@@ -916,20 +1010,21 @@ export const p1Invoiced: Story = {
     await send(made(curb, '14:10', '14:40', { ...noAddress, ticketNumber: '101030' }));
     await send(made(curb, '14:10', '14:40', { ...noAddress, ticketNumber: '101031' }));
     await send(made(tower, '15:05', '15:15', { ticketNumber: '101030', loadCall: 70 }));
-    const evening = await reconciliation.run(sync);
-    // The jobs those syncs queued, a record each, are taken up now and write nothing more.
     await queue.settle(p1);
+    const evening = await queue.standing(p1);
     story.at(on('15', '08:00'), 'Thursday: Luis sets 101030 QC Approved and tries to lock it');
     const l101030 = await loadOf('101030');
-    await saved(qc.set(luis, l101030, 'QC_APPROVED'));
-    const flaggedLock = await refusal(locks.lock(luis, l101030, batch.id));
+    await byLuis(setQcStatusEndpoint, qcing(l101030, 'QC_APPROVED'));
+    const flaggedLock = await refusal(lockAsInvoicedEndpoint, locking(l101030, batch.id));
     story.at(
       on('15', '08:10'),
       'The second number was a mis-scan at the curb: he voids the phantom 101031; the worker runs; he locks 101030',
     );
-    await reviewed(voids.ticket(luis, p1, load('101031'), await reasonId('Work never happened')));
+    await reviewed(
+      byLuis(voidTicketEndpoint, voiding(load('101031'), await reasonId('Work never happened'))),
+    );
     const afterVoid = of(last.run, '10103');
-    const lockAfterVoid = await refusal(locks.lock(luis, l101030, batch.id));
+    const lockAfterVoid = await refusal(lockAsInvoicedEndpoint, locking(l101030, batch.id));
     story.check(
       'AC-09-04 review never holds the money, and it does hold the lock: 101030 bills $341.25 while flagged for overlapping 101031 and can’t be locked until that flag is fixed or accepted; the phantom voided, it locks',
       [
@@ -946,7 +1041,7 @@ export const p1Invoiced: Story = {
           '101031 · PENDING · Ticket 101031: loading 14:10–14:40 overlaps ticket 101030 on truck 730415. Flagged for review.',
         ],
         ['101030 #1 VEG-HAUL-CY-15 45.5 × $7.50 = $341.25'],
-        'NOT_COMPLETED: Ticket 101030 is in review: every flag on it is fixed or accepted before it is locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 101030 is in review: every flag on it is fixed or accepted before it is locked as invoiced. Nothing was locked.',
         ['101031 · VOID', '101030 · COMPLETED'],
         'saved',
         ['101001', '101003', '101030', '201004', '301001'],
@@ -958,10 +1053,12 @@ export const p1Invoiced: Story = {
       'The hanger ticket 301003 is a duplicate of 301001: Luis voids it; the worker runs; he sets it QC Void by hand',
     );
     const u301003 = await unitRateOf('301003');
-    await reviewed(voids.ticket(luis, p1, unitRate('301003'), await reasonId('Duplicate ticket')));
-    const voidedMark = await saved(qc.set(luis, u301003, 'QC_VOID'));
-    const voidAtQcVoid = await refusal(locks.lock(luis, u301003, batch.id));
-    await saved(qc.set(luis, u301003, 'QC_APPROVED'));
+    await reviewed(
+      byLuis(voidTicketEndpoint, voiding(unitRate('301003'), await reasonId('Duplicate ticket'))),
+    );
+    const { record: voidedMark } = await byLuis(setQcStatusEndpoint, qcing(u301003, 'QC_VOID'));
+    const voidAtQcVoid = await refusal(lockAsInvoicedEndpoint, locking(u301003, batch.id));
+    await byLuis(setQcStatusEndpoint, qcing(u301003, 'QC_APPROVED'));
     story.check(
       'A void ticket isn’t locked as invoiced, whatever its QC status: it bills nothing. Its QC Void is Luis’s own mark, set by hand: the void didn’t set it, and the mark voids nothing',
       [
@@ -969,17 +1066,17 @@ export const p1Invoiced: Story = {
         await linesOf('301003'),
         [voidedMark.status, names.get(voidedMark.setById)],
         voidAtQcVoid,
-        await refusal(locks.lock(luis, u301003, batch.id)),
+        await refusal(lockAsInvoicedEndpoint, locking(u301003, batch.id)),
       ],
       [
         ['VOID'],
         [],
         ['QC_VOID', 'Luis'],
-        'NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
-        'NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
       ],
     );
-    await saved(qc.set(luis, u301003, 'QC_VOID'));
+    await byLuis(setQcStatusEndpoint, qcing(u301003, 'QC_VOID'));
 
     // ------------------------------------------------------------------------------------------
     story.at('2027-03-02T09:00:00-05:00', '2 March 2027: P1 is done. Dana closes the project');
@@ -1006,27 +1103,45 @@ export const p1Invoiced: Story = {
     );
     story.at(
       '2027-06-01T09:00:00-04:00',
-      '1 June 2027, months after closeout: Dana unlocks the hanger ticket 301001: "Client’s auditor asked"; the worker runs',
+      '1 June 2027, months after closeout: Dana goes to unlock the hanger ticket 301001: "Client’s auditor asked". P1 is closed, so she reopens it, with a reason; unlocks it; the worker runs; and she closes P1 again',
     );
     const lineOf301001 = (await lines()).filter((each) => each.ticket === '301001');
-    const late = await reviewed(locks.unlock(dana, u301001, 'Client’s auditor asked'));
+    const whileClosed = refusalOf(
+      await (
+        await backOffice.danas()
+      ).asked(unlockInvoicedEndpoint, unlocking(u301001, 'Client’s auditor asked')),
+    );
+    await saved(projects.reopen(dana, p1, 'Client’s auditor asked to see 301001 again'));
+    const late = await reviewed(
+      byDana(unlockInvoicedEndpoint, unlocking(u301001, 'Client’s auditor asked')),
+    );
+    const closedAgain = await saved(projects.close(dana, p1));
     story.check(
-      'AC-09-22 nothing refuses an unlock on a closed project: people are trusted not to without good reason, and the audit log records who did and when. The ticket is worked again and, nothing having changed, its line is the same $68.00',
+      'AC-09-22 (ADR-529 (b)) a closed project changes no more: the unlock is refused while P1 is closed. Dana reopens it, saying why (audited with her reason); the unlock is made, audited under her, and the ticket worked again: nothing having changed, its line is the same $68.00; and P1 is closed again',
       [
-        [names.get(late.record.unlockedById), late.record.unlockedAt?.toISOString()],
+        whileClosed,
+        (await auditOf('project', p1)).slice(-2),
+        [names.get(late.record.unlockedById), late.record.unlockedAt],
         (await auditOf('invoice_lock', late.record.id)).at(-1),
         of(last.run, '301001'),
         (await lines()).filter((each) => each.ticket === '301001').map((each) => each.line),
         lineOf301001.map((each) => each.line),
         await lockedIn(batchName),
+        closedAgain.closedAt?.toISOString(),
       ],
       [
+        '422 REFUSED_BY_THE_DATABASE',
+        [
+          'Dana · BACK_OFFICE · UPDATE · closed_at · Client’s auditor asked to see 301001 again',
+          'Dana · BACK_OFFICE · UPDATE · closed_at',
+        ],
         ['Dana', '2027-06-01T13:00:00.000Z'],
         'Dana · BACK_OFFICE · UPDATE · unlocked_at, unlocked_by_id, unlock_note · Client’s auditor asked',
         ['301001 · COMPLETED'],
         ['301001 #1 HNG-RMV-EA 1 × $68.00 = $68.00'],
         ['301001 #1 HNG-RMV-EA 1 × $68.00 = $68.00'],
         ['101001', '101003', '101030', '201004'],
+        '2027-06-01T13:00:00.000Z',
       ],
     );
 

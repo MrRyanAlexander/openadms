@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MasterPasscodeCheck } from '../src/phone/master-passcode-check.ts';
 import { SetupChoices } from '../src/phone/setup-choices.ts';
+import { OfflineChecks } from '../src/phone/offline-checks.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
@@ -37,7 +38,7 @@ import {
   type Served,
 } from './support/served.ts';
 import { ask, p1Priced, picked, saved, told } from './support/setup.ts';
-import { NoServer, signingSecret } from './support/sign-in.ts';
+import { NoServer, passwordKey, sealingKey } from './support/sign-in.ts';
 
 let db: Database;
 
@@ -255,7 +256,11 @@ describe('who may read what a phone is set up from', () => {
       const { phone } = await theStagingArea(served, tx);
       await tx.device.update({
         where: { id: phone.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00.000Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00.000Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00.000Z'),
+        },
       });
       served.clock.at = new Date('2026-10-13T12:00:00.000Z');
       const token = await proven(served, phone);
@@ -267,7 +272,8 @@ describe('who may read what a phone is set up from', () => {
         });
         expect([told(answer), (answer.body as { message?: string }).message]).toEqual([
           [409, 'PHONE_OUT_OF_SERVICE'],
-          'Not read: this phone was taken out of service. A phone is set up while it is in service.',
+          // The door's, before the service is asked (ADR-531).
+          'Not done: this phone was taken out of service. It only sends what it holds and is turned in.',
         ]);
         expect(Object.keys(answer.body as object).sort()).toEqual(['code', 'message', 'requestId']);
         expect(await audited(tx, answer.requestId)).toEqual([]);
@@ -423,10 +429,12 @@ describe('what a phone being set up picks from', () => {
       const choices = new SetupChoices(within, {
         passcode: new MasterPasscodeCheck(within, {
           rules: new MasterPasscodeTries(shippedPolicy),
-          hasher: new PasswordHasher(signingSecret),
+          hasher: new PasswordHasher(passwordKey),
+          offline: new OfflineChecks(sealingKey),
           mail: new NoServer(),
           clock: served.clock,
           requestNow: () => undefined,
+          here: { refusedLately: () => false, refused: () => undefined },
         }),
         clock: served.clock,
         monitorsAtMost: 1,
@@ -491,7 +499,7 @@ describe('the passcode it is read under', () => {
     });
   });
 
-  it('AC-10-22 while the passcode waits after wrong tries the right one reads nothing either, and nothing is written; one address is stopped at its own fourth', async () => {
+  it('AC-10-22, AC-10-108 while the passcode waits after wrong tries the right one reads nothing either from an address that tried it wrong, and nothing is written; one address is stopped at its own fourth', async () => {
     await world(async (served, tx) => {
       const { phone, token } = await theStagingArea(served, tx);
       const asked = { projectId: null, monitorsAfter: null };
@@ -508,8 +516,8 @@ describe('the passcode it is read under', () => {
       expect(told(await read(served, token, { ...asked, passcode: wrongPasscode }))).toEqual(
         refused,
       );
-      // The fifth wrong try in a row: the passcode waits, wherever the next comes from.
-      served.from = '198.51.100.12';
+      // The fifth wrong try in a row: the passcode waits for every address that tried it wrong
+      // (ADR-541), this one among them.
       const waiting = await read(served, token, { ...asked, passcode });
       expect(told(waiting)).toEqual(refused);
       expect(Object.keys(waiting.body as object).sort()).toEqual(['code', 'requestId']);

@@ -2,7 +2,9 @@
 // start, from the process's environment and then from its env file (the installer's
 // apps/worker/.env, or the file ADMS_ENV_FILE names), and checked. A missing or malformed one
 // stops the start and names its key, never its value. The policy values an installation states
-// for itself are read from the same place (policy.ts; ADR-395).
+// for itself are read from the same place (policy.ts; ADR-395). Its database login's URL asks
+// `sslmode=verify-full`, checked against the root its `sslrootcert` names, or
+// ADMS_DATABASE_CA_FILE where the installation has one (KD-78; ADR-517).
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -92,8 +94,12 @@ export class Settings {
 
     const address = environment['ADMS_DATABASE_ADDRESS'];
     checked('ADMS_DATABASE_ADDRESS', address, (value) => Settings.isAddress(value));
+    const databaseCaFile = environment['ADMS_DATABASE_CA_FILE'];
+    checked('ADMS_DATABASE_CA_FILE', databaseCaFile, (value) => Settings.isCertificateFile(value));
+    // Where ADMS_DATABASE_CA_FILE names the root (inside the stack), the root the URL names is
+    // not the one checked, so it is not asked to be there.
     const databaseUrl = checked('DATABASE_URL', required('DATABASE_URL'), (value) =>
-      Settings.isDatabaseUrl(value),
+      Settings.isDatabaseUrl(value, databaseCaFile === undefined),
     );
     const mapServersAddress = environment['ADMS_MAP_SERVERS_ADDRESS'];
     checked(
@@ -106,9 +112,7 @@ export class Settings {
 
     const values = {
       databaseUrl:
-        address === undefined || problems.length > 0
-          ? databaseUrl
-          : Settings.at(databaseUrl, address),
+        problems.length > 0 ? databaseUrl : Settings.at(databaseUrl, address, databaseCaFile),
       routingUrl: checked('ADMS_ROUTING_URL', required('ADMS_ROUTING_URL'), (value) =>
         Settings.isHttpsUrl(value),
       ),
@@ -139,15 +143,20 @@ export class Settings {
     return new Settings(values);
   }
 
-  private static isDatabaseUrl(value: string): boolean {
+  // A login's URL, over TLS alone, the server's certificate and name checked (KD-78): no URL
+  // that would let a connection fall back to plain, or take any certificate, is taken.
+  private static isDatabaseUrl(value: string, rootChecked: boolean): boolean {
     if (!URL.canParse(value)) return false;
     const url = new URL(value);
+    const rootCert = url.searchParams.get('sslrootcert');
     return (
       ['postgresql:', 'postgres:'].includes(url.protocol) &&
       url.username !== '' &&
       url.password !== '' &&
       url.hostname !== '' &&
-      url.pathname.length > 1
+      url.pathname.length > 1 &&
+      url.searchParams.getAll('sslmode').join() === 'verify-full' &&
+      (rootCert === null || !rootChecked || Settings.isCertificateFile(rootCert))
     );
   }
 
@@ -190,10 +199,15 @@ export class Settings {
   }
 
   // Where the database is when it isn't where the installer reached it: inside the local stack
-  // the worker's container reaches Postgres by its service name, with the same login.
-  private static at(databaseUrl: string, address: string): string {
+  // the worker's container reaches Postgres by its service name, with the same login, and checks
+  // its certificate against the stack's root as mounted there.
+  private static at(databaseUrl: string, address?: string, caFile?: string): string {
+    if ((address === undefined && caFile === undefined) || !URL.canParse(databaseUrl)) {
+      return databaseUrl;
+    }
     const url = new URL(databaseUrl);
-    url.host = address;
+    if (address !== undefined) url.host = address;
+    if (caFile !== undefined) url.searchParams.set('sslrootcert', caFile);
     return url.toString();
   }
 }

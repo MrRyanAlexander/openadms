@@ -19,11 +19,33 @@ export interface Actor {
   readonly requestId?: string;
 }
 
+// How long one piece of work (a `$write`, a `$read`, a viewer's `$viewed`) waits for a connection
+// from the pool before it gives up, and how long it may run in all before it is undone, in
+// milliseconds (ADR-524): the policy's `DATABASE_CONNECTION_WAIT_MS` and
+// `DATABASE_WORK_LONGEST_MS`. Unstated, Prisma's own: two seconds and five.
+export interface PieceOfWork {
+  readonly waitMs: number;
+  readonly longestMs: number;
+}
+
+// What Prisma's transaction takes for a piece of work's limits; nothing where none are stated.
+export function transactionLimits(
+  work: PieceOfWork | undefined,
+): { maxWait: number; timeout: number } | undefined {
+  return work === undefined ? undefined : { maxWait: work.waitMs, timeout: work.longestMs };
+}
+
 // Extends a client with $write. Applied once, by openDatabase, to the service's client. `requestNow`
 // is the service's answer to "which request is this work for?": the API's says the request it is
 // answering, so that no write of a service can leave its request out (ADR-390); an actor that
-// states a request keeps its own.
-export function statesTheActor(client: PrismaClient, requestNow?: () => string | undefined) {
+// states a request keeps its own. `work` is how long each piece of work waits for a connection
+// and may run (ADR-524).
+export function statesTheActor(
+  client: PrismaClient,
+  requestNow?: () => string | undefined,
+  work?: PieceOfWork,
+) {
+  const limits = transactionLimits(work);
   return client.$extends({
     name: 'states-the-actor',
     client: {
@@ -38,7 +60,7 @@ export function statesTheActor(client: PrismaClient, requestNow?: () => string |
             set_config('adms.reason', ${actor.reason ?? ''}, true),
             set_config('adms.request_id', ${actor.requestId ?? requestNow?.() ?? ''}, true)`;
           return work(tx);
-        });
+        }, limits);
       },
       // Runs reads as one database transaction that can write nothing: what a service reads
       // through code written for a piece of work (the rules, read one way by setup and by the
@@ -47,7 +69,7 @@ export function statesTheActor(client: PrismaClient, requestNow?: () => string |
         return client.$transaction(async (tx) => {
           await tx.$executeRaw`SET TRANSACTION READ ONLY`;
           return work(tx);
-        });
+        }, limits);
       },
     },
   });

@@ -74,6 +74,8 @@ export interface ReadCertification extends CheckedCertification {
   readonly primeId: string;
   readonly firstTierSubId: string | null;
   readonly secondTierSubId: string | null;
+  // The subs it names, by their contractors' names as recorded (ADR-529 (f)).
+  readonly subNames: readonly (string | null)[];
   readonly photographs: readonly CertificationPhotograph[];
 }
 
@@ -346,7 +348,8 @@ export class ProjectRead {
     const accepted = new Set(
       (
         await db.flagAcceptance.findMany({
-          where: { projectId, flag: { clearedAt: null } },
+          // Those in force: one taken back no longer holds its flag (ADR-534 (8)).
+          where: { projectId, withdrawnAt: null, flag: { clearedAt: null } },
           select: { flagId: true },
         })
       ).map((acceptance) => acceptance.flagId),
@@ -399,6 +402,10 @@ export class ProjectRead {
     const rows = await this.db.certification.findMany({
       where: { projectId },
       orderBy: { certNumber: 'asc' },
+      include: {
+        firstTierSub: { select: { name: true } },
+        secondTierSub: { select: { name: true } },
+      },
     });
     const replacedBy = new Map(
       rows.flatMap((row) => (row.replacesId === null ? [] : [[row.replacesId, row] as const])),
@@ -420,6 +427,7 @@ export class ProjectRead {
         primeId: row.primeId,
         firstTierSubId: row.firstTierSubId,
         secondTierSubId: row.secondTierSubId,
+        subNames: [row.firstTierSub?.name ?? null, row.secondTierSub?.name ?? null],
         tagExpiry: dayOrNone(row.tagExpiry),
         revokedFrom: dayOrNone(row.revokedFrom),
         replacedBy:
@@ -669,7 +677,11 @@ export class ProjectRead {
       }),
     );
     const people = byId(
-      await db.user.findMany({ where: { id: { in: idsOf((row) => row.createdById) } } }),
+      await db.user.findMany({
+        where: {
+          id: { in: [...idsOf((row) => row.createdById), ...idsOf((row) => row.monitorId)] },
+        },
+      }),
     );
     const devices = byId(
       await db.device.findMany({ where: { id: { in: idsOf((row) => row.deviceId) } } }),
@@ -686,21 +698,28 @@ export class ProjectRead {
     // event, in whole minutes with the seconds dropped: read through the idempotency ledger,
     // whose row is under the id the phone made (ARCHITECTURE §10; ADR-100, 471…473). A record
     // created in the back office, or one stored by no sync, has no difference and no flag.
+    // And who the sync found it named, and whether they were signed in on that phone over its
+    // field time when it arrived (ADR-543).
+    const ledger = await db.syncedRecord.findMany({
+      where: {
+        recordId: { in: rows.flatMap((row) => (row.source === 'DEVICE' ? [row.id] : [])) },
+        recordKind: 'FIELD_EVENT',
+        answer: 'SAVED',
+      },
+      select: {
+        recordId: true,
+        monitorId: true,
+        monitorSignedIn: true,
+        sync: { select: { clockDifferenceSeconds: true } },
+      },
+    });
     const clockOff = new Map(
-      (
-        await db.syncedRecord.findMany({
-          where: {
-            recordId: { in: rows.flatMap((row) => (row.source === 'DEVICE' ? [row.id] : [])) },
-            recordKind: 'FIELD_EVENT',
-            answer: 'SAVED',
-          },
-          select: { recordId: true, sync: { select: { clockDifferenceSeconds: true } } },
-        })
-      ).map(({ recordId, sync }) => [
+      ledger.map(({ recordId, sync }) => [
         recordId,
         Math.trunc(Number(sync.clockDifferenceSeconds) / 60) || 0,
       ]),
     );
+    const askedAtSync = new Map(ledger.map((row) => [row.recordId, row]));
 
     const certificationOf = new Map(certifications.map((each) => [each.certNumber, each]));
     const siteOf = byId(sites);
@@ -771,6 +790,16 @@ export class ProjectRead {
         unreadableGps: row.unreadableGps as Fact | null,
         assignmentProjectId:
           row.assignmentId === null ? null : (assignments.get(row.assignmentId)?.projectId ?? null),
+        monitorId: row.monitorId,
+        assignmentPersonId:
+          row.assignmentId === null ? null : (assignments.get(row.assignmentId)?.personId ?? null),
+        // Asked of the person it names now: one a reviewer corrected since was asked of nobody.
+        monitorAtSync: ((asked) => {
+          if (asked?.monitorId == null || asked.monitorSignedIn === null) return null;
+          if (asked.monitorId !== row.monitorId) return null;
+          const monitor = named(people.get(asked.monitorId));
+          return monitor === null ? null : { monitor, signedIn: asked.monitorSignedIn };
+        })(askedAtSync.get(row.id)),
         endGps: fix(row.endLatitude, row.endLongitude),
         site: row.siteId === null ? null : (siteOf.get(row.siteId) ?? null),
         scaleReceipt:

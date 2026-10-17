@@ -40,6 +40,7 @@ import type {
   PhotographRecord,
   QcMarkRecord,
   QuarantinedRecordAnswer,
+  ReprocessRecord,
   RoeRecord,
   RoeScopeItemRecord,
   ScaleReceiptRecord,
@@ -52,6 +53,8 @@ import type { FastifyRequest } from 'fastify';
 import { Refusal } from '../process/refusal.ts';
 import { answered, type SavedAnswer } from '../setup/setup-answered.ts';
 import type { Outcome } from '../setup/setup-service.ts';
+import type { ReprocessAsked } from './reprocesses.ts';
+import type { Reviewed } from './review-service.ts';
 
 export function reviewed<T, A>(
   request: FastifyRequest,
@@ -102,6 +105,9 @@ export const flagAcceptanceRecord = (made: FlagAcceptance): FlagAcceptanceRecord
   note: made.note,
   acceptedById: made.acceptedById,
   acceptedAt: made.acceptedAt.toISOString(),
+  withdrawnById: made.withdrawnById,
+  withdrawnAt: time(made.withdrawnAt),
+  withdrawNote: made.withdrawNote,
 });
 
 // A unit rate ticket is named by its one field event.
@@ -128,6 +134,21 @@ export const invoiceBatchRecord = (batch: InvoiceBatch): InvoiceBatchRecord => (
   name: batch.name,
   createdById: batch.createdById,
   createdAt: batch.createdAt.toISOString(),
+});
+
+// A reprocess writes no record but its job: what was asked, as its queue read it.
+export const reprocessRecord = ({
+  record,
+  reprocess,
+}: Reviewed<ReprocessAsked>): ReprocessRecord => ({
+  projectId: reprocess.projectId,
+  setAsideJobId: record.setAsideJobId,
+  tickets: reprocess.tickets.map(({ workflow, ticketNumber }) => ({ workflow, ticketNumber })),
+  lockedAsInvoiced: reprocess.lockedAsInvoiced.map(({ workflow, ticketNumber }) => ({
+    workflow,
+    ticketNumber,
+  })),
+  requestedById: reprocess.requestedById,
 });
 
 export const invoiceLockRecord = (lock: InvoiceLock): InvoiceLockRecord => ({
@@ -161,6 +182,9 @@ export const fieldEventRecord = (event: FieldEvent): FieldEventRecord => ({
   kind: event.kind,
   splitSuffix: event.splitSuffix,
   source: event.source,
+  masterPasscodeSession: event.masterPasscodeSession,
+  createdById: event.createdById,
+  createdReasonId: event.createdReasonId,
   monitorId: event.monitorId,
   startedAt: event.startedAt.toISOString(),
   endedAt: event.endedAt.toISOString(),
@@ -223,7 +247,9 @@ export const photographRecord = (photo: Photo): PhotographRecord => ({
   surveyId: photo.surveyId,
   incidentId: photo.incidentId,
   dropOffLogId: photo.dropOffLogId,
+  view: photo.view,
   capturedAt: photo.capturedAt.toISOString(),
+  uploadedAt: time(photo.uploadedAt),
   removedAt: time(photo.archivedAt),
   label: photo.label,
 });
@@ -242,7 +268,16 @@ export const scaleReceiptRecord = (receipt: ScaleReceipt): ScaleReceiptRecord =>
   notes: receipt.notes,
 });
 
-// An ROE as it was made and corrected: never the answers to the firm's own fields.
+// The answers to the firm's own fields as kept, and the version they answer.
+const answersOf = (record: {
+  readonly answers: Prisma.JsonValue;
+  readonly formDefinitionId: string | null;
+}) => ({
+  answers: record.answers as Record<string, string | number | boolean>,
+  formDefinitionId: record.formDefinitionId,
+});
+
+// An ROE as it was made and corrected.
 export const roeRecord = (roe: Roe): RoeRecord => ({
   id: roe.id,
   projectId: roe.projectId,
@@ -257,6 +292,7 @@ export const roeRecord = (roe: Roe): RoeRecord => ({
   madeById: roe.madeById,
   madeAt: time(roe.madeAt),
   notes: roe.notes,
+  ...answersOf(roe),
 });
 
 export const roeScopeItemRecord = (pick: RoeScopeItem): RoeScopeItemRecord => ({
@@ -274,11 +310,14 @@ const formRecord = (form: Survey | Incident | DropOffLog) => ({
   id: form.id,
   projectId: form.projectId,
   source: form.source,
+  createdById: form.createdById,
+  createdReasonId: form.createdReasonId,
   monitorId: form.monitorId,
   madeAt: form.madeAt.toISOString(),
   deviceUtcOffsetMinutes: form.deviceUtcOffsetMinutes,
   fix: fix(form.latitude, form.longitude),
   notes: form.notes,
+  ...answersOf(form),
 });
 
 export const surveyRecord = (survey: Survey): SurveyRecord => ({
@@ -335,8 +374,24 @@ export const certificationRecord = (kept: Certification): CertificationRecord =>
   firstTierSubId: kept.firstTierSubId,
   secondTierSubId: kept.secondTierSubId,
   capacityCy: kept.capacityCy,
+  vehicleTypeId: kept.vehicleTypeId,
+  vehicleTypeOther: kept.vehicleTypeOther,
+  crewTypeId: kept.crewTypeId,
+  driverName: kept.driverName,
+  driverLicenceState: kept.driverLicenceState,
+  driverLicenceExpiry: dayOf(kept.driverLicenceExpiry),
+  tagNumber: kept.tagNumber,
+  tagState: kept.tagState,
+  tagExpiry: dayOf(kept.tagExpiry),
   certifiedAt: kept.certifiedAt.toISOString(),
+  deviceUtcOffsetMinutes: kept.deviceUtcOffsetMinutes,
   certifiedById: kept.certifiedById,
+  deviceId: kept.deviceId,
+  createdById: kept.createdById,
+  createdReasonId: kept.createdReasonId,
+  clientRepresentativeName: kept.clientRepresentativeName,
+  contractorRepresentativeName: kept.contractorRepresentativeName,
+  notes: kept.notes,
   signaturesOnFile: kept.signaturesOnFile,
   replacesId: kept.replacesId,
   replacedReason: kept.replacedReason,

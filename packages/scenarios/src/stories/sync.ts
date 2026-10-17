@@ -48,7 +48,15 @@ import {
 import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, firstBlocks, sentAlone, taken, unplanned as unplannedOn } from './board.ts';
+import { storyMasterPasscode } from '../story-database.ts';
+import {
+  assigned,
+  firstBlocks,
+  photoSentAlone,
+  sentAlone,
+  taken,
+  unplanned as unplannedOn,
+} from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites, startSeries } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
@@ -115,6 +123,7 @@ export const sync: Story = {
       const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
       // Luis writes the board and marks a phone lost: Dana grants him *dispatch* (ADR-428).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
@@ -201,8 +210,8 @@ export const sync: Story = {
       [p2, 'P2'],
     ]);
 
-    const forms = new FormSetup(api, clock);
-    const lists = new ListSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
+    const lists = new ListSetup(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const certifications = new Certifications(api, clock, story.policy);
@@ -219,7 +228,6 @@ export const sync: Story = {
             projectId,
             documentType,
             name: documentType,
-            enabled: true,
             ...more,
           }),
         )
@@ -523,24 +531,24 @@ export const sync: Story = {
       monday('12:05'),
       'The tower’s phone finds signal and syncs: its records first, its photograph after',
     );
-    // A sync begins with the phone's proof of itself (ARCHITECTURE §9 (1)): it asks for a
-    // challenge, signs it with the key only it holds, and sends both back. What comes of the
-    // proof, and of the same signed answer sent a second time.
-    const provesItself = async (name: string): Promise<[boolean, string]> => {
+    // A sync begins with the phone's proof of itself (ARCHITECTURE §9 (1)), over HTTPS: it
+    // asks for a challenge, signs it with the key only it holds, and sends both back; its sync
+    // then carries the token it was given. What comes of the proof, and of the same signed
+    // answer sent a second time, which is told only the one code a proof that isn't one gets.
+    // `passcode`: whoever holds it is at the phone, typing it beside the phone's proof (ADR-531).
+    const provesItself = async (name: string, passcode?: string): Promise<[string, string]> => {
       const phone = enrolled[name];
       if (phone === undefined) throw new Error(`No phone ${name}`);
-      const { challenge } = story.proofs.challenge(phone.id);
-      const signature = phone.key.signed(challenge);
-      const first = await story.proofs.prove(phone.id, challenge, signature);
-      const again = await story.proofs.prove(phone.id, challenge, signature);
-      return [first.proven, again.proven ? 'proven again' : again.why];
+      const proof = await story.proofs.proves(phone.id, passcode);
+      return [proof.answer, await proof.again()];
     };
     story.check(
-      'AC-05-03, AC-10-45 the sync begins with the phone’s proof: P1-TWR-TDSR signs the challenge the server has just made with the key it made at enrolment; the same signed answer sent again proves nothing',
+      'AC-05-03, AC-10-45 the sync begins with the phone’s proof: P1-TWR-TDSR signs the challenge the server has just made with the key it made at enrolment; the same signed answer sent again proves nothing, and is told so by the one code',
       await provesItself('P1-TWR-TDSR'),
-      [true, 'SPENT'],
+      ['PROVEN', 'PHONE_NOT_PROVEN'],
     );
     const noon = kim.waitingRecords;
+    const noonPhotos = kim.waitingPhotos;
     const atNoon = await syncing(kim);
     story.check(
       'AC-05-45, AC-05-17, AC-05-20 each record gets its own answer: the 10:22 disposal saved, the 11:40 one not saved (quarantined, with the reason), and its photograph’s record saved all the same',
@@ -645,6 +653,9 @@ export const sync: Story = {
     );
     const again: RecordAnswer[] = [];
     for (const record of noon) again.push(await sentAlone(story, timeZone, record));
+    for (const photo of noonPhotos) {
+      again.push(await photoSentAlone(story, timeZone, kim.setup.deviceId, photo));
+    }
     story.check(
       'AC-05-12, AC-05-15 a retry is the same record: the 10:22 disposal is answered "already saved", never taken for a duplicate; the 11:40 one is still one quarantined record and still not "saved"',
       [
@@ -1702,9 +1713,9 @@ export const sync: Story = {
       'P1-TWR-LF turns up in Tariq’s truck and syncs, two days after Luis marked it lost',
     );
     story.check(
-      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself: its key stands until the phone is wiped',
-      await provesItself('P1-TWR-LF'),
-      [true, 'SPENT'],
+      'AC-10-46, AC-02-60 marked lost two days ago, P1-TWR-LF still proves itself, the supervisor who syncs it typing the master passcode beside its proof (ADR-531): its key stands until the phone is turned in',
+      await provesItself('P1-TWR-LF', storyMasterPasscode),
+      ['PROVEN', 'PHONE_NOT_PROVEN'],
     );
     const lostAnswers = await syncing(lost);
     const lostEvents = await api.fieldEvent.findMany({
@@ -1757,15 +1768,89 @@ export const sync: Story = {
     );
     story.at(
       wednesday('18:05'),
-      'Every record of P1-TWR-LF is confirmed. Luis retires what it held',
+      'Luis holds P1-TWR-LF and turns it in with the master passcode: “Sync and turn in”',
     );
-    const retired = await saved(
-      allocator.retire(luis, device('P1-TWR-LF'), 'Lost on Monday 12 October'),
+    const turnedIn = await story.underPasscode.turnIn(lost);
+    const lostPhone = await api.device.findUniqueOrThrow({ where: { id: device('P1-TWR-LF') } });
+    story.check(
+      'AC-02-58, AC-05-56, AC-02-61 every record of P1-TWR-LF is on the server, so it is turned in: told to wipe, and wiped. A tower makes no numbers, so it held no block to retire (Ana’s phone, turned in below, held some); it stays lost from 6:10 pm on Monday, and its key is revoked now',
+      [
+        turnedIn,
+        lost.wiped,
+        lost.holds,
+        lostPhone.status,
+        lostPhone.outOfServiceAt === null ? null : projectTime(timeZone, lostPhone.outOfServiceAt),
+        lostPhone.keyRevokedAt === null ? null : projectTime(timeZone, lostPhone.keyRevokedAt),
+        await api.numberBlock.count({ where: { deviceId: device('P1-TWR-LF') } }),
+      ],
+      [
+        { turnedIn: true, wipe: true, numbers: [] },
+        true,
+        [],
+        'LOST',
+        'Mon 12 Oct 18:10',
+        'Wed 14 Oct 18:05',
+        0,
+      ],
     );
     story.check(
-      'AC-05-56 after its last sync the lost phone’s number blocks are retired. A tower makes no numbers, so it held none (the story `numbering` retires a phone that did); the wipe and the key’s refusal are Phases 3 and 2',
-      [retired.length, await api.numberBlock.count({ where: { deviceId: device('P1-TWR-LF') } })],
-      [0, 0],
+      'AC-02-61, AC-10-46, REQ-202b only then is it refused: with its key revoked it proves nothing again, a challenge it signs now refused by the one code as the one it signed before; the passcode’s use and the turn-in are security events on it',
+      [
+        await provesItself('P1-TWR-LF'),
+        (
+          await api.securityEvent.findMany({
+            where: {
+              deviceId: device('P1-TWR-LF'),
+              ...(lostPhone.keyRevokedAt === null ? {} : { occurredAt: lostPhone.keyRevokedAt }),
+              deviceUtcOffsetMinutes: null,
+            },
+            orderBy: { kind: 'asc' },
+            select: { kind: true },
+          })
+        ).map(({ kind }) => kind),
+      ],
+      [
+        ['PHONE_NOT_PROVEN', 'PHONE_NOT_PROVEN'],
+        ['MASTER_PASSCODE_USE', 'DEVICE_TURN_IN'],
+      ],
+    );
+
+    story.at(
+      wednesday('18:10'),
+      'The week’s collections are done: Luis turns Ana’s P1-COL-1 in with the master passcode',
+    );
+    const anasTurnIn = await story.underPasscode.turnIn(ana);
+    const anasPhone = await api.device.findUniqueOrThrow({ where: { id: device('P1-COL-1') } });
+    story.check(
+      'AC-02-58, ADR-065 a phone in hand is turned in once everything it made is on the server: it reports the last number it used, 101038, and the unused rest of each load block is handed back for the next phone; it is out of service as retired from now, its key revoked, and wiped',
+      [
+        anasTurnIn.turnedIn
+          ? anasTurnIn.numbers.map(
+              ({ series, ended, blocks: ended_ }) =>
+                `${series} ${ended}: ${ended_
+                  .map(
+                    (each) =>
+                      `${String(each.firstNumber)}–${String(each.lastNumber)}, last used ${String(each.lastUsedNumber)}`,
+                  )
+                  .join('; ')}`,
+            )
+          : anasTurnIn.message,
+        ana.wiped,
+        ana.holds,
+        anasPhone.status,
+        anasPhone.outOfServiceAt === null ? null : projectTime(timeZone, anasPhone.outOfServiceAt),
+        anasPhone.keyRevokedAt === null ? null : projectTime(timeZone, anasPhone.keyRevokedAt),
+      ],
+      [
+        [
+          'LOAD RECLAIMED: 101001–102000, last used 101038; 102001–102022, last used null; 102023–102038, last used null',
+        ],
+        true,
+        [],
+        'RETIRED',
+        'Wed 14 Oct 18:10',
+        'Wed 14 Oct 18:10',
+      ],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -1819,7 +1904,7 @@ export const sync: Story = {
     ]);
     const inserts = audit.filter((record) => record.operation === 'INSERT');
     story.check(
-      'every record intake wrote is audited once as an insert, by the monitor who made it, from a phone; nothing was deleted, and the only changes afterwards are the two records that came to point at ROE R-0007',
+      'every record intake wrote is audited once as an insert, by the monitor who made it, from a phone; nothing was deleted, and the only changes afterwards are the two records that came to point at ROE R-0007 and each photograph’s upload time, written once by its own phone as its file was kept (ADR-482, 483)',
       [
         inserts.every((record) => record.source === 'DEVICE' && record.deviceId !== null),
         inserts.filter(
@@ -1842,6 +1927,8 @@ export const sync: Story = {
         true,
         [
           ['field_event', 'UPDATE', ['roe_id'], 'Lee Morgan'],
+          ['photo', 'UPDATE', ['uploaded_at'], 'Device key'],
+          ['photo', 'UPDATE', ['uploaded_at'], 'Device key'],
           ['survey', 'UPDATE', ['roe_id'], 'Lee Morgan'],
         ],
       ],

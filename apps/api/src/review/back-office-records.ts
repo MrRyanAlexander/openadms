@@ -11,14 +11,22 @@
 // What is refused is a number another field event of its kind already holds, and a fix the
 // person typed that can't be one (ADR-432): the person is right there to be told, so nothing
 // goes to quarantine and nothing is kept "as sent".
-import type { FieldEvent } from '@open-adms/db';
-import { PickedReason, Renumber } from '@open-adms/domain';
+//
+// The forms too (ADR-534 (9)): a survey, an incident and a drop-off log made on paper are
+// entered as their monitor would have made them, naming that monitor, with a reason from the
+// firm's list; an ROE, which is configuration as much as field work (ADR-294), names the person
+// who made it and its number off the paper. What a number finds is found, answers are checked
+// against the version they answer, and an ROE links what was waiting for its number. A
+// certification from the paper sheet is `Certifications.fromTheSheet`.
+import type { DropOffLog, FieldEvent, Incident, Roe, Survey } from '@open-adms/db';
+import { fieldEventDetails, PickedReason, QuarantineResolution, Renumber } from '@open-adms/domain';
 
-import { type Outcome, Refused } from '../setup/setup-service.ts';
+import { day, type Outcome, Refused } from '../setup/setup-service.ts';
+import { type AnswersGiven, answersKept } from './answers-given.ts';
 import { RecordWrite } from '../sync/record-write.ts';
 import type { SentFieldEvent } from '../sync/sent.ts';
-import { fixOf } from './corrections.ts';
-import { ReviewService, type Reviewed, ticketOf } from './review-service.ts';
+import { type CorrectedFix, fixOf } from './corrections.ts';
+import { ReviewService, type Reviewed, ticketOf, type Tx } from './review-service.ts';
 
 // What the person enters: everything a phone would have recorded but the phone itself. The
 // number was never scanned, so it isn't a typed one either.
@@ -29,7 +37,7 @@ export type NewBackOfficeFieldEvent = Omit<
   | 'deviceId'
   | 'assignmentId'
   | 'setupVersion'
-  | 'temporarySession'
+  | 'masterPasscodeSession'
   | 'numberTyped'
   | 'numberTypedReasonId'
   | 'typedCapacityCy'
@@ -38,6 +46,58 @@ export type NewBackOfficeFieldEvent = Omit<
   readonly reasonId: string;
 };
 
+// What every form entered in the back office says: whose work it was, when by the paper, where,
+// the answers to the form's own fields, and the reason picked.
+export interface NewBackOfficeForm {
+  readonly projectId: string;
+  readonly monitorId: string;
+  readonly madeAt: Date;
+  readonly deviceUtcOffsetMinutes: number;
+  readonly fix: CorrectedFix;
+  readonly notes: string | null;
+  readonly answers: AnswersGiven;
+  readonly reasonId: string;
+}
+
+export interface NewBackOfficeSurvey extends NewBackOfficeForm {
+  readonly workTypeId: string;
+  readonly surveyNumber: string | null;
+  readonly roeNumber: string | null;
+}
+
+export interface NewBackOfficeIncident extends NewBackOfficeForm {
+  readonly incidentTypeId: string;
+  readonly incidentSubTypeId: string | null;
+  readonly description: string | null;
+  readonly parties: string | null;
+  readonly address: string | null;
+  readonly contractorId: string | null;
+  readonly certNumber: string | null;
+  readonly roeNumber: string | null;
+}
+
+export interface NewBackOfficeDropOffLog extends NewBackOfficeForm {
+  readonly siteId: string;
+  readonly residentName: string | null;
+  readonly originAddress: string | null;
+}
+
+export interface NewBackOfficeRoe {
+  readonly projectId: string;
+  // Off the paper, as written.
+  readonly roeNumber: string;
+  readonly parcelId: string | null;
+  readonly address: string | null;
+  readonly ownerName: string | null;
+  readonly signed: boolean;
+  // A calendar day.
+  readonly signedDate: string | null;
+  readonly fix: CorrectedFix;
+  readonly madeAt: Date | null;
+  readonly notes: string | null;
+  readonly answers: AnswersGiven;
+}
+
 export class BackOfficeRecords extends ReviewService {
   fieldEvent(
     person: string,
@@ -45,13 +105,7 @@ export class BackOfficeRecords extends ReviewService {
   ): Promise<Outcome<Reviewed<FieldEvent>>> {
     return this.review(person, 'CORRECT', undefined, async (tx) => {
       const { reasonId, ...entered } = input;
-      const reason = await tx.reason.findUniqueOrThrow({ where: { id: reasonId } });
-      const refusal = new PickedReason({
-        name: reason.name,
-        uses: reason.uses,
-        archived: reason.archivedAt !== null,
-      }).refusal('BACK_OFFICE_RECORD');
-      if (refusal !== null) throw new Refused(refusal);
+      await BackOfficeRecords.offered(tx, reasonId);
       const holder = await tx.fieldEvent.findUnique({
         where: {
           projectId_workflow_ticketNumber_splitSuffix_kind: {
@@ -68,6 +122,7 @@ export class BackOfficeRecords extends ReviewService {
           new Renumber(entered.kind, { ticketNumber: '', splitSuffix: '' }, entered).held(),
         );
       }
+      await ReviewService.refusedIfLocked(tx, entered.projectId, [ticketOf(entered)]);
       const ends = [
         ['start', entered.startLatitude ?? null, entered.startLongitude ?? null],
         ['end', entered.endLatitude, entered.endLongitude],
@@ -86,12 +141,179 @@ export class BackOfficeRecords extends ReviewService {
         source: 'BACK_OFFICE',
         createdById: person,
         createdReasonId: reasonId,
-        temporarySession: false,
+        masterPasscodeSession: null,
         numberTyped: false,
         numberTypedReasonId: null,
       });
       const record = await tx.fieldEvent.findUniqueOrThrow({ where: { id: made.id } });
       return { record, projectId: record.projectId, tickets: [ticketOf(record)] };
     });
+  }
+
+  // An ROE made on paper (ADR-149, 534 (9)): its number off the paper, once a project; the
+  // records already naming that number point at it now, and their tickets are queued.
+  roe(person: string, input: NewBackOfficeRoe): Promise<Outcome<Reviewed<Roe>>> {
+    return this.review(person, 'CORRECT', undefined, async (tx) => {
+      const { projectId, roeNumber } = input;
+      const held = await tx.roe.findUnique({
+        where: { projectId_roeNumber: { projectId, roeNumber } },
+        select: { id: true },
+      });
+      if (held !== null) throw new Refused(new QuarantineResolution(null).roeNumberHeld(roeNumber));
+      const fix = fixOf(null, input.fix);
+      const record = await tx.roe.create({
+        data: {
+          projectId,
+          roeNumber,
+          parcelId: input.parcelId,
+          address: input.address,
+          ownerName: input.ownerName,
+          signed: input.signed,
+          signedDate: input.signedDate === null ? null : day(input.signedDate),
+          latitude: fix?.latitude ?? null,
+          longitude: fix?.longitude ?? null,
+          ...(await answersKept(
+            tx,
+            { projectId, kind: 'ROE', formDefinitionId: null },
+            input.answers,
+          )),
+          source: 'BACK_OFFICE',
+          madeById: person,
+          madeAt: input.madeAt,
+          receivedAt: this.clock.now(),
+          notes: input.notes,
+        },
+      });
+      const awaited = { projectId, roeNumber, roeId: null };
+      await tx.fieldEvent.updateMany({
+        where: { ...awaited, kind: { in: [...fieldEventDetails.roeId] } },
+        data: { roeId: record.id },
+      });
+      await tx.survey.updateMany({ where: awaited, data: { roeId: record.id } });
+      await tx.incident.updateMany({ where: awaited, data: { roeId: record.id } });
+      return {
+        record,
+        projectId,
+        tickets: await ReviewService.ticketsOf(tx, { roeId: record.id }),
+        projectRecords: true,
+      };
+    });
+  }
+
+  survey(person: string, input: NewBackOfficeSurvey): Promise<Outcome<Reviewed<Survey>>> {
+    return this.review(person, 'CORRECT', undefined, async (tx) => {
+      const record = await tx.survey.create({
+        data: {
+          ...(await this.formMade(tx, person, input, 'SURVEY')),
+          workTypeId: input.workTypeId,
+          surveyNumber: input.surveyNumber,
+          roeNumber: input.roeNumber,
+          roeId: await BackOfficeRecords.roeOf(tx, input.projectId, input.roeNumber),
+        },
+      });
+      // A survey's flags sit on the survey, on no ticket: the run checks them by themselves.
+      return { record, projectId: record.projectId, tickets: [], projectRecords: true };
+    });
+  }
+
+  incident(person: string, input: NewBackOfficeIncident): Promise<Outcome<Reviewed<Incident>>> {
+    return this.review(person, 'CORRECT', undefined, async (tx) => {
+      const { projectId, certNumber } = input;
+      const certification =
+        certNumber === null
+          ? null
+          : await tx.certification.findUnique({
+              where: { projectId_certNumber: { projectId, certNumber } },
+              select: { id: true },
+            });
+      const record = await tx.incident.create({
+        data: {
+          ...(await this.formMade(tx, person, input, 'INCIDENT')),
+          incidentTypeId: input.incidentTypeId,
+          incidentSubTypeId: input.incidentSubTypeId,
+          description: input.description,
+          parties: input.parties,
+          address: input.address,
+          contractorId: input.contractorId,
+          certNumber,
+          certificationId: certification?.id ?? null,
+          roeNumber: input.roeNumber,
+          roeId: await BackOfficeRecords.roeOf(tx, projectId, input.roeNumber),
+        },
+      });
+      return { record, projectId, tickets: [] };
+    });
+  }
+
+  dropOffLog(
+    person: string,
+    input: NewBackOfficeDropOffLog,
+  ): Promise<Outcome<Reviewed<DropOffLog>>> {
+    return this.review(person, 'CORRECT', undefined, async (tx) => {
+      const record = await tx.dropOffLog.create({
+        data: {
+          ...(await this.formMade(tx, person, input, 'DROP_OFF_LOG')),
+          siteId: input.siteId,
+          residentName: input.residentName,
+          originAddress: input.originAddress,
+        },
+      });
+      return { record, projectId: record.projectId, tickets: [] };
+    });
+  }
+
+  // What every form made in the back office is written with: no phone, assignment or setup
+  // version; the person and the reason; a fix that can be one; answers that fit.
+  private async formMade(
+    tx: Tx,
+    person: string,
+    input: NewBackOfficeForm,
+    kind: 'SURVEY' | 'INCIDENT' | 'DROP_OFF_LOG',
+  ) {
+    await BackOfficeRecords.offered(tx, input.reasonId);
+    const fix = fixOf(null, input.fix);
+    return {
+      projectId: input.projectId,
+      source: 'BACK_OFFICE' as const,
+      monitorId: input.monitorId,
+      createdById: person,
+      createdReasonId: input.reasonId,
+      madeAt: input.madeAt,
+      deviceUtcOffsetMinutes: input.deviceUtcOffsetMinutes,
+      receivedAt: this.clock.now(),
+      latitude: fix?.latitude ?? null,
+      longitude: fix?.longitude ?? null,
+      notes: input.notes,
+      ...(await answersKept(
+        tx,
+        { projectId: input.projectId, kind, formDefinitionId: null },
+        input.answers,
+      )),
+    };
+  }
+
+  // A reason the firm offers for a record made in the back office (ADR-156, 173).
+  private static async offered(tx: Tx, reasonId: string): Promise<void> {
+    const reason = await tx.reason.findUniqueOrThrow({ where: { id: reasonId } });
+    const refusal = new PickedReason({
+      name: reason.name,
+      uses: reason.uses,
+      archived: reason.archivedAt !== null,
+    }).refusal('BACK_OFFICE_RECORD');
+    if (refusal !== null) throw new Refused(refusal);
+  }
+
+  // The ROE a number finds on the project, if one has it (ADR-292).
+  private static async roeOf(
+    tx: Tx,
+    projectId: string,
+    roeNumber: string | null,
+  ): Promise<string | null> {
+    if (roeNumber === null) return null;
+    const roe = await tx.roe.findUnique({
+      where: { projectId_roeNumber: { projectId, roeNumber } },
+      select: { id: true },
+    });
+    return roe?.id ?? null;
   }
 }

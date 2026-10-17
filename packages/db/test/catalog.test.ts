@@ -77,6 +77,8 @@ const domains: Record<string, string> = {
   incident: 'RECORDS',
   drop_off_log: 'RECORDS',
   master_passcode: 'SECURITY',
+  // The firm's own settings (ADR-530).
+  firm_settings: 'SECURITY',
   // Sign-in's records (ADR-397…399): what sign-in keeps of a person, a session and a security
   // event are the security reviewer's to read.
   user_credential: 'SECURITY',
@@ -102,6 +104,8 @@ const domains: Record<string, string> = {
   sync: 'RECORDS',
   synced_record: 'RECORDS',
   held_record: 'RECORDS',
+  // A file the media endpoint set aside for a person: how the evidence arrived (ADR-482).
+  set_aside_file: 'RECORDS',
   completed_load: 'BILLING',
   // The worker's other conclusions (ADR-340): a completed record and its collection rows are
   // what bills; a flag, a run and a run's decisions are how the work went.
@@ -130,7 +134,8 @@ const domains: Record<string, string> = {
 
 // The columns an audit trigger names so the capture leaves them out of the audit log (ADR-281).
 const keptOut: Record<string, string[]> = {
-  master_passcode: ['hash'],
+  // Its verifier, and its offline seed (ADR-542).
+  master_passcode: ['hash', 'offline_seed'],
   // A password's hash, an authenticator's secret and a refresh token's hash (ADR-397, 398); a
   // monitor's offline seed (ADR-454).
   user_credential: ['password_hash', 'two_step_secret', 'offline_seed'],
@@ -144,6 +149,71 @@ const on = (table: string): string => (table === 'user' ? 'public."user"' : `pub
 const capture = (table: string, domain: string): string =>
   [domain, ...(keptOut[table] ?? [])].map((argument) => `'${argument}'`).join(', ');
 
+// The records a closed project holds (ADR-529 (b)): every table with its project, and every
+// table of the records under one, by its parent. A held record, a file set aside and a viewer's
+// grant are no records of the project.
+export const closedProjectTables = [
+  'assignment',
+  'assignment_pay_item',
+  'certification',
+  'completed_haul_out',
+  'completed_haul_out_collection',
+  'completed_load',
+  'completed_load_collection',
+  'contract',
+  'control_range',
+  'disposal_site',
+  'disposal_site_tipping_fee',
+  'drop_off_log',
+  'field_event',
+  'field_tag',
+  'flag',
+  'flag_acceptance',
+  'form',
+  'incident',
+  'invoice_batch',
+  'invoice_lock',
+  'map_version',
+  'number_block',
+  'pay_item',
+  'pay_item_rate',
+  'photo',
+  'project_contractor',
+  'project_kind_of_work',
+  'project_number_series',
+  'qc_mark',
+  'quarantined_record',
+  'reconciliation_job',
+  'reconciliation_job_ticket',
+  'reconciliation_run',
+  'roe',
+  'roe_scope_item',
+  'rule',
+  'rule_action',
+  'rule_criterion',
+  'rule_criterion_pick',
+  'scale_receipt',
+  'setup_manifest',
+  'survey',
+  'ticket_unvoid',
+  'ticket_void',
+  'transaction',
+];
+export const closedProjectChildren: readonly (readonly [string, string, string])[] = [
+  ['carried_ticket', 'field_event', 'field_event_id'],
+  ['certification_box', 'certification', 'certification_id'],
+  ['certification_helper', 'certification', 'certification_id'],
+  ['disposal_site_label', 'disposal_site', 'site_id'],
+  ['field_event_item', 'field_event', 'field_event_id'],
+  ['form_debris_type', 'form', 'form_id'],
+  ['form_definition', 'form', 'form_id'],
+  ['pay_item_crew_day_step', 'pay_item', 'pay_item_id'],
+  ['reconciliation_decision', 'reconciliation_run', 'reconciliation_run_id'],
+  ['rule_action_item', 'rule_action', 'action_id'],
+  ['site_area_version', 'disposal_site', 'site_id'],
+  ['zone', 'map_version', 'map_version_id'],
+];
+
 const triggers = [
   ...Object.entries(domains).flatMap(([table, domain]) => [
     `CREATE TRIGGER ${table}_audit AFTER INSERT OR UPDATE ON ${on(table)} FOR EACH ROW EXECUTE FUNCTION audit_capture(${capture(table, domain)})`,
@@ -153,6 +223,17 @@ const triggers = [
     `CREATE TRIGGER ${table}_refuse_truncate BEFORE TRUNCATE ON ${on(table)} FOR EACH STATEMENT EXECUTE FUNCTION refuse_delete()`,
   ]),
   `CREATE TRIGGER audit_record_refuse_change BEFORE DELETE OR UPDATE ON public.audit_record FOR EACH ROW EXECUTE FUNCTION refuse_audit_change()`,
+  // A closed project stays closed (ADR-529 (b)): its own row, and every record in it, or under
+  // one in it, refused to everybody, the worker too.
+  `CREATE TRIGGER project_closed_stays_closed BEFORE UPDATE ON public.project FOR EACH ROW EXECUTE FUNCTION project_closed_stays_closed()`,
+  ...closedProjectTables.map(
+    (table) =>
+      `CREATE TRIGGER ${table}_project_open BEFORE INSERT OR DELETE OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION project_open_guard()`,
+  ),
+  ...closedProjectChildren.map(
+    ([table, parent, column]) =>
+      `CREATE TRIGGER ${table}_project_open BEFORE INSERT OR DELETE OR UPDATE ON public.${table} FOR EACH ROW EXECUTE FUNCTION project_open_guard('${parent}', '${column}')`,
+  ),
   `CREATE TRIGGER audit_record_refuse_truncate BEFORE TRUNCATE ON public.audit_record FOR EACH STATEMENT EXECUTE FUNCTION refuse_audit_change()`,
   // A definition's version is never edited (ADR-308).
   `CREATE TRIGGER form_definition_refuse_edit BEFORE UPDATE ON public.form_definition FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
@@ -164,6 +245,18 @@ const triggers = [
   ),
   // A photograph's fingerprints and places in storage are written once (ADR-326).
   `CREATE TRIGGER photo_refuse_file_edit BEFORE UPDATE OF original_sha256, uploaded_sha256, object_key, depth_object_key ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // So is the depth file's fingerprint; when each file reached storage is written once, by the
+  // phone that took it; a file set aside is never changed (ADR-482).
+  `CREATE TRIGGER photo_refuse_depth_fingerprint_edit BEFORE UPDATE OF depth_sha256 ON public.photo FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER photo_upload BEFORE INSERT OR UPDATE OF uploaded_at, depth_uploaded_at ON public.photo FOR EACH ROW EXECUTE FUNCTION photo_upload_guard()`,
+  // What arrived is never changed, and its resolution is written once, by a person at the back
+  // office (ADR-526); so is a held record's. A photograph is kept with a record held from its own
+  // phone and leaves it only for the record a person saved from it.
+  `CREATE TRIGGER set_aside_file_refuse_received_edit BEFORE UPDATE OF id, photo_id, file, device_id, received_sha256, byte_count, content_type, object_key, received_at ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER set_aside_file_resolved_once AFTER UPDATE OF resolved_by_id, resolved_at, resolution ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION resolved_once_guard()`,
+  `CREATE TRIGGER held_record_resolved_once AFTER UPDATE OF resolved_by_id, resolved_at, resolution ON public.held_record FOR EACH ROW EXECUTE FUNCTION resolved_once_guard()`,
+  `CREATE TRIGGER photo_held_record BEFORE INSERT OR UPDATE OF held_record_id, field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id, project_id, device_id ON public.photo FOR EACH ROW EXECUTE FUNCTION photo_held_record_guard()`,
+  `CREATE TRIGGER set_aside_file_from_its_phone BEFORE INSERT ON public.set_aside_file FOR EACH ROW EXECUTE FUNCTION set_aside_file_from_its_phone_guard()`,
   // What a phone sent, kept in quarantine, is written once (ADR-338).
   `CREATE TRIGGER quarantined_record_refuse_sent_edit BEFORE UPDATE OF id, project_id, device_id, monitor_id, payload, reason, holding_event_id, holding_roe_id, received_at ON public.quarantined_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER zone_with_its_map_version BEFORE INSERT ON public.zone FOR EACH ROW EXECUTE FUNCTION zone_with_its_map_version()`,
@@ -175,6 +268,15 @@ const triggers = [
   `CREATE TRIGGER invoice_lock_refuse_lock_edit BEFORE UPDATE OF id, project_id, completed_load_id, completed_haul_out_id, field_event_id, field_event_kind, locked_by_id, locked_at ON public.invoice_lock FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER invoice_lock_refuse_edit_once_unlocked BEFORE UPDATE ON public.invoice_lock FOR EACH ROW WHEN ((old.unlocked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER flag_acceptance_refuse_flag_edit BEFORE UPDATE OF id, project_id, flag_id, accepted_by_id, accepted_at ON public.flag_acceptance FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // An acceptance taken back is history (ADR-534 (8)).
+  `CREATE TRIGGER flag_acceptance_refuse_edit_once_withdrawn BEFORE UPDATE ON public.flag_acceptance FOR EACH ROW WHEN ((old.withdrawn_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
+  // Who entered a certification from its sheet, and why, never change (ADR-534 (1)).
+  `CREATE TRIGGER certification_refuse_created_edit BEFORE UPDATE OF created_by_id, created_reason_id ON public.certification FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // While a lock stands on a ticket, nothing changes its field events, their lines or the
+  // tickets they carry, but the two links a number finds (ADR-534 (10); C81).
+  `CREATE TRIGGER field_event_locked_ticket BEFORE UPDATE ON public.field_event FOR EACH ROW EXECUTE FUNCTION field_event_locked_ticket_guard()`,
+  `CREATE TRIGGER field_event_item_locked_ticket BEFORE INSERT OR UPDATE ON public.field_event_item FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
+  `CREATE TRIGGER carried_ticket_locked_ticket BEFORE INSERT OR UPDATE ON public.carried_ticket FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
   `CREATE TRIGGER ticket_void_refuse_void_edit BEFORE UPDATE OF id, project_id, workflow, ticket_number, voided_by_id, voided_at ON public.ticket_void FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unvoid, once written, is history (ADR-366).
@@ -189,6 +291,8 @@ const triggers = [
   // How a session was opened, by a monitor's own sign-in or under the master passcode, never
   // changes (ADR-462).
   `CREATE TRIGGER session_refuse_master_passcode_session_edit BEFORE UPDATE OF master_passcode_session ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  // What a session says of a sign-in made offline never changes (ADR-531).
+  `CREATE TRIGGER session_refuse_offline_sign_in_edit BEFORE UPDATE OF offline_sign_in_id, signed_in_at, signed_in_utc_offset_minutes ON public.session FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER security_event_refuse_edit BEFORE UPDATE ON public.security_event FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   // A security event a phone reported is written as the master passcode's actor for the phone
   // it names (ADR-464).
@@ -210,7 +314,7 @@ const triggers = [
   `CREATE TRIGGER sync_refuse_reported_edit BEFORE UPDATE OF id, device_id, started_at, device_clock_at, device_utc_offset_minutes, clock_difference_seconds ON public.sync FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER sync_refuse_edit_once_answered BEFORE UPDATE ON public.sync FOR EACH ROW WHEN ((old.setup_version_sent IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER synced_record_refuse_edit BEFORE UPDATE ON public.synced_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
-  `CREATE TRIGGER held_record_refuse_sent_edit BEFORE UPDATE OF id, device_id, sync_id, sent_id, project_id, sent_monitor_id, payload, sent_sha256, reason, message, received_at ON public.held_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER held_record_refuse_sent_edit BEFORE UPDATE OF id, device_id, sync_id, sent_id, project_id, sent_monitor_id, payload, sent_sha256, sent_bytes, reason, message, received_at ON public.held_record FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER sync_from_its_phone BEFORE INSERT OR UPDATE ON public.sync FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER synced_record_from_its_phone BEFORE INSERT ON public.synced_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER held_record_from_its_phone BEFORE INSERT ON public.held_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
@@ -227,7 +331,14 @@ const triggers = [
   // Which version of the master passcode's check a phone holds: its own proven call's alone,
   // never an earlier one; and a monitor's offline seed never outlives its password (ADR-454).
   `CREATE TRIGGER device_master_passcode_version BEFORE UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_master_passcode_version_guard()`,
+  // A phone's key is revoked by its turn-in alone, once it holds no block still issued, and the
+  // phone then stays as it was turned in; a phone turned in is issued no block (ADR-488).
+  `CREATE TRIGGER device_key_revocation BEFORE INSERT OR UPDATE ON public.device FOR EACH ROW EXECUTE FUNCTION device_key_revocation_guard()`,
+  `CREATE TRIGGER number_block_key_standing BEFORE INSERT OR UPDATE ON public.number_block FOR EACH ROW EXECUTE FUNCTION number_block_key_standing_guard()`,
   `CREATE TRIGGER user_credential_offline_seed BEFORE UPDATE ON public.user_credential FOR EACH ROW EXECUTE FUNCTION user_credential_offline_seed_guard()`,
+  // A version of the master passcode is never edited but to key the installer's verifier and
+  // write its sealed offline seed, each once (ADR-542).
+  `CREATE TRIGGER master_passcode_kept_once BEFORE UPDATE ON public.master_passcode FOR EACH ROW EXECUTE FUNCTION master_passcode_kept_once_guard()`,
   // A monitor's session names a phone in service, and only theirs does (ADR-443).
   `CREATE TRIGGER session_on_a_phone BEFORE INSERT ON public.session FOR EACH ROW EXECUTE FUNCTION session_on_a_phone_guard()`,
   // The firm's last admin stays (ADR-415).
@@ -312,6 +423,12 @@ describe('the guards in the catalog', () => {
         name: 'assignment_system_actor_check',
         definition:
           "CHECK (((person_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND (made_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)))",
+      },
+      // A withdrawal's note is a withdrawn assignment's, in a few words (ADR-527 (13)).
+      {
+        name: 'assignment_withdrawal_note_check',
+        definition:
+          'CHECK (((withdrawal_note IS NULL) OR ((archived_at IS NOT NULL) AND ((length(btrim(withdrawal_note)) >= 1) AND (length(btrim(withdrawal_note)) <= 500)))))',
       },
       // A carried ticket is a collection's (ADR-325).
       {
@@ -417,9 +534,25 @@ describe('the guards in the catalog', () => {
         definition:
           'CHECK (((key_revoked_at IS NULL) OR ((out_of_service_at IS NOT NULL) AND (key_revoked_at >= out_of_service_at))))',
       },
+      // Which revoked a key, said exactly when one is; a phone's mark and its reason only while it
+      // is out of service (ADR-530).
+      {
+        name: 'device_key_revoked_by_check',
+        definition: 'CHECK (((key_revoked_at IS NULL) = (key_revoked_by IS NULL)))',
+      },
       {
         name: 'device_out_of_service_check',
         definition: "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_at IS NULL)))",
+      },
+      {
+        name: 'device_out_of_service_marked_check',
+        definition:
+          "CHECK (((status = 'ACTIVE'::device_status) = (out_of_service_marked_at IS NULL)))",
+      },
+      {
+        name: 'device_out_of_service_reason_check',
+        definition:
+          "CHECK (((status <> 'ACTIVE'::device_status) OR (out_of_service_reason_id IS NULL)))",
       },
       {
         name: 'field_event_address_check',
@@ -517,6 +650,19 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK (((kind = 'UNIT_RATE'::field_event_kind) OR (num_nonnulls(kind_of_work_id, payable_type_id, pay_item_id, unit_count, measurement_inches, measured_as, root_ball_inches, root_ball_half_exposed, survey_number, marked_ineligible) = 0)))",
       },
+      // The firm's settings: one record, a lost phone's key kept whole hours up to a year, or off
+      // (ADR-530).
+      { name: 'firm_settings_one_row_check', definition: 'CHECK ((id = 1))' },
+      {
+        name: 'firm_settings_phone_key_hours_check',
+        definition:
+          'CHECK (((phone_key_revoked_after_hours IS NULL) OR ((phone_key_revoked_after_hours >= 1) AND (phone_key_revoked_after_hours <= 8760))))',
+      },
+      // A monitor's sign-in on a phone lasts 1 to 24 hours (ADR-531).
+      {
+        name: 'firm_settings_monitor_session_hours_check',
+        definition: 'CHECK (((monitor_session_hours >= 1) AND (monitor_session_hours <= 24)))',
+      },
       {
         name: 'form_debris_type_document_type_check',
         definition:
@@ -559,6 +705,22 @@ describe('the guards in the catalog', () => {
       { name: 'map_version_boundary_check', definition: shapeCheck('boundary') },
       { name: 'map_version_bounding_box_check', definition: boundingBoxCheck },
       { name: 'map_version_version_check', definition: 'CHECK ((version >= 1))' },
+      // The zones' own layer is a map fetched from Esri's, named in its field (ADR-527 (15)).
+      {
+        name: 'map_version_zones_file_check',
+        definition: 'CHECK (((zones_file_key IS NULL) OR (zones_source_name IS NOT NULL)))',
+      },
+      {
+        name: 'map_version_zones_layer_check',
+        definition:
+          "CHECK (((zones_source_name IS NULL) OR ((source = 'ESRI_LAYER'::map_source) AND (zone_name_field IS NOT NULL))))",
+      },
+      // A site's shape fetched from Esri names its layer (ADR-527 (10)).
+      {
+        name: 'site_area_version_esri_layer_check',
+        definition:
+          "CHECK (((source <> 'ESRI_LAYER'::site_area_source) OR (source_name IS NOT NULL)))",
+      },
       { name: 'site_area_version_bounding_box_check', definition: boundingBoxCheck },
       { name: 'site_area_version_geometry_check', definition: shapeCheck('geometry') },
       { name: 'site_area_version_version_check', definition: 'CHECK ((version >= 1))' },
@@ -588,6 +750,11 @@ describe('the guards in the catalog', () => {
           "CHECK ((((original_sha256 ~ '^[0-9a-f]{64}$'::text) AND (uploaded_sha256 ~ '^[0-9a-f]{64}$'::text) AND (btrim(object_key) <> ''::text) AND ((depth_object_key IS NULL) OR (btrim(depth_object_key) <> ''::text))) IS TRUE))",
       },
       {
+        name: 'photo_depth_check',
+        definition:
+          "CHECK (((((depth_object_key IS NULL) = (depth_sha256 IS NULL)) AND ((depth_sha256 IS NULL) OR (depth_sha256 ~ '^[0-9a-f]{64}$'::text)) AND ((depth_uploaded_at IS NULL) OR (depth_object_key IS NOT NULL))) IS TRUE))",
+      },
+      {
         name: 'photo_gps_check',
         definition:
           "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
@@ -600,7 +767,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'photo_owner_check',
         definition:
-          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id) = 1))',
+          'CHECK ((num_nonnulls(field_event_id, certification_id, scale_receipt_id, roe_id, survey_id, incident_id, drop_off_log_id, quarantined_record_id, held_record_id) = 1))',
       },
       // A record waiting in quarantine, and a fix kept as sent (ADR-338).
       {
@@ -632,8 +799,10 @@ describe('the guards in the catalog', () => {
           "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       {
+        // A held certification's photographs keep their views while they wait with it (ADR-526).
         name: 'photo_view_check',
-        definition: 'CHECK (((view IS NULL) OR (certification_id IS NOT NULL)))',
+        definition:
+          'CHECK (((view IS NULL) OR (certification_id IS NOT NULL) OR (held_record_id IS NOT NULL)))',
       },
       // ROEs and forms (ADR-327).
       {
@@ -757,6 +926,11 @@ describe('the guards in the catalog', () => {
           "CHECK ((\nCASE source\n    WHEN 'DEVICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 3) AND (num_nonnulls(created_by_id, created_reason_id) = 0))\n    WHEN 'BACK_OFFICE'::record_source THEN ((num_nonnulls(device_id, assignment_id, setup_version) = 0) AND (num_nonnulls(created_by_id, created_reason_id) = 2))\n    ELSE false\nEND IS TRUE))",
       },
       { name: 'master_passcode_hash_check', definition: "CHECK ((hash ~~ '$argon2id$%'::text))" },
+      {
+        name: 'master_passcode_offline_seed_sealed_check',
+        definition:
+          "CHECK ((offline_seed ~ '^v2\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+      },
       { name: 'master_passcode_version_check', definition: 'CHECK ((version >= 1))' },
       {
         name: 'number_block_ended_check',
@@ -1062,6 +1236,25 @@ describe('the guards in the catalog', () => {
         definition:
           "CHECK ((((accepted_by_id <> '00000000-0000-7000-8000-000000000001'::uuid) AND ((note IS NULL) OR (btrim(note) <> ''::text))) IS TRUE))",
       },
+      // An acceptance taken back says who and when together, a note only with them (ADR-534 (8)).
+      {
+        name: 'flag_acceptance_withdrawn_check',
+        definition:
+          "CHECK ((((num_nonnulls(withdrawn_by_id, withdrawn_at) = ANY (ARRAY[0, 2])) AND ((withdraw_note IS NULL) OR ((withdrawn_at IS NOT NULL) AND (btrim(withdraw_note) <> ''::text))) AND (withdrawn_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // A certification entered from its sheet names who and why, never with a phone (ADR-534 (1)).
+      {
+        name: 'certification_created_check',
+        definition:
+          "CHECK ((((num_nonnulls(created_by_id, created_reason_id) = ANY (ARRAY[0, 2])) AND ((created_by_id IS NULL) OR (num_nonnulls(device_id, assignment_id) = 0)) AND (created_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid)) IS TRUE))",
+      },
+      // Which way a passcode session was opened, on a phone's record alone, agreeing with the
+      // temporary mark (ADR-534 (11)).
+      {
+        name: 'field_event_master_passcode_session_check',
+        definition:
+          "CHECK (((((master_passcode_session IS NULL) OR (source = 'DEVICE'::record_source)) AND (temporary_session = (NOT (master_passcode_session IS DISTINCT FROM 'TEMPORARY'::master_passcode_session)))) IS TRUE))",
+      },
       // A person's void names its ticket; an unvoid is who and when together.
       {
         name: 'ticket_void_ticket_check',
@@ -1102,7 +1295,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'user_credential_offline_seed_sealed_check',
         definition:
-          "CHECK ((offline_seed ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+          "CHECK ((offline_seed ~ '^v[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
       },
       {
         name: 'user_credential_offline_seed_together_check',
@@ -1113,7 +1306,7 @@ describe('the guards in the catalog', () => {
       {
         name: 'user_credential_two_step_sealed_check',
         definition:
-          "CHECK ((two_step_secret ~ '^v1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
+          "CHECK ((two_step_secret ~ '^v[12]\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$'::text))",
       },
       {
         name: 'user_credential_two_step_last_step_check',
@@ -1141,6 +1334,13 @@ describe('the guards in the catalog', () => {
       {
         name: 'session_master_passcode_session_check',
         definition: 'CHECK (((master_passcode_session IS NULL) OR (device_id IS NOT NULL)))',
+      },
+      // A sign-in made offline: its id, the phone's time and its offset, all or none, on a phone
+      // (ADR-531).
+      {
+        name: 'session_offline_sign_in_check',
+        definition:
+          "CHECK (((((offline_sign_in_id IS NULL) AND (signed_in_at IS NULL) AND (signed_in_utc_offset_minutes IS NULL)) OR ((device_id IS NOT NULL) AND (offline_sign_in_id IS NOT NULL) AND (signed_in_at IS NOT NULL) AND (signed_in_utc_offset_minutes IS NOT NULL) AND ((signed_in_utc_offset_minutes >= '-720'::integer) AND (signed_in_utc_offset_minutes <= 840)))) IS TRUE))",
       },
       // A security event carries an offset only where a phone reported it (ADR-457).
       {
@@ -1196,6 +1396,17 @@ describe('the guards in the catalog', () => {
         name: 'synced_record_record_kind_check',
         definition: "CHECK ((record_kind ~ '^[A-Z]+(_[A-Z]+)*$'::text))",
       },
+      // Who a phone's field event named, and whether they held the phone then (ADR-543).
+      {
+        name: 'synced_record_monitor_check',
+        definition:
+          "CHECK (((((monitor_id IS NULL) = (monitor_signed_in IS NULL)) AND ((monitor_id IS NULL) OR ((record_kind = 'FIELD_EVENT'::text) AND (answer = 'SAVED'::sync_answer)))) IS TRUE))",
+      },
+      // What a phone's daily budget of held records counts (ADR-546).
+      {
+        name: 'held_record_sent_bytes_check',
+        definition: 'CHECK (((sent_bytes >= 0) AND (sent_bytes <= 16777216)))',
+      },
       {
         name: 'held_record_message_check',
         definition: "CHECK ((btrim(message) <> ''::text))",
@@ -1213,6 +1424,29 @@ describe('the guards in the catalog', () => {
       {
         name: 'held_record_sent_sha256_check',
         definition: "CHECK ((sent_sha256 ~ '^[0-9a-f]{64}$'::text))",
+      },
+      // A held record came with a sync, but for a report made to its own endpoint (ADR-526).
+      {
+        name: 'held_record_sync_check',
+        definition:
+          "CHECK (((sync_id IS NOT NULL) OR (reason = 'REPORT_NOT_SAVED'::not_saved_reason)))",
+      },
+      // A file set aside is what arrived, as the server read it (ADR-482).
+      {
+        name: 'set_aside_file_received_check',
+        definition:
+          "CHECK ((((received_sha256 ~ '^[0-9a-f]{64}$'::text) AND (byte_count > 0) AND (content_type ~ '^[a-z0-9][a-z0-9.+-]{0,62}/[a-z0-9][a-z0-9.+-]{0,62}$'::text) AND (btrim(object_key) <> ''::text)) IS TRUE))",
+      },
+      // Its resolution is who, when and why, by a person (ADR-526).
+      {
+        name: 'set_aside_file_resolution_check',
+        definition:
+          "CHECK ((((num_nonnulls(resolved_by_id, resolved_at, resolution) = ANY (ARRAY[0, 3])) AND ((resolution IS NULL) OR (btrim(resolution) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'set_aside_file_resolved_by_check',
+        definition:
+          "CHECK ((resolved_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       // The master passcode's actor is one id, never a person, and no record names it; a
       // count of wrong tries at the passcode is never below nought (ADR-438, 439).
@@ -1291,6 +1525,11 @@ describe('the guards in the catalog', () => {
       // What a block holds: its whole run, or, once reclaimed, only what its phone used (ADR-323).
       // In force once (ADR-363): a ticket has one lock not unlocked at most, and one void not
       // lifted.
+      // A flag has one acceptance in force (ADR-534 (8)).
+      {
+        name: 'flag_acceptance_accepted_once',
+        definition: 'EXCLUDE USING btree (flag_id WITH =) WHERE ((withdrawn_at IS NULL))',
+      },
       {
         name: 'invoice_lock_haul_out_locked_once',
         definition:
@@ -1360,6 +1599,8 @@ describe('the guards in the catalog', () => {
         ...asTheViewer,
         // Who recorded a field event asks the viewer's question itself too (ADR-324).
         { name: 'viewer_field_event_monitor', options: ['security_barrier=true'] },
+        // The audit log of a client user's or an auditor's projects (ADR-544).
+        { name: 'viewer_audit_record', options: ['security_barrier=true'] },
         { name: 'viewer_project_setup', options: ['security_barrier=true'] },
         // A private citizen's columns too (ADR-336).
         ...citizenViews.map((name) => ({ name, options: ['security_barrier=true'] })),

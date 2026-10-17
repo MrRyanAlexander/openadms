@@ -99,19 +99,33 @@ describe('who may ask', () => {
       endpoints.filter((one) => one.permission === permission).map(({ name }) => name);
     // Part 3's (review-records.test.ts) follow part 2's.
     expect(taking('CORRECT')).toEqual([
+      // A reprocess with nothing changed is part of correcting (reprocesses.test.ts; ADR-498).
+      'reprocessTickets',
       'correctFieldEvent',
       'correctItemLine',
       'correctCarriedTicket',
       'markPhotograph',
+      // A photograph added in the back office to a record made there (ADR-534 (2)).
+      'addPhotograph',
       'correctScaleReceipt',
       'correctRoe',
       'correctRoeScope',
       'correctSurvey',
       'correctIncident',
       'correctDropOffLog',
+      // A held record saved as corrected (held.test.ts; ADR-526).
+      'saveHeldRecord',
       'createFieldEvent',
-      // Part 4's (certifications.test.ts): a measuring mistake on a certification.
+      // The forms and a certification made in the back office (ADR-534 (1), (9)).
+      'createRoe',
+      'createSurvey',
+      'createIncident',
+      'createDropOffLog',
+      'createCertification',
+      // Part 4's (certifications.test.ts): a certification corrected, and its boxes.
+      'correctCertification',
       'correctCertificationBox',
+      'addCertificationBox',
     ]);
     expect(taking('RENUMBER')).toEqual([
       'renumberFieldEvent',
@@ -197,7 +211,7 @@ describe('who may ask', () => {
           refusal: {
             code: 'NOT_PERMITTED',
             message:
-              'Luis Ortega may not renumber a record: it takes an admin, or a manager/analyst granted "renumber". Nothing was changed.',
+              'Luis Ortega may not renumber a record: it takes an admin, or a manager/analyst granted "renumber" and "view review". Nothing was changed.',
           },
         },
       );

@@ -236,8 +236,9 @@ describe('an admin changes a person', () => {
         {},
         { name: ' ' },
         { email: 'not an address' },
-        { email: null },
         { phone: '' },
+        { employerId: 'harbor' },
+        { employerNumber: '' },
         { role: 'ADMIN' },
         { monitorId: 'M004199' },
         { archived: true },
@@ -379,7 +380,9 @@ describe('an admin changes a role', () => {
     await world(async (served, tx, who) => {
       const dana = await served.signedIn(danasEmail, long);
       const luis = await served.signedIn(luissEmail, longer);
-      const grants = { ids: { userId: who.luis }, payload: { permissions: ['VOID', 'QC'] } };
+      // A void takes "view review" beside it, and reading a person "view dispatch" (ADR-539).
+      const held = ['VOID', 'QC', 'VIEW_REVIEW', 'VIEW_DISPATCH'];
+      const grants = { ids: { userId: who.luis }, payload: { permissions: held } };
       saved(setPermissionsEndpoint, await ask(served, dana, setPermissionsEndpoint, grants));
       const create = (payload: object) => ask(served, luis, createPersonEndpoint, { payload });
       expect(told(await create(morgan))).toEqual([403, 'NOT_ALLOWED']);
@@ -388,7 +391,7 @@ describe('an admin changes a role', () => {
       expect(saved(setPersonRoleEndpoint, made)).toMatchObject({
         id: who.luis,
         role: 'ADMIN',
-        permissions: ['VOID', 'QC'],
+        permissions: held,
       });
       expect(await audited(tx, made.requestId)).toEqual([
         [who.dana, 'UPDATE', 'SECURITY', ['role']],
@@ -400,7 +403,7 @@ describe('an admin changes a role', () => {
       expect(await tx.auditRecord.count({ where: { requestId: same.requestId } })).toBe(0);
       expect(
         saved(setPersonRoleEndpoint, await role(served, dana, who.luis, 'MANAGER_ANALYST')),
-      ).toMatchObject({ role: 'MANAGER_ANALYST', permissions: ['VOID', 'QC'] });
+      ).toMatchObject({ role: 'MANAGER_ANALYST', permissions: held });
       expect(told(await create({ ...morgan, email: 'm.ellis@gates.example' }))).toEqual([
         403,
         'NOT_ALLOWED',
@@ -476,7 +479,10 @@ describe('out of the archive', () => {
     await world(async (served, tx, who) => {
       const dana = await served.signedIn(danasEmail, long);
       const luis = await served.signedIn(luissEmail, longer);
-      const grants = { ids: { userId: who.luis }, payload: { permissions: ['VOID'] } };
+      const grants = {
+        ids: { userId: who.luis },
+        payload: { permissions: ['VOID', 'VIEW_REVIEW'] },
+      };
       saved(setPermissionsEndpoint, await ask(served, dana, setPermissionsEndpoint, grants));
       saved(archivePersonEndpoint, await archive(served, dana, who.luis));
       const back = await unarchive(served, dana, who.luis);
@@ -484,7 +490,7 @@ describe('out of the archive', () => {
         id: who.luis,
         archived: false,
         role: 'MANAGER_ANALYST',
-        permissions: ['VOID'],
+        permissions: ['VOID', 'VIEW_REVIEW'],
       });
       expect(await audited(tx, back.requestId)).toEqual([
         [who.dana, 'UPDATE', 'SECURITY', ['archived_at']],

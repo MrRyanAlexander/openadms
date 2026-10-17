@@ -1,19 +1,22 @@
-// The worker's health answer (BACKLOG 2.3.2; ADR-385 (5), 418 (6), 419): `GET /health` says that
-// the process answers and how its queue stands: how many jobs wait and how many are set aside.
-// No version, no setting, no id. It is asked from inside the stack only (the container's own
-// check, the installer's): the worker publishes no port and no proxy leads to it.
+// The worker's health answer (BACKLOG 2.3.2, 2.7.2 part 4; ADR-385 (5), 418 (6), 419, 507):
+// `GET /health` says whether the worker is doing its work and how its queue stands: how many jobs
+// wait, how many are set aside, how long the oldest has waited. Status 200 when it is well, 503
+// when it isn't, with the problem named (job-loop.ts). No version, no setting, no id. It is asked
+// from inside the stack only (the container's own check, the installer's): the worker publishes
+// no port and no proxy leads to it.
 import { createServer, type Server } from 'node:http';
 
-import type { QueueStanding } from './job-loop.ts';
+import type { WorkerStanding } from './job-loop.ts';
 
 export class Health {
   private readonly server: Server;
 
-  constructor(standing: () => QueueStanding) {
+  constructor(standing: () => WorkerStanding) {
     this.server = createServer((request, answer) => {
       const found = request.method === 'GET' && request.url === '/health';
-      const body = found ? { status: 'ok', ...standing() } : { code: 'NOT_FOUND' };
-      answer.writeHead(found ? 200 : 404, {
+      const now = found ? standing() : undefined;
+      const body = now ?? { code: 'NOT_FOUND' };
+      answer.writeHead(now === undefined ? 404 : now.status === 'ok' ? 200 : 503, {
         'content-type': 'application/json; charset=utf-8',
         'cache-control': 'no-store',
       });

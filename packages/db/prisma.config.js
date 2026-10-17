@@ -9,7 +9,8 @@
 // schema the btree_gist extension lives in; so that schema is dropped there first, or the
 // migration that makes it would fail on every replay (ADR-310). It runs on adms_shadow alone.
 // Prisma offers that script only under its externalTables flag; no table is named external, so
-// nothing else changes.
+// nothing else changes. The URL asks TLS alone; Prisma's engine is handed it in its own words
+// (prisma.url.js; ADR-517).
 // @ts-check
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
@@ -17,13 +18,16 @@ import { URL } from 'node:url';
 import { parseEnv } from 'node:util';
 import { defineConfig } from 'prisma/config';
 
+import { schemaEngineUrl } from './prisma.url.js';
+
 const envFile = new URL('.env', import.meta.url);
 const installed = existsSync(envFile) ? parseEnv(readFileSync(envFile, 'utf8')) : {};
 // Prisma needs a URL even for commands that never connect (validate, format, an offline diff).
-const url =
+const url = schemaEngineUrl(
   installed['DATABASE_URL'] ??
-  process.env['DATABASE_URL'] ??
-  'postgresql://not-installed@127.0.0.1:1/adms';
+    process.env['DATABASE_URL'] ??
+    'postgresql://not-installed@127.0.0.1:1/adms',
+);
 const shadow = new URL(url);
 shadow.pathname = '/adms_shadow';
 

@@ -7,14 +7,12 @@ import { formDefinitionFields } from '@open-adms/contracts';
 import type { Form, FormDebrisType, FormDefinition, FormDocumentType, Prisma } from '@open-adms/db';
 import { DebrisTypeEntries, type IncidentOffer, IncidentOffers } from '@open-adms/domain';
 
-import { type Outcome, SetupService } from './setup-service.ts';
+import { type Outcome, QueueingService } from './setup-service.ts';
 
 export interface NewForm {
   readonly projectId: string;
   readonly documentType: FormDocumentType;
   readonly name: string;
-  // Read on a form that isn't a workflow's: incidents and drop-off logs are switched on per project.
-  readonly enabled: boolean;
   // "GPS required": stated on the ROE form, and only there.
   readonly gpsRequired?: boolean;
   // What an incident offers the project's monitors: stated on the incident form, and only there
@@ -31,7 +29,21 @@ export interface NewFormDebrisType {
   readonly hiddenOnPhones: boolean;
 }
 
-export class FormSetup extends SetupService {
+// What a form says, changed (ADR-527 (4)): "GPS required" on the ROE form and what an incident
+// offers on the incident form, as the database holds them.
+export type FormChanges = Partial<Pick<NewForm, 'name' | 'gpsRequired' | 'incidentOffers'>>;
+
+// A debris type's entry changed: its reduction method cleared with null.
+export interface FormDebrisTypeChanges {
+  readonly reduced?: boolean;
+  readonly reductionMethodId?: string | null;
+  readonly hiddenOnPhones?: boolean;
+}
+
+// A debris type's entry changed moves its form's rules (Reduced is what a rule may read): the
+// tickets of the form's workflow are queued in the same piece of work (ADR-420). An entry is
+// never archived at the API: "hidden on phones" takes it off their list (ADR-529 (g)).
+export class FormSetup extends QueueingService {
   form(person: string, input: NewForm): Promise<Outcome<Form>> {
     return this.setup(person, (tx) =>
       tx.form.create({
@@ -39,7 +51,6 @@ export class FormSetup extends SetupService {
           projectId: input.projectId,
           documentType: input.documentType,
           name: input.name,
-          enabled: input.enabled,
           gpsRequired: input.gpsRequired ?? null,
           // Left unsaid on an incident form, the database refuses it; on any other there is none.
           ...(input.incidentOffers === undefined
@@ -72,6 +83,64 @@ export class FormSetup extends SetupService {
         },
       });
     });
+  }
+
+  // A form's name, "GPS required" or what an incident offers, audited with the value
+  // before (AC-01-83). The worker reads none of them, so nothing is queued.
+  change(person: string, formId: string, changes: FormChanges): Promise<Outcome<Form>> {
+    return this.setup(person, (tx) =>
+      tx.form.update({
+        where: { id: formId },
+        data: {
+          ...(changes.name === undefined ? {} : { name: changes.name }),
+          ...(changes.gpsRequired === undefined ? {} : { gpsRequired: changes.gpsRequired }),
+          ...(changes.incidentOffers === undefined
+            ? {}
+            : { incidentOffers: new IncidentOffers(changes.incidentOffers).list() }),
+        },
+      }),
+    );
+  }
+
+  // A debris type's entry: Reduced, its reduction method, whether phones hide it. One not Reduced
+  // on a haul-out form is warned of, as when it was added. Reduced is what a rule's criteria may
+  // read, so the form's tickets are queued.
+  changeDebrisType(
+    person: string,
+    formDebrisTypeId: string,
+    changes: FormDebrisTypeChanges,
+  ): Promise<Outcome<FormDebrisType>> {
+    return this.setup(person, async (tx, warn) => {
+      const entry = await tx.formDebrisType.findUniqueOrThrow({
+        where: { id: formDebrisTypeId },
+        include: { debrisType: true, form: true },
+      });
+      const reduced = changes.reduced ?? entry.reduced;
+      if (entry.documentType === 'LOAD' || entry.documentType === 'HAUL_OUT') {
+        warn(
+          new DebrisTypeEntries(entry.documentType, []).warningsFor({
+            name: entry.debrisType.name,
+            reduced,
+          }),
+        );
+      }
+      const changed = await tx.formDebrisType.update({
+        where: { id: formDebrisTypeId },
+        data: changes,
+      });
+      await this.entryMoved(tx, person, entry.form);
+      return changed;
+    });
+  }
+
+  // The tickets of a load or haul-out form's workflow: its rules pick the entry.
+  private async entryMoved(
+    tx: Prisma.TransactionClient,
+    person: string,
+    form: Pick<Form, 'projectId' | 'documentType'>,
+  ): Promise<void> {
+    if (form.documentType !== 'LOAD' && form.documentType !== 'HAUL_OUT') return;
+    await this.setupChanged(tx, person, form.projectId, { workflow: form.documentType });
   }
 
   // The firm's own fields on a form, as its next version; a version is never edited (ADR-308).

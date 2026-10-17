@@ -8,49 +8,58 @@
 // P1's Monday and Tuesday are the story `p1-field-days`' own, held on its phones until each
 // phone's sync; P1's map, pay items, rules and certifications are the shared steps of
 // `p1-office.ts`. P2 is set up through the setup services and worked on Monday by Ana Brooks and
-// Kim Nguyen on a second phone each (one project per phone). Every reviewer's step goes through
-// `apps/api`'s review services, as Luis Ortega by his grants, each followed by the run it asks
-// the worker for.
+// Kim Nguyen on a second phone each (one project per phone). Every reviewer's step is a request
+// at its endpoint, at Luis Ortega's browser by the grants Dana gives him at hers (ADR-500); each
+// that queued its tickets is followed by the worker's runs of them.
 //
-// A certification's five photographs are written here as Sam Grant's phone would send them: no
-// service takes them yet (the phone's certifying screen is Phase 3's, the file Phase 2's), and
-// without them every certification stands flagged for its missing views.
+// A certification's five photographs reach the server after it, sent by Sam Grant's phone through
+// the API's own `Sync` (`photographed`, ADR-481); their files are the media endpoint's.
 //
 // Not here: what each viewer sees (the database's own tests, AC-02-66, 78…82); the client
 // package, which Dana zips by hand from the exports (Phase 4); 201002 and 201003, the flag
 // catalogue's examples, which Sam's phone passes over.
 import {
-  Acceptances,
   Certifications,
   ContractorSetup,
-  Corrections,
   FormSetup,
-  InvoiceLocks,
   PayItemSetup,
   ProjectSetup,
-  QcMarks,
   SiteSetup,
-  Voids,
-  type Outcome,
-  type QcMarked,
-  type Reviewed,
 } from '@open-adms/api';
+import {
+  acceptFlagEndpoint,
+  createInvoiceBatchEndpoint,
+  listInvoiceBatchesEndpoint,
+  lockAsInvoicedEndpoint,
+  lockSeveralAsInvoicedEndpoint,
+  previewPayItemRateEndpoint,
+  readInvoiceBatchEndpoint,
+  readTicketEndpoint,
+  renumberFieldEventEndpoint,
+  reviewQueueEndpoint,
+  setQcStatusesEndpoint,
+  voidTicketEndpoint,
+  type AnswerOf,
+  type Endpoint,
+} from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
-
-import { createHash } from 'node:crypto';
 
 import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
+import { refusalOf, type AskedWith } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
+  photographed,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
   primaryBox,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -60,26 +69,23 @@ import { p1TimeZone as timeZone } from './p1.ts';
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 
 // What a run did with each ticket, as lines a person reads.
-const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
+const told = (outcome: RunOutcome | null): string[] =>
+  outcome === null
+    ? ['No run yet.']
+    : outcome.tickets.map((ticket) =>
         [
           ticket.ticketNumber,
           ticket.status,
           ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
           ...ticket.flags,
         ].join(' · '),
-      )
-    : [outcome.message];
+      );
 
-const of = (outcome: RunOutcome, ...ticketNumbers: string[]): string[] =>
+const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
 const dollars = (cents: number): string =>
   `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// The five views of a certification's photographs (`adms-certifications`).
-const views = ['OPERATOR_WITH_PLACARD', 'INTERIOR_OR_BACK', 'RIGHT', 'LEFT', 'FRONT'] as const;
 
 const unticked = {
   kindOfWorkId: null,
@@ -168,18 +174,17 @@ export const goldenMission: Story = {
     );
     await loadP1Map(story, office);
     await setUpP1Pricing(story, office);
-    await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      for (const permission of [
-        'CORRECT',
-        'RENUMBER',
-        'VOID',
-        'ACCEPT_FLAG',
-        'QC',
-        'LOCK_INVOICED',
-      ] as const) {
-        await tx.userPermission.create({ data: { userId: luis, permission } });
-      }
-    });
+    // Dana and Luis at their browsers (ADR-497, 500): she grants at his record.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis(
+      'CORRECT',
+      'RENUMBER',
+      'VOID',
+      'ACCEPT_FLAG',
+      'QC',
+      'LOCK_INVOICED',
+      'VIEW_REVIEW',
+    );
 
     story.at(
       on('09', '09:00'),
@@ -187,7 +192,7 @@ export const goldenMission: Story = {
     );
     const projects = new ProjectSetup(api, clock, story.policy);
     const contractors = new ContractorSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
     const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });
     const p2 = (
@@ -216,22 +221,17 @@ export const goldenMission: Story = {
       }),
     );
     const p2Load = (
-      await saved(
-        forms.form(dana, { projectId: p2, documentType: 'LOAD', name: 'Load', enabled: true }),
-      )
+      await saved(forms.form(dana, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
     ).id;
     await saved(
       forms.form(dana, {
         projectId: p2,
         documentType: 'ROE',
         name: 'ROE',
-        enabled: true,
         gpsRequired: false,
       }),
     );
-    await saved(
-      forms.form(dana, { projectId: p2, documentType: 'SURVEY', name: 'Survey', enabled: true }),
-    );
+    await saved(forms.form(dana, { projectId: p2, documentType: 'SURVEY', name: 'Survey' }));
     const p2Vegetative = (
       await saved(
         forms.debrisType(dana, {
@@ -302,7 +302,7 @@ export const goldenMission: Story = {
     clock.set(on('10', '11:30'));
     const feature = async (name: string): Promise<string> =>
       (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
-    await saved(
+    const p2Loader = await saved(
       new Certifications(api, clock, story.policy).certify({
         id: uuidv7(clock.now()),
         projectId: p2,
@@ -329,31 +329,9 @@ export const goldenMission: Story = {
         deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
       }),
     );
+    await photographed(story, { deviceId: samPhone, takenById: sam }, p2Loader);
     const certified = await api.certification.findMany({
       orderBy: [{ projectId: 'asc' }, { certNumber: 'asc' }],
-    });
-    await api.$write({ actorId: sam, source: 'DEVICE', deviceId: samPhone }, async (tx) => {
-      for (const certification of certified) {
-        for (const view of views) {
-          const file = `P1-HO-TDSR/${certification.projectId}/${certification.certNumber}/${view}`;
-          const fingerprint = createHash('sha256').update(file).digest('hex');
-          await tx.photo.create({
-            data: {
-              id: uuidv7(certification.certifiedAt),
-              projectId: certification.projectId,
-              certificationId: certification.id,
-              view,
-              capturedAt: certification.certifiedAt,
-              deviceUtcOffsetMinutes: certification.deviceUtcOffsetMinutes,
-              receivedAt: clock.now(),
-              originalSha256: fingerprint,
-              uploadedSha256: fingerprint,
-              objectKey: `photographs/${file}`,
-              deviceId: samPhone,
-            },
-          });
-        }
-      }
     });
     const projectName = new Map([
       [p1, 'P1'],
@@ -439,11 +417,8 @@ export const goldenMission: Story = {
       settings,
       new Mileages(new MapServers(localMapServers())),
     );
-    const corrections = new Corrections(api, clock, story.policy);
-    const acceptances = new Acceptances(api, clock, story.policy);
-    const voids = new Voids(api, clock, story.policy);
-    const qc = new QcMarks(api, clock, story.policy);
-    const locks = new InvoiceLocks(api, clock, story.policy);
+    // The worker's own job loop: it takes up what each sync, review and setup change queued.
+    const queue = new QueueRuns(story, reconciliation);
 
     // The ledger of a project as it stands: every line with its ticket (and property or pile),
     // its #, its pay item, quantity × rate = amount.
@@ -564,14 +539,31 @@ export const goldenMission: Story = {
         ].join(' · ');
       });
     // A reviewer's action, then the run it asks for.
-    const last: { run: RunOutcome } = {
-      run: { ran: false, reason: 'RUN_UNDER_WAY', message: 'No run yet.' },
+    const last: { run: RunOutcome | null } = { run: null };
+    // Luis's act at his browser, saved: its answer. Every one that queues is on P1.
+    const byLuis = async <E extends Endpoint>(served: E, more: AskedWith): Promise<AnswerOf<E>> =>
+      (await backOffice.luiss()).answered(served, more);
+    // His act as it was answered: refused at the door, or by the endpoint's rule in its words.
+    const refusal = async (served: Endpoint, more: AskedWith): Promise<string> =>
+      refusalOf(await (await backOffice.luiss()).asked(served, more));
+    const reviewed = async <A>(done: Promise<A>): Promise<A> => {
+      const answer = await done;
+      last.run = await queue.settled(p1);
+      return answer;
     };
-    const reviewed = async <T>(attempt: Promise<Outcome<Reviewed<T>>>): Promise<Reviewed<T>> => {
-      const outcome = await saved(attempt);
-      last.run = await reconciliation.run(outcome.reprocess);
-      return outcome;
-    };
+    const accepting = async (ticketNumber: string, note: string): Promise<AskedWith> => ({
+      ids: { flagId: (await standingFlag(ticketNumber)).id },
+      json: { reasonId: await reasonId('Photos confirm'), note },
+    });
+    const voiding = async (ticketNumber: string, reason: string, note: string) => ({
+      ids: { projectId: p1 },
+      json: { workflow: 'UNIT_RATE', ticketNumber, reasonId: await reasonId(reason), note },
+    });
+    type Ticket =
+      { completedLoadId: string } | { completedHaulOutId: string } | { unitRateTicketId: string };
+    const locking = (ticket: Ticket, invoiceBatchId?: string): AskedWith => ({
+      json: { ticket, invoiceBatchId },
+    });
     const loadOf = async (ticketNumber: string, projectId = p1) => ({
       completedLoadId: (
         await api.completedLoad.findFirstOrThrow({
@@ -589,7 +581,6 @@ export const goldenMission: Story = {
     const unitRateOf = async (ticketNumber: string) => ({
       unitRateTicketId: (await eventOf(ticketNumber, 'UNIT_RATE')).id,
     });
-    const sync = (projectId: string) => ({ projectId, trigger: 'SYNC' }) as const;
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -758,10 +749,9 @@ export const goldenMission: Story = {
       'Monday evening at the yard: every phone finds signal and syncs; the worker runs on each project',
     );
     await phones.arrive(mondayEvening);
-    await phones.crewPhotographs(mondayEvening);
     const p2Sent = [await anaP2.sync(story.server), await kimP2.sync(story.server)];
-    const monday = await reconciliation.run(sync(p1));
-    const mondayP2 = await reconciliation.run(sync(p2));
+    const monday = await queue.settled(p1);
+    const mondayP2 = await queue.settled(p2);
     story.check(
       'AC-06-87 Monday night on P1: 101001 and 101002 are COMPLETED, 101003 is in review for its 96% call and still bills, the preload 101004 waits for its disposal with no flag, and the three unit rate tickets are COMPLETED, the duplicate hanger among them: 7 lines, $1,530.00',
       [told(monday), await total(p1)],
@@ -867,8 +857,8 @@ export const goldenMission: Story = {
       'Tuesday evening: the phones sync, all but the Marsh Road tower’s, whose battery is flat; the worker runs',
     );
     await phones.arrive(tuesdayEvening);
-    await phones.crewPhotographs(tuesdayEvening);
-    const tuesday = await reconciliation.run(sync(p1));
+    await queue.settle(p1);
+    const tuesday = await queue.standing(p1);
     story.check(
       'AC-05-52, AC-06-103, AC-06-154 Tuesday night: the collections 101004, 101005 and 101006 wait alone, PENDING and not flagged (an unpartnered field event never expires); the haul-out 201001 and the split haul-out 201004 are COMPLETED; the under-size stump 301005 is in review with no pay item; 17 lines, $4,879.00',
       [told(tuesday), await total(p1)],
@@ -952,7 +942,8 @@ export const goldenMission: Story = {
     );
     const fromTheTower = await phones.arrive(wednesdayMorning);
     story.at(on('14', '07:20'), 'The worker runs');
-    const wednesday = await reconciliation.run(sync(p1));
+    await queue.settle(p1);
+    const wednesday = await queue.standing(p1);
     story.check(
       'AC-02-56, AC-05-02, AC-06-16, AC-06-125 everything on the tower’s phone is received, three disposals and the drop-off log; the late sync pairs the preload 101004 (not flagged: its time is Monday, its collection’s end) and 101005; 101006 still waits, its disposal typed as 101060 and flagged for the typed number: 19 lines, $5,400.25',
       [
@@ -1002,19 +993,53 @@ export const goldenMission: Story = {
       ],
     );
 
+    // The same queue as Luis reads it at its endpoint (ADR-535 (1)): one workflow a page, each
+    // ticket with its open flags, and the project's open flags counted by cause.
+    const queueOf = async (workflow: 'LOAD' | 'UNIT_RATE') =>
+      byLuis(reviewQueueEndpoint, { ids: { projectId: p1 }, query: { workflow } });
+    const loadsWaiting = await queueOf('LOAD');
+    const unitRateWaiting = await queueOf('UNIT_RATE');
+    const lineOf = (ticket: (typeof loadsWaiting)['tickets'][number]) =>
+      [
+        `${ticket.ticketNumber} ${ticket.statuses.join(',')}`,
+        ...ticket.flags.map((flag) => flag.message),
+      ].join(' · ');
+    story.check(
+      'AC-10-93 Luis reads the same queue at its endpoint: the loads waiting by number (101003 in review, its flag; 101006 and 101060 pending, 101060 with its typed-number flag) and the unit rate ticket 301005 with its two flags; the open flags counted by cause, four flags on three tickets',
+      [
+        loadsWaiting.tickets.map(lineOf),
+        unitRateWaiting.tickets.map(lineOf),
+        [loadsWaiting.next, unitRateWaiting.next],
+      ],
+      [
+        [
+          '101003 MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
+          '101006 PENDING',
+          '101060 PENDING · Ticket 101060: typed ticket number (Barcode damaged). Flagged for review.',
+        ],
+        [
+          '301005 MANUAL_REVIEW · Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review. · Ticket 301005: no survey. Flagged for review.',
+        ],
+        [null, null],
+      ],
+    );
+    story.check(
+      'AC-10-93 counted by cause, the queue’s four open flags are on three tickets, one cause each but 301005’s two',
+      [
+        loadsWaiting.causes.reduce((sum, cause) => sum + cause.flags, 0),
+        loadsWaiting.causes.length,
+        loadsWaiting.causes.reduce((sum, cause) => sum + cause.tickets, 0),
+      ],
+      [4, 4, 4],
+    );
+
     // ------------------------------------------------------------------------------------------
     story.at(
       on('14', '08:00'),
       'Luis checks 101003’s tower photographs and accepts its flag: Photos confirm, "Heaped; photos confirm"; the worker runs',
     );
-    const flag101003 = await standingFlag('101003');
     const accepted = await reviewed(
-      acceptances.flag(
-        luis,
-        flag101003.id,
-        await reasonId('Photos confirm'),
-        'Heaped; photos confirm',
-      ),
+      byLuis(acceptFlagEndpoint, await accepting('101003', 'Heaped; photos confirm')),
     );
     story.check(
       'AC-08-43 101003: MANUAL_REVIEW → COMPLETED, its flag accepted and kept, its line as it was: 62.4 × $7.50 = $468.00',
@@ -1031,19 +1056,19 @@ export const goldenMission: Story = {
       'Luis matches cert, times and photos and renumbers Kim’s disposal from 101060 to 101006: real work is renumbered, never voided; the worker runs',
     );
     const dis101060 = await eventOf('101060', 'DISPOSAL');
-    await reviewed(corrections.renumber(luis, dis101060.id, { ticketNumber: '101006' }));
+    await reviewed(
+      byLuis(renumberFieldEventEndpoint, {
+        ids: { fieldEventId: dis101060.id },
+        json: { ticketNumber: '101006' },
+      }),
+    );
     const renumbered = of(last.run, '101006', '101060');
     story.at(
       on('14', '08:20'),
       'He accepts the typed-number flag: Photos confirm; the worker runs',
     );
     await reviewed(
-      acceptances.flag(
-        luis,
-        (await standingFlag('101006')).id,
-        await reasonId('Photos confirm'),
-        'Cert, times and photos match 101006',
-      ),
+      byLuis(acceptFlagEndpoint, await accepting('101006', 'Cert, times and photos match 101006')),
     );
     story.check(
       'AC-06-10, AC-08-22, AC-08-50 101006: the renumber pairs it, 48 CY × 60% = 28.8 CY, $216.00, in review for its typed number until Luis accepts that flag; nothing is left under 101060',
@@ -1074,12 +1099,9 @@ export const goldenMission: Story = {
       where: { fieldEventId: urt301003.id },
     });
     const void301003 = await reviewed(
-      voids.ticket(
-        luis,
-        p1,
-        { workflow: 'UNIT_RATE', ticketNumber: '301003' },
-        await reasonId('Duplicate ticket'),
-        'Duplicate of 301001',
+      byLuis(
+        voidTicketEndpoint,
+        await voiding('301003', 'Duplicate ticket', 'Duplicate of 301001'),
       ),
     );
     const after301003 = of(last.run, '301003');
@@ -1088,12 +1110,9 @@ export const goldenMission: Story = {
       'The stump 301005 is 20 in across: he voids it, Not eligible work, "Under 24 in; goes out as vegetative debris"; the worker runs',
     );
     await reviewed(
-      voids.ticket(
-        luis,
-        p1,
-        { workflow: 'UNIT_RATE', ticketNumber: '301005' },
-        await reasonId('Not eligible work'),
-        'Under 24 in; goes out as vegetative debris',
+      byLuis(
+        voidTicketEndpoint,
+        await voiding('301005', 'Not eligible work', 'Under 24 in; goes out as vegetative debris'),
       ),
     );
     story.check(
@@ -1235,7 +1254,14 @@ export const goldenMission: Story = {
     );
     const incident = await api.incident.findFirstOrThrow({ where: { projectId: p1 } });
     const dropOff = await api.dropOffLog.findFirstOrThrow({ where: { projectId: p1 } });
-    const approve: [string, QcMarked][] = [];
+    type Marked =
+      | Ticket
+      | { incidentId: string }
+      | { dropOffLogId: string }
+      | { roeId: string }
+      | { surveyId: string }
+      | { certificationId: string };
+    const approve: [string, Marked][] = [];
     for (const number of p1Loads) approve.push([`CLT ${number}`, await loadOf(number)]);
     for (const number of p1HaulOuts) approve.push([`CHO ${number}`, await haulOutOf(number)]);
     const l102001 = await loadOf('102001', p2);
@@ -1258,15 +1284,23 @@ export const goldenMission: Story = {
       await api.auditRecord.count({ where: { actorId: systemActorId } }),
     ];
     const beforeQc = await workerWrote();
-    const marked: string[] = [];
-    for (const [what, target] of approve) {
-      const mark = await saved(qc.set(luis, target, 'QC_APPROVED'));
-      marked.push(`${what} ${mark.status} ${names.get(mark.setById) ?? ''}`);
-    }
-    for (const number of p1Voided) {
-      const mark = await saved(qc.set(luis, await unitRateOf(number), 'QC_VOID'));
-      marked.push(`URT ${number} ${mark.status} ${names.get(mark.setById) ?? ''}`);
-    }
+    // Thirty marks in one request, each its own act and each answered (ADR-535 (4); C148).
+    const voidedQc: [string, Marked][] = [];
+    for (const number of p1Voided) voidedQc.push([`URT ${number}`, await unitRateOf(number)]);
+    const { outcomes: qcOutcomes } = await byLuis(setQcStatusesEndpoint, {
+      json: {
+        marks: [
+          ...approve.map(([, record]) => ({ record, status: 'QC_APPROVED' })),
+          ...voidedQc.map(([, record]) => ({ record, status: 'QC_VOID' })),
+        ],
+      },
+    });
+    const marked: string[] = [...approve, ...voidedQc].map(([what], at) => {
+      const outcome = qcOutcomes[at];
+      return outcome?.saved === true
+        ? `${what} ${outcome.record.status} ${names.get(outcome.record.setById) ?? ''}`
+        : `${what} refused`;
+    });
     story.check(
       'AC-08-63 QC Approved stands on completed loads 101001…101006, completed haul-outs 201001 and 201004, P2’s 102001, the five live unit rate tickets, the incident, the drop-off log, ROEs R-0007 and R-0008 with their four surveys, and the six certifications; 301003 and 301005 are QC Void; each mark is Luis’s, set by hand: the worker ran nothing and wrote nothing',
       [marked, [await workerWrote(), beforeQc]],
@@ -1307,13 +1341,18 @@ export const goldenMission: Story = {
       on('14', '11:00'),
       `The invoice lock: Luis makes the batch "${batchName}" and locks P1’s thirteen QC Approved tickets in it; he locks P2’s split load 102001 on its own`,
     );
-    const batch = await saved(locks.batch(luis, p1, batchName));
-    for (const number of p1Loads) await saved(locks.lock(luis, await loadOf(number), batch.id));
-    for (const number of p1HaulOuts)
-      await saved(locks.lock(luis, await haulOutOf(number), batch.id));
-    for (const number of p1LiveUnitRate) {
-      await saved(locks.lock(luis, await unitRateOf(number), batch.id));
-    }
+    const { record: batch } = await byLuis(createInvoiceBatchEndpoint, {
+      ids: { projectId: p1 },
+      json: { name: batchName },
+    });
+    // One request for the thirteen, each its own lock and each answered (ADR-535 (4); C148).
+    const toLock: Ticket[] = [];
+    for (const number of p1Loads) toLock.push(await loadOf(number));
+    for (const number of p1HaulOuts) toLock.push(await haulOutOf(number));
+    for (const number of p1LiveUnitRate) toLock.push(await unitRateOf(number));
+    const { outcomes: lockOutcomes } = await byLuis(lockSeveralAsInvoicedEndpoint, {
+      json: { tickets: toLock, invoiceBatchId: batch.id },
+    });
     const lockedIn = (
       await api.invoiceLock.findMany({
         where: { projectId: p1, unlockedAt: null, invoiceBatch: { name: batchName } },
@@ -1328,28 +1367,60 @@ export const goldenMission: Story = {
           '',
       )
       .sort();
-    const voidLock = await locks.lock(luis, await unitRateOf('301003'), batch.id);
+    const voidLock = await refusal(
+      lockAsInvoicedEndpoint,
+      locking(await unitRateOf('301003'), batch.id),
+    );
     story.check(
       'AC-09-11 read by its name, the batch holds P1’s thirteen QC Approved tickets, and their lines in the ledger come to $5,548.25 on 19 lines, a figure read from the ledger and stored nowhere on the batch; the voided 301003 and 301005, at QC Void, are not in it and can’t be locked',
       [
         lockedIn,
         await total(p1, lockedIn),
         Object.keys(batch).filter((key) => /amount|rate|quantity|total/i.test(key)),
-        voidLock.saved ? 'saved' : voidLock.refusal.code,
+        voidLock,
         await api.invoiceLock.count({ where: { projectId: p1 } }),
       ],
       [
         [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].sort(),
         [19, '$5,548.25'],
         [],
-        'NOT_COMPLETED',
+        '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
         13,
       ],
     );
-    const lock102001 = await saved(locks.lock(luis, l102001));
-    const onOneProperty = await locks.lock(luis, {
-      unitRateTicketId: (await eventOf('102001', 'COLLECTION', p2)).id,
+    const heldBy = await byLuis(readInvoiceBatchEndpoint, { ids: { invoiceBatchId: batch.id } });
+    const batches = await byLuis(listInvoiceBatchesEndpoint, { ids: { projectId: p1 } });
+    const ticket101002 = await byLuis(readTicketEndpoint, {
+      ids: { projectId: p1, workflow: 'LOAD', ticketNumber: '101002' },
     });
+    story.check(
+      'AC-10-98, AC-10-99, AC-10-94 the thirteen were locked in one request, each answered locked; read at its endpoint, the batch holds them, thirteen locks in force; 101002 read whole shows its two field events, its completed load, its line with its rate and amount, its QC mark and its lock in the batch',
+      [
+        lockOutcomes.map((outcome) => outcome.saved),
+        heldBy.locks.map((each) => each.ticket.ticketNumber).sort(),
+        batches.batches.map((each) => [each.batch.name, each.locksInForce]),
+        ticket101002.fieldEvents.map((event) => `${event.kind} ${event.status}`),
+        ticket101002.completed?.collections.length,
+        ticket101002.lines.map(
+          (line) => `#${String(line.slot)} ${line.quantity} × ${line.rate} = ${line.amount}`,
+        ),
+        [ticket101002.qcMark?.status, ticket101002.locks.map((lock) => lock.invoiceBatchId)],
+      ],
+      [
+        toLock.map(() => true),
+        [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].sort(),
+        [[batchName, 13]],
+        ['COLLECTION COMPLETED', 'DISPOSAL COMPLETED'],
+        1,
+        ['#1 36.0000 × 8.2500 = 297.00', '#2 36.0000 × 4.0000 = 144.00'],
+        ['QC_APPROVED', [batch.id]],
+      ],
+    );
+    const { record: lock102001 } = await byLuis(lockAsInvoicedEndpoint, locking(l102001));
+    const onOneProperty = await refusal(
+      lockAsInvoicedEndpoint,
+      locking({ unitRateTicketId: (await eventOf('102001', 'COLLECTION', p2)).id }),
+    );
     story.check(
       'AC-09-05 P2’s split load is locked as one: the lock names the completed load 102001, with both properties under it, and no single collection takes a lock',
       [
@@ -1359,51 +1430,113 @@ export const goldenMission: Story = {
           where: { completedLoadId: l102001.completedLoadId, dissolvedAt: null },
         }),
         await api.invoiceLock.count({ where: { projectId: p2 } }),
-        onOneProperty.saved ? 'saved' : onOneProperty.refusal.code,
+        onOneProperty,
       ],
-      [true, null, 2, 1, 'NOT_QCD_ALONE'],
+      [
+        true,
+        null,
+        2,
+        1,
+        '422 NOT_SAVED · NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+      ],
     );
 
     story.at(
       on('21', '09:00'),
-      'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75; the worker runs',
+      'A week later Dana changes Coastline’s rate on VEG-HAUL-CY-15 from $7.50 to $7.75',
     );
+    // Saved, the change says what it queued for the worker: no ticket, and every one it
+    // reached left as it is, locked as invoiced (ADR-422).
     const rateTo = async (rate: string) => {
       const veg15 = await api.payItem.findFirstOrThrow({
         where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
       });
-      return saved(payItems.rate(dana, veg15.id, coastline, rate));
+      const outcome = await payItems.rate(dana, veg15.id, coastline, rate);
+      if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
+      return outcome.queued;
     };
-    await rateTo('7.75');
-    const rated = await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
-    const passedBy = (
-      await api.reconciliationDecision.findMany({
-        where: { reconciliationRunId: rated.ran ? rated.runId : '' },
-        orderBy: { ticketNumber: 'asc' },
-      })
-    ).map(
-      (decision) => `${decision.ticketNumber}: ${(decision.summary as { why?: string }).why ?? ''}`,
-    );
+    const runsBefore = await api.reconciliationRun.count({ where: { projectId: p1 } });
+    // First she asks what it would change (ADR-229, 535 (3)): the save run and undone.
+    const veg15 = await api.payItem.findFirstOrThrow({
+      where: { projectId: p1, code: 'VEG-HAUL-CY-15' },
+    });
+    const kept = async () => [
+      (
+        await api.payItemRate.findFirstOrThrow({
+          where: { payItemId: veg15.id, primeId: coastline, archivedAt: null },
+        })
+      ).rate.toFixed(2),
+      await api.auditRecord.count({ where: { tableName: 'pay_item_rate' } }),
+      await api.reconciliationJob.count({ where: { projectId: p1 } }),
+    ];
+    const beforePreview = await kept();
+    const preview = await (
+      await backOffice.danas()
+    ).answered(previewPayItemRateEndpoint, {
+      ids: { payItemId: veg15.id, primeId: coastline },
+      json: { rate: '7.75' },
+    });
     story.check(
-      'AC-09-31 every ticket of P1 that bills is locked as invoiced: the rate change regenerates none of them, each is left exactly as it is, and P1’s ledger stays $5,548.25 on 19 lines, line for line; no line was removed but 301003’s',
+      'AC-10-104 previewed first, the change says what it would do: Coastline’s rate at $7.75, no ticket queued and all thirteen passed by, locked as invoiced; and nothing of it was kept: the rate is $7.50 still, no audit record of a rate and no job were written',
       [
-        passedBy,
+        preview.wouldSave ? { ...preview, record: { rate: preview.record.rate } } : preview,
+        await kept(),
+      ],
+      [
+        {
+          wouldSave: true,
+          record: { rate: '7.75' },
+          warnings: [],
+          queued: {
+            tickets: 0,
+            lockedAsInvoiced: [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].length,
+          },
+        },
+        beforePreview,
+      ],
+    );
+    const rated = await rateTo('7.75');
+    await queue.settle(p1);
+    story.check(
+      'AC-09-31 every ticket of P1 that bills is locked as invoiced: the rate change queues none of them and reaches all thirteen, so the worker has nothing to take up and regenerates none; each is left exactly as it is, and P1’s ledger stays $5,548.25 on 19 lines, line for line; no line was removed but 301003’s',
+      [
+        rated,
+        await api.reconciliationRun.count({ where: { projectId: p1 } }),
         await ledger(p1),
         await total(p1),
         await api.auditRecord.count({ where: { tableName: 'transaction', operation: 'DELETE' } }),
       ],
       [
-        [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].map(
-          (number) => `${number}: Locked as invoiced: left as it is.`,
-        ),
+        {
+          jobs: [],
+          tickets: 0,
+          lockedAsInvoiced: [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].length,
+        },
+        runsBefore,
         p1Ledger,
         [19, '$5,548.25'],
         1,
       ],
     );
-    story.at(on('21', '09:10'), 'The change was a slip: she puts $7.50 back; the worker runs');
+    story.at(
+      on('21', '09:10'),
+      'The change was a slip: she puts $7.50 back; the worker has nothing to run',
+    );
     await rateTo('7.50');
-    await reconciliation.run({ projectId: p1, trigger: 'SETUP_CHANGE' });
+    await queue.settle(p1);
+    const runs = await api.reconciliationRun.findMany({
+      select: { _count: { select: { jobs: true } } },
+    });
+    story.check(
+      'Exit criterion 1 (ADR-376): the mission was reconciled by queued jobs alone. Every run on either project was the worker’s own job loop taking up jobs that a sync, a review or a setup change queued; nobody asked for a run; no job waits and none was set aside',
+      [
+        runs.length > 0,
+        runs.filter((run) => run._count.jobs === 0).length,
+        await api.reconciliationJob.count({ where: { finishedAt: null } }),
+        await api.reconciliationJob.count({ where: { setAsideAt: { not: null } } }),
+      ],
+      [true, 0, 0, 0],
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at('2027-03-02T09:00:00-05:00', '2 March 2027: the work is done. Dana closes P1 and P2');

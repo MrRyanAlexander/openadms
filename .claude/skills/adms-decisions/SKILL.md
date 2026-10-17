@@ -2,14 +2,14 @@
 name: adms-decisions
 description: How to record an Open ADMS architectural decision (ADR) or a known deviation (KD), and where the existing ones live. Use when making a senior engineering judgment call — naming, an architectural pattern, a schema tradeoff, a deliberate deviation — or when you find code that disagrees with a spec skill, or when you need to check what has already been decided so you do not contradict it.
 ---
-<!-- skill-status: current (checked 2026-09-29, ADR-253) -->
+<!-- skill-status: current (checked 2026-09-29, ADR-253; how to read and append, ADR-532) -->
 
 ## Where the record lives
 
 | File | Contents |
 |---|---|
-| `agent_store/SUMMARY.md` | **Start here.** What's true now: current rules by topic with the ADRs to cite, superseded ADRs never to cite, open gaps by area |
-| `agent_store/DECISIONS.md` | Full ADR log + the dated session log. **Read it before deciding anything architectural.** |
+| `agent_store/SUMMARY.md` | **Start here.** What's true now: current rules by topic with the ADRs to cite (an index in its header), superseded ADRs never to cite, open gaps, what waits on the user |
+| `agent_store/DECISIONS.md` | Full ADR log + the scratchpad (history moved out of other pages) + the dated session log. **Over 2 MB: never read it whole.** Before deciding anything architectural, grep it for the ADRs your `SUMMARY.md` topic cites (`grep -n '^| \*\*ADR-519' agent_store/DECISIONS.md`) and read those rows. |
 | `agent_store/DEVIATIONS.md` | Known Deviations — every place code **or a doc** disagrees with a spec skill. The KDs against `database/` are rebuild lessons now (ADR-093). Read at orientation. |
 
 **Append, never rewrite. Never renumber existing entries.**
@@ -24,7 +24,17 @@ next agent.
 **Then update `agent_store/SUMMARY.md` in the same response:** add or change the rule under its
 topic, and if the new ADR replaces or amends an old one, mark the old one "SUPERSEDED BY" or
 "AMENDED BY" at the start of its row and add it to the summary's superseded table. When you open
-or close a KD, update the summary's gaps table. A stale summary is worse than none.
+or close a KD, update the summary's §3 (open deviations). A stale summary is worse than none.
+
+**Keep a row to the decision, its reasons and the invariant it creates** (a few sentences to a
+short paragraph; numbered points where it decides several things). The build's detail (files,
+classes, tests, counts, what was seen in a run) belongs in the code, the BACKLOG tick and
+`CHAIN.md`, never restated in the row (ADR-532).
+
+**Appending:** the ADR table ends just before `## 📝 Operational scratchpad`. Find the last row
+(`grep -n '^| \*\*ADR-' agent_store/DECISIONS.md | tail -1`), read a few lines there (offset and
+limit), and insert the new row after it with Edit. The session log is the file's last lines:
+append one line at the end.
 
 ADR row format:
 

@@ -1,11 +1,13 @@
 // The endpoints of corrections to a ticket's own records (spec/parts/08-review-and-corrections.md
 // steps 2…4; AC-04-102, 103; AC-10-27, 28, 37; BACKLOG 2.4.4; ADR-028, 051, 337, 364, 431): a
 // field event's captured details, its number, a line of its items, a ticket it carries, a
-// photograph's two marks and a scale receipt. The door has already asked the caller's role and
-// that they hold the action's own permission, correct or renumber (admission.ts), and the
-// boundary has read what was sent by the request's schema; the service asks the permission again
-// inside its own piece of work, and queues the tickets the change moves there. The log says what
-// was done or why not, by code: never a number, a value, a label or a note.
+// photograph's two marks and a scale receipt; and a reprocess asked for with nothing changed
+// (ADR-498), which takes the grant to correct and only queues a job. The door has already asked
+// the caller's role and that they hold the action's own permission, correct or renumber
+// (admission.ts), and the boundary has read what was sent by the request's schema; the service
+// asks the permission again inside its own piece of work, and queues the tickets the change moves
+// there. The log says what was done or why not, by code: never a number, a value, a label or a
+// note.
 import {
   correctCarriedTicketEndpoint,
   correctFieldEventEndpoint,
@@ -13,6 +15,7 @@ import {
   correctScaleReceiptEndpoint,
   markPhotographEndpoint,
   renumberFieldEventEndpoint,
+  reprocessTicketsEndpoint,
   type BodyOf,
   type ParamsOf,
 } from '@open-adms/contracts';
@@ -23,23 +26,48 @@ import { Serves } from '../process/serves.ts';
 import { stated } from '../setup/setup-answered.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import { Corrections } from './corrections.ts';
+import { Reprocesses } from './reprocesses.ts';
 import {
   carriedTicketRecord,
   fieldEventRecord,
   itemLineRecord,
   photographRecord,
+  reprocessRecord,
   reviewed,
   scaleReceiptRecord,
 } from './review-answered.ts';
 
 export const apiCorrections = Symbol('the API’s corrections');
+export const apiReprocesses = Symbol('the API’s reprocesses');
 
 @Controller()
 export class CorrectionsController {
   private readonly corrections: Corrections;
+  private readonly reprocesses: Reprocesses;
 
-  constructor(@Inject(apiCorrections) corrections: Corrections) {
+  constructor(
+    @Inject(apiCorrections) corrections: Corrections,
+    @Inject(apiReprocesses) reprocesses: Reprocesses,
+  ) {
     this.corrections = corrections;
+    this.reprocesses = reprocesses;
+  }
+
+  // A reprocess with nothing changed (ADR-498): the tickets named, or a set-aside job's.
+  @Serves(reprocessTicketsEndpoint)
+  async reprocess(
+    @Param() params: ParamsOf<typeof reprocessTicketsEndpoint>,
+    @Body() body: BodyOf<typeof reprocessTicketsEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const person = callerOf(request).userId;
+    const outcome =
+      'setAsideJobId' in body
+        ? await this.reprocesses.setAside(person, params.projectId, body.setAsideJobId, body.note)
+        : await this.reprocesses.tickets(person, params.projectId, body.tickets, body.note);
+    return reprocessTicketsEndpoint.answer.parse(
+      reviewed(request, outcome, reprocessRecord, 'Tickets were queued to be reprocessed.'),
+    );
   }
 
   @Serves(correctFieldEventEndpoint)

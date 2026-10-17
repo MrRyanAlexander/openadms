@@ -19,7 +19,7 @@
 //   The server holds neither against the board: the phone says which it was, as it says what
 //   was set up on it (ADR-458 (5)).
 // - **When it ends is the domain's** (`PasscodeSessionRules`): neither outlasts a monitor's own
-//   sign-in, and a temporary one also ends with the day of the project whose assignment the
+//   sign-in (the firm's hours, ADR-531), and a temporary one also ends with the day of the project whose assignment the
 //   phone takes. Read on every request as any session on a phone is (`PhoneSignIns.onPhone`).
 // - **One monitor at a time on a phone**: it ends any other session on the phone, as a
 //   monitor's own sign-in does.
@@ -27,8 +27,9 @@
 //   the passcode is touched; a person who is no monitor in service, after it was taken, so only
 //   somebody who holds the passcode learns it.
 import { underMasterPasscode, type Database, type DeviceStatus } from '@open-adms/db';
-import type { MasterPasscodeSessionKind, PasscodeSessionRules } from '@open-adms/domain';
+import { PasscodeSessionRules, type MasterPasscodeSessionKind } from '@open-adms/domain';
 
+import { FirmSettings } from '../firm/firm-settings.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import type { SessionTokens } from '../sign-in/session-tokens.ts';
 import type { MasterPasscodeCheck, PasscodeRefused } from './master-passcode-check.ts';
@@ -66,7 +67,6 @@ export interface OpeningPhone {
 export interface PasscodeSessionsParts {
   readonly passcode: MasterPasscodeCheck;
   readonly tokens: SessionTokens;
-  readonly rules: PasscodeSessionRules;
   readonly assignments: PhoneAssignments;
   readonly clock: Clock;
 }
@@ -81,7 +81,7 @@ export class PasscodeSessions {
   }
 
   async open(phone: OpeningPhone, asked: PasscodeSessionToOpen): Promise<PasscodeSessionOutcome> {
-    const { passcode, tokens, rules, assignments, clock } = this.parts;
+    const { passcode, tokens, assignments, clock } = this.parts;
     // Before the passcode is touched: a phone out of service never spends its count.
     if (phone.status !== 'ACTIVE') return { opened: false, why: 'PHONE_OUT_OF_SERVICE' };
     const now = clock.now();
@@ -97,6 +97,10 @@ export class PasscodeSessions {
     const { monitorNumber } = person;
     // Read first: a temporary session ends with the day of the project the phone takes.
     const assignment = await assignments.taken(person.id, phone.deviceId, now);
+    // Neither outlasts a monitor's own sign-in, as the firm has it now (ADR-531).
+    const rules = new PasscodeSessionRules(
+      await this.db.$read((tx) => FirmSettings.monitorSessionHours(tx)),
+    );
     const expiresAt = rules.endsAt(
       asked.kind,
       now,

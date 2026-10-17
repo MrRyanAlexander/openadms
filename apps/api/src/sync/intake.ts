@@ -24,16 +24,24 @@
 // queued and never waited for (ARCHITECTURE §9 (7); AC-10-51): a field event's ticket and its
 // neighbours, the tickets an ROE's number was waiting on, a survey's own flags. A record kept
 // in quarantine is in the ledger and queues nothing: the worker never reads it.
-import type { Database, NumberBlock, Prisma } from '@open-adms/db';
+//
+// **A held record a person saves as corrected** (ADR-526 (2)) is written by the same code, in
+// that person's own piece of work (`savedIn`): no ledger row (the ledger is the phone's) and
+// nothing queued here (the reviewer's service queues what it moved).
+import { heldSentAs } from '@open-adms/contracts';
+import type { Actor, Database, NumberBlock, Prisma } from '@open-adms/db';
 import { GpsFix, type Policy, Quarantine, type QuarantineNotice } from '@open-adms/domain';
 
 import { WorkQueue, type WorkAsked } from '../jobs/work-queue.ts';
 import { type LastUsed, NumberAllocator, type PhoneAtSync } from '../numbering/number-allocator.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { type Brought, ledgerRow } from './ledger.ts';
+import { signedInThere } from './monitor-on-phone.ts';
 import { gpsNote, RecordWrite } from './record-write.ts';
+import { photoPlaces } from '../media/photo-places.ts';
 import type {
   IntakeNote,
+  PhotoTaken,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -65,12 +73,14 @@ export class Intake {
   private readonly clock: Clock;
   private readonly allocator: NumberAllocator;
   private readonly ticketsAJob: number;
+  private readonly clockAllowanceMinutes: number;
 
   constructor(db: Database, clock: Clock, policy: Policy) {
     this.db = db;
     this.clock = clock;
     this.allocator = new NumberAllocator(db, clock, policy);
     this.ticketsAJob = policy.jobTicketsAtMost;
+    this.clockAllowanceMinutes = policy.deviceClockOffLimitMinutes;
   }
 
   // One record, one answer. The received time is the server's clock, never the phone's.
@@ -106,6 +116,37 @@ export class Intake {
     return held;
   }
 
+  // A scale receipt, an incident, a drop-off log, a survey or a photograph's record a person
+  // saves from a held record (ADR-526 (2)): written in their open piece of work, as they are,
+  // with the time the server received what was held. A field event and an ROE are the
+  // reviewer's to write (`RecordWrite`), since their number decides first. Answers what was
+  // written, or that a photograph's record has none of its project to belong to.
+  async savedIn(
+    tx: Tx,
+    sent:
+      | Extract<SentRecord, { record: 'SCALE_RECEIPT' | 'INCIDENT' | 'DROP_OFF_LOG' | 'SURVEY' }>
+      | { readonly record: 'PHOTO'; readonly photo: SentPhoto },
+    receivedAt: Date,
+  ): Promise<SyncAnswer | PhotoTaken> {
+    switch (sent.record) {
+      case 'SCALE_RECEIPT':
+        return this.scaleReceipt(sent.scaleReceipt, receivedAt, undefined, tx);
+      case 'INCIDENT':
+        return this.incident(sent.incident, receivedAt, undefined, tx);
+      case 'DROP_OFF_LOG':
+        return this.dropOffLog(sent.dropOffLog, receivedAt, undefined, tx);
+      case 'SURVEY':
+        return this.survey(sent.survey, receivedAt, undefined, tx);
+      case 'PHOTO':
+        return this.photo(sent.photo, undefined, { tx, receivedAt });
+    }
+  }
+
+  // The work as the actor in a piece of work of its own, or in the one already open.
+  private written<T>(actor: Actor, open: Tx | undefined, work: (tx: Tx) => Promise<T>): Promise<T> {
+    return open === undefined ? this.db.$write(actor, work) : work(open);
+  }
+
   private take(sent: SentRecord, receivedAt: Date, brought?: Brought): Promise<SyncAnswer> {
     switch (sent.record) {
       case 'FIELD_EVENT':
@@ -120,9 +161,6 @@ export class Intake {
         return this.survey(sent.survey, receivedAt, brought);
       case 'ROE':
         return this.roe(sent, sent.roe, receivedAt, brought);
-      // A photograph's record is not the sync contract's yet (task 2.6.4): no ledger row.
-      case 'PHOTO':
-        return this.photo(sent.photo, receivedAt);
     }
   }
 
@@ -193,11 +231,18 @@ export class Intake {
         }
 
         const notes = await new RecordWrite(tx, receivedAt).fieldEvent(event);
+        // Whether the person it names was signed in on the phone over its field time: asked
+        // once, as it arrives, and kept with the sync for the worker to flag from (ADR-543).
+        const monitorSignedIn =
+          brought === undefined
+            ? undefined
+            : await signedInThere(tx, event, brought.syncId, this.clockAllowanceMinutes);
         await ledgerRow(tx, brought, {
           recordId: event.id,
           recordKind: 'FIELD_EVENT',
           deviceId: event.deviceId,
           answer: 'SAVED',
+          ...(monitorSignedIn === undefined ? {} : { monitorId: event.monitorId, monitorSignedIn }),
         });
         // Its ticket, and the tickets whose conclusions read it as the records now stand: its
         // partner is the same ticket; an overlap on one truck, a shared scale receipt and a
@@ -222,9 +267,11 @@ export class Intake {
     receipt: SentScaleReceipt,
     receivedAt: Date,
     brought?: Brought,
+    open?: Tx,
   ): Promise<SyncAnswer> {
-    return this.db.$write(
+    return this.written(
       { actorId: receipt.enteredById, source: 'DEVICE', deviceId: receipt.deviceId },
+      open,
       async (tx): Promise<SyncAnswer> => {
         const saved = await tx.scaleReceipt.findUnique({ where: { id: receipt.id } });
         if (saved !== null) return { answer: 'ALREADY_SAVED', id: receipt.id };
@@ -261,8 +308,9 @@ export class Intake {
     incident: SentIncident,
     receivedAt: Date,
     brought?: Brought,
+    open?: Tx,
   ): Promise<SyncAnswer> {
-    return this.form(incident, 'INCIDENT', brought, async (tx, shared, notes) => {
+    return this.form(incident, 'INCIDENT', brought, open, async (tx, shared, notes) => {
       const saved = await tx.incident.findUnique({ where: { id: incident.id } });
       if (saved !== null) return false;
       const certification =
@@ -304,8 +352,9 @@ export class Intake {
     log: SentDropOffLog,
     receivedAt: Date,
     brought?: Brought,
+    open?: Tx,
   ): Promise<SyncAnswer> {
-    return this.form(log, 'DROP_OFF_LOG', brought, async (tx, shared, notes) => {
+    return this.form(log, 'DROP_OFF_LOG', brought, open, async (tx, shared, notes) => {
       const saved = await tx.dropOffLog.findUnique({ where: { id: log.id } });
       if (saved !== null) return false;
       await tx.dropOffLog.create({
@@ -322,8 +371,13 @@ export class Intake {
     });
   }
 
-  private survey(survey: SentSurvey, receivedAt: Date, brought?: Brought): Promise<SyncAnswer> {
-    return this.form(survey, 'SURVEY', brought, async (tx, shared, notes) => {
+  private survey(
+    survey: SentSurvey,
+    receivedAt: Date,
+    brought?: Brought,
+    open?: Tx,
+  ): Promise<SyncAnswer> {
+    return this.form(survey, 'SURVEY', brought, open, async (tx, shared, notes) => {
       const saved = await tx.survey.findUnique({ where: { id: survey.id } });
       if (saved !== null) return false;
       await tx.survey.create({
@@ -348,6 +402,7 @@ export class Intake {
     form: SentForm,
     kind: 'INCIDENT' | 'DROP_OFF_LOG' | 'SURVEY',
     brought: Brought | undefined,
+    open: Tx | undefined,
     save: (
       tx: Tx,
       shared: {
@@ -371,13 +426,14 @@ export class Intake {
     const notes: IntakeNote[] = [];
     if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
     const [note] = notes;
-    return this.db.$write(
+    return this.written(
       {
         actorId: form.monitorId,
         source: 'DEVICE',
         deviceId: form.deviceId,
         ...(note === undefined ? {} : { reason: note.message }),
       },
+      open,
       async (tx): Promise<SyncAnswer> => {
         const saved = await save(
           tx,
@@ -491,29 +547,68 @@ export class Intake {
     );
   }
 
-  // A photograph's record, with the fingerprint taken at capture (ADR-101). It belongs to the
-  // record its phone made it for; while that record waits in quarantine, to the quarantined
-  // record and nothing else (ADR-292 (5)). Intake writes neither of the back office's marks.
-  private photo(photo: SentPhoto, receivedAt: Date): Promise<SyncAnswer> {
+  // A photograph's record, sent after the records (ARCHITECTURE §9 (2); ADR-101, 481), with the
+  // fingerprint taken at capture and the one of the file its phone will upload, each as the
+  // phone said it, written once. It belongs to the record its phone made it for; while that
+  // record waits in quarantine, to the quarantined record and nothing else (ADR-292 (5)).
+  // **Where its files are kept is made here**, from its own id and its project's, never sent
+  // (`photoPlaces`). Its file is uploaded after, on its own (task 2.6.4, part 3): `uploadedAt`
+  // stays empty until then. Intake writes neither of the back office's marks.
+  //
+  // **A photograph whose record is held for a person is kept with it** (ADR-526 (4)): the newest
+  // record held from the same phone under the id it names, of the kind it names and of its
+  // project, still waiting. It is saved, so its files come as any photograph's do; it queues
+  // nothing, since nothing reads a held record. Saved as corrected, it moves to that record. A
+  // record the server has nowhere (not yet sent, or not of the kind the photograph says) is no
+  // record it can belong to: nothing is tried, and `Sync` holds the photograph for a person
+  // (ADR-481). Sent again once its record is saved, it is saved. Saved, it queues what reads
+  // it: a field event's ticket (a pay item may require a photograph), or a certification's
+  // views, which the run checks by themselves.
+  //
+  // `open` is a reviewer's piece of work, where a person saves it from a held record: then it
+  // is written there, as they are, with the time what was held was received.
+  async photo(
+    photo: SentPhoto,
+    brought?: Brought,
+    open?: { readonly tx: Tx; readonly receivedAt: Date },
+  ): Promise<PhotoTaken> {
+    const receivedAt = open?.receivedAt ?? this.clock.now();
     const fix = new GpsFix(photo).read();
     const notes: IntakeNote[] = [];
     if (fix.unreadable !== null) notes.push(gpsNote('', fix.unreadable));
     const [note] = notes;
-    return this.db.$write(
+    return this.written(
       {
         actorId: photo.takenById,
         source: 'DEVICE',
         deviceId: photo.deviceId,
         ...(note === undefined ? {} : { reason: note.message }),
       },
-      async (tx): Promise<SyncAnswer> => {
+      open?.tx,
+      async (tx): Promise<PhotoTaken> => {
         const saved = await tx.photo.findUnique({ where: { id: photo.id } });
         if (saved !== null) return { answer: 'ALREADY_SAVED', id: photo.id };
         const quarantined = await tx.quarantinedRecord.findUnique({
           where: { id: photo.owner.id },
         });
+        const ownerEvent =
+          quarantined === null && photo.owner.kind === 'FIELD_EVENT'
+            ? await tx.fieldEvent.findUnique({ where: { id: photo.owner.id } })
+            : null;
+        let held: string | null = null;
+        if (
+          quarantined === null &&
+          ownerEvent === null &&
+          !(await Intake.ownerSaved(tx, photo.owner))
+        ) {
+          held = open === undefined ? await Intake.heldOwner(tx, photo) : null;
+          if (held === null) return { answer: 'OWNER_NOT_SAVED' };
+        }
         const owner = (kind: SentPhoto['owner']['kind']): string | null =>
-          quarantined === null && photo.owner.kind === kind ? photo.owner.id : null;
+          quarantined === null && held === null && photo.owner.kind === kind
+            ? photo.owner.id
+            : null;
+        const places = photoPlaces(photo.projectId, photo.id, photo.depthSha256 !== null);
         await tx.photo.create({
           data: {
             id: photo.id,
@@ -526,7 +621,8 @@ export class Intake {
             incidentId: owner('INCIDENT'),
             dropOffLogId: owner('DROP_OFF_LOG'),
             quarantinedRecordId: quarantined?.id ?? null,
-            view: photo.view ?? null,
+            heldRecordId: held,
+            view: photo.view,
             capturedAt: photo.capturedAt,
             deviceUtcOffsetMinutes: photo.deviceUtcOffsetMinutes,
             receivedAt,
@@ -534,14 +630,70 @@ export class Intake {
             longitude: fix.fix?.longitude ?? null,
             originalSha256: photo.originalSha256,
             uploadedSha256: photo.uploadedSha256,
-            objectKey: photo.objectKey,
-            depthObjectKey: photo.depthObjectKey ?? null,
+            objectKey: places.objectKey,
+            depthObjectKey: places.depthObjectKey,
+            depthSha256: photo.depthSha256,
             deviceId: photo.deviceId,
           },
         });
+        await ledgerRow(tx, brought, {
+          recordId: photo.id,
+          recordKind: 'PHOTO',
+          deviceId: photo.deviceId,
+          answer: 'SAVED',
+        });
+        if (ownerEvent !== null) {
+          await this.queued(tx, brought, {
+            projectId: photo.projectId,
+            tickets: [{ workflow: ownerEvent.workflow, ticketNumber: ownerEvent.ticketNumber }],
+          });
+        } else if (quarantined === null && held === null && photo.owner.kind === 'CERTIFICATION') {
+          await this.queued(tx, brought, {
+            projectId: photo.projectId,
+            tickets: [],
+            projectRecords: true,
+          });
+        }
         return { answer: 'SAVED', id: photo.id, notes };
       },
     );
+  }
+
+  // The record held for a person that a photograph is kept with: the newest held from its own
+  // phone under the id it names, still waiting, naming its project, sent as the kind it names.
+  private static async heldOwner(tx: Tx, photo: SentPhoto): Promise<string | null> {
+    const held = await tx.heldRecord.findMany({
+      where: {
+        deviceId: photo.deviceId,
+        sentId: photo.owner.id,
+        projectId: photo.projectId,
+        resolvedAt: null,
+      },
+      orderBy: { receivedAt: 'desc' },
+      select: { id: true, payload: true, reason: true },
+    });
+    return held.find((one) => heldSentAs(one.payload, one.reason) === photo.owner.kind)?.id ?? null;
+  }
+
+  // Whether the record a photograph names is saved, as the kind it says.
+  private static async ownerSaved(tx: Tx, owner: SentPhoto['owner']): Promise<boolean> {
+    const where = { where: { id: owner.id }, select: { id: true } } as const;
+    switch (owner.kind) {
+      case 'FIELD_EVENT':
+        return (await tx.fieldEvent.findUnique(where)) !== null;
+      case 'SCALE_RECEIPT':
+        return (await tx.scaleReceipt.findUnique(where)) !== null;
+      case 'ROE':
+        return (await tx.roe.findUnique(where)) !== null;
+      case 'SURVEY':
+        return (await tx.survey.findUnique(where)) !== null;
+      case 'INCIDENT':
+        return (await tx.incident.findUnique(where)) !== null;
+      case 'DROP_OFF_LOG':
+        return (await tx.dropOffLog.findUnique(where)) !== null;
+      case 'CERTIFICATION':
+        return (await tx.certification.findUnique(where)) !== null;
+    }
   }
 
   // A record already waiting in quarantine under this id: sent again, it is the same quarantined

@@ -10,6 +10,11 @@
 //
 // A caller is counted by address (the domain's addressCounted: an IPv6 caller by its network), a
 // login by a hash of the address typed, so nothing a stranger typed is held as it was typed.
+//
+// **A try at a secret counts while it is under way** (ADR-541; the Phase 2 audit's F2): a try let
+// past `mayTry` is held as in flight until it is over, and the tries in flight count towards the
+// address's limits beside those already refused. So a burst sent at once from one address is let
+// through no further than the limit, not as far as the burst is long.
 import { createHash } from 'node:crypto';
 
 import {
@@ -36,10 +41,20 @@ export class Limited extends Refusal {
   }
 }
 
+// A try at a secret under way: over once its outcome is known, whatever it was. Its refusal, if
+// it was refused, is counted by `wrongTry` before it is over.
+export interface TryUnderWay {
+  over(): void;
+}
+
 export class Limits {
   private readonly rules: RateLimits;
   private readonly clock: Clock;
   private readonly kept = new Map<string, Counted>();
+  // Tries at a secret let past `mayTry` and not yet over, by the key they count under.
+  private readonly inFlight = new Map<string, number>();
+  // When each address was last refused at each login, in milliseconds, oldest first.
+  private readonly lastRefused = new Map<string, number>();
 
   constructor(rules: RateLimits, clock: Clock) {
     this.rules = rules;
@@ -58,25 +73,84 @@ export class Limits {
     if (limited !== undefined) throw limited;
   }
 
+  // Every request of a proven phone, counted for the phone, whatever address it came from and
+  // whoever is signed in on it (ADR-490): an office's phones share its address, and one of them
+  // must not spend the count of the rest.
+  phoneAsked(deviceId: string): void {
+    const limited = this.taken('REQUESTS_BY_PHONE', `phone ${deviceId}`);
+    if (limited !== undefined) throw limited;
+  }
+
+  // Every part of a photograph's file a phone sends, or asks after (ADR-482), counted for the
+  // phone, whatever address it came from.
+  filePart(deviceId: string): void {
+    const limited = this.taken('FILE_PARTS_BY_PHONE', `phone ${deviceId}`);
+    if (limited !== undefined) throw limited;
+  }
+
   // Before a secret is tried: refused where this address has been refused too often already,
-  // at any login or at this one. A try refused here never reaches the login, so it is never a
-  // wrong try there.
-  mayTry(address: string, login?: string): void {
+  // at any login or at this one, counting its tries still under way as refused. A try refused
+  // here never reaches the login, so it is never a wrong try there. One let through is under way
+  // until the caller says it is over (in a `finally`, whatever happened).
+  mayTry(address: string, login?: string): TryUnderWay {
     const from = addressCounted(address);
+    const keys = [
+      Limits.key('WRONG_TRIES_BY_ADDRESS', from),
+      ...(login === undefined
+        ? []
+        : [Limits.key('WRONG_TRIES_BY_ADDRESS_AT_LOGIN', Limits.pair(login, from))]),
+    ];
     const limited =
-      this.closed('WRONG_TRIES_BY_ADDRESS', from) ??
+      this.closed('WRONG_TRIES_BY_ADDRESS', from, true) ??
       (login === undefined
         ? undefined
-        : this.closed('WRONG_TRIES_BY_ADDRESS_AT_LOGIN', Limits.pair(login, from)));
+        : this.closed('WRONG_TRIES_BY_ADDRESS_AT_LOGIN', Limits.pair(login, from), true));
     if (limited !== undefined) throw limited;
+    for (const key of keys) this.inFlight.set(key, (this.inFlight.get(key) ?? 0) + 1);
+    let done = false;
+    return {
+      over: () => {
+        if (done) return;
+        done = true;
+        for (const key of keys) {
+          const left = (this.inFlight.get(key) ?? 1) - 1;
+          if (left > 0) this.inFlight.set(key, left);
+          else this.inFlight.delete(key);
+        }
+      },
+    };
+  }
+
+  // Whether this address was refused at that login in the last `seconds` (ADR-541): the master
+  // passcode's wait holds only an address that has tried it wrong, so a stranger's wrong tries
+  // never keep the firm's own supervisors out.
+  refusedLately(address: string, login: string, seconds: number): boolean {
+    const at = this.lastRefused.get(Limits.pair(login, addressCounted(address)));
+    return at !== undefined && this.clock.now().getTime() - at < seconds * 1000;
   }
 
   // A try at a secret was refused.
   wrongTry(address: string, login?: string): void {
     const from = addressCounted(address);
     this.count('WRONG_TRIES_BY_ADDRESS', from);
-    if (login !== undefined)
-      this.count('WRONG_TRIES_BY_ADDRESS_AT_LOGIN', Limits.pair(login, from));
+    if (login === undefined) return;
+    this.count('WRONG_TRIES_BY_ADDRESS_AT_LOGIN', Limits.pair(login, from));
+    this.refusedAt(address, login);
+  }
+
+  // When an address was refused at a login, kept as soon as the login's own check knows it: the
+  // master passcode's check says so inside its turn, before the next try's turn begins, so the
+  // next try from that address is held by the wait however its request was timed (ADR-541).
+  refusedAt(address: string, login: string): void {
+    const pair = Limits.pair(login, addressCounted(address));
+    // Moved to the end of the line, so the first in it is the oldest, and bounded as the counts.
+    this.lastRefused.delete(pair);
+    while (this.lastRefused.size >= this.rules.countsKept) {
+      const oldest = this.lastRefused.keys().next();
+      if (oldest.done === true) break;
+      this.lastRefused.delete(oldest.value);
+    }
+    this.lastRefused.set(pair, this.clock.now().getTime());
   }
 
   // A sign-in worked: what this address was refused at that login before counts no more.
@@ -111,16 +185,31 @@ export class Limits {
     return this.kept.size;
   }
 
+  // How many keys have a try under way: what a test reads to see that none is left behind.
+  get underWay(): number {
+    return this.inFlight.size;
+  }
+
   private taken(name: RateLimitName, who: string): Limited | undefined {
     const limited = this.closed(name, who);
     if (limited === undefined) this.count(name, who);
     return limited;
   }
 
-  private closed(name: RateLimitName, who: string): Limited | undefined {
-    const seconds = this.rules
-      .of(name)
-      .closedFor(this.kept.get(Limits.key(name, who)), this.clock.now());
+  // `andUnderWay`: the tries under way count too, as if each were refused.
+  private closed(name: RateLimitName, who: string, andUnderWay = false): Limited | undefined {
+    const key = Limits.key(name, who);
+    const limit = this.rules.of(name);
+    const now = this.clock.now();
+    const kept = this.kept.get(key);
+    const underWay = andUnderWay ? (this.inFlight.get(key) ?? 0) : 0;
+    const counted: Counted | undefined =
+      underWay === 0
+        ? kept
+        : limit.live(kept, now)
+          ? { from: kept.from, count: kept.count + underWay }
+          : { from: now.getTime(), count: underWay };
+    const seconds = limit.closedFor(counted, now);
     return seconds === undefined ? undefined : new Limited(name, seconds);
   }
 

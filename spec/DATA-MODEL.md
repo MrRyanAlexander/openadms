@@ -127,7 +127,7 @@ is a prime or a sub is its place on each project (`ProjectContractor`), never a 
 | **name** | text | |
 | **kind** | enum `ContractorKind` | `HAULER` · `MONITORING` · `CREW` · `OTHER` (Q-97, `FROM-BUILD-1.md`). No default: whoever adds it says which (ADR-305) |
 | contactName, contactEmail, contactPhone | text | Edited freely, audited, as a client's; each optional (the user, ADR-306) |
-| mergedIntoId | → `Contractor` | A sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted. Never itself, and a merged row is archived for as long as it is merged (checks, ADR-305) |
+| mergedIntoId | → `Contractor` | ⚠️ **Written by nothing since ADR-529 (f)**, kept as history: two spellings of a sub are flagged (`SUB_NAME_ALIKE`) and a person corrects the sub, never merged. Was: a sub typed twice at certification, merged by the back office, audited (ADR-108); the merged row is archived, never deleted. Never itself, and a merged row is archived for as long as it is merged (checks, ADR-305) |
 | **createdAt** | instant | |
 | archivedAt | instant | |
 
@@ -225,7 +225,7 @@ API reads the table**; who is shown them on a screen is the back office's (Phase
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
-| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) (REQ-202b's list; a task that needs another adds it) |
+| **kind** | enum `SecurityEventKind` | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (a wrong try at the master passcode and the lock, ADR-439) · `DEVICE_TURN_IN` (a phone turned in, its key revoked, ADR-488) · `DEVICE_KEY_REVOKED` (a lost phone's key revoked after the firm's time, by the worker, ADR-530) (REQ-202b's list; a task that needs another adds it) |
 | userId | → `User` | Who it is about: the person a try named, when the firm has such a person. Never the name that was typed |
 | deviceId | → `Device` | The phone, when it happened on one |
 | requestId | text | The API request it happened in; never blank (check) |
@@ -251,7 +251,7 @@ permission"; an admin needs none.
 |---|---|---|
 | **id** | uuid | |
 | **userId** | → `User` | Unique with `permission`. Never the system actor (check) |
-| **permission** | enum `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` |
+| **permission** | enum `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` · `VIEW_REVIEW` · `VIEW_SETUP` · `VIEW_DISPATCH` (the three views, ADR-539: what the back office reads, granted apart; an act needs its area's view) |
 | **createdAt** | instant | |
 | archivedAt | instant | **Taken away by archiving, given back by clearing it**: never deleted, never a second row (*agent default*, ADR-315) |
 
@@ -343,19 +343,33 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **status** | enum `DeviceStatus` | `ACTIVE` · `LOST` · `RETIRED` |
 | **masterPasscodeVersion** | int → `MasterPasscode.version` | The passcode version the phone holds |
 | **enrolledAt** | instant | |
-| outOfServiceAt | instant | Work made after it arrives flagged (ADR-134) |
-| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, once a lost or retired phone is wiped; only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once; nothing sets it yet (2.6.5) |
+| outOfServiceAt | instant | Work made after it arrives flagged (ADR-134); may be stated by hand, never after now nor before enrolment (ADR-530) |
+| outOfServiceMarkedAt | instant | **Built (ADR-530):** when it was last marked lost or retired; the firm's time for its key runs from here. Set exactly while it is out of service (check) |
+| outOfServiceReasonId | → `Reason` | **Built (ADR-530):** why, from the firm's reasons list (use `PHONE_REMOVAL`), where one was picked; only while out of service (check) |
+| keyRevokedBy | enum `DeviceKeyRevocation` | **Built (ADR-530):** `TURN_IN` · `FIRM_TIME`, set exactly when `keyRevokedAt` is (check). `FIRM_TIME`: written by the worker as the system actor, only for a phone out of service, only once the firm's hours have passed since its mark by the database's clock and while the firm's record isn't off, with no block still issued; such a phone may then be turned in once (moved to `TURN_IN`, its time kept), nothing else of it changing, and still answers a challenge. `TURN_IN`: as below, final |
+| keyRevokedAt | instant | **Built (ADR-315):** when its key was revoked, as a lost or retired phone is told to wipe at its turn-in (ADR-495); only on a phone out of service, never before its removal time (check). Refusing the key is the API's, built (ADR-440): a phone with one proves nothing and its token stops at once. **Set by the phone's turn-in alone (ADR-488):** as the master passcode's actor for that phone, once every record it holds is on the server and it holds no block still issued; never at enrolment, and never changed after, nor its status or removal time; a phone with one is issued no block (the guard migration). It is set as the phone is told to wipe, not after (the user kept that moment: KD-77 closed, ADR-495) |
 | lastAnsweredChallengeMadeAt | instant | **Built (ADR-440):** when the server made the last challenge this phone proved itself with; a challenge is good once, so only one made later is taken. Written by that phone's own proof alone (the device key's actor, for that phone), only ever later, never once the key is revoked (the guard) |
+
+#### `FirmSettings`
+
+*Configuration, built (ADR-530; REQ-214, 215).* The firm's own settings for the whole installation: **one row**, `id` 1 (check). Written once by the seed from the release's policy values; changed by the API alone (never another row added), audited in the security domain; read by the worker.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | int | Always 1 |
+| phoneKeyRevokedAfterHours | int | Hours a phone marked lost or retired keeps its key, from its last mark; 1…8,760, or null for off (check). Starts at `PHONE_KEY_REVOKED_AFTER_HOURS` (24; 0 starts it off). An admin or a manager/analyst holding Setup changes it |
+| **viewerTwoStepRequired** | boolean | Whether a read-only viewer must use two-step sign-in (ASVS 6.3.3); false as shipped (ADR-170). An admin alone changes it |
 
 #### `MasterPasscode`
 
-*Configuration, as built (ADR-281).* A version and its slow hash, never edited, read only by the API.
+*Configuration, as built (ADR-281, 542).* A version, its keyed slow hash and its sealed offline seed, read only by the API; never edited but to key the installer's verifier and write its seed, each once (ADR-542).
 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | |
 | **version** | int, unique | |
-| **hash** | text | Kept out of the audit log (§7) |
+| **hash** | text | Argon2id, keyed with the API's password key (the installer's first version keyed at its first right use). Kept out of the audit log (§7) |
+| offlineSeed | text | The first slow hash of the passcode under its own salt, sealed with the API's sealing key and bound to the version: what a phone's check is made from and an offline sign-in under it proven against (ADR-542). None until the API first has the passcode in hand. Kept out of the audit log |
 | **createdAt** | instant | |
 
 #### `MasterPasscodeTries`
@@ -396,7 +410,8 @@ only by the API; audited in the security domain; never deleted.
 | deviceUtcOffsetMinutes | int | An unplanned one only: that clock's offset, UTC−12:00 to UTC+14:00 (check) |
 | receivedAt | instant | An unplanned one only: when the server received it; never changes |
 | **createdAt** | instant | |
-| archivedAt | instant | Withdrawn by archiving; never expires |
+| archivedAt | instant | Withdrawn by archiving; never expires; put back by clearing it (ADR-527) |
+| withdrawalNote | text | Why it was withdrawn, as the dispatcher wrote it, 500 characters at most; on a withdrawn one only, cleared when it is put back (check; ADR-527) |
 
 **An unplanned one is what its phone reported (built, ADR-457; agent defaults).** The database
 takes one only as the master passcode's actor, for a phone, naming that same phone; whether an
@@ -448,7 +463,7 @@ The eighteen lists:
 | `SiteLabel` | | |
 | `IncidentType` | | |
 | `IncidentSubType` | **incidentTypeId** | |
-| `Reason` | **uses** `ReasonUse[]` (`VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD`, ADR-173) | |
+| `Reason` | **uses** `ReasonUse[]` (`VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD`, ADR-173 · `PHONE_REMOVAL`, ADR-530) | |
 | `SurveyWorkType` | | `PRE_WORK` · `POST_WORK` · `ROE` (a post-work survey finds its pre-work survey, ADR-150) |
 | `ClockActivity` | | |
 | `FieldTag` | **projectId** (the one project list, ADR-216) | |
@@ -488,7 +503,7 @@ creates a project says what it starts as (invariant 16, ADR-303).
 | **siteCircleMeters** | int | A new project starts with the policy value `DISPOSAL_SITE_PROXIMITY_M`, 200 (ADR-142, 303); at least 1 (a check) |
 | **timeClockEnabled** | bool | Whether the project offers its workers the time clock (ADR-241). A new project starts with it switched off; the firm switches it on (ADR-303; confirmed by the user, ADR-304) |
 | **createdAt** | instant | |
-| closedAt | instant | |
+| closedAt | instant | Set by an admin's close, by hand (ADR-529 (b)): the project is read-only after, held by the database (`project_open_guard()` on its tables and the records under them; a viewer's grant, a held record, a file set aside and a photograph kept with a held record still written); cleared only by an admin's reopening, with a reason (`adms.reason`), nothing else changing with it. A second close keeps the first |
 
 #### `ProjectKindOfWork`
 
@@ -527,7 +542,6 @@ dates or amount (ADR-146). A prime may hold one contract on a project or several
 | **projectId** | → `Project` | Unique with `documentType`, archived forms included: at most one form of each on a project |
 | **name** | text | |
 | **documentType** | enum `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG`. Also unique with `id`: the key a debris type's entry and a definition point at, so neither sits on the wrong kind of form and the type can't change under them |
-| **enabled** | bool | Incidents and drop-off logs are switched on per project (ADR-188). No default. **Read only on the forms that aren't a workflow's**: whether a load, haul-out or unit rate form is used is `Project.workflows`' to say (ADR-041, 308) |
 | gpsRequired | bool | The ROE form's setting (ADR-181): stated on it, and on no other form (a check, ADR-308) |
 | incidentOffers | enum `IncidentOffer`[] | The incident form's setting (ADR-328, 334): which of the contractor involved, a cert number and an ROE number an incident offers the project's monitors. Stated on the incident form, an empty list for none, and on no other form (a check). A new one starts with `CONTRACTOR` and `CERT_NUMBER`, and `ROE_NUMBER` where the program type requires ROEs (`packages/domain`'s `IncidentOffers`, *agent default*) |
 | **createdAt** | instant | As every configuration record (§1, *Leaving*) |
@@ -778,7 +792,9 @@ edited or deleted**. A site with none uses the project's circle (ADR-142, 144).
 | **version** | int | From 1; once per site |
 | **geometry** | geometry | A Polygon or MultiPolygon (§1) |
 | **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
-| **source** | enum `SiteAreaSource` | `DRAWN` · `UPLOAD` |
+| **source** | enum `SiteAreaSource` | `DRAWN` · `UPLOAD` · `ESRI_LAYER` (ADR-527) |
+| sourceName | text | The file's name, or the Esri layer's address; stated on an `ESRI_LAYER` one (check; ADR-527) |
+| uploadedFileKey | text | Where the file it came from is kept; never shown to a viewer (ADR-527) |
 | **createdById** | → `User` | |
 | **effectiveFrom** | instant | When it was saved: the site's area until its next version |
 
@@ -797,7 +813,9 @@ deleted** (ADR-135, 141).
 | zoneNameField | text | |
 | **boundary** | geometry | A Polygon or MultiPolygon (§1) |
 | **westLongitude**, **southLatitude**, **eastLongitude**, **northLatitude** | decimal(38,8) | The shape's bounding box (§1) |
-| uploadedFileKey | text | |
+| uploadedFileKey | text | Where the file it came from (or the Esri boundary layer's copy) is kept; never shown to a viewer |
+| zonesSourceName | text | The zones' Esri layer, on a map fetched from Esri with zones, named in `zoneNameField` (check; ADR-527) |
+| zonesFileKey | text | Where that layer's copy is kept; only with `zonesSourceName` (check); never shown to a viewer (ADR-527) |
 | **loadedById** | → `User` | |
 | **loadedAt** | instant | When it was saved: **the database's own time**, never the client's (`dbgenerated`), since the guard that takes a zone only with its version compares it with the transaction's (ADR-316, KD-68) |
 
@@ -906,6 +924,8 @@ primary box); a box repeats its certification's `kind`, so only a container hold
 | **certifiedById** | → `User` | The monitor who made it and measured it: one whose assignment includes certifying (ADR-151, 294) |
 | deviceId | → `Device` | |
 | assignmentId | → `Assignment` | |
+| createdById | → `User` | Entered in the back office from the paper sheet, its phone having failed: who entered it (ADR-521, 534). With `createdReasonId`, both or neither; never with a phone or an assignment; never changed |
+| createdReasonId | → `Reason` | And why, from the firm's reasons for a record made in the back office |
 | clientRepresentativeName, contractorRepresentativeName | text | Names only |
 | **signaturesOnFile** | bool | Set at QC |
 | replacesId | → `Certification` | A modified truck's new certification (ADR-082) |
@@ -918,7 +938,9 @@ primary box); a box repeats its certification's `kind`, so only a container hold
 
 **Who did what on a certification** (ADR-294): it is **made and measured** by the certifying monitor
 (`certifiedById`); **helped** by whoever that monitor picks, or nobody (`CertificationHelper`);
-**audited** by the back office at QC (its `QcMark.setById`, "checked by"). No other field says who.
+**audited** by the back office at QC (its `QcMark.setById`, "checked by"). One entered in the
+back office from its sheet also says who entered it and why (`createdById`, `createdReasonId`;
+ADR-534 (1)); its certifier is still the monitor named on the sheet. No other field says who.
 
 #### `CertificationHelper`
 
@@ -1079,6 +1101,7 @@ version used, both and the worked-out pay item to the field event's own project)
 | createdById | → `User` | The back-office person who created it (ADR-156); required when `source` is `BACK_OFFICE` |
 | createdReasonId | → `Reason` | And why; required the same way |
 | **temporarySession** | bool | Made under the master passcode's temporary session for this monitor (ADR-120) |
+| masterPasscodeSession | enum `MasterPasscodeSession` | Made in a session the master passcode opened, and which way: `AS_MONITOR` (signed in as the phone's monitor) or `TEMPORARY`; none in a monitor's own sign-in (ADR-462, 534 (11); AC-02-42). Only on a phone's record; `TEMPORARY` exactly when `temporarySession` |
 | **certNumber** | text | The number as scanned: a snapshot (ADR-017) |
 | certificationId | → `Certification` | Empty while no certification on the project has that number (ADR-154) |
 | **certKeyedByHand** | bool | A truck keyed in by hand: only the monitor's claim (ADR-154) |
@@ -1318,16 +1341,18 @@ item requires is a flag.
 |---|---|---|
 | **id** | uuid | From the phone |
 | **projectId** | → `Project` | |
-| fieldEventId, certificationId, roeId, surveyId, incidentId, dropOffLogId, scaleReceiptId, quarantinedRecordId | → each | **Exactly one owner** (check). `quarantinedRecordId` while its record waits in quarantine; the photo moves to the field event when a reviewer resolves it (ADR-292) |
+| fieldEventId, certificationId, roeId, surveyId, incidentId, dropOffLogId, scaleReceiptId, quarantinedRecordId, heldRecordId | → each | **Exactly one owner** (check). `quarantinedRecordId` while its record waits in quarantine; the photo moves to the field event when a reviewer resolves it (ADR-292). `heldRecordId` while its record is held for a person; it moves to the record a person saves from it (ADR-526 (4)) |
 | view | enum `PhotoView` | A certification's five: `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` (ADR-179) |
 | **capturedAt** | instant | With its offset |
 | latitude, longitude | decimal(38,8) | |
-| **originalSha256** | text | Taken at capture |
-| **uploadedSha256** | text | |
-| **objectKey** | text | |
-| depthObjectKey | text | |
-| deviceId | → `Device` | |
-| uploadedAt | instant | |
+| **originalSha256** | text | Taken at capture; the phone's word |
+| **uploadedSha256** | text | Of the file the phone uploads; the phone's word, sent with the record (ADR-481) |
+| **objectKey** | text | Where the file is kept: **made by the server**, never sent by a phone: `projects/<project>/photos/<photograph>` (ADR-481) |
+| depthObjectKey | text | The depth file's place, beside it with `.depth` after it, where the phone said one comes (ADR-481) |
+| depthSha256 | text | The depth file's own fingerprint, the phone's word; there exactly where a depth file goes (ADR-482) |
+| deviceId | → `Device` | None on a photograph added in the back office (ADR-534 (2)) |
+| uploadedAt | instant | When the file reached storage, through the media endpoint: written once, by the phone that took it (ADR-482); on one added in the back office, by the person who sent it |
+| depthUploadedAt | instant | The same for the depth file (ADR-482) |
 | archivedAt | instant | The back office removed it from the record (ADR-329 (9), 337): a mark only, cleared to put it back. Nothing is deleted; who and when is the audit record |
 | label | text | The back office's own words for what it shows; never blank; read by no check (ADR-337) |
 
@@ -1350,6 +1375,44 @@ photograph keeps its record, its file, its fingerprints and its label, and a vie
 both columns. A label that is blank is refused (`photo_label_check`). Who may remove or label is
 a permission the API reads (Phase 2); a removed photograph counts towards nothing a record must
 have: not a certification's five views, not the photographs a pay item requires (the user, ADR-345).
+**Its files (ADR-482).** The depth file's fingerprint, like the other two, is a SHA-256 written
+once, and is there exactly where `depthObjectKey` is (`photo_depth_check`). **A record is kept
+before its files reach storage** (no upload time on an insert); `uploadedAt` and
+`depthUploadedAt` are each written once, and only with the source `DEVICE` and the photograph's own
+phone stated (`photo_upload_guard`); the API writes them under the device key's actor when the
+media endpoint has kept a file it checked. A viewer's view shows both new columns. **Added in
+the back office (ADR-534 (2)):** a photograph with no phone, sent whole to a record made in the back
+office; both fingerprints are the server's reading of its bytes; its upload time is written by a
+person from the back office alone (`photo_upload_guard`).
+
+#### `SetAsideFile` (`set_aside_file`)
+
+*How the evidence arrived (ADR-482; BACKLOG C84 (12)).* A whole file the media endpoint received
+for a photograph that isn't the file its phone fingerprinted: kept in storage at a place of its
+own beside the photograph's (`<objectKey>.set-aside/<its SHA-256>`), for a person; never kept as
+the photograph's, never thrown away.
+
+| Field | Type | Notes |
+|---|---|---|
+| **id** | uuid | The database's |
+| **photoId** | → `Photo` | |
+| **file** | enum `PhotoFile` | `PHOTO` · `DEPTH`: which of the photograph's files it stood for |
+| **deviceId** | → `Device` | The phone that sent it: the photograph's own |
+| **receivedSha256** | text | Of what arrived, read by the server |
+| **byteCount** | int | More than none |
+| **contentType** | text | The kind of image its first bytes say |
+| **objectKey** | text | Where it is kept; unique |
+| **receivedAt** | instant | When the server received it whole |
+| resolvedById | → `User` | Who closed it (ADR-526 (3)) |
+| resolvedAt | instant | |
+| resolution | text | What was decided: the photograph's own file won't come, this one stays beside it |
+
+One row for one file: unique on `photoId`, `file` and `receivedSha256`. The API's alone to add and
+read; what arrived is never changed, never deleted, audited in the records domain; written only
+with the source `DEVICE` and the photograph's own phone stated (`set_aside_file_from_its_phone_guard`).
+**Closed once, by a person at the back office who is named on it** (all three or none; never the
+system actor, the master passcode's or the device key's; `resolved_once_guard`), the API's
+`closeSetAsideFile` (ADR-526). No viewer reads it.
 
 ### 4.5 Sync (Phase 2 settles the detail; ARCHITECTURE §9)
 
@@ -1402,6 +1465,8 @@ The idempotency ledger: a retry is answered "already saved" from here and never 
 | **recordKind** | *open* | |
 | **syncId** | → `Sync` | |
 | **answer** | enum `SyncAnswer` | `SAVED` · `QUARANTINED` |
+| monitorId | → `User` | A field event saved: the person it named as its monitor (ADR-543) |
+| monitorSignedIn | bool | And whether they held that phone over its field time when it arrived: what the worker flags `MONITOR_NOT_SIGNED_IN` from. Both or neither |
 
 **As built (ADR-471, task 2.6.2 part 1; agent defaults).** Table `synced_record`; **the key's
 column is `id`** (the phone-made id; the audit log names every row by a column of that name),
@@ -1428,13 +1493,14 @@ defaults). Inert: never a field event, never paired, never billed, never read by
 |---|---|---|
 | **id** | uuid | Its own: what was sent may carry no id |
 | **deviceId** | → `Device` | The phone, known for certain from its proof |
-| **syncId** | → `Sync` | The sync that brought it, that phone's own |
+| syncId | → `Sync` | The sync that brought it, that phone's own; none only for a report made to its own endpoint (ADR-526 (5)) |
 | sentId | uuid | The record's phone-made id, where one could be read |
 | projectId | uuid | The project it named, **as sent: not a relation**, it may name nothing |
 | sentMonitorId | uuid | The monitor it named, as sent: not a relation |
 | **payload** | JSONB | What stood in the record's place, exactly as sent: any JSON value |
 | **sentSha256** | text | The SHA-256 of what was sent |
-| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` (the domain's `notSavedReasons`) |
+| sentBytes | int | Its size as canonical JSON in UTF-8: what the phone's daily budget counts (ADR-546). Never changed |
+| **reason** | enum `NotSavedReason` | `NOT_A_RECORD` · `NAMES_NO_RECORD` · `ASSIGNMENT_NOT_SAVED` · `CERTIFICATION_REFUSED` · `OWNER_NOT_SAVED` (a photograph whose record the server has nowhere, ADR-481, 526) · `REPORT_NOT_SAVED` (an unplanned assignment or a use of the passcode the server could not keep, ADR-526) · `PROJECT_CLOSED` (field work for a project closed before it arrived, ADR-529) (the domain's `heldReasons`) |
 | **message** | text | What the phone was told |
 | **receivedAt** | instant | |
 | resolvedById | → `User` | |
@@ -1453,7 +1519,12 @@ worker holds no right on it. **Viewers:** as a quarantined record's (ADR-336, 46
 client user and an auditor see that a record naming their project is held, why and how it was
 resolved (`viewer_held_record`); what was sent only by `viewer_held_record_citizen`, to a viewer
 the firm lets see private citizens; one that names no project of theirs is seen by none; a
-contractor user sees none. Who resolves one and how is the review queue's (Phase 4).
+contractor user sees none. **Resolved once (ADR-526 (2), (7)), by a person at the back office who is
+named on it** (`resolved_once_guard`): saved as corrected (the record saved under the id its phone
+made, its photographs moved to it) or closed, never to be saved. **A photograph whose record is
+held is kept with it** (`Photo.heldRecordId`, the ninth owner): one held from the photograph's own
+phone, naming its project, still waiting; it leaves only for the record a person saved from it
+(`photo_held_record_guard`). The review queue's screens are Phase 4's.
 **Written since ADR-472** by `Sync` alone, as the device key's actor on the syncing phone.
 **`sentSha256` is the SHA-256, in hex, of what was sent as canonical JSON in UTF-8** (object
 keys sorted at every depth, no white space), so the order of a record's fields doesn't matter.
@@ -1842,11 +1913,13 @@ itself is never changed by an acceptance; the acceptance stays on its flag (ADR-
 
 | Field | Type | Notes |
 |---|---|---|
-| **flagId** | → `Flag`, unique | |
+| **flagId** | → `Flag` | One acceptance in force a flag: unique among those not taken back (an exclusion, ADR-534 (8)) |
 | **reasonId** | → `Reason` | |
 | note | text | |
 | **acceptedById** | → `User` | |
 | **acceptedAt** | instant | |
+| withdrawnById, withdrawnAt | → `User`, instant | Taken back: who and when, both or neither; a person (ADR-534 (8)). The flag stands again; accepting it again is a new row; one taken back is history |
+| withdrawNote | text | Why, only with them; never blank |
 
 #### `TicketVoid`
 
@@ -1996,7 +2069,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `TicketStatus` ✅ | `PENDING` · `COMPLETED` · `MANUAL_REVIEW` · `VOID` | `FieldEvent`, `ReconciliationDecision` |
 | `UserRole` ✅ | `ADMIN` · `MANAGER_ANALYST` · `MONITOR` · `READ_ONLY_VIEWER` · `SYSTEM` · `MASTER_PASSCODE` (ADR-439) · `DEVICE_KEY` (ADR-440) | `User` |
 | `DeviceStatus` ✅ | `ACTIVE` · `LOST` · `RETIRED` | `Device` |
-| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) | `SecurityEvent` (ADR-399) |
+| `SecurityEventKind` ✅ | `SIGN_IN` · `SIGN_IN_FAILED` · `LOCKOUT` · `TWO_STEP_SET_UP` · `TWO_STEP_CLEARED` (ADR-412) · `DEVICE_SETUP` · `DEVICE_SWITCH` · `MASTER_PASSCODE_USE` · `MASTER_PASSCODE_FAILED` · `MASTER_PASSCODE_LOCKOUT` (ADR-439) · `DEVICE_TURN_IN` (ADR-488) · `DEVICE_KEY_REVOKED` (ADR-530) | `SecurityEvent` (ADR-399) |
+| `DeviceKeyRevocation` ✅ | `TURN_IN` · `FIRM_TIME` (ADR-530) | `Device.keyRevokedBy` |
 | `NumberSeries` ✅ | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` (✅ ADR-323) | `ProjectNumberSeries`, `ControlRange`, `NumberBlock` |
 | `NumberBlockStatus` ✅ | `ISSUED` · `RECLAIMED` · `RETIRED` | `NumberBlock` |
 | `AssignmentOrigin` ✅ | `PLANNED` · `UNPLANNED` | `Assignment` |
@@ -2004,8 +2078,8 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `ContractorKind` ✅ | `HAULER` · `MONITORING` · `CREW` · `OTHER` | `Contractor` |
 | `ContractorPosition` ✅ | `PRIME` · `SUB_TIER_1` · `SUB_TIER_2` | `ProjectContractor` |
 | `ViewerKind` | `CLIENT` · `CONTRACTOR` · `AUDITOR` | `User` |
-| `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` | `UserPermission` |
-| `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` | `Reason` |
+| `Permission` | `CORRECT` · `RENUMBER` · `VOID` · `ACCEPT_FLAG` · `QC` · `LOCK_INVOICED` · `UNLOCK_INVOICED` · `APPROVE_HOURS` · `SETUP` · `DISPATCH` · `VIEW_REVIEW` · `VIEW_SETUP` · `VIEW_DISPATCH` | `UserPermission` |
+| `ReasonUse` ✅ | `VOID` · `TYPED_NUMBER` · `ACCEPT_FLAG` · `BACK_OFFICE_RECORD` · `PHONE_REMOVAL` (ADR-530) | `Reason` |
 | `FormDocumentType` | `LOAD` · `HAUL_OUT` · `UNIT_RATE` · `CERTIFICATION` · `ROE` · `SURVEY` · `INCIDENT` · `DROP_OFF_LOG` | `Form`, `Assignment` |
 | `IncidentOffer` ✅ | `CONTRACTOR` · `CERT_NUMBER` · `ROE_NUMBER` | `Form.incidentOffers` (ADR-334) |
 | `BillingUnit` ✅ | `CY` · `TN` · `EA` · `LB` · `HR` · `CREW_DAY` · `TBN` | `PayItem`, `Transaction` |
@@ -2022,13 +2096,13 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `MileageSource` ✅ | `ROAD_ROUTE` · `STRAIGHT_LINE` | `CompletedLoadCollection`, `CompletedHaulOutCollection` |
 | `MapSource` | `UPLOAD` · `ESRI_LAYER` · `DRAWN` | `MapVersion` |
 | `QcStatus` ✅ | `QC_REVIEW` · `QC_APPROVED` · `QC_ISSUES` · `QC_VOID` | `QcMark` (ADR-363) |
-| `SiteAreaSource` | `DRAWN` · `UPLOAD` | `SiteAreaVersion` |
+| `SiteAreaSource` | `DRAWN` · `UPLOAD` · `ESRI_LAYER` | `SiteAreaVersion` |
 | `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` | `ClockEntry` |
 | `PhotoView` | `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` | `Photo` |
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
 | `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
 | `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |
-| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 77 today (nine added as §3.10, ADR-345; two more, ADR-348), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
+| `FlagCode` ✅ | The codes of `spec/FLAGS.md` §3: 79 today (nine added as §3.10, ADR-345; two more, ADR-348; `SUB_NAME_ALIKE`, ADR-529), in the page's order; a database test holds the enum to the page (ADR-340) | `Flag` |
 | `RuleActionKind` | `ADD_TRANSACTION` · `REMOVE_TRANSACTION` · `VOID_TICKET` | `RuleAction` |
 | `QuantityFrom` | `ALL_ITEMS` · `CHOSEN_ITEMS` | `RuleAction` |
 | `RuleOperator` | `spec/RULES.md` §4a: `EQUALS` · `NOT_EQUALS` · `IS_ONE_OF` · `IS_NOT_ONE_OF` · `BETWEEN` · `AT_LEAST` · `AT_MOST` · `MORE_THAN` · `LESS_THAN` · `ON` · `NOT_ON` · `ON_OR_BEFORE` · `ON_OR_AFTER` · `CONTAINS` · `STARTS_WITH` · `IS_EMPTY` · `IS_NOT_EMPTY` | `RuleCriterion` |

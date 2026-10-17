@@ -33,6 +33,7 @@ import type { ResetCodes } from './reset-codes.ts';
 import type { Sessions } from './sessions.ts';
 import type { Limits } from '../process/limits.ts';
 import type { OfflineChecks } from '../phone/offline-checks.ts';
+import { signingInWith } from './signs-in-with.ts';
 import type { WrongTries } from './wrong-tries.ts';
 
 type Tx = Prisma.TransactionClient;
@@ -133,7 +134,18 @@ export class Passwords {
 
   // The signed-in person sets a new password, giving the one they have. A wrong current one
   // counts as a wrong try at their login, so a stolen session can't be used to guess it.
-  async changeOwn(
+  changeOwn(
+    userId: string,
+    sessionId: string,
+    current: string,
+    password: string,
+  ): Promise<PasswordOutcome> {
+    return this.parts.tries.inTurn(`person ${userId}`, () =>
+      this.changeOwnNow(userId, sessionId, current, password),
+    );
+  }
+
+  private async changeOwnNow(
     userId: string,
     sessionId: string,
     current: string,
@@ -172,21 +184,22 @@ export class Passwords {
   // the server can't know whose password is meant, and an admin sets it instead.
   async requestReset(email: string): Promise<ResetAsked> {
     if (!this.parts.mail.available) return { asked: false, code: 'NO_MAIL' };
-    // Compared here, whole and without regard to capitals, never as a pattern in the database.
-    const typed = email.trim().toLowerCase();
-    const people = (
-      await this.db.$read((tx) =>
-        tx.user.findMany({
-          where: { email: { not: null }, archivedAt: null, role: { in: [...resetsByEmail] } },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            credential: { select: { passwordHash: true } },
-          },
-        }),
-      )
-    ).filter((held) => held.email?.trim().toLowerCase() === typed);
+    // Found by the database's own rule and index, never as a pattern and never by reading
+    // everybody (signs-in-with.ts; ADR-547).
+    const people = await this.db.$read(async (tx) => {
+      const ids = await signingInWith(tx, email);
+      return ids.length !== 1
+        ? []
+        : tx.user.findMany({
+            where: { id: { in: [...ids] }, archivedAt: null, role: { in: [...resetsByEmail] } },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              credential: { select: { passwordHash: true } },
+            },
+          });
+    });
     const [person, another] = people;
     if (person?.email == null || another !== undefined) return { asked: true, sent: false };
     const code = this.parts.resetCodes.make(

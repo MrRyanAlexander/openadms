@@ -6,8 +6,8 @@
 // that story leaves out: its map (Thursday), the rest of its pay items and its rules, and its
 // five certifications (Saturday).
 //
-// After each sync the worker runs, as a sync's job would start it, and the story checks what it
-// concluded: each ticket's status and flags, the completed loads and haul-outs with their
+// After each sync the worker's own job loop takes up the jobs it queued (BACKLOG 2.7.1 part 3,
+// ADR-494), and the story checks what it concluded: each ticket's status and flags, the completed loads and haul-outs with their
 // quantities, zone and mileage, and the run's own record. Then the run's guarantees: a ticket
 // whose writing fails part-way is left exactly as it was, flagged, and the run goes on; a run
 // over unchanged input changes nothing; two runs never work one project at once; a mileage is
@@ -20,6 +20,7 @@
 // (1.8.x): where this story needs a corrected record it writes the correction as the API's login
 // may, to show what the worker does when the ticket comes back. The golden mission in full is 1.9.1.
 import { ProjectSetup, SiteSetup } from '@open-adms/api';
+import { correctFieldEventEndpoint, renumberFieldEventEndpoint } from '@open-adms/contracts';
 import type { Database, Prisma } from '@open-adms/db';
 import type { MileageEnds } from '@open-adms/domain';
 import {
@@ -27,6 +28,7 @@ import {
   Mileages,
   Reconciliation,
   type MileageStep,
+  type ProjectPassed,
   type RunOutcome,
 } from '@open-adms/worker';
 
@@ -38,8 +40,10 @@ import { sentAlone } from './board.ts';
 import {
   certifyP1,
   loadP1Map,
+  p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
+  QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
@@ -58,22 +62,19 @@ const short = {
 // What a run did, as lines a person reads: each ticket's status, what it waits for, why it
 // could not be processed, and the flags that stand on it.
 const told = (outcome: RunOutcome): string[] =>
-  outcome.ran
-    ? outcome.tickets.map((ticket) =>
-        [
-          ticket.ticketNumber,
-          ticket.status,
-          ...(ticket.waitingFor.length === 0
-            ? []
-            : [`waits for its ${ticket.waitingFor.map((kind) => short[kind]).join(', ')}`]),
-          ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
-          ...ticket.flags,
-        ].join(' · '),
-      )
-    : [outcome.message];
+  outcome.tickets.map((ticket) =>
+    [
+      ticket.ticketNumber,
+      ticket.status,
+      ...(ticket.waitingFor.length === 0
+        ? []
+        : [`waits for its ${ticket.waitingFor.map((kind) => short[kind]).join(', ')}`]),
+      ...(ticket.error === null ? [] : [`error: ${ticket.error}`]),
+      ...ticket.flags,
+    ].join(' · '),
+  );
 
-const counts = (outcome: RunOutcome): unknown =>
-  outcome.ran ? [outcome.ticketsDone, outcome.ticketsFailed] : outcome.reason;
+const counts = (outcome: RunOutcome): unknown => [outcome.ticketsDone, outcome.ticketsFailed];
 
 export const p1Reconciled: Story = {
   name: 'p1-reconciled',
@@ -148,7 +149,16 @@ export const p1Reconciled: Story = {
       longestRunMs: 600_000,
     };
     const reconciliation = new Reconciliation(worker, clock, settings, step);
-    const sync = { projectId: p1, trigger: 'SYNC' } as const;
+    // The worker's own job loop: it takes up what each sync queued, each reprocess Luis asks
+    // for at its endpoint and the job each of his corrections queues (BACKLOG 2.7.1 part 3;
+    // ADR-494, 497, 498).
+    const queue = new QueueRuns(story, reconciliation);
+    // Every ticket of P1 as it stands, for a reprocess Luis asks for.
+    const everyTicket = async () =>
+      (await queue.standing(p1)).tickets.map(({ workflow, ticketNumber }) => ({
+        workflow,
+        ticketNumber,
+      }));
 
     // Each ticket as the server holds it: its field events' kinds and the status on them.
     const tickets = async (): Promise<string[]> => {
@@ -255,8 +265,23 @@ export const p1Reconciled: Story = {
       haulOuts: await api.completedHaulOut.findMany({ orderBy: { id: 'asc' } }),
       haulOutRows: await api.completedHaulOutCollection.findMany({ orderBy: { id: 'asc' } }),
       flags: await api.flag.findMany({ orderBy: { id: 'asc' } }),
+      // Luis asks at his browser (ADR-498): what his sign-in and Dana's grant to him write is
+      // no record the run concludes either.
       audited: await api.auditRecord.count({
-        where: { tableName: { notIn: ['reconciliation_run', 'reconciliation_decision'] } },
+        where: {
+          tableName: {
+            notIn: [
+              'reconciliation_job',
+              'reconciliation_job_ticket',
+              'reconciliation_run',
+              'reconciliation_decision',
+              'security_event',
+              'session',
+              'user_credential',
+              'user_permission',
+            ],
+          },
+        },
       }),
     });
     const show = (value: unknown): string =>
@@ -267,7 +292,6 @@ export const p1Reconciled: Story = {
     const phones = new P1Syncs(story, office);
     const syncs = phones.times;
     const arrive = (syncedAt: Date): Promise<number> => phones.arrive(syncedAt);
-    const crewPhotographs = (syncedAt: Date): Promise<number> => phones.crewPhotographs(syncedAt);
     const [mondayEvening, tuesdayEvening, wednesdayMorning] = syncs;
     if (
       mondayEvening === undefined ||
@@ -289,7 +313,7 @@ export const p1Reconciled: Story = {
     );
     story.check(
       'Monday’s ten field events arrive, and Jo’s three crew photographs after them',
-      [await arrive(mondayEvening), await crewPhotographs(mondayEvening)],
+      [await arrive(mondayEvening), phones.photosAt(mondayEvening)],
       [10, 3],
     );
     story.check(
@@ -342,9 +366,10 @@ export const p1Reconciled: Story = {
           return write;
         },
       });
-    const first = await new Reconciliation(refusingAFlagOn('101003'), clock, settings, step).run(
-      sync,
-    );
+    const first = await new QueueRuns(
+      story,
+      new Reconciliation(refusingAFlagOn('101003'), clock, settings, step),
+    ).settled(p1);
     story.check(
       'AC-06-124 the run goes on past it: six tickets worked, one failed, and 101003 is flagged "could not be processed"',
       [counts(first), told(first)],
@@ -393,9 +418,17 @@ export const p1Reconciled: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    story.at(on('12', '19:00'), 'The worker runs again, with nothing in its way');
+    story.at(
+      on('12', '19:00'),
+      'Dana grants Luis correct; at his browser he asks for P1’s tickets to be reprocessed, nothing changed; the worker runs again, with nothing in its way',
+    );
+    // Dana and Luis at their browsers (ADR-497, 498): a reprocess with nothing changed is his
+    // request at its endpoint, part of correcting.
+    const backOffice = p1BackOffice(story, office);
+    await backOffice.grantLuis('CORRECT', 'VIEW_REVIEW');
     asked = [];
-    const second = await reconciliation.run(sync);
+    await backOffice.reprocess(await everyTicket());
+    const second = await queue.settled(p1);
     story.check(
       'AC-06-18, 23, 13 Monday’s tickets: 101001 and 101002 COMPLETED; 101003 in review for its 96% call, and "could not be processed" is gone; 101004, a preload, waits for its disposal with no flag; Jo’s three unit rate tickets each whole by itself',
       [counts(second), told(second)],
@@ -414,7 +447,7 @@ export const p1Reconciled: Story = {
     );
     story.check(
       'AC-06-14 the run lists what is pending: 101004, waiting for its disposal, not flagged',
-      second.ran ? second.pending.map((ticket) => [ticket.ticketNumber, ticket.flags]) : null,
+      second.pending.map((ticket) => [ticket.ticketNumber, ticket.flags]),
       [['101004', []]],
     );
     story.check(
@@ -438,21 +471,12 @@ export const p1Reconciled: Story = {
       return counted;
     };
     story.check(
-      'the run also checked what is no ticket: each of the five certifications is flagged for each of the five views it has no photograph of (the harness’s phone takes none); every site has its permit; no ticket’s status is touched by these',
+      'C82, AC-04-77 the run also checked what is no ticket: each of the five certifications has the five photographs Sam’s phone sent after it, one of each view, so none is flagged; every site has its permit; no ticket’s status is touched by these',
       [
         await flagsOnRecords(),
-        (
-          await api.flag.findMany({
-            where: { code: 'CERTIFICATION_PHOTO_MISSING' },
-            orderBy: { id: 'asc' },
-            take: 1,
-          })
-        ).map((flag) => flag.message),
+        await api.photo.count({ where: { certificationId: { not: null }, view: { not: null } } }),
       ],
-      [
-        { CERTIFICATION_PHOTO_MISSING: 25 },
-        ['Certification 730415: no operator with placard photo.'],
-      ],
+      [{}, 25],
     );
     const loadOf101001 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101001' },
@@ -461,13 +485,14 @@ export const p1Reconciled: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('12', '19:10'),
-      'The worker runs a third time over the same field events and setup',
+      'Luis asks for them again: the worker runs a third time over the same field events and setup',
     );
     const before = show(await concluded());
     asked = [];
-    const third = await reconciliation.run(sync);
+    await backOffice.reprocess(await everyTicket());
+    const third = await queue.settled(p1);
     story.check(
-      'AC-06-151 nothing changes: every field event, completed load, row and flag is as it was to the last column, no audit record was written for any of them, and no map server was asked; only the run and its seven decisions are new',
+      'AC-06-151 nothing changes: every field event, completed load, row and flag is as it was to the last column, no audit record was written for any of them, and no map server was asked; only Luis’s job, the run and its seven decisions are new',
       [
         show(await concluded()) === before,
         asked.length,
@@ -481,7 +506,7 @@ export const p1Reconciled: Story = {
     // ------------------------------------------------------------------------------------------
     story.at(
       on('12', '19:20'),
-      'A run on P1 is held part-way (the story holds its mileage step); a second run on P1 and a run on another project are started meanwhile',
+      'Luis asks for P1’s tickets once more, and Dana enters Marsh Road TDSR on a second project, P2, which queues the check of its permit. The worker’s pass is held part-way through P1 (the story holds its mileage step); a second worker’s pass goes meanwhile',
     );
     const ppdr = await api.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
     const p2 = await saved(
@@ -498,6 +523,22 @@ export const p1Reconciled: Story = {
         kindOfWorkIds: [],
       }),
     );
+    await saved(
+      new SiteSetup(api, clock, story.policy).site(dana, {
+        projectId: p2.id,
+        name: 'Marsh Road TDSR',
+        siteTypeId: (await api.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
+        takesLoads: true,
+        haulOutsLeaveHere: true,
+        chargesTippingFee: false,
+        ineligibleSite: false,
+        permitNumber: 'FDEP-DMS-2026-0117',
+        latitude: '39.09000000',
+        longitude: '-75.62000000',
+        activationDate: '2026-10-12',
+      }),
+    );
+    await backOffice.reprocess(await everyTicket());
     let reached: () => void = () => undefined;
     let release: () => void = () => undefined;
     const isReached = new Promise<void>((resolve) => {
@@ -509,21 +550,29 @@ export const p1Reconciled: Story = {
         release = resolve;
       }),
     };
-    const underWay = reconciliation.run(sync);
+    // What a pass did with each project, P1 first.
+    const did = (passed: readonly ProjectPassed[]): string[] =>
+      passed.map((each) => {
+        const project = each.projectId === p1 ? 'P1' : 'P2';
+        if ('error' in each) return `${project}: error`;
+        return each.outcome.worked
+          ? `${project}: ${String(counts(each.outcome.run))}`
+          : `${project}: ${each.outcome.reason}`;
+      });
+    const underWay = queue.pass();
     await isReached;
-    const meanwhile = await reconciliation.run(sync);
-    const elsewhere = await new Reconciliation(worker, clock, settings, mileages).run({
-      projectId: p2.id,
-      trigger: 'SYNC',
-    });
+    const meanwhile = await new QueueRuns(
+      story,
+      new Reconciliation(worker, clock, settings, mileages),
+    ).pass();
     const runsSoFar = await api.reconciliationRun.count({ where: { projectId: p1 } });
     hold = null;
     release();
     const finished = await underWay;
     story.check(
-      'AC-06-150 the second run on P1 works nothing and is told a run is under way (a database lock); the run on P2 isn’t held up; the first then finishes',
-      [told(meanwhile), counts(elsewhere), runsSoFar, counts(finished)],
-      [['A run on this project is under way.'], [0, 0], 4, [7, 0]],
+      'AC-06-150 the second worker’s pass works nothing on P1 and is told a run is under way (a database lock), and P1’s job waits on; its run on P2 isn’t held up; the first pass then finishes P1, and finds P2’s job already taken',
+      [did(meanwhile), runsSoFar, did(finished), (await queue.waiting(p1)).length],
+      [['P1: RUN_UNDER_WAY', 'P2: 0,0'], 4, ['P1: 7,0', 'P2: NOTHING_WAITING'], 0],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -533,7 +582,7 @@ export const p1Reconciled: Story = {
     );
     story.check(
       'Tuesday’s records arrive: twelve field events, the scale receipt and the incident; and Jo’s four crew photographs',
-      [await arrive(tuesdayEvening), await crewPhotographs(tuesdayEvening)],
+      [await arrive(tuesdayEvening), phones.photosAt(tuesdayEvening)],
       [14, 4],
     );
     story.at(
@@ -542,13 +591,13 @@ export const p1Reconciled: Story = {
     );
     asked = [];
     unanswered = (ends) => ends.to.latitude === '39.00000000';
-    const fourth = await reconciliation.run(sync);
+    const fourth = await queue.settled(p1);
     unanswered = null;
     story.check(
-      'AC-06-124 a map server that doesn’t answer is an error on that ticket alone, never a straight line: 201001 is flagged "could not be processed" and skipped; the rest are worked. 101004, 101005 and 101006 wait for their disposals, unflagged; 301005, a 20 in stump with no survey number, is in review',
-      [counts(fourth), told(fourth)],
+      'AC-06-124 a map server that doesn’t answer is an error on that ticket alone, never a straight line: 201001 is flagged "could not be processed" and skipped; the other seven tickets Tuesday’s syncs queued are worked. P1 as it stands: 101004, 101005 and 101006 wait for their disposals, unflagged; 301005, a 20 in stump with no survey number, is in review',
+      [counts(fourth), told(await queue.standing(p1))],
       [
-        [14, 1],
+        [7, 1],
         [
           '101001 · COMPLETED',
           '101002 · COMPLETED',
@@ -569,20 +618,24 @@ export const p1Reconciled: Story = {
       ],
     );
     story.check(
-      'AC-06-119 the incident and the drop-off log aren’t field events: the run decided on P1’s fifteen tickets and neither record has a status, a flag or a decision',
+      'AC-06-119 the incident and the drop-off log aren’t field events: the run decided on the eight tickets Tuesday’s field events queued, and neither record has a status, a flag or a decision',
       [
         await api.incident.count(),
         await api.reconciliationDecision.count({
-          where: { reconciliationRun: { id: fourth.ran ? fourth.runId : '' } },
+          where: { reconciliationRun: { id: fourth.runId } },
         }),
         await api.flag.count({ where: { ticketNumber: null, certificationId: null } }),
       ],
-      [1, 15, 0],
+      [1, 8, 0],
     );
 
-    story.at(on('13', '19:00'), 'The routing server answers again; the worker runs');
+    story.at(
+      on('13', '19:00'),
+      'The routing server answers again; Luis asks for P1’s tickets to be reprocessed and the worker runs',
+    );
     asked = [];
-    const fifth = await reconciliation.run(sync);
+    await backOffice.reprocess(await everyTicket());
+    const fifth = await queue.settled(p1);
     story.check(
       '201001 is worked now and its flag cleared; only its mileage was asked for',
       [
@@ -651,12 +704,17 @@ export const p1Reconciled: Story = {
       [4, 'QUARANTINED', 1],
     );
     story.at(on('14', '07:20'), 'The worker runs');
-    const sixth = await reconciliation.run(sync);
+    const sixth = await queue.settled(p1);
     story.check(
-      'AC-06-154, 16, 04 P1’s Monday and Tuesday reconciled, before any review: 101001, 101002, 101004 and 201001 whole and unflagged; 101003 in review for its 96% call; 101005 paired now its disposal is in, the one in quarantine never read; 101006 and 101060 each PENDING, 101060 showing its typed-number flag; 201004 one haul-out of three piles, unflagged; 301005 in review',
-      [counts(sixth), told(sixth)],
+      'AC-06-154, 16, 04 P1’s Monday and Tuesday reconciled, before any review: the run works the three tickets the tower’s disposals queued; 101001, 101002, 101004 and 201001 whole and unflagged; 101003 in review for its 96% call; 101005 paired now its disposal is in, the one in quarantine never read; 101006 and 101060 each PENDING, 101060 showing its typed-number flag; 201004 one haul-out of three piles, unflagged; 301005 in review',
+      [told(sixth), counts(sixth), told(await queue.standing(p1))],
       [
-        [16, 0],
+        [
+          '101004 · COMPLETED',
+          '101005 · COMPLETED',
+          '101060 · PENDING · waits for its COL · Ticket 101060: typed ticket number (Barcode damaged). Flagged for review.',
+        ],
+        [3, 0],
         [
           '101001 · COMPLETED',
           '101002 · COMPLETED',
@@ -708,7 +766,7 @@ export const p1Reconciled: Story = {
       orderBy: { id: 'asc' },
     });
     story.check(
-      'AC-06-152 every run on P1 is recorded: what started it, when, how many tickets it worked and how many failed, with one decision for each ticket',
+      'AC-06-152 every run on P1 is recorded: what started it (its oldest job’s: setup’s, before the first sync’s; then Luis’s reprocesses and the syncs), when, how many tickets it worked and how many failed, with one decision for each ticket',
       runs.map((run) =>
         [
           run.trigger,
@@ -719,17 +777,17 @@ export const p1Reconciled: Story = {
         ].join(' · '),
       ),
       [
-        'SYNC · Mon 12 Oct 18:45 · 6 worked · 1 failed · 7 decisions',
-        'SYNC · Mon 12 Oct 19:00 · 7 worked · 0 failed · 7 decisions',
-        'SYNC · Mon 12 Oct 19:10 · 7 worked · 0 failed · 7 decisions',
-        'SYNC · Mon 12 Oct 19:20 · 7 worked · 0 failed · 7 decisions',
-        'SYNC · Tue 13 Oct 18:45 · 14 worked · 1 failed · 15 decisions',
-        'SYNC · Tue 13 Oct 19:00 · 15 worked · 0 failed · 15 decisions',
-        'SYNC · Wed 14 Oct 07:20 · 16 worked · 0 failed · 16 decisions',
+        'SETUP_CHANGE · Mon 12 Oct 18:45 · 6 worked · 1 failed · 7 decisions',
+        'REPROCESS · Mon 12 Oct 19:00 · 7 worked · 0 failed · 7 decisions',
+        'REPROCESS · Mon 12 Oct 19:10 · 7 worked · 0 failed · 7 decisions',
+        'REPROCESS · Mon 12 Oct 19:20 · 7 worked · 0 failed · 7 decisions',
+        'SYNC · Tue 13 Oct 18:45 · 7 worked · 1 failed · 8 decisions',
+        'REPROCESS · Tue 13 Oct 19:00 · 15 worked · 0 failed · 15 decisions',
+        'SYNC · Wed 14 Oct 07:20 · 3 worked · 0 failed · 3 decisions',
       ],
     );
     const decision = await api.reconciliationDecision.findFirstOrThrow({
-      where: { reconciliationRunId: sixth.ran ? sixth.runId : '', ticketNumber: '101005' },
+      where: { reconciliationRunId: sixth.runId, ticketNumber: '101005' },
     });
     story.check(
       'AC-06-152 a decision says, for a person to read, the field events grouped and why',
@@ -798,7 +856,6 @@ export const p1Reconciled: Story = {
         (await api.fieldEvent.findMany({ where: { ticketNumber } })).map((event) => event.status),
       ),
     ];
-    const setupChange = { projectId: p1, trigger: 'SETUP_CHANGE' } as const;
 
     story.at(
       on('14', '09:00'),
@@ -806,7 +863,7 @@ export const p1Reconciled: Story = {
     );
     await saved(projects.changeSettings(dana, p1, { siteCircleMeters: 30 }));
     asked = [];
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-06-03, 56 101001’s disposal ended 38 m from Marsh Road TDSR’s GPS: the ticket is worked again and flagged, in review; its mileage is not asked for again',
       [await statusOf('101001'), await flagsOn('101001'), asked.length],
@@ -818,7 +875,7 @@ export const p1Reconciled: Story = {
     );
     story.at(on('14', '09:10'), 'She changes it back to 200 m; the worker runs');
     await saved(projects.changeSettings(dana, p1, { siteCircleMeters: 200 }));
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-06-141 the facts no longer raise the flag: it is cleared, kept in the ticket’s history, and with nothing else open the ticket is COMPLETED',
       [await statusOf('101001'), await flagsOn('101001')],
@@ -839,7 +896,7 @@ export const p1Reconciled: Story = {
       saved(new SiteSetup(api, clock, story.policy).change(dana, tdsr.id, { latitude }));
     await moveTheTdsr('39.09010000');
     asked = [];
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'AC-06-56, 03 one end of 101001’s mileage moved, so it is asked for again, to the site’s corrected GPS: once for each of the four loads dumped there',
       [asked.map((ends) => ends.to.latitude), await mileageOf101001()],
@@ -848,7 +905,7 @@ export const p1Reconciled: Story = {
     story.at(on('14', '09:30'), 'She puts it back; the worker runs');
     await moveTheTdsr('39.09000000');
     asked = [];
-    await reconciliation.run(setupChange);
+    await queue.settle(p1);
     story.check(
       'asked once more for each of the four, and 101001 is 6.2050 road miles from the TDSR again',
       [asked.length, await mileageOf101001()],
@@ -857,20 +914,30 @@ export const p1Reconciled: Story = {
 
     story.at(
       on('14', '10:00'),
-      'Luis corrects 101003’s load call to 90% (the correction itself is Part 8’s); the worker runs, asked by him',
+      'Dana grants Luis renumber; at his browser he corrects 101003’s load call to 90% (the correction itself is Part 8’s), which queues its job; the worker runs, asked by him',
     );
-    const correct = (
-      where: Prisma.FieldEventWhereInput,
-      data: { loadCall?: number; ticketNumber?: string },
-    ) =>
-      api.$write({ actorId: luis, source: 'BACK_OFFICE', reason: 'Correction' }, async (tx) => {
-        const event = await tx.fieldEvent.findFirstOrThrow({ where });
-        await tx.fieldEvent.update({ where: { id: event.id }, data });
+    // Luis at his browser (ADR-497): a correction of a disposal's load call and a renumber of
+    // one, each queuing its own job (its tickets and their neighbours) at its endpoint.
+    await backOffice.grantLuis('RENUMBER', 'VIEW_REVIEW');
+    const luiss = await backOffice.luiss();
+    const disposalOf = (ticketNumber: string) =>
+      api.fieldEvent.findFirstOrThrow({ where: { projectId: p1, ticketNumber, kind: 'DISPOSAL' } });
+    const correctCall = async (ticketNumber: string, loadCall: number): Promise<void> => {
+      const { id } = await disposalOf(ticketNumber);
+      await luiss.answered(correctFieldEventEndpoint, {
+        ids: { fieldEventId: id },
+        json: { changes: { loadCall } },
       });
-    const dis101003 = { ticketNumber: '101003', kind: 'DISPOSAL' } as const;
-    const askedByLuis = { projectId: p1, trigger: 'CORRECTION', requestedById: luis } as const;
-    await correct(dis101003, { loadCall: 90 });
-    const corrected = await reconciliation.run(askedByLuis);
+    };
+    const renumber = async (ticketNumber: string, to: string): Promise<void> => {
+      const { id } = await disposalOf(ticketNumber);
+      await luiss.answered(renumberFieldEventEndpoint, {
+        ids: { fieldEventId: id },
+        json: { ticketNumber: to },
+      });
+    };
+    await correctCall('101003', 90);
+    const corrected = await queue.settled(p1);
     story.check(
       'AC-06-141 the 96% flag is cleared and 101003 is COMPLETED, its completed load updated in place to 58.5 CY',
       [
@@ -890,7 +957,7 @@ export const p1Reconciled: Story = {
       ],
     );
     const correctionRun = await api.reconciliationRun.findUniqueOrThrow({
-      where: { id: corrected.ran ? corrected.runId : '' },
+      where: { id: corrected.runId },
     });
     story.check(
       'BACKLOG C20 the run records that Luis asked for it; what the worker wrote in it is still the system actor’s',
@@ -912,8 +979,8 @@ export const p1Reconciled: Story = {
       ['CORRECTION', true, [true]],
     );
     story.at(on('14', '10:10'), 'The call was right: Luis puts 96% back; the worker runs');
-    await correct({ ...dis101003 }, { loadCall: 96 });
-    await reconciliation.run(askedByLuis);
+    await correctCall('101003', 96);
+    await queue.settle(p1);
     story.check(
       'the problem is back, so a new flag is raised to be looked at; the cleared one stays in the history',
       [await statusOf('101003'), await flagsOn('101003')],
@@ -934,8 +1001,8 @@ export const p1Reconciled: Story = {
     const loadOf101005 = await api.completedLoad.findFirstOrThrow({
       where: { ticketNumber: '101005' },
     });
-    await correct({ ticketNumber: '101005', kind: 'DISPOSAL' }, { ticketNumber: '101050' });
-    await reconciliation.run(askedByLuis);
+    await renumber('101005', '101050');
+    await queue.settle(p1);
     story.check(
       'AC-06-148 101005 is its collection alone again, PENDING; its completed load is marked dissolved, with its row, never deleted; 101050 is a disposal waiting for a collection',
       [
@@ -952,8 +1019,8 @@ export const p1Reconciled: Story = {
       ],
     );
     story.at(on('14', '10:40'), 'It is put back; the worker runs');
-    await correct({ ticketNumber: '101050', kind: 'DISPOSAL' }, { ticketNumber: '101005' });
-    await reconciliation.run(askedByLuis);
+    await renumber('101050', '101005');
+    await queue.settle(p1);
     story.check(
       'AC-06-148 the ticket is whole again: the mark is cleared on the same completed load, and it is COMPLETED',
       [
@@ -971,8 +1038,8 @@ export const p1Reconciled: Story = {
       on('14', '11:00'),
       'Luis renumbers the tower’s typed 101060 to 101006, the load it was (golden mission §2); the worker runs',
     );
-    await correct({ ticketNumber: '101060', kind: 'DISPOSAL' }, { ticketNumber: '101006' });
-    await reconciliation.run(askedByLuis);
+    await renumber('101060', '101006');
+    await queue.settle(p1);
     story.check(
       'the collection and the disposal pair on 101006: 48 CY × 60% = 28.8 CY. The typed-number flag is the ticket’s now, still to be accepted (Part 8), so it is in review; nothing is left on 101060, whose flag is cleared',
       [
@@ -1011,7 +1078,7 @@ export const p1Reconciled: Story = {
         endedAt: new Date(on('14', '08:20')),
       },
     });
-    const seventeenth = await reconciliation.run(sync);
+    const seventeenth = await queue.settled(p1);
     story.check(
       'AC-06-160 it is in no ticket: flagged, PENDING, paired with nothing until a person renumbers it; the run still records a decision for it',
       [
@@ -1020,7 +1087,7 @@ export const p1Reconciled: Story = {
         await api.reconciliationDecision.count({ where: { ticketNumber: '10A040' } }),
       ],
       [
-        [16, 0],
+        [1, 0],
         [
           '10A040 · PENDING · Ticket 10A040: not a valid ticket number. Flagged for review; not billed.',
         ],

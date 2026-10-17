@@ -84,12 +84,17 @@ const tableGrants: Record<string, Record<string, string>> = {
     listTables.map((table) => [table, { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' }]),
   ),
   // A version is added, never edited, and the worker has no business reading it (ADR-281).
-  master_passcode: { adms_api: 'INSERT SELECT' },
+  // Updated only to key the installer's verifier and seal its seed, once (ADR-542; its trigger).
+  master_passcode: { adms_api: 'INSERT SELECT UPDATE' },
+  // The firm's own settings (ADR-530): the seed writes the one record, the API changes it, the
+  // worker reads it; nobody adds another.
+  firm_settings: { adms_api: 'SELECT UPDATE', adms_worker: 'SELECT' },
   // Sign-in's records (ADR-397…399): the API's alone. What sign-in keeps of a person and a
   // session are changed in place; a security event is added, never edited.
   user_credential: { adms_api: 'INSERT SELECT UPDATE' },
   session: { adms_api: 'INSERT SELECT UPDATE' },
-  security_event: { adms_api: 'INSERT SELECT' },
+  // The worker adds one when the firm's time revokes a lost phone's key, and reads none (ADR-530).
+  security_event: { adms_api: 'INSERT SELECT', adms_worker: 'INSERT' },
   // Wrong tries at the master passcode: the API's alone, its count changed in place (ADR-438).
   master_passcode_tries: { adms_api: 'INSERT SELECT UPDATE' },
   // The API writes people, so the Monitor ID's default runs as it (ADR-281).
@@ -137,6 +142,9 @@ const tableGrants: Record<string, Record<string, string>> = {
   sync: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   synced_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   held_record: { adms_api: 'INSERT SELECT UPDATE' },
+  // A file set aside (ADR-482): the API's alone, added and read; what arrived is never changed,
+  // and only its resolution is written later, by a person (a trigger refuses the rest, ADR-526).
+  set_aside_file: { adms_api: 'INSERT SELECT UPDATE' },
   audit_record: { adms_api: 'SELECT', adms_worker: 'SELECT' },
   viewer_project: { adms_readonly: 'SELECT' },
   viewer_field_event: { adms_readonly: 'SELECT' },
@@ -145,6 +153,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   viewer_project_setup: { adms_readonly: 'SELECT' },
   // Who recorded a field event: a monitor's name and Monitor ID (ADR-324).
   viewer_field_event_monitor: { adms_readonly: 'SELECT' },
+  // The audit log of a client user's or an auditor's projects (ADR-544).
+  viewer_audit_record: { adms_readonly: 'SELECT' },
   ...Object.fromEntries(
     viewedTables.map((table) => [`viewer_${table}`, { adms_readonly: 'SELECT' }]),
   ),
@@ -189,6 +199,8 @@ const captured = [
   'start_latitude',
   'start_longitude',
   'temporary_session',
+  // Which way a session under the master passcode was opened (ADR-534 (11)).
+  'master_passcode_session',
   'typed_capacity_cy',
   // What each kind records (ADR-325).
   'carried_count',
@@ -289,6 +301,8 @@ const correctable: Record<string, string[]> = {
     'drop_off_log_id',
     // While its record waits in quarantine (ADR-338).
     'quarantined_record_id',
+    // While its record is held for a person (ADR-526).
+    'held_record_id',
     'view',
     'captured_at',
     'device_utc_offset_minutes',
@@ -298,8 +312,10 @@ const correctable: Record<string, string[]> = {
     'uploaded_sha256',
     'object_key',
     'depth_object_key',
+    'depth_sha256',
     'device_id',
     'uploaded_at',
+    'depth_uploaded_at',
     // The back office's two marks (ADR-337).
     'archived_at',
     'label',
@@ -364,6 +380,11 @@ const columnGrants = [
   'field_event.zone_id adms_worker UPDATE',
   'field_event.map_version_id adms_worker UPDATE',
   'field_event.worked_out_pay_item_id adms_worker UPDATE',
+  // A lost phone's key revoked after the firm's time, its blocks retired whole (ADR-530).
+  'device.key_revoked_at adms_worker UPDATE',
+  'device.key_revoked_by adms_worker UPDATE',
+  'number_block.status adms_worker UPDATE',
+  'number_block.ended_at adms_worker UPDATE',
   ...Object.entries(correctable).flatMap(([table, columns]) =>
     columns.map((column) => `${table}.${column} adms_api UPDATE`),
   ),

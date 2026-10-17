@@ -48,3 +48,20 @@ export async function opens(
   const kept = Buffer.from(tag ?? '', 'base64');
   return two.length === kept.length && timingSafeEqual(two, kept);
 }
+
+// The first slow hash of what was typed, as a phone makes it to check it against its entry
+// (ADR-531): the key of the proof of a sign-in made offline. Never kept by a real phone.
+export async function firstHashOf(
+  typed: string,
+  sent: OfflineCheckRecord | null | undefined,
+): Promise<Buffer> {
+  if (sent == null) throw new Error('The phone was sent no check.');
+  const { first } = sent;
+  return slow(
+    Buffer.from(typed.normalize('NFC')),
+    first.salt,
+    first.memory,
+    first.passes,
+    first.parallelism,
+  );
+}

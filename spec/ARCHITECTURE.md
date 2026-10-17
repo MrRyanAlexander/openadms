@@ -268,13 +268,25 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
   as the demo and for development testing. Firms can extend it to host wherever they like; we make
   the demo case work and document it.
 - **Services talk to each other over HTTPS, locally too.** CORS is handled properly, never
-  switched off (§6).
+  switched off (§6). Every hop inside the local stack's own network too: nothing is served over
+  plain HTTP and no data is in flight unencrypted (the user, 2026-10-14, ADR-513; KD-78).
+  *Built (ADR-517, KD-78 closed):* `pnpm local:up` makes the stack's own root and a certificate
+  for each service (`infra/local/src/certificates.ts`); Caddy issues the public names' certificates
+  from that root and reaches every service over TLS, each certificate checked against it and the
+  one name the service is reached by; the API serves HTTPS alone; Postgres takes TLS alone; the
+  mail catcher takes no message before STARTTLS; Valhalla, which speaks no TLS, listens on its own
+  container's loopback behind a Caddy of its own, and so do the object store's master, volume,
+  filer and S3 servers and their gRPC, which speak no TLS and ask nobody who calls (ADR-525): only
+  S3, over TLS through that Caddy, is reachable. Only a container's own loopback (a health check
+  inside it) is plain, and it never leaves the container. Every container is hardened as far as
+  its image allows, each departure named with its reason (`infra/local/test/compose.test.ts`;
+  ASVS 4.2.1, KD-79).
 
 ✅ **Approved** — how:
 
 | Environment | What runs | HTTPS | Notes |
 |---|---|---|---|
-| **Local** | One `docker compose` stack: Postgres, object storage, API, worker, Valhalla, Nominatim (§3), Caddy; web apps served through Caddy | Caddy's internal CA; hostnames under `*.adms.localhost` | A phone on the same network needs Caddy's root certificate installed and trusted, or a tunnel |
+| **Local** | One `docker compose` stack: Postgres, object storage, API, worker, Valhalla, Nominatim (§3), Caddy; web apps served through Caddy | The stack's own root, which Caddy issues from (ADR-517; `infra/local/.generated/caddy-root.crt`); hostnames under `*.adms.localhost`; every hop inside the stack over TLS too | A phone on the same network needs Caddy's root certificate installed and trusted, or a tunnel |
 | **Demo cloud** | Railway: Postgres, API with worker, Valhalla, Nominatim; Netlify: back office and field web build; an S3-compatible bucket | Provider certificates; HSTS on | The back office calls the API **through a same-origin proxy path** (e.g. `/api/*` rewritten to the API), so browser cookies stay first-party and CORS isn't needed for it |
 | **A firm's cloud** | The same containers | The firm's certificates | Documented, not scripted |
 
@@ -293,6 +305,8 @@ already knows except to confirm what it knows is truthful and to ask if I want t
   secret store in the cloud), and never logged or echoed.
 - **Each service gets its own database login** (§5).
 - The token signing keys and the master passcode verifiers (§7) are secrets too.
+- Every key, its life and how it is replaced, what each service talks to, and the data's levels
+  of protection: `spec/CHECKLIST-API.md` §5.5, §5.6, §5.8 (ADR-515).
 
 **Backups (server, not device):** evidence is kept indefinitely (ADR-101), so the database needs
 automated backups with point-in-time recovery where the host offers it, and the object store needs
@@ -411,9 +425,17 @@ every edit of a migration file and allows a write only while the file is still P
 
 ### 5.7 Connections
 
-- TLS to the database in every non-local environment.
+- TLS to the database in every environment, the local stack's too: no data in flight unencrypted
+  (the user, 2026-10-14: "we dont want to have unencrypted data in flight"; ADR-513, KD-78).
+  *Built (ADR-517):* the local stack's Postgres takes TLS 1.2 or 1.3 alone (every rule over TCP
+  `hostssl`); every login's URL asks `sslmode=verify-full`, the server's certificate and name
+  checked against the stack's root (`sslrootcert`, or `ADMS_DATABASE_CA_FILE` inside the stack);
+  Prisma's migration engine is handed the same check in its own words (`packages/db/prisma.url.js`).
 - A separate credential per role.
 - Pool limits, and a statement timeout.
+  *Built (ADR-419, 524):* each service's pool is `DATABASE_POOL_CONNECTIONS`; each piece of work
+  waits `DATABASE_CONNECTION_WAIT_MS` for a connection and runs `DATABASE_WORK_LONGEST_MS` at most;
+  a request whose work couldn't be done in time is told `503 BUSY` with `Retry-After`, never 500.
 
 ---
 
@@ -434,17 +456,37 @@ every edit of a migration file and allows a write only while the file is still P
 
 | Area | Rule |
 |---|---|
-| Transport | HTTPS only; TLS 1.2+ (1.3 preferred); HSTS; HTTP redirected |
+| Transport | HTTPS only; TLS 1.2+ (1.3 preferred); HSTS, its subdomains included; HTTP redirected for the web apps' pages, refused at the API's address (the user, 2026-10-14, ADR-511) |
 | CORS | **An explicit allow-list of exact origins** from configuration: the back-office origin (if not served same-origin) and the field app's native origins (Capacitor's `capacitor://localhost` on iOS, `https://localhost` on Android) plus the browser test build. **No wildcards, no pattern-matching whole hosting domains** (Build 1 allowed any `*.netlify.app`; §17) |
 | Back-office sessions | Short-lived access token plus a rotating refresh token, held in `HttpOnly; Secure; SameSite` cookies, **never** in `localStorage`; refresh tokens stored server-side only as hashes and revocable; CSRF protection on cookie-authenticated writes |
 | Device sessions | A device credential (§7.4) plus the signed-in monitor; bearer tokens held in the device's secure storage |
-| Authorization | Checked on the server on every request, from the database, so **a revoke takes effect immediately** (not when a token expires); a user can never grant a permission they don't hold; the last admin can't be removed or locked out |
+| Authorization | Checked on the server on every request, from the database, so **a revoke takes effect immediately** (not when a token expires); a user can never grant a permission they don't hold; the last admin can't be removed or locked out. **What the back office reads is granted too** (the user, ADR-539): a manager/analyst reads an area only with its view (*view review*, *view setup*, *view dispatch*), and an act needs its area's view beside its own grant |
 | Passwords | Hashed with **Argon2id** (OWASP parameters, set in an ADR at build); rules per NIST SP 800-63B (length over complexity, breached-password screening, no forced rotation) |
 | Abuse | Rate limits per IP, account and device; sign-in back-off and lockout; every sign-in, failure, lockout, device setup and master-passcode use is a **security** audit event |
 | Input | Every request body validated by the shared Zod schema at the boundary; size limits; unknown fields rejected |
 | Output | No stack traces or internal errors in responses; plain error codes; security headers (CSP, `frame-ancestors 'none'`, `nosniff`, referrer policy) on the web apps |
 | Logs | Structured, with a request ID; never secrets, tokens, passwords or full personal details |
-| Uploads | Media only through the media endpoint (§11): type and size checked, hash verified, stored outside the web root, never executed |
+| Uploads | Files only through the media endpoint (§11), the back office's map's file (§3; ADR-485, 486) and a photograph the back office adds to a record made there (ADR-534 (2); agent default, awaiting approval), each by its own route and size limit: type and size checked (a photograph's hash verified, a zip bounded unzipped), stored outside the web root, never executed |
+
+### Every way in
+
+✅ **Approved** *Agent-written (task 2.7.3 part 4, ADR-515), as the checklist's §3.1 approved it (ADR-513): OWASP ASVS 5.0 6.1.3 and 6.3.4.* Every way a person, a phone or a command is let in, and nothing else. Each endpoint says which it takes (`access` in `packages/contracts/src/endpoints.ts`), and `apps/api/test/every-endpoint.test.ts` holds the 120 endpoints to that one list (AC-10-27), so a way in this table doesn't name fails it. The checklist page has the rest of the written answers (`spec/CHECKLIST-API.md` §5).
+
+| Way in | Who | What it takes | What it gives, and for how long | Where (ADR) |
+|---|---|---|---|---|
+| **A person's sign-in** | an admin, a manager/analyst, a read-only viewer | their email address and password, and their authenticator's code where they have one (an admin and a manager/analyst must: one with none is made to set one up before anything else) | a session: an access token (five minutes) and a refresh token, as `__Host-` cookies only, and a CSRF value for every call that isn't a GET; thirty quiet minutes or twelve hours end it | `POST /sessions` (ADR-408, 409, 412) |
+| **A session kept going** | the same | the refresh token, good once (one presented again ends its session) | new tokens; the page's CSRF value read again; sign-out ends it on the server | `POST /sessions/refreshes`, `GET /sessions/csrf`, `POST /sessions/sign-outs` (ADR-408) |
+| **A password reset by email** | the same, where the firm has mail | the address the firm holds; then the message's code (a signature, good once, sixty minutes) and a new password | a password, never a session: the person signs in after, their authenticator still asked (AC-10-25) | `POST /password-resets`, `/password-resets/completions` (ADR-404) |
+| **A password or an authenticator an admin sets right** | the same | an admin's own session: a password set anew, or an authenticator cleared (AC-10-26) | the person's sessions all ended; at their next sign-in they set their own password, and an authenticator again, before anything else | `POST /people/:userId/passwords`, `/two-step-clearings` (ADR-410, 412) |
+| **The server's own command** | whoever runs `pnpm installer:admin` on the firm's server | the API's own settings file, read on that server | the firm's first admin, or an admin let back in when no other admin can do it; never over the API | `apps/api/src/admin.ts` (ADR-413, 414) |
+| **A phone enrolled** | whoever holds the master passcode | the passcode, a name, the public half of a key the phone made (ECDSA P-256) | the phone's record, once: no session | `POST /phones/enrolments` (ADR-436, 437) |
+| **A phone proving itself** | an enrolled phone in service | a challenge (two minutes, good once) signed with its key | a phone's token, fifteen minutes, as `Authorization: Bearer`, never a cookie | `POST /phones/:deviceId/challenges`, `/proofs` (ADR-437, 440) |
+| **A monitor on a phone** | a field monitor, on a proven phone only | their Monitor ID and password | a monitor's session on that phone, twelve hours, in its own header beside the phone's token; one monitor at a time | `POST /phones/current/sign-ins` (ADR-441, 443) |
+| **The master passcode on a proven phone** | a supervisor | the passcode, each time | a monitor created, a session under the passcode (marked so), the phone's setup choices, a turn-in; each a security event | `POST /phones/current/monitors`, `/passcode-sessions`, `/setup-choices`, `/turn-ins` (ADR-442, 462, 463, 487) |
+| **Offline, on the phone** | a monitor or a supervisor, with no connection | a password or the passcode, checked on the phone against its login list | nothing on the server; each use the phone logged is reported when it next has signal | `POST /phones/current/passcode-uses` (ADR-454, 464) |
+| **Asked by anybody** | anybody | nothing | only up or down | `GET /health`, `GET /readiness` (ADR-385, 507) |
+
+**Not ways in for a person:** each service's own login to the database and the API's own identity at the object store (§5.1; ADR-480), read from that service's settings file alone; and the local stack's seeded accounts, which never ship (`infra/local/test/dev-accounts.test.ts`). A change to the master passcode takes an admin's session and their own password again (`POST /master-passcode/versions`, ADR-428).
 
 ---
 
@@ -626,8 +668,8 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > checks a sign-in against. Each entry costs the server about a hundredth of a second, so it
 > makes only those the phone doesn't hold, a bounded number a call; a password set anew
 > replaces its entry at the phone's next read. **The master passcode's check** is made the same
-> way and sent with its version; the phone's record says which version it was sent (§7.5). The
-> server keeps no entry.
+> way, from the passcode's own sealed seed (ADR-542), and sent with its version; the phone's
+> record says which version it was sent (§7.5). The server keeps no entry.
 
 ✅ **Decided** *(ADR-176, user 2026-09-27, Q-170)*: the setup manifest carries the project's **service
 codes and their settings** (photos, GPS, measurement and weight required; payable type) for **every
@@ -700,6 +742,21 @@ So the protection can't rest on the password. It rests on these:
 > fiftieth until an admin sets the password anew (the phone's own screen keeps its 5 and 10).
 > A phone taken out of service signs nobody in. The database itself lets a monitor's session be
 > opened on a phone only (point 1).
+
+⏳ **Awaiting approval** **ADR-531 (2026-10-15; the user's answers, their design agent defaults):
+> nothing is sent with nobody signed in, and a sign-in made offline proven.** The user: a phone
+> syncs only while somebody is signed in on it, a monitor or the master user, and the server knows
+> it. So a sync, a photograph's file and the phone's two reports need **the monitor's session**
+> beside the phone's token, or **the master user**: the master passcode sent beside the phone's
+> proof. **A sign-in made with no connection** is reported when the phone finds signal, with a
+> proof the server checks itself: an HMAC over who, how and when, keyed by the first slow hash of
+> what was typed, which only the right password (or passcode) makes; the server makes the same
+> from what it keeps. Taken, it is a session from when it was made; refused (a proof that isn't
+> one, a password set anew since, a later sign-in on the phone, taken already), the back office
+> is told and the monitor signs in online, nothing on the phone lost. **A monitor's sign-in lasts
+> the firm's hours, a day as shipped** (the user: shifts never run past a day), changed by an
+> admin; the twelve hours above are superseded. The app keeps the proof, never the hash, and drops
+> it at sign-out.
 >
 ✅ **Approved:** **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
 > the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
@@ -734,8 +791,8 @@ So the protection can't rest on the password. It rests on these:
 - Every sync proves the phone's identity by signing a server challenge.
 - A lost or retired phone is marked in the back office. If it syncs again, the server still takes
   its records, flagging what it made after its removal (§7.2 point 4, ADR-134), then retires its
-  number block (ADR-065) and has it wiped. Once wiped, its device key is revoked and the server
-  refuses it.
+  number block (ADR-065), tells it to wipe and revokes its device key: only then is it refused
+  (ADR-495).
 
 ✅ **Approved** **ADR-436, 437, 440 (2026-10-09; agent defaults, this note awaits approval, building didn't
 > wait): how a phone proves itself.** The key is ECDSA P-256. Before a sync the phone asks for a
@@ -744,6 +801,32 @@ So the protection can't rest on the password. It rests on these:
 > signed in on the phone, so what the proof writes is recorded as done by **"Device key"**, an
 > actor that is not a person, on that phone. A phone out of service still proves itself; one
 > whose key is revoked is refused at once, whatever token it holds.
+
+✅ **Approved by the user (KD-77 closed, ADR-495)** **ADR-488 (2026-10-13): when the key is revoked.** "Sync
+> and turn in" (`POST /phones/current/turn-ins`, §8) revokes the key **in the same piece of work
+> that confirms every record the phone holds and ends its number blocks, as the phone is told to
+> wipe**, not after it reports a wipe: the server can't see a wipe, and a key kept until a phone
+> that may never call again says it wiped would stand for good. Nothing is revoked before every
+> record is on the server and every block has ended, and only the turn-in can revoke a key (the
+> database's guard). The text above was reworded to say so (ADR-495).
+
+⏳ **Awaiting approval** **ADR-520, 530 (2026-10-15; the user's decision, its design agent defaults):
+> a lost phone's key revoked after the firm's time** (REQ-214). A phone marked lost or retired
+> whose turn-in hasn't revoked its key has it revoked by the worker, as the system actor, once the
+> firm's hours have passed since its last mark (24 as shipped, `PHONE_KEY_REVOKED_AFTER_HOURS`; the
+> firm's settings record, whole hours up to a year or off, changed by an admin or anyone holding
+> Setup, audited): its blocks retired whole, a security event written. The database allows that
+> and nothing else, and tells the two kinds of revocation apart (`keyRevokedBy`: `TURN_IN`,
+> `FIRM_TIME`). **Such a phone proves itself with its key and the master passcode together**, and
+> its token opens only its sync, its photographs' files, its reports and its turn-in; its turn-in
+> then revokes the key for good. A phone whose key is revoked, by either kind, is never put back
+> in service: it is wiped and enrolled anew. A found phone whose key stands may be (ADR-530 (5)).
+
+⏳ **Awaiting approval** **ADR-531 (2026-10-15; the user's answer): a phone out of service only
+> sends.** Its standing is read once a request, at the door: a phone marked lost or retired sends
+> its records, photographs and reports and is turned in, and is given nothing (no new numbers, no
+> check of the passcode, no lists), whatever session it still holds; the database issues it no
+> new block. A phone whose key the firm's time revoked is the same, with the passcode at its proof.
 
 ### 7.5 The master passcode
 
@@ -784,7 +867,13 @@ So the protection can't rest on the password. It rests on these:
   3. It waits for the server to confirm each record.
   4. It returns its unused numbers (ADR-065), then wipes its data.
 
-  Nothing is wiped before the server confirms it. Cancelled tickets are the only exception to
+  Nothing is wiped before the server confirms it.
+  ⚠️ *ADR-488…490 (2026-10-13), as built: step 2's proof is the phone's token; steps 3 and 4 are
+  one call, `POST /phones/current/turn-ins`, the passcode in it, that names everything the phone
+  still holds; the server answers `wipe: true` only when it has all of it from that phone, and
+  in the same piece of work hands back (or, for a lost phone or a series not reported, retires)
+  its numbers and revokes its key (§7.4's note; KD-77 closed, ADR-495). Otherwise nothing changes and the answer
+  names what it doesn't have. A client wipes only on `wipe: true` (the sync contract's suite).* Cancelled tickets are the only exception to
   syncing: they stay on the device until it is set up again (ADR-056).
 - **Browser test build:** IndexedDB, encrypted with a WebCrypto key that can't be exported. It's
   good enough for testing, but it isn't device-grade, so real work never uses it.
@@ -822,6 +911,11 @@ So the protection can't rest on the password. It rests on these:
    ⚠️ *ADR-477 (the user, 2026-10-12): once a monitor submits a record on the phone it is sealed
    for them, synced or not; only the back office changes it. A record sent again is answered
    "already saved" as it was stored.*
+   ⚠️ *ADR-504 (agent default): a sync has a weight as well as counts, a mebibyte at most as sent,
+   the least body any installation's API reads (`REQUEST_BODY_LIMIT_BYTES` is never stated under
+   it); the device fills each sync by weight and sends the rest in the next, so no sync is
+   refused for its size at every try. One record weighs 256 KiB at most: a heavier one is
+   answered not saved and held for a person, never left on the device.*
 5. **Photos upload resumably.** An interrupted upload continues from where it stopped. The server
    checks each file's hash against the one the device recorded (§11).
 6. **The device gets a fresh manifest** (certs, sites, ROEs, roster, control ranges), its number

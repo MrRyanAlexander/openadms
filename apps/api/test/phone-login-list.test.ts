@@ -211,8 +211,8 @@ describe('the login list a phone takes', () => {
       });
       expect(kept).toHaveLength(2);
       for (const { passwordHash, offlineSeed } of kept) {
-        expect(passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$/);
-        expect(offlineSeed).toMatch(/^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+        expect(passwordHash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$/);
+        expect(offlineSeed).toMatch(/^v2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
         for (const text of [answer.text, served.lines.join('\n')]) {
           expect(text).not.toContain(passwordHash ?? 'none');
           expect(text).not.toContain(offlineSeed ?? 'none');

@@ -33,6 +33,12 @@ export const policyNames = {
   // The most connections a service's pool opens to the database (ARCHITECTURE §5.7; ADR-419).
   // Never under two: a run holds its project's lock on one and writes on another.
   databasePoolConnections: 'DATABASE_POOL_CONNECTIONS',
+  // How long one piece of work waits for a connection from its service's pool, and how long it
+  // may run in all, in milliseconds; and how many seconds a caller told the database is busy is
+  // told to wait (ARCHITECTURE §5.7, §6, Abuse; ADR-524).
+  databaseConnectionWaitMs: 'DATABASE_CONNECTION_WAIT_MS',
+  databaseWorkLongestMs: 'DATABASE_WORK_LONGEST_MS',
+  databaseBusyRetrySeconds: 'DATABASE_BUSY_RETRY_SECONDS',
   // The shortest and the longest password a back-office or outside user may set, in characters
   // (ARCHITECTURE §6, Passwords; NIST SP 800-63B-4 §3.1.1.2; ADR-402).
   passwordMinimumLength: 'PASSWORD_MINIMUM_LENGTH',
@@ -76,12 +82,33 @@ export const policyNames = {
   // How long the object store has to answer one question of the API's, a file put or read
   // whole, in seconds (ARCHITECTURE §11; ADR-480).
   mediaStoreAnswerSeconds: 'MEDIA_STORE_ANSWER_SECONDS',
+  // A photograph's file as the media endpoint takes it (ARCHITECTURE §6 "Uploads", §9 (5), §11;
+  // ADR-482): the largest file, in bytes; the largest part of one sent in a request; how many
+  // bytes of files not yet whole the API holds at once, across every phone; and how many parts
+  // one phone may send in the rate limits' stretch.
+  mediaFileBytesAtMost: 'MEDIA_FILE_BYTES_AT_MOST',
+  mediaPartBytesAtMost: 'MEDIA_PART_BYTES_AT_MOST',
+  mediaReceivingBytesAtMost: 'MEDIA_RECEIVING_BYTES_AT_MOST',
+  rateLimitFilePartsPerPhone: 'RATE_LIMIT_FILE_PARTS_PER_PHONE',
+  // A map's file as the back office sends it (ARCHITECTURE §3 "Project boundary and zones";
+  // ADR-485): the largest file, in bytes, sent whole in one request; the most its zipped parts
+  // may come to, unzipped; and how many files a zip may hold, counted before any is unzipped.
+  mapFileBytesAtMost: 'MAP_FILE_BYTES_AT_MOST',
+  mapFileUnzippedBytesAtMost: 'MAP_FILE_UNZIPPED_BYTES_AT_MOST',
+  mapFileEntriesAtMost: 'MAP_FILE_ENTRIES_AT_MOST',
+  // The most outer rings times holes one shape of a shapefile may have to be read: setting each
+  // hole in its outer ring tries every pair, all at once, and nothing stops it part way (ADR-524).
+  mapFileRingPairsAtMost: 'MAP_FILE_RING_PAIRS_AT_MOST',
+  // How long an Esri feature layer has to give the API every page of its features, in seconds,
+  // the whole exchange (ARCHITECTURE §3 "Project boundary and zones"; ADR-527 (15)).
+  esriLayerAnswerSeconds: 'ESRI_LAYER_ANSWER_SECONDS',
   // Rate limits (ARCHITECTURE §6, Abuse; ASVS 2.4.1; ADR-416): how long the stretch is that
   // requests are counted over, in seconds; how many one address and one signed-in person may send
   // in it; and how many callers' counts the server keeps at once.
   rateLimitWindowSeconds: 'RATE_LIMIT_WINDOW_SECONDS',
   rateLimitRequestsPerAddress: 'RATE_LIMIT_REQUESTS_PER_ADDRESS',
   rateLimitRequestsPerAccount: 'RATE_LIMIT_REQUESTS_PER_ACCOUNT',
+  rateLimitRequestsPerPhone: 'RATE_LIMIT_REQUESTS_PER_PHONE',
   rateLimitCountsKept: 'RATE_LIMIT_COUNTS_KEPT',
   // Tries at sign-in from one address (ASVS 6.1.1, 6.3.1; ADR-416): how long the stretch is, in
   // minutes; how many refused tries one address may make in it, whoever's login it tries, and
@@ -92,6 +119,13 @@ export const policyNames = {
   signInWrongTriesPerAddressAtLogin: 'SIGN_IN_WRONG_TRIES_PER_ADDRESS_AT_LOGIN',
   passwordResetAsksPerAddress: 'PASSWORD_RESET_ASKS_PER_ADDRESS',
   passwordResetAsksPerLogin: 'PASSWORD_RESET_ASKS_PER_LOGIN',
+  // The shortest and the longest master passcode, in characters (ARCHITECTURE §7.5; ADR-266,
+  // 530): the installer asks the firm's first one to them, and the back office each change.
+  masterPasscodeMinimumLength: 'MASTER_PASSCODE_MINIMUM_LENGTH',
+  masterPasscodeMaximumLength: 'MASTER_PASSCODE_MAXIMUM_LENGTH',
+  // How many hours a phone marked lost or retired keeps its key before the worker revokes it,
+  // nought for off (ADR-520, 530): what a new installation's firm settings start as.
+  phoneKeyRevokedAfterHours: 'PHONE_KEY_REVOKED_AFTER_HOURS',
   // The worker's own (ARCHITECTURE §13; ADR-418, 419), read by the worker's process alone: how
   // many runs may take a job up before it is set aside; the longest a run may hold its project's
   // lock, in minutes; how often the worker looks for waiting jobs, in seconds; and how long a map
@@ -107,14 +141,31 @@ export const policyNames = {
   // services: the API cuts a change that touches more into jobs of that size, and the worker
   // takes up waiting jobs, the oldest first, until their tickets come to it.
   jobTicketsAtMost: 'JOB_TICKETS_AT_MOST',
+  // What one phone may make the server hold for a person in a day, in bytes and in records,
+  // before the admins are told (ADR-546): its records are received all the same.
+  phoneHeldBytesPerDay: 'PHONE_HELD_BYTES_PER_DAY',
+  phoneHeldRecordsPerDay: 'PHONE_HELD_RECORDS_PER_DAY',
+  // How long a map file may take to be read, in seconds, and how much memory its reading may
+  // hold, in mebibytes, apart from the API's own work (ADR-548).
+  mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
+  mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 
+// The least body any installation's API reads from a request: one mebibyte, the release's own
+// value. A sync is never heavier (the contracts' `syncBytesAtMost`), so a phone's sync always fits
+// whatever an installation states (ADR-504).
+export const requestBodyBytesAtLeast = 1_048_576;
+
 // What each value may be: a whole number in the range the database's own checks hold a project's
 // setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
-// is at least one number, and a size limit at least one byte. A statement's time limit is at least
-// one millisecond (nought would switch it off) and at most what Postgres takes. A password's
+// is at least one number. The body a request may carry is never under a mebibyte, so that no
+// installation's limit refuses a sync a phone may send (ADR-504). A statement's time limit is at
+// least one millisecond (nought would switch it off) and at most what Postgres takes. A piece of
+// work waits a tenth of a second for a connection at the least and ten minutes at the most, runs
+// a second at the least and at most what a statement may, and a caller told the database is busy
+// waits a second at the least and an hour at the most (ADR-524). A password's
 // shortest length is never under the eight characters the standard allows beside a second step,
 // nor over the 64 it says must be permitted; its longest never under those 64. A reset by email
 // is good for a day at most, the standard's limit. A session lasts a day at most and an hour at
@@ -126,7 +177,9 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // most, a limit on tries over a day at the most, and each allows at least one; the server keeps
 // at least a thousand callers' counts and at most ten million. A job names at least one ticket
 // and at most a hundred thousand. A phone's clock may stand a minute off at the least before
-// its sync is flagged, and a day at the most.
+// its sync is flagged, and a day at the most. A master passcode is held to a password's own
+// bounds. A lost phone keeps its key a year at the most, and nought switches the backstop off.
+
 const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loadCallLowLimit]: { least: 0, most: 100 },
   [policyNames.loadCallHighLimit]: { least: 0, most: 100 },
@@ -136,9 +189,15 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.ticketNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.certNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.roeNumberBlockSize]: { least: 1, most: Number.MAX_SAFE_INTEGER },
-  [policyNames.requestBodyLimitBytes]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.requestBodyLimitBytes]: {
+    least: requestBodyBytesAtLeast,
+    most: Number.MAX_SAFE_INTEGER,
+  },
   [policyNames.statementTimeoutMs]: { least: 1, most: 2147483647 },
   [policyNames.databasePoolConnections]: { least: 2, most: 1000 },
+  [policyNames.databaseConnectionWaitMs]: { least: 100, most: 600000 },
+  [policyNames.databaseWorkLongestMs]: { least: 1000, most: 2147483647 },
+  [policyNames.databaseBusyRetrySeconds]: { least: 1, most: 3600 },
   [policyNames.passwordMinimumLength]: { least: 8, most: 64 },
   [policyNames.passwordMaximumLength]: { least: 64, most: 1024 },
   [policyNames.passwordResetMinutes]: { least: 1, most: 1440 },
@@ -157,21 +216,38 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
   [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
   [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
+  [policyNames.mediaFileBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mediaPartBytesAtMost]: { least: 65536, most: 1073741824 },
+  [policyNames.mediaReceivingBytesAtMost]: { least: 1048576, most: 68719476736 },
+  [policyNames.rateLimitFilePartsPerPhone]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.mapFileBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mapFileUnzippedBytesAtMost]: { least: 1048576, most: 1073741824 },
+  [policyNames.mapFileEntriesAtMost]: { least: 4, most: 65535 },
+  [policyNames.mapFileRingPairsAtMost]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.esriLayerAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.rateLimitWindowSeconds]: { least: 1, most: 3600 },
   [policyNames.rateLimitRequestsPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitRequestsPerAccount]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.rateLimitRequestsPerPhone]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.rateLimitCountsKept]: { least: 1000, most: 10000000 },
   [policyNames.signInAddressWindowMinutes]: { least: 1, most: 1440 },
   [policyNames.signInWrongTriesPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.signInWrongTriesPerAddressAtLogin]: { least: 1, most: 98 },
   [policyNames.passwordResetAsksPerAddress]: { least: 1, most: Number.MAX_SAFE_INTEGER },
   [policyNames.passwordResetAsksPerLogin]: { least: 1, most: Number.MAX_SAFE_INTEGER },
+  [policyNames.masterPasscodeMinimumLength]: { least: 8, most: 64 },
+  [policyNames.masterPasscodeMaximumLength]: { least: 64, most: 1024 },
+  [policyNames.phoneKeyRevokedAfterHours]: { least: 0, most: 8760 },
   [policyNames.jobTriesBeforeSetAside]: { least: 1, most: 100 },
   [policyNames.reconciliationRunLongestMinutes]: { least: 1, most: 1440 },
   [policyNames.jobQueuePollSeconds]: { least: 1, most: 3600 },
   [policyNames.mapServerAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.deviceClockOffLimitMinutes]: { least: 1, most: 1440 },
   [policyNames.jobTicketsAtMost]: { least: 1, most: 100000 },
+  [policyNames.phoneHeldBytesPerDay]: { least: 1048576, most: 1073741824 },
+  [policyNames.phoneHeldRecordsPerDay]: { least: 10, most: 100000 },
+  [policyNames.mapFileReadSeconds]: { least: 5, most: 600 },
+  [policyNames.mapFileReadMemoryMebibytes]: { least: 64, most: 4096 },
 };
 
 export class Policy {
@@ -186,6 +262,9 @@ export class Policy {
   readonly requestBodyLimitBytes: number;
   readonly statementTimeoutMs: number;
   readonly databasePoolConnections: number;
+  readonly databaseConnectionWaitMs: number;
+  readonly databaseWorkLongestMs: number;
+  readonly databaseBusyRetrySeconds: number;
   readonly passwordMinimumLength: number;
   readonly passwordMaximumLength: number;
   readonly passwordResetMinutes: number;
@@ -204,21 +283,38 @@ export class Policy {
   readonly loginListEntriesPerCall: number;
   readonly addressLookupAnswerSeconds: number;
   readonly mediaStoreAnswerSeconds: number;
+  readonly mediaFileBytesAtMost: number;
+  readonly mediaPartBytesAtMost: number;
+  readonly mediaReceivingBytesAtMost: number;
+  readonly rateLimitFilePartsPerPhone: number;
+  readonly mapFileBytesAtMost: number;
+  readonly mapFileUnzippedBytesAtMost: number;
+  readonly mapFileEntriesAtMost: number;
+  readonly mapFileRingPairsAtMost: number;
+  readonly esriLayerAnswerSeconds: number;
   readonly rateLimitWindowSeconds: number;
   readonly rateLimitRequestsPerAddress: number;
   readonly rateLimitRequestsPerAccount: number;
+  readonly rateLimitRequestsPerPhone: number;
   readonly rateLimitCountsKept: number;
   readonly signInAddressWindowMinutes: number;
   readonly signInWrongTriesPerAddress: number;
   readonly signInWrongTriesPerAddressAtLogin: number;
   readonly passwordResetAsksPerAddress: number;
   readonly passwordResetAsksPerLogin: number;
+  readonly masterPasscodeMinimumLength: number;
+  readonly masterPasscodeMaximumLength: number;
+  readonly phoneKeyRevokedAfterHours: number;
   readonly jobTriesBeforeSetAside: number;
   readonly reconciliationRunLongestMinutes: number;
   readonly jobQueuePollSeconds: number;
   readonly mapServerAnswerSeconds: number;
   readonly deviceClockOffLimitMinutes: number;
   readonly jobTicketsAtMost: number;
+  readonly phoneHeldBytesPerDay: number;
+  readonly phoneHeldRecordsPerDay: number;
+  readonly mapFileReadSeconds: number;
+  readonly mapFileReadMemoryMebibytes: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -232,6 +328,9 @@ export class Policy {
     this.requestBodyLimitBytes = Policy.read(values, policyNames.requestBodyLimitBytes);
     this.statementTimeoutMs = Policy.read(values, policyNames.statementTimeoutMs);
     this.databasePoolConnections = Policy.read(values, policyNames.databasePoolConnections);
+    this.databaseConnectionWaitMs = Policy.read(values, policyNames.databaseConnectionWaitMs);
+    this.databaseWorkLongestMs = Policy.read(values, policyNames.databaseWorkLongestMs);
+    this.databaseBusyRetrySeconds = Policy.read(values, policyNames.databaseBusyRetrySeconds);
     this.passwordMinimumLength = Policy.read(values, policyNames.passwordMinimumLength);
     this.passwordMaximumLength = Policy.read(values, policyNames.passwordMaximumLength);
     this.passwordResetMinutes = Policy.read(values, policyNames.passwordResetMinutes);
@@ -250,9 +349,19 @@ export class Policy {
     this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
     this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
     this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
+    this.mediaFileBytesAtMost = Policy.read(values, policyNames.mediaFileBytesAtMost);
+    this.mediaPartBytesAtMost = Policy.read(values, policyNames.mediaPartBytesAtMost);
+    this.mediaReceivingBytesAtMost = Policy.read(values, policyNames.mediaReceivingBytesAtMost);
+    this.rateLimitFilePartsPerPhone = Policy.read(values, policyNames.rateLimitFilePartsPerPhone);
+    this.mapFileBytesAtMost = Policy.read(values, policyNames.mapFileBytesAtMost);
+    this.mapFileUnzippedBytesAtMost = Policy.read(values, policyNames.mapFileUnzippedBytesAtMost);
+    this.mapFileEntriesAtMost = Policy.read(values, policyNames.mapFileEntriesAtMost);
+    this.mapFileRingPairsAtMost = Policy.read(values, policyNames.mapFileRingPairsAtMost);
+    this.esriLayerAnswerSeconds = Policy.read(values, policyNames.esriLayerAnswerSeconds);
     this.rateLimitWindowSeconds = Policy.read(values, policyNames.rateLimitWindowSeconds);
     this.rateLimitRequestsPerAddress = Policy.read(values, policyNames.rateLimitRequestsPerAddress);
     this.rateLimitRequestsPerAccount = Policy.read(values, policyNames.rateLimitRequestsPerAccount);
+    this.rateLimitRequestsPerPhone = Policy.read(values, policyNames.rateLimitRequestsPerPhone);
     this.rateLimitCountsKept = Policy.read(values, policyNames.rateLimitCountsKept);
     this.signInAddressWindowMinutes = Policy.read(values, policyNames.signInAddressWindowMinutes);
     this.signInWrongTriesPerAddress = Policy.read(values, policyNames.signInWrongTriesPerAddress);
@@ -262,6 +371,9 @@ export class Policy {
     );
     this.passwordResetAsksPerAddress = Policy.read(values, policyNames.passwordResetAsksPerAddress);
     this.passwordResetAsksPerLogin = Policy.read(values, policyNames.passwordResetAsksPerLogin);
+    this.masterPasscodeMinimumLength = Policy.read(values, policyNames.masterPasscodeMinimumLength);
+    this.masterPasscodeMaximumLength = Policy.read(values, policyNames.masterPasscodeMaximumLength);
+    this.phoneKeyRevokedAfterHours = Policy.read(values, policyNames.phoneKeyRevokedAfterHours);
     this.jobTriesBeforeSetAside = Policy.read(values, policyNames.jobTriesBeforeSetAside);
     this.reconciliationRunLongestMinutes = Policy.read(
       values,
@@ -271,6 +383,10 @@ export class Policy {
     this.mapServerAnswerSeconds = Policy.read(values, policyNames.mapServerAnswerSeconds);
     this.deviceClockOffLimitMinutes = Policy.read(values, policyNames.deviceClockOffLimitMinutes);
     this.jobTicketsAtMost = Policy.read(values, policyNames.jobTicketsAtMost);
+    this.phoneHeldBytesPerDay = Policy.read(values, policyNames.phoneHeldBytesPerDay);
+    this.phoneHeldRecordsPerDay = Policy.read(values, policyNames.phoneHeldRecordsPerDay);
+    this.mapFileReadSeconds = Policy.read(values, policyNames.mapFileReadSeconds);
+    this.mapFileReadMemoryMebibytes = Policy.read(values, policyNames.mapFileReadMemoryMebibytes);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would
     // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait
@@ -283,6 +399,18 @@ export class Policy {
     if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
       throw new Error(
         `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
+    // The API holds at least one whole file while it comes. (A part never goes past its file's
+    // length, so a part's own limit needs no pairing.)
+    if (this.mediaReceivingBytesAtMost < this.mediaFileBytesAtMost) {
+      throw new Error(
+        `The policy value ${policyNames.mediaReceivingBytesAtMost} must be at least ${policyNames.mediaFileBytesAtMost}.`,
+      );
+    }
+    if (this.masterPasscodeMinimumLength > this.masterPasscodeMaximumLength) {
+      throw new Error(
+        `The policy value ${policyNames.masterPasscodeMinimumLength} must be at most ${policyNames.masterPasscodeMaximumLength}.`,
       );
     }
     if (this.signInWrongTriesPerAddressAtLogin >= this.signInTriesBeforeWait) {

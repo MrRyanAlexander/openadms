@@ -26,6 +26,8 @@ export default defineConfig({
       'packages/contracts',
       'tools/setup',
       'tools/security',
+      // The chain's one command (ADR-533): how it reads each step and CHAIN.md, needing nothing.
+      'tools/chain',
       // The local stack's map servers (ADR-282): they need the stack up, like the database tests.
       'infra/local',
       // The API as a process (ADR-385): its settings and its error filter need nothing; the door

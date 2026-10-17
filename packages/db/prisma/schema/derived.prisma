@@ -133,6 +133,10 @@ enum FlagCode {
   SCALE_NET_DISAGREES
   TWO_QUANTITIES
   NOT_PROCESSED_LINES_STAND
+  SUB_NAME_ALIKE
+  // §3.13 Who a phone's record names (ADR-543)
+  MONITOR_NOT_SIGNED_IN
+  ASSIGNMENT_OF_ANOTHER_PERSON
 
   @@map("flag_code")
 }

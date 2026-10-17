@@ -338,6 +338,9 @@ describe('what is certified, and its one number', () => {
       'revoked_reason',
       'revoked_by_id',
       'notes',
+      // Entered from the paper sheet: who entered it, and why (ADR-521, 534 (1)).
+      'created_by_id',
+      'created_reason_id',
     ]);
     expect(
       await tested.db.one(
@@ -438,6 +441,57 @@ describe('what is certified, and its one number', () => {
         ),
         column,
       ).toBe(refusedBy.notNull);
+    }
+  });
+
+  it('AC-03-61 one entered in the back office from its paper sheet names who entered it and the reason, both or neither, and then no phone and no assignment; who entered it is a person, and never changes', async () => {
+    const { db, world } = tested;
+    await db.administer();
+    const deviceFailed = (
+      await db.one<{ id: string }>(`SELECT "id"::text FROM "reason" WHERE "name" = 'Device failed'`)
+    ).id;
+    await asTheBackOffice();
+    const fromTheSheet = {
+      cert_number: '88120',
+      device_id: null,
+      assignment_id: null,
+      created_by_id: world.admin,
+      created_reason_id: deviceFailed,
+    };
+    const id = await add('certification', certificationLike(world, fromTheSheet));
+    await add('certification_box', boxLike(id, 0));
+    await db.run(theWorkEnds);
+    for (const [what, more] of [
+      ['no reason', { ...fromTheSheet, cert_number: '88121', created_reason_id: null }],
+      ['no person', { ...fromTheSheet, cert_number: '88122', created_by_id: null }],
+      ['a phone', { ...fromTheSheet, cert_number: '88123', device_id: world.certifyingDevice }],
+      [
+        'an assignment',
+        { ...fromTheSheet, cert_number: '88124', assignment_id: world.certifyingAssignments.p1 },
+      ],
+      ['the system actor', { ...fromTheSheet, cert_number: '88125', created_by_id: world.worker }],
+    ] as const) {
+      const refused = await db.refused(
+        ...insertOf('certification', certificationLike(world, more)),
+      );
+      expect(refused.code, what).toBe(refusedBy.check);
+      expect(refused.message, what).toContain(
+        what === 'the system actor' ? '_check' : '"certification_created_check"',
+      );
+    }
+    for (const set of [
+      `"created_by_id" = NULL, "created_reason_id" = NULL`,
+      `"created_reason_id" = $2`,
+    ]) {
+      expect(
+        (
+          await db.refused(`UPDATE "certification" SET ${set} WHERE "id" = $1`, [
+            id,
+            ...(set.includes('$2') ? [deviceFailed] : []),
+          ])
+        ).code,
+        set,
+      ).toBe(refusedBy.trigger);
     }
   });
 

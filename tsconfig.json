@@ -63,6 +63,12 @@
     },
     {
       "path": "tools/security/test"
+    },
+    {
+      "path": "tools/chain"
+    },
+    {
+      "path": "tools/chain/test"
     }
   ]
 }

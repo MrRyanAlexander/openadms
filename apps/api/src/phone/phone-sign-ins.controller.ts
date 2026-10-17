@@ -46,44 +46,48 @@ export class PhoneSignInsController {
     // An address refused too often already, here or at this login, is stopped before the login
     // is touched, as at the back office's sign-in: its try is never a wrong try (ADR-416).
     const login = body.monitorNumber.trim().toUpperCase();
-    this.limits.mayTry(request.ip, login);
-    const outcome = await this.signIns.signIn(phone, body.monitorNumber, body.password);
-    if (!outcome.signedIn) {
-      request.log.info(
-        { why: outcome.why, deviceId: phone.deviceId },
-        'A monitor’s sign-in on a phone was refused.',
-      );
-      if (outcome.why === 'PHONE_OUT_OF_SERVICE') {
-        throw new Refusal(
-          'PHONE_OUT_OF_SERVICE',
-          409,
-          'Not signed in: this phone was taken out of service. A monitor signs in on a phone in service.',
+    const underWay = this.limits.mayTry(request.ip, login);
+    try {
+      const outcome = await this.signIns.signIn(phone, body.monitorNumber, body.password);
+      if (!outcome.signedIn) {
+        request.log.info(
+          { why: outcome.why, deviceId: phone.deviceId },
+          'A monitor’s sign-in on a phone was refused.',
         );
+        if (outcome.why === 'PHONE_OUT_OF_SERVICE') {
+          throw new Refusal(
+            'PHONE_OUT_OF_SERVICE',
+            409,
+            'Not signed in: this phone was taken out of service. A monitor signs in on a phone in service.',
+          );
+        }
+        this.limits.wrongTry(request.ip, login);
+        throw new Refusal('SIGN_IN_REFUSED', 401);
       }
-      this.limits.wrongTry(request.ip, login);
-      throw new Refusal('SIGN_IN_REFUSED', 401);
-    }
-    this.limits.signedIn(request.ip, login);
-    const { assignment } = outcome;
-    request.log.info(
-      {
-        deviceId: phone.deviceId,
+      this.limits.signedIn(request.ip, login);
+      const { assignment } = outcome;
+      request.log.info(
+        {
+          deviceId: phone.deviceId,
+          userId: outcome.userId,
+          ...(assignment.taken
+            ? { assignmentId: assignment.assignment.id }
+            : { noAssignment: assignment.why }),
+        },
+        'A monitor signed in on a phone.',
+      );
+      return monitorSignedInAnswerSchema.parse({
+        token: outcome.token,
         userId: outcome.userId,
-        ...(assignment.taken
-          ? { assignmentId: assignment.assignment.id }
-          : { noAssignment: assignment.why }),
-      },
-      'A monitor signed in on a phone.',
-    );
-    return monitorSignedInAnswerSchema.parse({
-      token: outcome.token,
-      userId: outcome.userId,
-      monitorNumber: outcome.monitorNumber,
-      name: outcome.name,
-      expiresInSeconds: this.signIns.secondsLeft(outcome.expiresAt),
-      assignment: assignment.taken ? assignment.assignment : null,
-      noAssignment: assignment.taken ? null : assignment.why,
-    });
+        monitorNumber: outcome.monitorNumber,
+        name: outcome.name,
+        expiresInSeconds: this.signIns.secondsLeft(outcome.expiresAt),
+        assignment: assignment.taken ? assignment.assignment : null,
+        noAssignment: assignment.taken ? null : assignment.why,
+      });
+    } finally {
+      underWay.over();
+    }
   }
 
   @Serves(signOutOnPhoneEndpoint)

@@ -7,9 +7,15 @@
 // database's own refusal (number_blocks_never_overlap), whatever this class does.
 //
 // A top-up is the phone's own piece of work, written as its monitor from that phone; retiring a
-// lost phone's blocks is the back office's. Two top-ups of one series at the same moment don't
+// lost phone's blocks is the back office's; a phone turned in ends its own in its turn-in's piece
+// of work, under the master passcode (`turnedIn`, ADR-488). Two top-ups of one series at the same moment don't
 // both go through: the second finds the series moved on, or the database refuses its block, and
-// it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2).
+// it is thrown, not saved, for the caller to ask again (the sync endpoint's, Phase 2). A top-up
+// and its phone's turn-in at the same moment are ordered by the phone's row: the top-up first,
+// and the turn-in ends its block; the turn-in first, and the top-up is refused, the phone proven
+// no more (ADR-524). A phone taken out of service is topped up no more (ADR-065, 134, 531): the
+// sync never asks for one (its standing is the door's), and one marked out of service while its
+// sync runs is answered not topped up, under the same lock; the database refuses its block too.
 import type { Database, NumberBlock, NumberSeries, Prisma } from '@open-adms/db';
 import {
   NumberSeriesBook,
@@ -17,8 +23,10 @@ import {
   PhoneNumbers,
   type NumbersTaken,
   type Policy,
+  type TurnedInBlocks,
 } from '@open-adms/domain';
 
+import { Refusal } from '../process/refusal.ts';
 import { type Clock, type Outcome, Refused, SetupService } from '../setup/setup-service.ts';
 
 // A phone at a sync: its monitor, and the phone itself.
@@ -32,6 +40,24 @@ export interface LastUsed {
   readonly projectId: string;
   readonly series: NumberSeries;
   readonly lastUsedNumber: number | null;
+}
+
+// How one series' blocks ended when their phone was turned in, and the blocks as they ended.
+export interface SeriesTurnedIn {
+  readonly projectId: string;
+  readonly series: NumberSeries;
+  readonly ended: TurnedInBlocks;
+  readonly blocks: readonly NumberBlock[];
+}
+
+// A top-up that lost the race for its series: another phone's top-up moved the series on between
+// this one's read and its write (ADR-065, 323). Nothing it did is kept; asked again, it reads the
+// series anew (ADR-505).
+export class SeriesMovedOn extends Error {
+  constructor() {
+    super('The number series moved on while a block was being cut: ask again.');
+    this.name = 'SeriesMovedOn';
+  }
 }
 
 export class NumberAllocator extends SetupService {
@@ -49,6 +75,15 @@ export class NumberAllocator extends SetupService {
     return this.writeAs(
       { actorId: phone.person, source: 'DEVICE', deviceId: phone.deviceId },
       async (tx) => {
+        // The phone's row under the share lock the database's guard takes for a block (ADR-488),
+        // taken first (ADR-524): a turn-in of the phone at the same moment waits for this top-up
+        // and ends its block, or this one waits for the turn-in and finds the key revoked; a mark
+        // out of service at the same moment likewise (ADR-531).
+        const [standing] = await tx.$queryRaw<{ revoked: boolean; inService: boolean }[]>`
+          SELECT "key_revoked_at" IS NOT NULL AS "revoked", "status" = 'ACTIVE' AS "inService"
+          FROM "device" WHERE "id" = ${phone.deviceId}::uuid FOR SHARE`;
+        if (standing?.revoked === true) throw new Refusal('PHONE_NOT_PROVEN', 401);
+        if (standing?.inService === false) throw new Refused(NumberAllocator.outOfService);
         const series = await tx.projectNumberSeries.findUnique({
           where: { projectId_series: { projectId: report.projectId, series: report.series } },
         });
@@ -107,6 +142,47 @@ export class NumberAllocator extends SetupService {
     );
   }
 
+  // A phone turned in (ADR-065, 134, 488), inside its turn-in's own piece of work: each series
+  // it holds blocks of ends as `endsAs` says, given whether the phone reported its last used
+  // number there; a report is written on the blocks first, so a block handed back keeps only
+  // what the phone used. A report of a series it holds nothing of changes nothing.
+  static async turnedIn(
+    tx: Prisma.TransactionClient,
+    deviceId: string,
+    reports: readonly LastUsed[],
+    endsAs: (reported: boolean) => TurnedInBlocks,
+    endedAt: Date,
+  ): Promise<SeriesTurnedIn[]> {
+    const held = await tx.numberBlock.findMany({
+      where: { deviceId, status: 'ISSUED' },
+      orderBy: [
+        { projectId: 'asc' },
+        { series: 'asc' },
+        { issuedAt: 'asc' },
+        { firstNumber: 'asc' },
+      ],
+      select: { projectId: true, series: true },
+    });
+    const series = new Map(held.map((block) => [`${block.projectId} ${block.series}`, block]));
+    const turnedIn: SeriesTurnedIn[] = [];
+    for (const { projectId, series: of } of series.values()) {
+      const report = reports.find((one) => one.projectId === projectId && one.series === of);
+      if (report !== undefined) await NumberAllocator.record(tx, deviceId, report);
+      const ended = endsAs(report !== undefined);
+      const blocks: NumberBlock[] = [];
+      for (const block of await NumberAllocator.heldBy(tx, deviceId, { projectId, series: of })) {
+        blocks.push(
+          await tx.numberBlock.update({
+            where: { id: block.id },
+            data: { status: ended, endedAt },
+          }),
+        );
+      }
+      turnedIn.push({ projectId, series: of, ended, blocks });
+    }
+    return turnedIn;
+  }
+
   // Moves the series on to the next number never handed out, only if nobody moved it meanwhile.
   private static async advance(
     tx: Prisma.TransactionClient,
@@ -118,9 +194,7 @@ export class NumberAllocator extends SetupService {
       where: { id: series.id, nextNumber: series.nextNumber },
       data: { nextNumber: taken.nextNumber },
     });
-    if (moved.count !== 1) {
-      throw new Error('The number series moved on while a block was being cut: ask again.');
-    }
+    if (moved.count !== 1) throw new SeriesMovedOn();
   }
 
   // Writes down the last number the phone says it used: every block before the one it lies in is
@@ -169,6 +243,12 @@ export class NumberAllocator extends SetupService {
     }
     return ended;
   }
+
+  private static readonly outOfService = {
+    code: 'PHONE_OUT_OF_SERVICE',
+    message:
+      'No block cut: this phone was taken out of service. It keeps what it holds until it is turned in.',
+  } as const;
 
   private static noSeries(series: NumberSeries): Refused {
     return new Refused({

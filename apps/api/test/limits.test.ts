@@ -25,6 +25,7 @@ import {
   wrong,
   type Answer,
 } from './support/served.ts';
+import { enrolledPhone, proven } from './support/phones.ts';
 import { Outbox, TestClock } from './support/sign-in.ts';
 
 // What an installation states for itself, over the release's values (ADR-395).
@@ -131,6 +132,24 @@ describe('one address sending requests faster than the policy allows', () => {
     }
     expect((await forwarded('203.0.113.50', '203.0.113.70')).statusCode).toBe(429);
     expect((await health('203.0.113.60')).statusCode).toBe(200);
+  });
+
+  it('AC-10-116 a request that came through a proxy the API doesn’t trust is answered as its own address, and the log says so once an hour, naming the setting and never an address; a trusted proxy’s says nothing (ADR-549)', async () => {
+    const said = () => lines.filter((line) => line.includes('a proxy the API doesn’t trust'));
+    // The test before sent through an untrusted proxy already: said once, however often since.
+    await health('203.0.113.80', { 'x-forwarded-for': '198.51.100.81' });
+    await health('203.0.113.80', { 'x-forwarded-for': '198.51.100.82' });
+    expect(said()).toHaveLength(1);
+    expect(said()[0]).toContain('ADMS_TRUSTED_PROXIES');
+    for (const address of ['203.0.113', '198.51.100', '10.0.0.2']) {
+      expect(said()[0]).not.toContain(address);
+    }
+    // An hour on, said again; a trusted proxy's word, never.
+    clock.later(61);
+    await health('10.0.0.2', { 'x-forwarded-for': '203.0.113.90' });
+    expect(said()).toHaveLength(1);
+    await health('203.0.113.80', { 'x-forwarded-for': '198.51.100.83' });
+    expect(said()).toHaveLength(2);
   });
 
   it('an IPv6 caller is counted by its network, so a caller with a network of addresses is one caller', async () => {
@@ -377,6 +396,30 @@ describe('a signed-in person sending requests faster than the policy allows', ()
       },
       undefined,
       stating({ RATE_LIMIT_REQUESTS_PER_ACCOUNT: '3' }),
+    );
+  });
+});
+
+describe('a proven phone sending requests faster than the policy allows', () => {
+  it('ADR-490, AC-10-41, API4 is limited as that phone, whatever address each request comes from; another phone at the same address is not, and the phone’s token still stands once the stretch is over', async () => {
+    await world(
+      async (served, tx) => {
+        const first = await enrolledPhone(served, tx, 'P1-COL-1');
+        const second = await enrolledPhone(served, tx, 'P1-COL-2');
+        const [one, other] = [await proven(served, first), await proven(served, second)];
+        const current = (bearer: string) => served.ask('GET', '/phones/current', { bearer });
+        for (const from of ['203.0.113.150', '203.0.113.151', '203.0.113.152']) {
+          served.from = from;
+          expect((await current(one)).status).toBe(200);
+        }
+        served.from = '203.0.113.153';
+        limited(await current(one), 60);
+        expect((await current(other)).status).toBe(200);
+        served.clock.later(1);
+        expect((await current(one)).status).toBe(200);
+      },
+      undefined,
+      stating({ RATE_LIMIT_REQUESTS_PER_PHONE: '3' }),
     );
   });
 });

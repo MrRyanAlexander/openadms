@@ -1,13 +1,15 @@
 // The security checks (ARCHITECTURE §15, §16; REQ-018; ADR-276), one command from the root:
 //   pnpm security            (--fresh runs the grant tests again whatever `pnpm test` reported)
-// The dependency audit, the secrets scan, the env files and the grant tests, each with real counts;
-// exit 1 if any fails. It never prints a secret. The grant tests need the local stack and an
-// installation at head; the audit needs the registry.
+// The dependency audit, the secrets scan, the env files, who reaches Postgres (REQ-205, ADR-508)
+// and the grant tests, each with real counts; exit 1 if any fails. It never prints a secret. Who
+// reaches Postgres and the grant tests need the local stack and an installation at head; the
+// audit needs the registry.
 // Node 24 runs this file as-is (type stripping), so it uses erasable TypeScript only.
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DependencyAudit } from './audit.ts';
+import { DatabaseReach } from './database-reach.ts';
 import { GrantTests } from './grants.ts';
 import { Repository, type Outcome } from './repository.ts';
 import { EnvFilesCheck, SecretsScan } from './secrets.ts';
@@ -20,6 +22,7 @@ const checks: (() => Outcome | Outcome[])[] = [
   () => new DependencyAudit(root).run(),
   () => new SecretsScan(repository).run(),
   () => new EnvFilesCheck(repository).run(),
+  () => new DatabaseReach(repository).run(),
   () => new GrantTests(repository, process.argv.includes('--fresh')).run(),
 ];
 

@@ -103,6 +103,13 @@ version, the 94 values the firm's lists start with, 98 audit records (ADR-302).
   the master passcode's actor stated from the back office is refused by a session's trigger
   first, in that trigger's words; without that case, loosening the trigger's own check of the
   source slipped.
+- **A closed project is held by one trigger function on many tables** (ADR-529): `project_open_guard()`
+  on each table that carries `project_id`, and, given the parent table and its column as arguments,
+  on each record under one of them; `catalog.test.ts` holds both lists exactly (`closedProjectTables`,
+  `closedProjectChildren`), and **a new table of a project's records joins one of them** (or is named
+  exempt beside them, as `held_record`, `user_viewer_project` and `set_aside_file` are).
+  `closed-projects.test.ts` holds the refusals. A plpgsql variable named as a column (`project`)
+  is ambiguous only when the statement runs: the guard's checks are tried, never read.
 - A new table or guard adds its expectations to these tests in the same response: the grant, trigger
   and policy lists are exact, so an unexpected one fails.
 - **A bare copy fails one test by itself** (`configuration.test.ts`, "nobody but the logins may

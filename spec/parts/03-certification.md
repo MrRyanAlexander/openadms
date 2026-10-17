@@ -32,8 +32,9 @@ works on the project.
    181).
 2. **General information:** the client and declaration event come from the project; date and time.
 3. **Whose truck:** pick the **prime** it works for, then either the prime itself or a **sub**, typed
-   into **tier 1 or tier 2** (the phone suggests subs already known under that prime; the back office
-   merges duplicates, audited). The firm doesn't know the subs before they turn up; the prime is on
+   into **tier 1 or tier 2** (the phone suggests subs already known under that prime; two subs whose
+   names look alike are flagged on each certification, `SUB_NAME_ALIKE`, and a person corrects the
+   sub, never merged: ADR-529). The firm doesn't know the subs before they turn up; the prime is on
    site to approve them (ADR-108).
 4. **Driver and vehicle:** the driver's name, phone and licence (recorded on the cert only, carried
    onto its tickets; there is no driver list, and **a driver's licence flags nothing**); the vehicle
@@ -67,10 +68,16 @@ works on the project.
     own** (ADR-048, 079, 082).
 14. **Later changes:**
     - **Measurement mistake** → correct the certification in place (audited); its tickets
-      reprocess; invoiced ones are unlocked first (ADR-079).
+      reprocess; invoiced ones are unlocked first (ADR-079). Any box's measurements, shape, sign
+      or feature, a box added or taken off (never the primary), and anything else keyed (driver,
+      tag, vehicle type, prime, subs) are corrected the same way (ADR-534).
     - **Truck modified** (sideboards added) → a **new certification and number**, with a
       **replaces** link to the old one, shown on both (ADR-082).
-    - **Pulled from work** → an admin **revokes** it from a date, with a reason (ADR-079).
+    - **Pulled from work** → an admin **revokes** it from a date, with a reason (ADR-079); an
+      admin takes a revocation back, with a reason, audited (ADR-534).
+    - **The phone failed** → the back office **enters the paper sheet**: the monitor who
+      certified it, the sheet's number, its boxes and photographs, with a reason; it then
+      reconciles as one made on a phone (the user, ADR-521; ADR-534).
     - **The same truck on another project** → it is **certified there from scratch**: measured
       and photographed again, with that project's own number. A certification is never copied
       (the user, ADR-328, 329).

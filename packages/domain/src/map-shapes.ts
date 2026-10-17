@@ -104,15 +104,21 @@ export class MapShapes {
     return { geometry, box: MapShapes.boxOf(polygons) };
   }
 
+  // Position by position: a shape from a file may hold more positions than a call takes
+  // arguments (ADR-485).
   private static boxOf(polygons: readonly Polygon[]): BoundingBox {
-    const positions = polygons.flat(2);
-    const longitudes = positions.map((position) => position[0] ?? 0);
-    const latitudes = positions.map((position) => position[1] ?? 0);
+    let [west, south, east, north] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [longitude = 0, latitude = 0] of polygons.flat(2)) {
+      west = Math.min(west, longitude);
+      south = Math.min(south, latitude);
+      east = Math.max(east, longitude);
+      north = Math.max(north, latitude);
+    }
     return {
-      westLongitude: Math.min(...longitudes).toFixed(8),
-      southLatitude: Math.min(...latitudes).toFixed(8),
-      eastLongitude: Math.max(...longitudes).toFixed(8),
-      northLatitude: Math.max(...latitudes).toFixed(8),
+      westLongitude: west.toFixed(8),
+      southLatitude: south.toFixed(8),
+      eastLongitude: east.toFixed(8),
+      northLatitude: north.toFixed(8),
     };
   }
 

@@ -218,6 +218,9 @@ describe("a manager/analyst's permissions", () => {
       'APPROVE_HOURS',
       'SETUP',
       'DISPATCH',
+      'VIEW_REVIEW',
+      'VIEW_SETUP',
+      'VIEW_DISPATCH',
     ]);
     await asTheApi();
     const luis = await luisWith([]);

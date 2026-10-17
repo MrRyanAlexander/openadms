@@ -1,6 +1,7 @@
 // The boundary, the headers every answer carries, the CORS list and the size limit (ARCHITECTURE
 // §6, Transport, CORS, Input, Output; acceptance file 10, AC-10-04…07, 34, 36, 39; T-12, T-15,
-// T-17, T-28; ADR-387…392). The real process, in this test's own memory, with one more controller;
+// T-17, T-28; ADR-387…392); and how a request is read and an answer and a log line written, as
+// the checklist asks (AC-10-57…62, 66; spec/CHECKLIST-API.md §3.1; ADR-513). The real process, in this test's own memory, with one more controller;
 // no stack is needed. What a schema takes and refuses, case by case, is
 // packages/contracts/test/endpoints.test.ts; here it is the server that asks it, every time. The
 // same answers through the door, over HTTPS, are door.test.ts's.
@@ -37,6 +38,26 @@ const everyPart = endpoint({
   answer: healthAnswerSchema,
 });
 const good = { code: 'NOT_FOUND', requestId: 'r-1' };
+// A write, as a browser's page would make one: a POST with a body.
+const written = endpoint({
+  name: 'testWritten',
+  summary: 'A test’s own.',
+  access: 'ANYBODY',
+  method: 'POST',
+  path: '/written',
+  body: errorAnswerSchema,
+  answer: healthAnswerSchema,
+});
+// An answer holding what a person may type: markup, quotes, a line break, a line separator.
+const typed = '</script><script>alert("Bayline")</script>\n\'O\u2028Brien';
+const says = endpoint({
+  name: 'testSays',
+  summary: 'A test’s own.',
+  access: 'ANYBODY',
+  method: 'GET',
+  path: '/says',
+  answer: errorAnswerSchema,
+});
 const noPart = endpoint({
   name: 'testNoPart',
   summary: 'A test’s own.',
@@ -54,6 +75,17 @@ class TakingController {
   taken(@Param() params: unknown, @Query() query: unknown, @Body() body: unknown) {
     ran.push({ params, query, body, request: requestNow() });
     return { status: 'ok' };
+  }
+
+  @Serves(written)
+  written(@Body() body: unknown) {
+    ran.push({ written: body });
+    return { status: 'ok' };
+  }
+
+  @Serves(says)
+  says() {
+    return { code: 'NOT_FOUND', requestId: 'r-1', message: typed };
   }
 
   @Serves(noPart)
@@ -74,12 +106,13 @@ class TakingController {
 class TakingModule {}
 
 const json = { 'content-type': 'application/json' };
+const logged: string[] = [];
 
 describe('the boundary', () => {
   let api: ApiProcess;
   beforeAll(async () => {
     api = await ApiProcess.create(TakingModule, madeUpSettings, shippedPolicy, {
-      stream: { write: () => undefined },
+      stream: { write: (line) => logged.push(line) },
     });
     await ready(api);
   });
@@ -200,7 +233,14 @@ describe('the boundary', () => {
       expect(ran).toEqual([]);
     });
 
+    it('KD-78: the process never listens in plain HTTP: given no certificate, it refuses to', async () => {
+      await expect(api.listen()).rejects.toThrow(
+        'The API listens over HTTPS alone: it was given no certificate.',
+      );
+    });
+
     it('AC-10-39: it is refused before it is read whole: on what it says its size is', async () => {
+      // The framework's own listen, past the process's: a test's raw socket on its own loopback.
       await api.app.listen(0, '127.0.0.1');
       const { port } = api.app.getHttpServer().address() as AddressInfo;
       const answered = await new Promise<string>((resolve, reject) => {
@@ -239,7 +279,7 @@ describe('the boundary', () => {
       expect(answers.map(({ statusCode }) => statusCode)).toEqual([200, 400, 404, 500, 400]);
       for (const answer of answers) {
         expect(answer.headers).toMatchObject({
-          'strict-transport-security': 'max-age=31536000',
+          'strict-transport-security': 'max-age=31536000; includeSubDomains',
           'x-content-type-options': 'nosniff',
           'referrer-policy': 'no-referrer',
           'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
@@ -325,6 +365,123 @@ describe('the boundary', () => {
       const answer = await api.app.inject({ method: 'GET', url: '/health' });
       expect(answer.statusCode).toBe(200);
       expect(cors(answer.headers)).toEqual([]);
+    });
+  });
+
+  describe('as the checklist asks (ADR-513)', () => {
+    it('AC-10-57 (ASVS 1.1.1, 15.3.7): a path and a query are decoded once, never twice, and a query key sent twice is refused', async () => {
+      ran.length = 0;
+      // `%256f` is `%6f` decoded once, and `o` only if decoded again.
+      await refused(put('/taken/%256fk?status=ok', good));
+      await refused(put('/taken/ok?status=%256fk', good));
+      await refused(put('/taken/ok?status=ok&status=ok', good));
+      await refused(put('/taken/ok?status=ok&status=', good));
+      expect(ran).toEqual([]);
+      // Decoded once, each is what the schema takes.
+      expect((await put('/taken/%6fk?status=%6fk', good)).statusCode).toBe(200);
+    });
+
+    it('AC-10-58 (ASVS 1.5.2, 15.3.6): a body is JSON read by its schema alone; one holding `__proto__` or `constructor.prototype` is refused, and pollutes nothing', async () => {
+      ran.length = 0;
+      for (const payload of [
+        '{"code":"NOT_FOUND","requestId":"r-1","__proto__":{"polluted":true}}',
+        '{"code":"NOT_FOUND","requestId":"r-1","constructor":{"prototype":{"polluted":true}}}',
+        '{"__proto__":{"code":"NOT_FOUND","requestId":"r-1","polluted":true}}',
+      ]) {
+        await refused(put('/taken/ok?status=ok', payload));
+      }
+      expect(ran).toEqual([]);
+      expect(({} as Record<string, unknown>)['polluted']).toBeUndefined();
+      expect(Object.prototype).not.toHaveProperty('polluted');
+    });
+
+    it('AC-10-59 (ASVS 3.5.2): a write sent as a page may send it without asking first, a form or plain text, is refused before anything runs', async () => {
+      ran.length = 0;
+      const post = (contentType: string, payload: string) =>
+        api.app.inject({
+          method: 'POST',
+          url: '/written',
+          headers: { 'content-type': contentType, origin: 'https://evil.example' },
+          payload,
+        });
+      const asked = [
+        await post('text/plain', JSON.stringify(good)),
+        await post('text/plain;charset=UTF-8', JSON.stringify(good)),
+        await post('application/x-www-form-urlencoded', 'code=NOT_FOUND&requestId=r-1'),
+        await post(
+          'multipart/form-data; boundary=x',
+          '--x\r\nContent-Disposition: form-data; name="code"\r\n\r\nNOT_FOUND\r\n--x--',
+        ),
+      ];
+      expect(asked.map(({ statusCode }) => statusCode)).toEqual([415, 415, 415, 415]);
+      for (const answer of asked) {
+        expect(errorAnswerSchema.parse(answer.json()).code).toBe('UNSUPPORTED_MEDIA_TYPE');
+      }
+      expect(ran).toEqual([]);
+      // As JSON, the same body is read.
+      expect((await post('application/json', JSON.stringify(good))).statusCode).toBe(200);
+    });
+
+    it('AC-10-60 (ASVS 1.1.2, 1.2.1, 1.2.3): an answer is JSON written by the serializer: what a person typed comes back as a JSON string, its markup inert and its line breaks escaped', async () => {
+      const answer = await api.app.inject({ method: 'GET', url: '/says' });
+      expect(answer.statusCode).toBe(200);
+      expect(answer.headers['content-type']).toBe('application/json; charset=utf-8');
+      expect(answer.headers['x-content-type-options']).toBe('nosniff');
+      expect(answer.body).not.toMatch(/[\n\r]/);
+      expect(answer.body).toContain(String.raw`alert(\"Bayline\")`);
+      expect(errorAnswerSchema.parse(answer.json()).message).toBe(typed);
+    });
+
+    it('AC-10-61 (ASVS 13.4.4): TRACE and any method the endpoints don’t list is answered "not found", and nothing sent is said back', async () => {
+      const sent = 'trace-9f3c-said-back';
+      for (const method of ['TRACE', 'DELETE', 'PROPFIND', 'OPTIONS']) {
+        const answer = await api.app.inject({
+          // The test's client lists fewer methods than a caller may send.
+          method: method as 'GET',
+          url: '/health',
+          headers: { 'x-adms-echo': sent, cookie: `session=${sent}` },
+        });
+        expect([method, answer.statusCode]).toEqual([method, 404]);
+        expect(errorAnswerSchema.parse(answer.json()).code).toBe('NOT_FOUND');
+        expect(answer.body).not.toContain(sent);
+      }
+    });
+
+    it('AC-10-62 (ASVS 16.4.1): a line break or a quote in what a request sends never breaks the log: each line written is one JSON object', async () => {
+      const from = logged.length;
+      await api.app.inject({ method: 'GET', url: '/nowhere%0A%7B%22level%22%3A60%7D%22' });
+      await api.app.inject({ method: 'GET', url: '/nowhere\u2028"' });
+      await put('/taken/ok%0D%0A?status=ok%0A%22', good, { ...json, 'x-adms': 'a\u2028"b' });
+      await put('/taken/ok?status=ok', '{"code": "NOT_FOUND\n", "requestId": "\\"}');
+      const lines = logged.slice(from);
+      expect(lines.length).toBeGreaterThan(4);
+      for (const line of lines) {
+        expect(line.endsWith('\n')).toBe(true);
+        expect(line.indexOf('\n')).toBe(line.length - 1);
+        const read = JSON.parse(line) as Record<string, unknown>;
+        expect(read['level']).not.toBe(60);
+      }
+    });
+
+    it('AC-10-66 (ASVS 16.3.3): what the boundary refuses is logged, by its endpoint and the refusal, with the request’s id; never what was sent', async () => {
+      const from = logged.length;
+      const answer = await refused(put('/taken/ok?status=ok', { ...good, amount: 'sent-9f3c' }));
+      const lines = logged.slice(from).map((line) => JSON.parse(line) as Record<string, unknown>);
+      const refusal = lines.filter(
+        ({ msg }) => msg === 'The boundary refused what a request sent.',
+      );
+      expect(refusal).toEqual([
+        expect.objectContaining({
+          endpoint: 'testEveryPart',
+          refused: 'BAD_REQUEST',
+          requestId: answer.headers['x-request-id'],
+        }),
+      ]);
+      expect(logged.slice(from).join('')).not.toMatch(/sent-9f3c|amount/);
+      // Taken, nothing is logged as refused.
+      const taken = logged.length;
+      await put('/taken/ok?status=ok', good);
+      expect(logged.slice(taken).join('')).not.toContain('refused');
     });
   });
 });

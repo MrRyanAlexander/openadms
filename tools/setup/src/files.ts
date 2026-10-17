@@ -73,6 +73,26 @@ export class EnvFile {
     return missing.map(([key]) => key);
   }
 
+  // Changes one value as `change` says, for a setting a later release asks more of (a login's URL
+  // given its TLS parameters, ADR-517): its secret is never made or replaced, only carried over
+  // as it was. Every other line is left exactly as it was; still its owner's only; written whole
+  // beside itself, then swapped in. Answers whether the value changed.
+  amend(key: string, change: (value: string) => string): boolean {
+    const value = this.read()[key];
+    if (value === undefined) return false;
+    const changed = change(value);
+    if (changed === value) return false;
+    const [line] = EnvFile.render([], [[key, changed]]).split('\n');
+    const text = readFileSync(this.path, 'utf8')
+      .split('\n')
+      .map((kept) => (kept.startsWith(`${key}=`) ? (line ?? kept) : kept))
+      .join('\n');
+    const next = `${this.path}.next`;
+    writeFileSync(next, text, { mode: 0o600, flag: 'wx' });
+    renameSync(next, this.path);
+    return true;
+  }
+
   static render(header: string[], values: [string, string][]): string {
     const lines = header.map((line) => `# ${line}`);
     for (const [key, value] of values) {
@@ -89,7 +109,9 @@ export interface InstallationRecord {
   mail: 'mail catcher' | 'none';
   database: { host: string; port: number; name: string };
   // When each step last finished, as ISO times.
-  steps: Partial<Record<'secrets' | 'roles' | 'database', string>>;
+  // `keys`: when the API's password key and sealing key were made (ADR-542), so that one lost
+  // afterwards is never made again unseen.
+  steps: Partial<Record<'secrets' | 'roles' | 'database' | 'keys', string>>;
   createdAt: string;
   updatedAt: string;
 }

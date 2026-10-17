@@ -7,6 +7,7 @@
 import {
   crewTimeConversions,
   incidentOffers,
+  mapFileTypes,
   numberSeries,
   quantityAsks,
   setupGapCodes,
@@ -35,7 +36,7 @@ export const formDocumentTypes = [
 ] as const;
 export const billingUnits = ['CY', 'TN', 'EA', 'LB', 'HR', 'CREW_DAY', 'TBN'] as const;
 export const quantityFroms = ['ALL_ITEMS', 'CHOSEN_ITEMS'] as const;
-export const siteAreaSources = ['DRAWN', 'UPLOAD'] as const;
+export const siteAreaSources = ['DRAWN', 'UPLOAD', 'ESRI_LAYER'] as const;
 export const mapSources = ['UPLOAD', 'ESRI_LAYER', 'DRAWN'] as const;
 export const dumpedForms = ['LOAD', 'HAUL_OUT'] as const;
 
@@ -63,10 +64,41 @@ export function savedAnswer<R extends z.ZodType>(record: R) {
   });
 }
 
-// A search's answer: what the firm already has, to pick from before anything is entered again.
+// A search's answer, a page at a time (ADR-527 (3)): what the firm already has, to pick from
+// before anything is entered again, in name order. `next` is what to send as `after` for the
+// page that follows; null when this is the last.
 export function foundAnswer<R extends z.ZodType>(record: R) {
-  return z.strictObject({ records: z.array(record) });
+  return z.strictObject({ records: z.array(record), next: id.nullable() });
 }
+
+// The firm's lists whose values are renamed, archived and put back at `/lists/:list/values`
+// (spec/LISTS.md; ADR-194, 302, 527 (6)), by the name a path gives each, and a project's field
+// tags (ADR-216), its own list. A built-in value is renamed and never archived.
+export const firmLists = [
+  'program-types',
+  'declaration-reference-types',
+  'debris-types',
+  'reduction-methods',
+  'payable-types',
+  'kinds-of-work',
+  'item-names',
+  'vehicle-types',
+  'vehicle-features',
+  'crew-types',
+  'site-types',
+  'site-labels',
+  'incident-types',
+  'incident-sub-types',
+  'reasons',
+  'survey-work-types',
+  'clock-activities',
+  'field-tags',
+] as const;
+
+export type FirmList = (typeof firmLists)[number];
+
+// Where a reason is offered (spec/LISTS.md; ADR-302): the database's closed set.
+export const reasonUses = ['VOID', 'TYPED_NUMBER', 'ACCEPT_FLAG', 'BACK_OFFICE_RECORD'] as const;
 
 export const clientRecordSchema = z.strictObject({
   id,
@@ -79,6 +111,13 @@ export const clientRecordSchema = z.strictObject({
 });
 
 export type ClientRecord = z.infer<typeof clientRecordSchema>;
+
+// What is still open on a project as an admin closes it (ADR-529 (b)), each in plain words.
+export const closingCheckAnswerSchema = z.strictObject({
+  items: z.array(z.strictObject({ code: z.string().min(1), message: z.string().min(1) })),
+});
+
+export type ClosingCheckAnswer = z.infer<typeof closingCheckAnswerSchema>;
 
 export const declarationEventRecordSchema = z.strictObject({
   id,
@@ -208,7 +247,6 @@ export const formRecordSchema = z.strictObject({
   projectId: id,
   documentType: z.enum(formDocumentTypes),
   name: z.string(),
-  enabled: z.boolean(),
   gpsRequired: z.boolean().nullable(),
   incidentOffers: z.array(z.enum(incidentOffers)),
   archived: z.boolean(),
@@ -326,6 +364,10 @@ export const siteAreaVersionRecordSchema = z.strictObject({
   siteId: id,
   version: z.number().int(),
   source: z.enum(siteAreaSources),
+  // The file's name, or the Esri layer's address; and whether the file it came from is kept
+  // (ADR-527 (10)), never where.
+  sourceName: z.string().nullable(),
+  fileKept: z.boolean(),
   effectiveFrom: z.iso.datetime(),
 });
 
@@ -342,8 +384,35 @@ export const siteTippingFeeRecordSchema = z.strictObject({
 
 export type SiteTippingFeeRecord = z.infer<typeof siteTippingFeeRecordSchema>;
 
+// One of the firm's own labels on a site (ADR-194, 215; AC-01-58): kept, and changes nothing.
+export const siteLabelRecordSchema = z.strictObject({
+  id,
+  siteId: id,
+  siteLabelId: id,
+  archived: z.boolean(),
+});
+
+export type SiteLabelRecord = z.infer<typeof siteLabelRecordSchema>;
+
+// A pay item's crew day steps in force, in hour order (ADR-087, 527 (7)): hours from and to,
+// both included, and the quantity they bill, as exact decimals.
+export const crewDayStepsRecordSchema = z.strictObject({
+  payItemId: id,
+  steps: z.array(
+    z.strictObject({
+      id,
+      fromHours: z.string(),
+      toHours: z.string(),
+      quantity: z.string(),
+    }),
+  ),
+});
+
+export type CrewDayStepsRecord = z.infer<typeof crewDayStepsRecordSchema>;
+
 // One version of a project's map (ADR-141): which version, how it came and the field its zones
-// are named in. The shapes themselves aren't said back.
+// are named in, and whether the file it was loaded from is kept (ADR-485), never where. The
+// shapes themselves aren't said back.
 export const mapVersionRecordSchema = z.strictObject({
   id,
   projectId: id,
@@ -351,10 +420,41 @@ export const mapVersionRecordSchema = z.strictObject({
   source: z.enum(mapSources),
   sourceName: z.string().nullable(),
   zoneNameField: z.string().nullable(),
+  fileKept: z.boolean(),
+  // The zones' own Esri layer, where they came from one apart from the boundary's (ADR-527 (15)).
+  zonesSourceName: z.string().nullable(),
   loadedAt: z.iso.datetime(),
 });
 
 export type MapVersionRecord = z.infer<typeof mapVersionRecordSchema>;
+
+// A map's file is known by its own SHA-256, in lower-case hex (ADR-485): the same file sent
+// twice is one file, and a map or a site's shape is loaded from it by that id.
+export const mapFileId = z.string().regex(/^[0-9a-f]{64}$/);
+
+// A map's file as the server read it when it was sent (ARCHITECTURE §3 "Project boundary and
+// zones"; ADR-485): its id, its kind and its size, and each layer it holds, so the person picks
+// which is the boundary, which the zones and the field that names them. A layer is a shapefile
+// or a GeoJSON file inside a zip, named by its path there, or a GeoJSON file's one layer, named
+// by nothing. For each: how many features it has, the fields they carry, and, where the layer
+// can't be kept as one shape, why not, in plain words. Never where the file is kept.
+export const mapFileRecordSchema = z.strictObject({
+  id: mapFileId,
+  type: z.enum(mapFileTypes),
+  bytes: z.number().int().positive(),
+  layers: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).nullable(),
+        features: z.number().int().nonnegative(),
+        fields: z.array(z.string()),
+        problem: z.string().min(1).nullable(),
+      }),
+    )
+    .min(1),
+});
+
+export type MapFileRecord = z.infer<typeof mapFileRecordSchema>;
 
 // The setup check's answer (ADR-229): everything the project's setup leaves open, each a plain
 // message with the records it is about; none when the setup is whole. It lists, never refuses.

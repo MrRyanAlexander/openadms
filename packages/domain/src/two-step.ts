@@ -3,8 +3,9 @@
 // spec/acceptance/10-api-and-sync.md AC-10-26; spec/THREAT-MODEL.md T-14, T-16; ADR-170, 412).
 // NIST SP 800-63B-4 §3.1.4, §3.1.5; OWASP ASVS 5.0 §6.5; RFC 6238.
 //
-// - **Who.** An admin and a manager/analyst must have it; a read-only viewer may choose it; a
-//   monitor has none (the enrolled phone is their protection) and the system actor is no login.
+// - **Who.** An admin and a manager/analyst must have it; a read-only viewer may choose it, or
+//   must have it where the firm says so (REQ-215; ADR-511, 530); a monitor has none (the enrolled
+//   phone is their protection) and the system actor is no login.
 // - **The code** is the time-based one every authenticator app makes: six digits that change
 //   every thirty seconds, counted from 1970 in steps. Those two numbers are what the apps take,
 //   so they are the code's own shape, never a policy value.
@@ -36,9 +37,11 @@ export class TwoStepRules {
     this.policy = policy;
   }
 
-  // Whether a person of that role must have a second step, may, or has none.
-  need(role: string): TwoStepNeed {
-    return needs[role] ?? 'NONE';
+  // Whether a person of that role must have a second step, may, or has none, given whether the
+  // firm requires it of its read-only viewers.
+  need(role: string, viewersRequired: boolean): TwoStepNeed {
+    const need = needs[role] ?? 'NONE';
+    return need === 'OPTIONAL' && viewersRequired ? 'REQUIRED' : need;
   }
 
   // The step a moment falls in.

@@ -6,6 +6,7 @@
 // type's built-in key again, which is how the database holds the same rule.
 import type {
   DisposalSite,
+  DisposalSiteLabel,
   DisposalSiteTippingFee,
   Prisma,
   SiteAreaSource,
@@ -13,7 +14,7 @@ import type {
 } from '@open-adms/db';
 import { type BuiltInKey, MapShapes, SiteFacts, type SiteSetting } from '@open-adms/domain';
 
-import { day, type Outcome, QueueingService, Refused } from './setup-service.ts';
+import { archiveChange, day, type Outcome, QueueingService, Refused } from './setup-service.ts';
 
 // The four site facts: every one stated, none has a default (ADR-215).
 export interface SiteFactSettings {
@@ -58,6 +59,10 @@ export type SiteChanges = Partial<
 export interface NewSiteShape {
   readonly source: SiteAreaSource;
   readonly shape: unknown;
+  // The file's name, or the Esri layer's address; and where the file it came from is kept
+  // (ADR-527 (10)).
+  readonly sourceName?: string | null;
+  readonly uploadedFileKey?: string;
 }
 
 // A site added or changed is checked by the worker's next run (its permit; where its tickets'
@@ -150,6 +155,8 @@ export class SiteSetup extends QueueingService {
           geometry: shape.read.geometry satisfies Prisma.InputJsonObject,
           ...shape.read.box,
           source: input.source,
+          sourceName: input.sourceName ?? null,
+          uploadedFileKey: input.uploadedFileKey ?? null,
           createdById: person,
           effectiveFrom: this.clock.now(),
         },
@@ -160,7 +167,8 @@ export class SiteSetup extends QueueingService {
   }
 
   // The site keeps the link to a tipping fee pay item written from it: how a fee line is told from
-  // a hauling line. A site may keep several (ADR-222, 311, 312).
+  // a hauling line. A site may keep several (ADR-222, 311, 312). A link taken off is given back
+  // on its own row (ADR-527 (9)); one that stands is answered as it is.
   tippingFee(
     person: string,
     siteId: string,
@@ -168,11 +176,70 @@ export class SiteSetup extends QueueingService {
   ): Promise<Outcome<DisposalSiteTippingFee>> {
     return this.setup(person, async (tx) => {
       const site = await tx.disposalSite.findUniqueOrThrow({ where: { id: siteId } });
-      const link = await tx.disposalSiteTippingFee.create({
-        data: { projectId: site.projectId, siteId, payItemId },
+      const held = await tx.disposalSiteTippingFee.findUnique({
+        where: { siteId_payItemId: { siteId, payItemId } },
       });
+      if (held?.archivedAt === null) return held;
+      const link =
+        held === null
+          ? await tx.disposalSiteTippingFee.create({
+              data: { projectId: site.projectId, siteId, payItemId },
+            })
+          : await tx.disposalSiteTippingFee.update({
+              where: { id: held.id },
+              data: { archivedAt: null },
+            });
       await this.setupChanged(tx, person, site.projectId, { siteId });
       return link;
+    });
+  }
+
+  // A link made by mistake removed (ADR-529 (g)): audited, never deleted; linked again, it is
+  // back on its own row.
+  removeTippingFee(
+    person: string,
+    siteId: string,
+    payItemId: string,
+  ): Promise<Outcome<DisposalSiteTippingFee>> {
+    return this.setup(person, async (tx) => {
+      const held = await tx.disposalSiteTippingFee.findUniqueOrThrow({
+        where: { siteId_payItemId: { siteId, payItemId } },
+      });
+      const change = archiveChange(held.archivedAt, true, this.clock.now());
+      if (change === null) return held;
+      const link = await tx.disposalSiteTippingFee.update({ where: { id: held.id }, data: change });
+      await this.setupChanged(tx, person, held.projectId, { siteId });
+      return link;
+    });
+  }
+
+  // One of the firm's own labels on the site (AC-01-58): given, or given back on its own row.
+  // It changes nothing the system does, so nothing is queued.
+  label(person: string, siteId: string, siteLabelId: string): Promise<Outcome<DisposalSiteLabel>> {
+    return this.setup(person, async (tx) => {
+      const held = await tx.disposalSiteLabel.findUnique({
+        where: { siteId_siteLabelId: { siteId, siteLabelId } },
+      });
+      if (held === null) return tx.disposalSiteLabel.create({ data: { siteId, siteLabelId } });
+      if (held.archivedAt === null) return held;
+      return tx.disposalSiteLabel.update({ where: { id: held.id }, data: { archivedAt: null } });
+    });
+  }
+
+  // A label given by mistake removed (ADR-529 (g)): audited, never deleted.
+  removeLabel(
+    person: string,
+    siteId: string,
+    siteLabelId: string,
+  ): Promise<Outcome<DisposalSiteLabel>> {
+    return this.setup(person, async (tx) => {
+      const held = await tx.disposalSiteLabel.findUniqueOrThrow({
+        where: { siteId_siteLabelId: { siteId, siteLabelId } },
+      });
+      const change = archiveChange(held.archivedAt, true, this.clock.now());
+      return change === null
+        ? held
+        : tx.disposalSiteLabel.update({ where: { id: held.id }, data: change });
     });
   }
 

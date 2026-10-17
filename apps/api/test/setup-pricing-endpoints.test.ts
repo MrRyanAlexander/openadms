@@ -64,7 +64,6 @@ describe('step 5: Dana sets P1’s forms through the endpoints', () => {
         projectId: project.id,
         documentType: 'INCIDENT',
         name: 'Incident',
-        enabled: true,
         gpsRequired: null,
         // As the form keeps it: each once, in the phone's order.
         incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
@@ -77,11 +76,9 @@ describe('step 5: Dana sets P1’s forms through the endpoints', () => {
         {
           documentType: 'INCIDENT',
           name: 'Incident',
-          enabled: true,
           incidentOffers: ['CONTRACTOR', 'CONTRACTOR'],
         },
-        { documentType: 'INVOICE', name: 'Invoice', enabled: true },
-        { documentType: 'SURVEY', name: 'Survey' },
+        { documentType: 'INVOICE', name: 'Invoice' },
       ]) {
         expect(
           told(
@@ -677,7 +674,7 @@ describe('each service asks again inside its own piece of work (ADR-364)', () =>
   it('called as a manager/analyst without Setup or as a read-only viewer, the form, pay item and rule services change nothing', async () => {
     await world(async (_api, tx, who, within) => {
       const clock = { now: () => new Date('2026-10-12T14:00:00Z') };
-      const forms = new FormSetup(within, clock);
+      const forms = new FormSetup(within, clock, shippedPolicy);
       const payItems = new PayItemSetup(within, clock, shippedPolicy);
       const rules = new RuleSetup(within, clock, shippedPolicy);
       const none = randomUUID();
@@ -687,7 +684,6 @@ describe('each service asks again inside its own piece of work (ADR-364)', () =>
             projectId: none,
             documentType: 'LOAD',
             name: 'Load',
-            enabled: true,
           }),
           await forms.debrisType(caller, {
             formId: none,
@@ -771,7 +767,7 @@ describe('a refusal by the database’s own constraints is answered plainly, nev
       (api, dana, { ids }) =>
         ask(api, dana, createFormEndpoint, {
           ids,
-          payload: { documentType: 'LOAD', name: 'Load, again', enabled: true },
+          payload: { documentType: 'LOAD', name: 'Load, again' },
         }),
     );
   });
@@ -829,7 +825,7 @@ describe('a refusal by the database’s own constraints is answered plainly, nev
       (api, dana, { ids }) =>
         ask(api, dana, createFormEndpoint, {
           ids,
-          payload: { documentType: 'SURVEY', name: 'Survey', enabled: true, gpsRequired: true },
+          payload: { documentType: 'SURVEY', name: 'Survey', gpsRequired: true },
         }),
     );
   });

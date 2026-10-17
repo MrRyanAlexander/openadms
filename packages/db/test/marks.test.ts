@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest';
 
 import { refusedBy } from './support/database.ts';
 import {
+  eventInsertOf,
+  fieldEventLike,
   formLike,
   given,
   insertOf,
@@ -579,6 +581,79 @@ describe('the invoice lock', () => {
     ]);
   });
 
+  it('AC-08-73 while 101001 is locked as invoiced its field events, and the tickets its collection carries, change no more, for anybody, but the links a number finds; unlocked, they are corrected again', async () => {
+    const { db, world } = tested;
+    const reviewer = await luis();
+    await actingAs(reviewer);
+    const lock = await tickets.add(
+      'invoice_lock',
+      lockLike(reviewer, { completed_load_id: world.loads.l101001.completedLoad }),
+    );
+    const { collection, disposal } = world.loads.l101001;
+    const locked = {
+      code: refusedBy.trigger,
+      message:
+        'Ticket 101001 is locked as invoiced: its field events don’t change. Unlock it first',
+    };
+    for (const [event, set] of [
+      [collection, `"notes" = 'Corrected after the lock'`],
+      [disposal, `"load_call" = 70`],
+      [disposal, `"ticket_number" = '101099'`],
+    ] as const) {
+      const refused = await db.refused(`UPDATE "field_event" SET ${set} WHERE "id" = $1`, [event]);
+      expect({ code: refused.code, message: refused.message.replace("'", '’') }, set).toEqual(
+        locked,
+      );
+    }
+    expect(
+      (
+        await db.refused(
+          `INSERT INTO "carried_ticket" ("field_event_id", "field_event_kind", "carried_ticket_number") VALUES ($1, 'COLLECTION', '301001')`,
+          [collection],
+        )
+      ).code,
+    ).toBe(refusedBy.trigger);
+    // A field event the lock didn't hold, arriving now under the locked number (a split's late
+    // collection), writes the tickets it carries: what was invoiced stands as it was.
+    await db.as('adms_api');
+    await db.actor(world.monitor, 'DEVICE', { deviceId: world.device });
+    const late = (
+      await db.one<{ id: string }>(
+        ...eventInsertOf(
+          fieldEventLike(world, {
+            ticket_number: '101001',
+            split_suffix: 'B',
+            estimate_cy: '12.0',
+          }),
+        ),
+      )
+    ).id;
+    expect(
+      await db.run(
+        `INSERT INTO "carried_ticket" ("field_event_id", "field_event_kind", "carried_ticket_number") VALUES ($1, 'COLLECTION', '301001')`,
+        [late],
+      ),
+    ).toBe(1);
+    await actingAs(reviewer);
+    // A number finds its record: a certification or an ROE corrected moves the link, and the
+    // ticket reads it only once unlocked.
+    expect(
+      await db.run(`UPDATE "field_event" SET "certification_id" = NULL WHERE "id" = $1`, [
+        disposal,
+      ]),
+    ).toBe(1);
+    await db.run(
+      `UPDATE "invoice_lock" SET "unlocked_by_id" = $2, "unlocked_at" = now() WHERE "id" = $1`,
+      [lock, reviewer],
+    );
+    expect(
+      await db.run(
+        `UPDATE "field_event" SET "notes" = 'Corrected after the unlock' WHERE "id" = $1`,
+        [collection],
+      ),
+    ).toBe(1);
+  });
+
   it('AC-09-01 is on one ticket of its own project, a field event only as a unit rate ticket, by a person', async () => {
     const { world } = tested;
     const load = world.loads.l101001;
@@ -943,7 +1018,7 @@ describe('a flag’s acceptance', () => {
     expect(
       await tickets.refused('flag_acceptance', acceptanceLike(world.admin, flag, photosConfirm)),
       'a second acceptance',
-    ).toBe(refusedBy.unique);
+    ).toBe(refusedBy.exclusion);
     expect(await refusedChange('flag', flag, `"cleared_at" = now()`)).toBe(refusedBy.grant);
     for (const set of [
       `"flag_id" = '${other}'`,
@@ -958,6 +1033,49 @@ describe('a flag’s acceptance', () => {
     }
     await db.administer();
     expect(await db.one(`SELECT * FROM "flag" WHERE "id" = $1`, [flag])).toEqual(before);
+  });
+
+  it('AC-08-70 an acceptance taken back says who and when together, a note only with them, a person’s; it is history then; a flag has one acceptance in force, so accepting it again is a new row', async () => {
+    const { db, world } = tested;
+    const reviewer = await luis();
+    const flag = await flagOn101001();
+    const photosConfirm = await reason('Photos confirm');
+    await actingAs(reviewer);
+    const first = await tickets.add(
+      'flag_acceptance',
+      acceptanceLike(reviewer, flag, photosConfirm),
+    );
+    const withdrawn = (set: string) =>
+      db.refused(`UPDATE "flag_acceptance" SET ${set} WHERE "id" = $1`, [first]);
+    for (const [what, set] of [
+      ['who alone', `"withdrawn_by_id" = '${reviewer}'`],
+      ['when alone', `"withdrawn_at" = now()`],
+      ['a note alone', `"withdraw_note" = 'Wrong photos'`],
+      [
+        'a blank note',
+        `"withdrawn_by_id" = '${reviewer}', "withdrawn_at" = now(), "withdraw_note" = ' '`,
+      ],
+      ['the system actor', `"withdrawn_by_id" = '${systemActor}', "withdrawn_at" = now()`],
+    ] as const) {
+      expect((await withdrawn(set)).code, what).toBe(refusedBy.check);
+    }
+    expect(
+      await db.run(
+        `UPDATE "flag_acceptance" SET "withdrawn_by_id" = $2, "withdrawn_at" = now(), "withdraw_note" = 'Photos were 101005’s' WHERE "id" = $1`,
+        [first, reviewer],
+      ),
+    ).toBe(1);
+    // Once taken back it is history: its note no more than anything else.
+    expect(await withdrawn(`"withdraw_note" = 'Another'`)).toEqual(neverEdited('flag_acceptance'));
+    const again = await tickets.add(
+      'flag_acceptance',
+      acceptanceLike(world.admin, flag, photosConfirm),
+    );
+    expect(again).not.toBe(first);
+    expect(
+      await tickets.refused('flag_acceptance', acceptanceLike(reviewer, flag, photosConfirm)),
+      'a third while the second stands',
+    ).toBe(refusedBy.exclusion);
   });
 });
 

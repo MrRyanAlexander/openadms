@@ -1,9 +1,9 @@
 ---
 name: adms-verify
-description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
+description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, `pnpm chain` (the whole chain in one command, one summary held against CHAIN.md), the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448; the whole chain in one command, `pnpm chain`, ADR-533) -->
 
 > **This page is the chain: what to run, what each command proves, what a pass looks like.** The
 > rule never changes: **report real observed output, never "should pass".** **Today's counts are in
@@ -20,7 +20,7 @@ is tried on). **Read the one you need before you write a test or a migration the
 |---|---|
 | `packages/db/prisma/schema/`, a migration, a guard, a new table's tests | `schema-and-migrations.md` |
 | `packages/db` or its tests; a throw-away copy of `adms`; a guard's loosening | `database-tests.md` |
-| `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` |
+| `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` (its first section, then the one for your area) |
 | `apps/worker`, the job queue, what queues work | `worker-tests.md` |
 
 # PART 1 — THE CHAIN
@@ -39,8 +39,25 @@ the whole test run fails by the hundred otherwise, and a run is lost (seen 2026-
 If every `docker` call answers 500, quit and reopen Docker Desktop; if `up` then meets `RWLayer …
 is unexpectedly nil` or `ECONNRESET`, `pnpm local:down` and `pnpm ready` once more.
 
+**The whole chain is one command: `pnpm chain`** (ADR-533; `tools/chain`). It runs the steps below
+in this order (`local:up` and `installer:check`, which are `pnpm ready`; the frozen install;
+typecheck; test; scenarios; security; lint; licences), keeps each one's whole output in
+`.cache/adms/chain/NN-<step>.log` (emptied at each run, a run of some steps too), and prints one summary: each step's ✓ or ✗ and its time, its key
+lines, what failed **by name** (a test from Vitest's report, a story's check, a security ✗, an ESLint
+problem by file and place, a licence refused), then **the counts held against `agent_store/CHAIN.md`**
+(`≠` differs, `+` not written there, `−` written there and not seen), then `The chain: N passed, N
+failed, N not run, in …`. A failed `ready`, install or typecheck stops the run (the rest would fail
+by the hundred). Exit 0 only when every step passed; a count that differs is printed, not failed:
+it is a finding, or the count a task changed, and CHAIN.md is then replaced. `pnpm chain <step…>`
+runs some (`pnpm chain ready test security`), `--fresh` is passed to `pnpm security`. **It takes
+about ten minutes, past the Bash tool's ten-minute limit: run it in the background** and read its
+summary when it ends; open a step's log only when the summary names a failure. It leaves the stack
+up (the close-out stops it). Every command below still runs on its own, and this page still says
+what each proves.
+
 ```bash
 eval "$(fnm env --shell zsh)"
+pnpm chain                       # all of what follows, one summary (above)
 pnpm ready                       # the stack up, the installation at head and re-checked (above)
 pnpm install --frozen-lockfile   # the committed lockfile, the supply-chain policy
 pnpm typecheck                   # pnpm generate (the Prisma client), then tsc --build
@@ -62,7 +79,7 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `N packages: N allowed, 0 refused, 0 undecided.` The package count moves with dependencies (and is one less on Linux: the lockfile's Mac-only packages aren't installed there); **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation). **A run of several stories migrates and seeds once**, into a template each story's database is a copy of (ADR-447); the template is dropped at the end | `This run’s template, adms_story_template_…: N migrations applied; seed: …`, per story `passed: N checks, N passed, 0 failed` (each story's count is CHAIN.md's), then `Stories: N passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, env files `✓ every one ignored by git and untracked`, the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: 7 passed, 0 failed.`**, exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
+| `pnpm security` | The dependency audit, the secrets scan, the env files, who reaches Postgres (REQ-205, ADR-508) and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, a whole slow hash, an authenticator's secret or a private key as a JWK `0 found`, env files `✓ every one ignored by git and untracked`, four `✓` under "Who reaches Postgres", the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: 12 passed, 0 failed.`**, exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
 **The counts live in `agent_store/CHAIN.md`, and nowhere else** (ADR-445). A task that adds or
 removes tests, a story's checks, a migration or a package replaces the numbers there in the same
@@ -75,8 +92,9 @@ work that needs the database or the object store:
 
 ```bash
 pnpm local:up       # generates infra/local/.env on a first run; fetches the map extract if it isn't in
-                    # infra/local/.cache/maps/ and checks its pinned SHA-256; waits until all six are
-                    # healthy; copies Caddy's root to infra/local/.generated/; checks the health page
+                    # infra/local/.cache/maps/ and checks its pinned SHA-256; makes the stack's root
+                    # and each service's certificate into infra/local/.generated/ where one is missing
+                    # or ending (ADR-517); waits until all eight are healthy (ADR-525); checks the health page
                     # and both map servers over HTTPS
 curl --cacert infra/local/.generated/caddy-root.crt https://adms.localhost/health   # → ok
 curl --cacert infra/local/.generated/caddy-root.crt https://routing.adms.localhost/status
@@ -87,9 +105,9 @@ pnpm local:down     # containers and network removed; data volumes kept
 
 | Command | What it proves | Expected today (2026-10-01, ADR-282) |
 |---|---|---|
-| `pnpm local:up` | Postgres, object store, mail catcher, the routing server (Valhalla), the address server (Nominatim) and Caddy healthy; the map extract matches its pinned hash; HTTPS verified against Caddy's own root | `Keeping the map extract delaware-260101.osm.pbf (SHA-256 matches its pin).`, six `Healthy` lines, then `https://adms.localhost/health → 200 ok`, `https://routing.adms.localhost/status → 200 {"version":"3.9.0",…` and `https://addresses.adms.localhost/status → 200 OK`; then, once the installer has run, the API is built, its container started afresh (`Starting the API’s container afresh on what was just built.`) and `https://api.adms.localhost/health → 200 {"status":"ok"}` (ADR-385, §1.3b), and the same for the worker: `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0}` (ADR-419, §1.3c). **A container that is the one `up` last started, still running, whose built code, mounted files and settings file are byte for byte what they were then, is kept** (`Keeping the API’s container: it runs what was just built, under the same settings.`; ADR-448): after a change to `apps/worker` alone only the worker's is made afresh, and after `pnpm local:down` both always are. A resume takes about 12 s; **a first run about two minutes** (it downloads the 20 MB extract, builds the road tiles and imports the addresses) |
-| `pnpm local:down` | Nothing left running | 8 containers (6 before the installer has run) and the network `Removed`; `docker ps -a --filter label=com.docker.compose.project=open-adms-local` empty |
-| `pnpm local:wipe` | The next `up` is a first run | volumes, `.env` and `.generated/` removed; the downloaded map extract in `.cache/maps/` is kept (public data) |
+| `pnpm local:up` | Postgres, object store, mail catcher, the routing server (Valhalla), the address server (Nominatim) and Caddy healthy; the map extract matches its pinned hash; HTTPS verified against the stack's own root, which Caddy issues from; every hop inside the stack over TLS (ADR-517) | `Keeping the map extract delaware-260101.osm.pbf (SHA-256 matches its pin).`, `Keeping the stack’s root and every service’s certificate.`, eight `Healthy` lines (`routing-tls`, Valhalla's TLS, the seventh; `objectstore-tls`, the object store's, the eighth, ADR-525), then `https://adms.localhost/health → 200 ok`, `https://routing.adms.localhost/status → 200 {"version":"3.9.0",…` and `https://addresses.adms.localhost/status → 200 OK`; then, once the installer has run, the API is built, its container started afresh (`Starting the API’s container afresh on what was just built.`) and `https://api.adms.localhost/health → 200 {"status":"ok"}` (ADR-385, §1.3b), and the same for the worker: `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` (ADR-419, 507, §1.3c). **A container that is the one `up` last started, still running, whose built code, mounted files and settings file are byte for byte what they were then, is kept** (`Keeping the API’s container: it runs what was just built, under the same settings.`; ADR-448): after a change to `apps/worker` alone only the worker's is made afresh, and after `pnpm local:down` both always are. A resume takes about 12 s; **a first run about two minutes** (it downloads the 20 MB extract, builds the road tiles and imports the addresses) |
+| `pnpm local:down` | Nothing left running | 10 containers (8 before the installer has run; ADR-525) and the network `Removed`; `docker ps -a --filter label=com.docker.compose.project=open-adms-local` empty |
+| `pnpm local:wipe` | The next `up` is a first run | volumes, `.env` and `.generated/` (the stack's root and certificates with it) removed; the downloaded map extract in `.cache/maps/` is kept (public data) |
 
 **Docker's disk.** On this machine Docker Desktop's disk is 8 GB and the stack leaves under 1 GB
 free. `No space left on device` in a container's log means it's full: stop, free space (the two map
@@ -213,6 +231,58 @@ and seeded once, as a story's database always was) **and each story's database i
 made file by file (`STRATEGY FILE_COPY`), locked down and checked as before, since Postgres copies
 no access list; the template is dropped when the run ends, and `clean` drops one a killed run left
 (ADR-447). One story named alone is migrated and seeded by itself, as before.
+**A story's phones reach the API's own process over HTTPS** (ADR-492): the runner starts it on
+the story's database and clock at 127.0.0.1:3180, and the stack's proxy serves it as
+`https://stories.adms.localhost` (502 while no story runs). So **`pnpm scenarios` needs the stack
+up**, and only one run of the stories at a time (a second is told the port is held).
+`packages/scenarios/test/story-api.test.ts` holds the way to it; a loosening of `story-api.ts` or
+`over-https.ts` is tried there and on `sync`, `interrupted-upload` and `dispatch-monday`.
+**Every request a story's phone makes goes there** (ADR-493): enrolment, a monitor created, a
+sign-in, the passcode's session and choices, its lists, a sync, a file's part, the turn-in
+(`StoryApi.requests`); the phone holds its monitor's session beside its token, and
+`story.phonesOn(clock)` puts all of them on a clock of their own (field days told again). A
+loosening of the runner's phone requests is tried on `story-api.test.ts` with
+`under-the-passcode`, `p1-reconciled`, `p1-reviewed` and `dispatch-monday` (seven took about ten
+minutes). **A story whose clock goes back before a phone's last proof stops at that phone's next
+request**: tell it in time order.
+**The back office and the viewers reach it at their browsers** (ADR-496): `story.backOffice.admin`
+(the first admin's password set on the server), `.person(admin, person)` (a first password from
+that admin at its endpoint) and `.signedOut`, each an `OfficeBrowser` (`office-browser.ts`):
+email, password and authenticator code; the session only as cookies; CSRF past a GET; refreshed
+or signed in again when the story's clock moves on. **A person needs the address they sign in
+with** on their record, and an authenticator's code is good once a step: a person signed out
+signs in again only thirty seconds of the story's clock later. A loosening of it is tried on
+`story-api.test.ts`. **A P1 story's reviewer is `p1BackOffice(story, office)`** (ADR-497:
+`danas()`, `luiss()`, `grantLuis(...)` at `setPermissions`), and a refusal is read by
+`refusalOf` (`403 NOT_ALLOWED`, or `422 NOT_SAVED · CODE: words`); a loosening of either is
+tried on `p1-voided`, `p1-left-out` and `p1-reconciled`. No story writes a correction or its job
+by hand: the endpoint queues its own. **QC marks, locks, batches and unlocks are requests too**
+(ADR-500: `p1-invoiced`, `golden-mission`, and `p1-priced`'s lock of 101004, which stays between
+Luis's reprocess request and the run); a loosening of them, or of the worker's look for a lock, is
+tried on those three. **`p1-reviewed`'s acts are requests too** (ADR-501: corrections, renumbers, a
+photograph's marks, an item line, an ROE's scope, a quarantined record, a record made in the back
+office, a certification's box, its QC mark, lock and unlock); an act's answer only counts what it
+queued, so a story reads a job's tickets from its rows (`jobTickets`). Its AC-10-50 check alone
+calls `Corrections` in process, on purpose (the job queue made to fail). A loosening of a review
+controller is tried on `p1-reviewed`. The story `certification`'s measurement and revocation and
+`p1-left-out`'s revocation are requests too (ADR-502: `correctCertificationBox`,
+`revokeCertification`); a blank reason or a height of 0 is the schema's `400` before any rule. A
+loosening of the certifications' controller is tried on those two. `first-admin` keeps its own
+sign-in parts in process, by ADR-502 (d): it is the server's command.
+**`apps/api`'s and `apps/worker`'s indexes export only what `packages/scenarios` and
+`infra/local` read** (ADR-503; `packages/scenarios/test/app-exports.test.ts`, no database): a
+story that stops calling a service takes it out of the index in the same task, and a new reader
+of either app joins the test's folders on purpose.
+**The story `burst` is the load test** (ADR-505): a thousand loads from 54 phones syncing at
+once (`Promise.allSettled`, so a refusal stops it only once every phone is done), then the
+worker's loop; about two minutes alone, most of a `pnpm scenarios` run. **A phone answered `429
+LIMITED` is told to wait** (`ToldToWait`, thrown by `StoryApi` as `NoSignal` is by a story's
+server): it waits on its clock until the instant it was told and sends the same again; ten in
+a row stops the story. Its lines `It took …` are measurements, written down in the task's ADR,
+never checked. A loosening of the phone's wait is tried on `sync-client.test.ts` (seconds);
+one of `StoryApi`'s translation of a 429 on `burst` alone. **A story's API, once closed, refuses a
+request still in flight** (it never starts again unseen, holding the port for the rest of the
+run), and **one phone's requests at once share its one proof** (ADR-505; `story-api.test.ts`).
 `packages/scenarios/test/stories.test.ts` holds a copy to what a database made by itself is (at
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,
@@ -237,7 +307,22 @@ rebuild it with `./node_modules/.bin/tsc --build --force <workspace>`; never edi
   A finding prints **file, line and rule only**; secretlint's own JSON carries every file's content,
   so never print it. An inline `secretlint-disable-next-line` needs its reason on the line; every one
   is listed on each run.
+  **Phase 2's kinds (ADR-508)**, which secretlint has no rule for: a whole Argon2 hash (salt of
+  16 bytes or more, tag of 32 or more), an `otpauth://` address holding a secret, a private key
+  as a JWK (`d`). A test's own vector of such a kind is marked on the line before with
+  `secretlint-disable-next-line -- <why>`; without a reason it isn't honoured. **A test of the
+  scan itself puts its values together** (a variable in a template literal), never writes one
+  whole: the scan reads that file too, and ESLint refuses a template around a bare literal.
 - **Env files**: every `.env` file on disk ignored by git and untracked.
+- **Who reaches Postgres** (REQ-205, ADR-508; `tools/security/src/database-reach.ts`): of the
+  product only `packages/db`, `apps/api` and `apps/worker`, three tools named by folder with
+  their reasons (never by package name: AC-10-26 forbids naming the dev stack's package in what
+  ships); found by `pnpm -r why` and the workspaces' own dependencies, and by every committed
+  source file's imports; the product's SQL only Prisma's tagged templates, none changing the
+  schema; `prisma migrate diff` from the migrations to the schema on the shadow database (needs
+  the stack). A new tool that must reach Postgres joins `toolReaches` with its reason and an ADR.
+  Its rules are loosened on `database-reach.test.ts` and `checks.test.ts`; what only a real run
+  shows (a stray import, a table by hand in a copied migrations folder) by hand.
 - **The grant tests**: the `@open-adms/db` project's tests, their counts reported. **Run `pnpm
   security` after `pnpm test`:** where the run `pnpm test` just made held every one of that
   project's files, each passed with nothing skipped, it began within the last thirty minutes, and
@@ -281,7 +366,7 @@ ARCHITECTURE §15's layers arrive with their milestones; each adds its command h
 
 | Layer | Arrives in |
 |---|---|
-| ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (27 checks; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
+| ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (its count is CHAIN.md's; reconciled by the worker's own job loop alone since ADR-494; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
 | **Unit** tests of real rules (the capacity math is in, ADR-320; number blocks, ADR-323; volume and apportionment, ADR-343; the checks between field events, on the certification and on time, ADR-344; the checks on place, ADR-346; the checks on quantity, the pay item's settings, unit rate work and ROEs, ADR-347) | Phase 1 |
 | API (begun: `apps/api/test`, ADR-385, §1.3b), browser end-to-end, on device | Phases 2–4 |
 

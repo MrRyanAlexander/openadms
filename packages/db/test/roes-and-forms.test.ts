@@ -87,7 +87,6 @@ async function formOn(projectId: string, documentType: string): Promise<string> 
     project_id: projectId,
     name: `A ${documentType} form`,
     document_type: documentType,
-    enabled: true,
     ...(documentType === 'ROE' ? { gps_required: true } : {}),
     ...(documentType === 'INCIDENT'
       ? { incident_offers: '{CONTRACTOR,CERT_NUMBER,ROE_NUMBER}' }

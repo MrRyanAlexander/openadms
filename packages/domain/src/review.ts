@@ -13,6 +13,7 @@
 // QC Approved and COMPLETED, a second lock, an unlock of a ticket that isn't locked, and a change
 // to a ticket while its lock stands (ADR-367).
 import type { FieldEventKindName } from './field-event-details.ts';
+import { Access, grantsInWords } from './people.ts';
 
 // The grants a reviewer's action asks for, as the database's Permission keeps them.
 export const reviewPermissions = [
@@ -26,14 +27,14 @@ export const reviewPermissions = [
 ] as const;
 export type ReviewPermission = (typeof reviewPermissions)[number];
 
-const permissionInWords: Record<ReviewPermission, { grant: string; action: string }> = {
-  CORRECT: { grant: 'correct', action: 'correct a record' },
-  RENUMBER: { grant: 'renumber', action: 'renumber a record' },
-  VOID: { grant: 'void', action: 'void or unvoid a ticket' },
-  ACCEPT_FLAG: { grant: 'accept flags', action: 'accept a flag' },
-  QC: { grant: 'QC', action: 'set a QC status' },
-  LOCK_INVOICED: { grant: 'lock as invoiced', action: 'lock a ticket as invoiced' },
-  UNLOCK_INVOICED: { grant: 'unlock', action: 'unlock an invoiced ticket' },
+const actionInWords: Record<ReviewPermission, string> = {
+  CORRECT: 'correct a record',
+  RENUMBER: 'renumber a record',
+  VOID: 'void or unvoid a ticket',
+  ACCEPT_FLAG: 'accept a flag',
+  QC: 'set a QC status',
+  LOCK_INVOICED: 'lock a ticket as invoiced',
+  UNLOCK_INVOICED: 'unlock an invoiced ticket',
 };
 
 export type ReviewerRole =
@@ -82,7 +83,18 @@ export interface ReviewRefusal {
     | 'NOT_LOCKED'
     | 'BATCH_NAME_BLANK'
     | 'BATCH_NAME_USED'
-    | 'BATCH_ON_ANOTHER_PROJECT';
+    | 'BATCH_ON_ANOTHER_PROJECT'
+    | 'TOO_MANY_TICKETS'
+    | 'NOT_SET_ASIDE'
+    | 'NO_ID_SENT'
+    | 'NOT_THE_ID_SENT'
+    | 'NOT_THE_KIND_SENT'
+    | 'CLOSED_ONLY'
+    | 'NOT_IN_THE_PROJECT_SENT'
+    | 'ALREADY_WITHDRAWN'
+    | 'ANSWERS_DO_NOT_FIT'
+    | 'NOT_MADE_IN_THE_BACK_OFFICE'
+    | 'VIEW_NOT_ON_THIS_RECORD';
   readonly message: string;
 }
 
@@ -94,17 +106,13 @@ export class Reviewer {
   }
 
   // Why this person may not do it, or nothing: an admin may do every action; a manager/analyst
-  // the ones granted; a monitor, a read-only viewer and the system actor none (ADR-050, 051).
+  // the ones granted, with "view review" beside them (ADR-539); a monitor, a read-only viewer and
+  // the system actor none (ADR-050, 051).
   refusal(permission: ReviewPermission): ReviewRefusal | null {
-    const { name, role, archived, granted } = this.person;
-    const allowed =
-      !archived &&
-      (role === 'ADMIN' || (role === 'MANAGER_ANALYST' && granted.includes(permission)));
-    if (allowed) return null;
-    const { grant, action } = permissionInWords[permission];
+    if (new Access(this.person).holds(permission)) return null;
     return {
       code: 'NOT_PERMITTED',
-      message: `${name} may not ${action}: it takes an admin, or a manager/analyst granted "${grant}". Nothing was changed.`,
+      message: `${this.person.name} may not ${actionInWords[permission]}: it takes an admin, or a manager/analyst granted ${grantsInWords(permission)}. Nothing was changed.`,
     };
   }
 }
@@ -267,6 +275,123 @@ export class QuarantineResolution {
   }
 }
 
+// What a sync held for a person, resolved (ADR-526 (2), (3); AC-10-74…76): a held record saved
+// as corrected or closed, a file set aside closed. Each once, by a person, with a reason; the
+// words here are what the record keeps of how. What a held record was sent as is the contract's
+// reading of what was sent: a record of one of its kinds, a photograph's record, a report, or
+// nothing it can say.
+export const heldSentAs = [
+  'FIELD_EVENT',
+  'SCALE_RECEIPT',
+  'INCIDENT',
+  'DROP_OFF_LOG',
+  'SURVEY',
+  'ROE',
+  'CERTIFICATION',
+  'PHOTO',
+  'REPORT',
+] as const;
+export type HeldSentAs = (typeof heldSentAs)[number];
+
+const sentAsInWords: Record<HeldSentAs, string> = {
+  FIELD_EVENT: 'a field event',
+  SCALE_RECEIPT: 'a scale receipt',
+  INCIDENT: 'an incident',
+  DROP_OFF_LOG: 'a drop-off log',
+  SURVEY: 'a survey',
+  ROE: 'an ROE',
+  CERTIFICATION: 'a certification',
+  PHOTO: 'a photograph’s record',
+  REPORT: 'a report',
+};
+
+export class HeldResolution {
+  // How it was resolved already; nothing while it waits.
+  private readonly standing: string | null;
+  private readonly what: 'HELD_RECORD' | 'SET_ASIDE_FILE';
+
+  constructor(standing: string | null, what: 'HELD_RECORD' | 'SET_ASIDE_FILE' = 'HELD_RECORD') {
+    this.standing = standing;
+    this.what = what;
+  }
+
+  // Resolved once: afterwards it stays as it was resolved.
+  refusal(): ReviewRefusal | null {
+    if (this.standing === null) return null;
+    const it = this.what === 'HELD_RECORD' ? 'This held record' : 'This file set aside';
+    return {
+      code: 'ALREADY_RESOLVED',
+      message: `${it} is already resolved (${this.standing}). Nothing was changed.`,
+    };
+  }
+
+  // Why a held record can't be saved as the record a reviewer sends, or nothing: it keeps the
+  // id its phone made and the kind it was sent as; a report is closed, never saved (ADR-526 (2),
+  // agent defaults (c), (d)).
+  savingRefusal(
+    held: { readonly sentId: string | null; readonly sentAs: HeldSentAs | null },
+    given: { readonly id: string; readonly kind: HeldSentAs },
+  ): ReviewRefusal | null {
+    if (held.sentAs === 'REPORT') {
+      return {
+        code: 'CLOSED_ONLY',
+        message:
+          'A report the server couldn’t keep is closed, never saved: write the assignment on the dispatch board. Nothing was changed.',
+      };
+    }
+    if (held.sentId === null) {
+      return {
+        code: 'NO_ID_SENT',
+        message:
+          'This held record came with no id the server could read: enter it in the back office as a record of its own, then close this one. Nothing was changed.',
+      };
+    }
+    if (given.id !== held.sentId) {
+      return {
+        code: 'NOT_THE_ID_SENT',
+        message: `A record saved from a held one keeps the id its phone made, ${held.sentId}. Nothing was changed.`,
+      };
+    }
+    if (held.sentAs !== null && given.kind !== held.sentAs) {
+      return {
+        code: 'NOT_THE_KIND_SENT',
+        message: `This held record was sent as ${sentAsInWords[held.sentAs]}: it is saved as one. Nothing was changed.`,
+      };
+    }
+    return null;
+  }
+
+  // A certification saved under a number its project already has: a cert number is one
+  // certification's (ADR-045).
+  certNumberHeld(certNumber: string): ReviewRefusal {
+    return {
+      code: 'NUMBER_HELD',
+      message: `This project already has a certification ${certNumber}. Nothing was changed.`,
+    };
+  }
+
+  // A photograph's record saved with no record of its project to belong to.
+  notInTheProjectSent(): ReviewRefusal {
+    return {
+      code: 'NOT_IN_THE_PROJECT_SENT',
+      message:
+        'A photograph saved from a held record belongs to a record of its own project the server has, and a record saved with photographs stays in the project they were sent for. Nothing was changed.',
+    };
+  }
+
+  // Saved as the reviewer sent it, under the id its phone made.
+  saved(kind: HeldSentAs): string {
+    return `Saved as corrected: ${sentAsInWords[kind]} under the id its phone made, with its photographs.`;
+  }
+
+  // Closed: nothing is made from it, and what was sent stays.
+  closed(): string {
+    return this.what === 'HELD_RECORD'
+      ? 'Closed, never to be saved: what was sent stays here, with its photographs.'
+      : 'Closed: the photograph’s own file won’t come; this file stays beside it.';
+  }
+}
+
 // A person's void of a ticket, and its unvoid (adms-exceptions "Correct, void or accept";
 // ADR-028, 060, 360, 365). A void names a ticket as the worker groups one: nothing asks whether
 // the work happened, which is the reviewer's call.
@@ -350,6 +475,72 @@ export class FlagAccepting {
   }
 }
 
+// An acceptance taken back (ADR-534 (8)): once, by a person, with a note; the flag stands again,
+// and accepting it again is an acceptance of its own.
+export class AcceptanceWithdrawal {
+  private readonly acceptance: { readonly message: string; readonly withdrawn: boolean };
+
+  constructor(acceptance: { message: string; withdrawn: boolean }) {
+    this.acceptance = acceptance;
+  }
+
+  refusal(): ReviewRefusal | null {
+    if (!this.acceptance.withdrawn) return null;
+    return {
+      code: 'ALREADY_WITHDRAWN',
+      message: `This acceptance was already taken back ("${this.acceptance.message}"). Nothing was changed.`,
+    };
+  }
+}
+
+// The answers to the firm's own fields, given by a person at the back office (ADR-534 (4), (9)):
+// the person is there to be told, so answers that don't fit the version they answer are refused,
+// never kept as sent as a phone's are (ADR-327, 432).
+export const FormAnswersGiven = {
+  notFitting(version: number, fields: readonly string[]): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message: `The answers don’t fit the form’s own fields as version ${String(version)} has them${fields.length === 0 ? '' : ` (${fields.join(', ')})`}. Nothing was saved.`,
+    };
+  },
+
+  // The version named is another kind's form's, or another project's.
+  notThisForm(record: string): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message: `The version of a form’s own fields named isn’t one of this project’s ${record} form’s. Nothing was saved.`,
+    };
+  },
+
+  // With no version of a form's fields there is nothing to answer.
+  noFields(): ReviewRefusal {
+    return {
+      code: 'ANSWERS_DO_NOT_FIT',
+      message:
+        'This record answers no version of a form’s own fields, so it takes no answers: name the version they answer. Nothing was saved.',
+    };
+  },
+} as const;
+
+// A photograph added in the back office (ADR-534 (2)): only on a record made there, since a
+// phone's record keeps its own phone's photographs; and a view only on a certification's.
+export const BackOfficePhotograph = {
+  notMadeInTheBackOffice(record: string): ReviewRefusal {
+    return {
+      code: 'NOT_MADE_IN_THE_BACK_OFFICE',
+      message: `This ${record} was made on a phone: its photographs are its phone’s, and none is added in the back office. Nothing was saved.`,
+    };
+  },
+
+  viewOnlyOnACertification(): ReviewRefusal {
+    return {
+      code: 'VIEW_NOT_ON_THIS_RECORD',
+      message:
+        'A view (operator with placard, interior or back, right, left, front) is a certification’s photograph’s alone. Nothing was saved.',
+    };
+  },
+} as const;
+
 // The back office's QC status, as the database's QcStatus keeps it (ADR-107). A record nobody
 // has marked is at QC Review.
 export const qcStatuses = ['QC_REVIEW', 'QC_APPROVED', 'QC_ISSUES', 'QC_VOID'] as const;
@@ -396,6 +587,69 @@ export class TicketOnItsOwn {
       code: 'NOT_QCD_ALONE',
       message: `A ${kindInWords[this.kind]} is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.`,
     };
+  }
+}
+
+// A reprocess a person asks for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): the tickets they name, worked again as their records and the setup stand
+// now, or the tickets of a job the worker set aside, put back. It changes no record, so little
+// is refused: more tickets than one job names (the policy's JOB_TICKETS_AT_MOST), a number no
+// field event of the project is under, and a job that isn't one of the project's set aside.
+export class ReprocessAsking {
+  private readonly atMost: number;
+
+  // `atMost` is the policy's JOB_TICKETS_AT_MOST.
+  constructor(atMost: number) {
+    this.atMost = atMost;
+  }
+
+  // Why that many tickets, each named once, can't be asked for at once, or nothing: asked
+  // before any of them is looked for.
+  countRefusal(count: number): ReviewRefusal | null {
+    if (count <= this.atMost) return null;
+    return {
+      code: 'TOO_MANY_TICKETS',
+      message: `${String(count)} tickets were named: a reprocess asks for ${String(this.atMost)} at the most. Ask for them in parts. Nothing was queued.`,
+    };
+  }
+
+  // Why the tickets a person named can't be asked for, or nothing: each named once, with how
+  // many field events of the project are under its number.
+  ticketsRefusal(
+    named: readonly { readonly ticketNumber: string; readonly fieldEvents: number }[],
+  ): ReviewRefusal | null {
+    const tooMany = this.countRefusal(named.length);
+    if (tooMany !== null) return tooMany;
+    const none = named.find((ticket) => ticket.fieldEvents === 0);
+    if (none !== undefined) {
+      return {
+        code: 'NOT_A_TICKET',
+        message: `No field event of this project is under ${none.ticketNumber}: there is no such ticket to reprocess. Nothing was queued.`,
+      };
+    }
+    return null;
+  }
+
+  // Why a job's tickets can't be put back, or nothing: only a job of this project the worker
+  // set aside is. The job stays as it is, the record of what failed.
+  static jobRefusal(job: {
+    readonly onThisProject: boolean;
+    readonly setAside: boolean;
+  }): ReviewRefusal | null {
+    if (!job.onThisProject) {
+      return {
+        code: 'NOT_ON_THIS_PROJECT',
+        message: 'That job is another project’s. Nothing was queued.',
+      };
+    }
+    if (!job.setAside) {
+      return {
+        code: 'NOT_SET_ASIDE',
+        message:
+          'That job isn’t set aside: it waits for the worker, or the worker has finished it. Nothing was queued.',
+      };
+    }
+    return null;
   }
 }
 

@@ -10,12 +10,13 @@ import type {
   ReceivedFieldEvent,
   ReceivedIncident,
   ReceivedItem,
+  ReceivedPhoto,
   ReceivedRoe,
   ReceivedScaleReceipt,
   ReceivedSurvey,
+  PhotoAnswer,
   RecordAnswer,
 } from '@open-adms/contracts';
-import type { PhotoView } from '@open-adms/db';
 
 // What the server says of a record, never the phone (ADR-466): that a phone made it, and which
 // phone, the one that proved itself for the sync.
@@ -80,37 +81,12 @@ export type SentRoe = Readonly<ReceivedRoe> & FromAPhone;
 // intake's to write. It is handed to `Certifications.received`, the one way one is made.
 export type SentCertification = Readonly<ReceivedCertification> & Pick<FromAPhone, 'deviceId'>;
 
-// What a photograph belongs to: a record its phone made, by that record's id.
-export type PhotoOwnerKind =
-  | 'FIELD_EVENT'
-  | 'SCALE_RECEIPT'
-  | 'ROE'
-  | 'SURVEY'
-  | 'INCIDENT'
-  | 'DROP_OFF_LOG'
-  | 'CERTIFICATION';
-
-// A photograph's record: sent after the records, the file after that (ADR-101; ARCHITECTURE §9
-// (2), §11). The fingerprint is taken at capture. Where the file is kept and the fingerprint of
-// what was uploaded are the upload's to say (Phase 2); until it exists the phone's record states
-// them. A certification's five are photographs like any other's: each names its certification
-// and says which view it is (ADR-179, 469).
-export interface SentPhoto {
-  readonly id: string;
-  readonly projectId: string;
-  readonly owner: { readonly kind: PhotoOwnerKind; readonly id: string };
-  readonly view?: PhotoView | null;
-  readonly takenById: string;
-  readonly deviceId: string;
-  readonly capturedAt: Date;
-  readonly deviceUtcOffsetMinutes: number;
-  readonly latitude: string | null;
-  readonly longitude: string | null;
-  readonly originalSha256: string;
-  readonly uploadedSha256: string;
-  readonly objectKey: string;
-  readonly depthObjectKey?: string | null;
-}
+// A photograph's record as the server read it (`syncedPhotoSchema`, sent after the records:
+// ARCHITECTURE §9 (2); ADR-101, 481), with the phone it came from. Its two fingerprints are the
+// phone's word; where its files are kept is never the phone's to say, and is made by the server
+// (`media/photo-places.ts`). A certification's five are photographs like any other's, each
+// naming its certification and saying which view it is (ADR-179, 469).
+export type SentPhoto = Readonly<ReceivedPhoto> & Pick<FromAPhone, 'deviceId'>;
 
 // One record a phone sends at sync.
 export type SentRecord =
@@ -119,8 +95,7 @@ export type SentRecord =
   | { readonly record: 'INCIDENT'; readonly incident: SentIncident }
   | { readonly record: 'DROP_OFF_LOG'; readonly dropOffLog: SentDropOffLog }
   | { readonly record: 'SURVEY'; readonly survey: SentSurvey }
-  | { readonly record: 'ROE'; readonly roe: SentRoe }
-  | { readonly record: 'PHOTO'; readonly photo: SentPhoto };
+  | { readonly record: 'ROE'; readonly roe: SentRoe };
 
 // Something intake did with a record it saved that the sender should know: nothing was refused
 // for it, and the flag is the worker's (ADR-052, 329). The contract's own shape.
@@ -133,3 +108,9 @@ export type IntakeNote = Readonly<NoteAnswered>;
 // a record, or that the database refuses, is answered by `Sync` in front of it, and held for a
 // person (ADR-468, 472).
 export type SyncAnswer = Exclude<RecordAnswer, { answer: 'NOT_SAVED' }>;
+
+// What intake did with a photograph's record: saved, already saved, or not tried because the
+// record it belongs to is not saved on the server, which `Sync` answers "not saved" and holds
+// (ADR-481). Never quarantined: a photograph holds no number.
+export type PhotoTaken =
+  Exclude<PhotoAnswer, { answer: 'NOT_SAVED' }> | { readonly answer: 'OWNER_NOT_SAVED' };

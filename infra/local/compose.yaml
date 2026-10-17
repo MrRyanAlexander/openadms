@@ -3,10 +3,23 @@
 # `pnpm local:status` (infra/local/src/index.ts). The helper generates `.env` beside this file
 # (git-ignored, mode 0600) with the dev passwords; nothing secret is written here.
 #
-# HTTPS only: Caddy is the one way in from the host (loopback only), with its internal CA, on
-# *.adms.localhost. Plain HTTP on port 80 is redirected to HTTPS. Postgres and the mail catcher's
-# SMTP port are published on 127.0.0.1 for local tools; nothing is published on other interfaces.
-# Every image is pinned by tag and digest (ADR-264, 282).
+# HTTPS only: Caddy is the one way in from the host (loopback only), on *.adms.localhost. Plain
+# HTTP on port 80 is redirected to HTTPS. Postgres and the mail catcher's SMTP port are published
+# on 127.0.0.1 for local tools; nothing is published on other interfaces. Every image is pinned by
+# tag and digest (ADR-264, 282).
+#
+# Every hop is encrypted, locally too (ARCHITECTURE §4; KD-78; ADR-513, 517): Caddy reaches each
+# service over TLS, Postgres takes TLS alone, and the mail catcher takes mail only after STARTTLS.
+# Each service holds a certificate of the stack's own root, which `pnpm local:up` makes into
+# .generated/ (infra/local/src/certificates.ts) and mounts read-only at /run/adms/tls; Caddy
+# issues the public names' certificates from the same root. Only a container's own loopback (a
+# health check inside it, Valhalla and the object store each behind its own Caddy) is plain, and
+# never leaves it.
+#
+# Every container is hardened as far as its image allows (OWASP ASVS 5.0 4.2.1; KD-79; ADR-517):
+# no capability, a read-only root filesystem, an unprivileged user, no new privileges. Where an
+# image needs more, its service says what and why; infra/local/test/compose.test.ts holds every
+# service to it.
 #
 # The routing server (Valhalla) and the address server (Nominatim) read one OpenStreetMap extract,
 # downloaded and checked against its pinned SHA-256 by `pnpm local:up` into infra/local/.cache/maps/
@@ -20,22 +33,51 @@ x-hardening: &hardening
   restart: unless-stopped
   security_opt:
     - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
 
 services:
   postgres:
     <<: *hardening
     image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    # The image's own `postgres` user, which owns the data volume: the entrypoint, run as it, has
+    # nothing to change owner of and no user to switch to.
+    user: '999:999'
+    # Its socket's folder and the temporary files, each its user's own and lost with the container.
+    tmpfs:
+      - /var/run/postgresql:uid=999,gid=999,mode=0775
+      - /tmp:uid=999,gid=999,mode=0700
+    # TLS alone (ARCHITECTURE §5.7; KD-78): every login over TCP is `hostssl` (postgres/pg_hba.conf),
+    # so a client that won't speak TLS is refused, and every service's login asks `verify-full`.
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/adms/tls/postgres.crt
+      - -c
+      - ssl_key_file=/run/adms/tls/postgres.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+      - -c
+      - hba_file=/etc/adms/pg_hba.conf
     environment:
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
+      # The database administrator's password, which the image reads once, to set a new database
+      # up: written by `pnpm local:up` from infra/local/.env into a file readable by its owner
+      # alone, and mounted read-only (a read-only container takes no secret compose would copy).
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      - postgres_password
     ports:
       - '127.0.0.1:${ADMS_PG_PORT:-55432}:5432'
     volumes:
       # Postgres 18 images keep data under /var/lib/postgresql/<major>/docker.
       - postgres_data:/var/lib/postgresql
+      - ./.generated/postgres/password:/run/secrets/postgres_password:ro
+      - ./postgres/pg_hba.conf:/etc/adms/pg_hba.conf:ro
+      - ./.generated/tls/postgres.crt:/run/adms/tls/postgres.crt:ro
+      - ./.generated/tls/postgres.key:/run/adms/tls/postgres.key:ro
     healthcheck:
       # Over TCP, so the entrypoint's temporary socket-only server during first init doesn't count.
       test: ['CMD', 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres']
@@ -47,49 +89,115 @@ services:
   objectstore:
     <<: *hardening
     image: chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
-    # One process: master, volume, filer and the S3 gateway. Only S3 is used, and only through
-    # Caddy (https://s3.adms.localhost); no port is published to the host.
+    # The image's own `seaweed` user, which owns the data volume: the entrypoint, run as it, has
+    # no owner to change and no user to switch to.
+    user: '1000:1000'
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=0700
+    # One process: master, volume, filer and the S3 gateway, every one of them, and each one's
+    # gRPC, listening on the container's own loopback alone (OWASP ASVS 5.0 4.2.1, 12.3.3;
+    # ADR-525): none speaks TLS or asks who is calling, and no hop of ours but S3 uses them. S3
+    # is reached only through `objectstore-tls` below, which shares this container's network and
+    # takes TLS for it, and that only through Caddy (https://s3.adms.localhost); no port is
+    # published to the host. `server`, not `mini`: `mini` keeps its admin server's gRPC on every
+    # interface whatever it is told, and only `server` binds S3 apart from the rest.
     command:
-      - mini
-      - -s3.config=/etc/seaweedfs/s3.json
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=127.0.0.1
       - -master.telemetry=false
-      - -webdav=false
-      - -admin.ui=false
+      # What `mini` chose for this disk: small volumes, as many as the free space holds.
+      - -master.volumeSizeLimitMB=128
+      - -volume.max=0
+      - -filer
+      - -s3
+      - -s3.port=8334
+      - -s3.config=/etc/seaweedfs/s3.json
       - -s3.port.iceberg=0
       - -s3.port.lance=0
       - -s3.allowDeleteBucketNotEmpty=false
       # CORS by exact allow-list, never '*' (ARCHITECTURE §6). Widened when the web apps arrive.
       - -s3.allowedOrigins=https://adms.localhost
       - -filer.allowedOrigins=https://adms.localhost
-    configs:
-      - source: s3_identities
-        target: /etc/seaweedfs/s3.json
-        # Readable only by the image's `seaweed` user (the entrypoint drops root to it).
-        uid: '1000'
-        gid: '1000'
-        mode: 0400
     volumes:
       - objectstore_data:/data
+      # Who the store knows: written by `pnpm local:up` from infra/local/.env, readable by its
+      # owner alone (infra/local/src/index.ts, StoreIdentities).
+      - ./.generated/objectstore/s3.json:/etc/seaweedfs/s3.json:ro
     healthcheck:
-      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
+      # Inside the container, on its loopback, which never leaves it.
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8334/healthz']
       interval: 5s
       timeout: 5s
       retries: 20
       start_period: 20s
 
+  objectstore-tls:
+    <<: *hardening
+    # TLS for the object store (KD-78; ADR-517, 525), as `routing-tls` is for Valhalla: this Caddy
+    # shares the store's container's network, takes TLS on 8333 with the stack's certificate for
+    # `objectstore`, and hands each request to S3 over that container's loopback
+    # (objectstore/Caddyfile), keeping the Host header, so S3 signatures verify. Nothing else of
+    # the store is reachable from the stack's network.
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: service:objectstore
+    user: '1000:1000'
+    # The image's caddy binary carries the file capability to bind a low port, and the kernel
+    # refuses to start a binary whose file capability isn't in the container's bounding set. It is
+    # kept there and never held: an unprivileged user under no-new-privileges gains none of it.
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      # The root its health check (OpenSSL's) checks the certificate against: the stack's own.
+      SSL_CERT_FILE: /run/adms/tls/root.crt
+    volumes:
+      - ./objectstore/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/objectstore.crt:/run/adms/tls/objectstore.crt:ro
+      - ./.generated/tls/objectstore.key:/run/adms/tls/objectstore.key:ro
+    depends_on:
+      # Its network is the store's container's: made again when that one is.
+      objectstore:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      # Through its own TLS to S3's health answer, inside the shared network, its certificate
+      # checked against the stack's root and the name `objectstore`.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'https://objectstore:8333/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
   mail:
     <<: *hardening
     image: axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d
     user: '65534:65534'
-    cap_drop:
-      - ALL
+    tmpfs:
+      - /tmp:uid=65534,gid=65534,mode=0700
     environment:
       MP_DISABLE_VERSION_CHECK: 'true'
       MP_MAX_MESSAGES: '5000'
+      # Mail is taken only after STARTTLS, with the stack's certificate for `mail` (KD-78), and
+      # the inbox is served over HTTPS to Caddy.
+      MP_SMTP_TLS_CERT: /run/adms/tls/mail.crt
+      MP_SMTP_TLS_KEY: /run/adms/tls/mail.key
+      MP_SMTP_REQUIRE_STARTTLS: 'true'
+      MP_UI_TLS_CERT: /run/adms/tls/mail.crt
+      MP_UI_TLS_KEY: /run/adms/tls/mail.key
     ports:
       - '127.0.0.1:${ADMS_SMTP_PORT:-1025}:1025'
+    volumes:
+      - ./.generated/tls/mail.crt:/run/adms/tls/mail.crt:ro
+      - ./.generated/tls/mail.key:/run/adms/tls/mail.key:ro
     healthcheck:
-      test: ['CMD', '/mailpit', 'readyz']
+      # Inside the container, on its loopback: whether it answers, its certificate unread.
+      test: ['CMD', '/mailpit', 'readyz', '--https']
       interval: 5s
       timeout: 5s
       retries: 20
@@ -98,11 +206,10 @@ services:
   routing:
     <<: *hardening
     image: ghcr.io/valhalla/valhalla:3.9.0@sha256:511c095b8caf393dccceb8b519ec96b6f85a0166b2288ba014a8a748acc5a63c
-    # The image runs as root, which owns the data volume; it gets no capability and a read-only
-    # root filesystem. Valhalla's workers talk over sockets in /tmp.
-    cap_drop:
-      - ALL
-    read_only: true
+    # The image runs as root, which owns the data volume (the image has no other user); it gets no
+    # capability and a read-only root filesystem. Valhalla's workers talk over sockets in /tmp.
+    # It listens on its own loopback alone; `routing-tls` below takes TLS for it.
+    user: '0:0'
     tmpfs:
       - /tmp
     command: ['bash', '/opt/open-adms/start.sh']
@@ -114,6 +221,7 @@ services:
       - ${ADMS_MAP_FILE:?run pnpm local:up}:/maps/region.osm.pbf:ro
       - routing_data:/data
     healthcheck:
+      # Inside the container, on its loopback, which never leaves it.
       test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8002/status']
       interval: 5s
       timeout: 5s
@@ -121,12 +229,65 @@ services:
       # Building the road tiles (a first run, or a new extract) comes before the first answer.
       start_period: 600s
 
+  routing-tls:
+    <<: *hardening
+    # TLS for the routing server (KD-78; ADR-517): Valhalla speaks none, so this Caddy shares its
+    # container's network, takes TLS on 8443 with the stack's certificate for `routing`, and hands
+    # each request to Valhalla over that container's loopback (routing/Caddyfile).
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: service:routing
+    user: '1000:1000'
+    # The image's caddy binary carries the file capability to bind a low port, and the kernel
+    # refuses to start a binary whose file capability isn't in the container's bounding set. It is
+    # kept there and never held: an unprivileged user under no-new-privileges gains none of it.
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      # The root its health check (OpenSSL's) checks the certificate against: the stack's own.
+      SSL_CERT_FILE: /run/adms/tls/root.crt
+    volumes:
+      - ./routing/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/routing.crt:/run/adms/tls/routing.crt:ro
+      - ./.generated/tls/routing.key:/run/adms/tls/routing.key:ro
+    depends_on:
+      # Its network is the routing server's container's: made again when that one is.
+      routing:
+        condition: service_started
+        restart: true
+    healthcheck:
+      # Through its own TLS to Valhalla's status, inside the shared network, its certificate
+      # checked against the stack's root and the name `routing`.
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'https://routing:8443/status']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
   addresses:
     restart: unless-stopped
-    # No `no-new-privileges` here: the image's own start script changes user with sudo, for the
-    # Postgres it keeps inside this container (Nominatim's own database, apart from the evidence
-    # database). addresses/start.sh closes that Postgres to everything outside the container.
+    # Hardened as far as the image allows (KD-79; ADR-517). Its own start script runs as root and
+    # changes user with sudo, for the Postgres it keeps inside this container (Nominatim's own
+    # database, apart from the evidence database) and for Nominatim itself: so no
+    # `no-new-privileges` (sudo is setuid) and these capabilities alone of Docker's default set:
+    # CHOWN, DAC_OVERRIDE, FOWNER (its Postgres's files), SETUID, SETGID (sudo), KILL (stopping its
+    # own processes). Its root filesystem stays writable: the script writes its Postgres's
+    # settings, its logs and Nominatim's website files under / on every start.
+    # addresses/start.sh closes that Postgres to everything outside the container.
     image: mediagis/nominatim:5.3.2-2026-06-23T09-03@sha256:7923a8e67197fc6d4f4ecb7c0e8bbedffeddcfdf4519596fe946e46a28f5a9f8
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - KILL
     command: ['bash', '/opt/open-adms/start.sh']
     environment:
       ADMS_MAP_NAME: ${ADMS_MAP_NAME:?run pnpm local:up}
@@ -147,13 +308,29 @@ services:
       POSTGRES_WORK_MEM: 32MB
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
       POSTGRES_MAX_WAL_SIZE: 128MB
+      # Nominatim's server (gunicorn) takes TLS alone, with the stack's certificate for
+      # `addresses` (KD-78): the image's start script hands its environment through to it.
+      GUNICORN_CMD_ARGS: --certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key
     shm_size: 512mb
     volumes:
       - ./addresses/start.sh:/opt/open-adms/start.sh:ro
       - ${ADMS_MAP_FILE:?run pnpm local:up}:/maps/region.osm.pbf:ro
       - addresses_data:/var/lib/postgresql/16/main
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/addresses.crt:/run/adms/tls/addresses.crt:ro
+      - ./.generated/tls/addresses.key:/run/adms/tls/addresses.key:ro
     healthcheck:
-      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8080/status']
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - -o
+        - /dev/null
+        - --cacert
+        - /run/adms/tls/root.crt
+        - --resolve
+        - addresses:8080:127.0.0.1
+        - https://addresses:8080/status
       interval: 10s
       timeout: 5s
       retries: 12
@@ -170,9 +347,6 @@ services:
     profiles: ['api']
     image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
     user: '1000:1000'
-    cap_drop:
-      - ALL
-    read_only: true
     working_dir: /srv/open-adms
     command: ['node', 'apps/api/dist/main.js']
     environment:
@@ -180,10 +354,16 @@ services:
       ADMS_ENV_FILE: /run/secrets/api_env
       ADMS_API_HOST: 0.0.0.0
       ADMS_API_PORT: '3000'
-      # The installer wrote the logins as this machine reaches Postgres; in here it is a service.
+      # The API serves HTTPS alone, with the stack's certificate for `api` (KD-78; ADR-517).
+      ADMS_API_TLS_CERT_FILE: /run/adms/tls/api.crt
+      ADMS_API_TLS_KEY_FILE: /run/adms/tls/api.key
+      # The installer wrote the logins as this machine reaches Postgres; in here it is a service,
+      # and the root its certificate is checked against is mounted below.
       ADMS_DATABASE_ADDRESS: postgres:5432
+      ADMS_DATABASE_CA_FILE: /run/adms/tls/root.crt
       # The same for the mail catcher, where the installation sends mail through it (ADR-405).
       ADMS_SMTP_ADDRESS: mail:1025
+      ADMS_SMTP_CA_FILE: /run/adms/tls/root.crt
       # The exact origins whose pages may read an answer (ADR-098, 391): the stack's own page
       # today. Each web app's origin joins the list when it gets its hostname.
       ADMS_CORS_ORIGINS: https://adms.localhost
@@ -194,11 +374,11 @@ services:
       # address lookup (ADR-455), as the worker asks it below: in here Caddy is at the address
       # the stack's network gives it, and its root certificate is mounted below.
       ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
-      ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
+      ADMS_MAP_CA_FILE: /run/adms/tls/root.crt
       # The object store the API keeps files in is asked the same way (ADR-480): by its own
       # name, over HTTPS, through Caddy, under the API's own identity there.
       ADMS_MEDIA_ADDRESS: 172.30.213.2:443
-      ADMS_MEDIA_CA_FILE: /run/adms/caddy-root.crt
+      ADMS_MEDIA_CA_FILE: /run/adms/tls/root.crt
     secrets:
       - api_env
     volumes:
@@ -217,7 +397,9 @@ services:
       - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
       - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
       - ../../packages/domain/breached-passwords.txt:/srv/open-adms/packages/domain/breached-passwords.txt:ro
-      - ./.generated/caddy-root.crt:/run/adms/caddy-root.crt:ro
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/api.crt:/run/adms/tls/api.crt:ro
+      - ./.generated/tls/api.key:/run/adms/tls/api.key:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -226,7 +408,8 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+        # Over its own TLS, inside the container, its certificate checked as Caddy checks it.
+        - "require('node:https').get({ host: '127.0.0.1', port: 3000, path: '/health', servername: 'api', ca: require('node:fs').readFileSync('/run/adms/tls/root.crt') }, (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 12
@@ -242,9 +425,6 @@ services:
     profiles: ['worker']
     image: node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
     user: '1000:1000'
-    cap_drop:
-      - ALL
-    read_only: true
     working_dir: /srv/open-adms
     command: ['node', 'apps/worker/dist/main.js']
     environment:
@@ -252,12 +432,14 @@ services:
       ADMS_ENV_FILE: /run/secrets/worker_env
       ADMS_WORKER_HOST: 127.0.0.1
       ADMS_WORKER_PORT: '3001'
-      # The installer wrote the login as this machine reaches Postgres; in here it is a service.
+      # The installer wrote the login as this machine reaches Postgres; in here it is a service,
+      # and the root its certificate is checked against is mounted below.
       ADMS_DATABASE_ADDRESS: postgres:5432
+      ADMS_DATABASE_CA_FILE: /run/adms/tls/root.crt
       # The map servers are asked by their own names, over HTTPS, through Caddy: in here Caddy is
-      # at the address the stack's network gives it, and its root certificate is mounted below.
+      # at the address the stack's network gives it, and the stack's root is mounted below.
       ADMS_MAP_SERVERS_ADDRESS: 172.30.213.2:443
-      ADMS_MAP_CA_FILE: /run/adms/caddy-root.crt
+      ADMS_MAP_CA_FILE: /run/adms/tls/root.crt
       # The extract both map servers were built from: the stack's own word (`pnpm local:up`).
       ADMS_MAP_EXTRACT_SHA256: ${ADMS_MAP_SHA256:?run pnpm local:up}
     secrets:
@@ -274,11 +456,12 @@ services:
       - ../../packages/domain/node_modules:/srv/open-adms/packages/domain/node_modules:ro
       - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
       - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
-      - ./.generated/caddy-root.crt:/run/adms/caddy-root.crt:ro
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
+      # On its own loopback, inside the container: no proxy leads to it, and it never leaves.
       test:
         - CMD
         - node
@@ -292,24 +475,42 @@ services:
   caddy:
     <<: *hardening
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    user: '1000:1000'
+    # The image's caddy binary carries the file capability to bind a low port, and the kernel
+    # refuses to start a binary whose file capability isn't in the container's bounding set. It is
+    # kept there and never held: an unprivileged user under no-new-privileges gains none of it,
+    # and binds 80 and 443 as Docker lets any user in a container's own network.
+    cap_add:
+      - NET_BIND_SERVICE
+    # What Caddy keeps (the certificates it issues, its locks) lasts as long as the container:
+    # it issues them afresh from the stack's root on every start.
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
     # A fixed address, so that the API can name the proxy it believes (ADMS_TRUSTED_PROXIES).
     networks:
       default:
         ipv4_address: 172.30.213.2
+    # The stories' API listens on this machine (ADR-491): Docker Desktop names it already, and a
+    # Linux host is told here.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     ports:
       - '127.0.0.1:${ADMS_HTTPS_PORT:-443}:443'
       - '127.0.0.1:${ADMS_HTTP_PORT:-80}:80'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      # Holds Caddy's internal CA; `pnpm local:up` copies its root certificate out for curl.
-      - caddy_data:/data
-      - caddy_config:/config
+      # The stack's root and its key, which Caddy issues the public names' certificates from and
+      # checks every service's certificate against (certificates.ts).
+      - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
+      - ./.generated/tls/root.key:/run/adms/tls/root.key:ro
     depends_on:
-      objectstore:
+      objectstore-tls:
         condition: service_healthy
       mail:
         condition: service_healthy
     healthcheck:
+      # Its admin endpoint, on its own loopback inside the container.
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
       interval: 5s
       timeout: 5s
@@ -326,8 +527,6 @@ networks:
           ip_range: 172.30.213.128/25
 
 secrets:
-  postgres_password:
-    environment: POSTGRES_PASSWORD
   # The API's own settings, the installer's file, read by the process itself (never an env_file:
   # that would put each value in the container's description).
   api_env:
@@ -336,39 +535,8 @@ secrets:
   worker_env:
     file: ../../apps/worker/.env
 
-configs:
-  # Who the object store knows (ADR-263, 480). `open-adms-local` is the stack's own
-  # administrator: `pnpm local:up` makes the media bucket through the store's own shell, and a
-  # test tidies up as it. `open-adms-api` is the identity the API uses: it may put and get an
-  # object in the media bucket and nothing else. It can delete no object and no bucket, make no
-  # bucket, list nothing and change no bucket's settings (apps/api/test/media-store.test.ts).
-  s3_identities:
-    content: |
-      {
-        "identities": [
-          {
-            "name": "open-adms-local",
-            "credentials": [{ "accessKey": "${S3_ACCESS_KEY:?run pnpm local:up}", "secretKey": "${S3_SECRET_KEY:?run pnpm local:up}" }],
-            "actions": ["Admin", "Read", "List", "Tagging", "Write"]
-          },
-          {
-            "name": "open-adms-api",
-            "credentials": [{ "accessKey": "${S3_API_ACCESS_KEY:?run pnpm local:up}", "secretKey": "${S3_API_SECRET_KEY:?run pnpm local:up}" }],
-            "policyNames": ["open-adms-media-write-once"]
-          }
-        ],
-        "policies": [
-          {
-            "name": "open-adms-media-write-once",
-            "content": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\",\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::${ADMS_MEDIA_BUCKET:?run pnpm local:up}/*\"]}]}"
-          }
-        ]
-      }
-
 volumes:
   postgres_data:
   objectstore_data:
   routing_data:
   addresses_data:
-  caddy_data:
-  caddy_config:

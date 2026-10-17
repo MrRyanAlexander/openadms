@@ -44,7 +44,7 @@ import {
 import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { assigned, firstBlocks, taken } from './board.ts';
-import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
+import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const monday = (time: string): string => on('12', time);
@@ -89,7 +89,15 @@ export const p1FieldDays: Story = {
     };
     const done = (completed: Completed): RecordedEvent => {
       if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-      return completed.event;
+      // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as she
+      // completes it; it goes in her sync, after the ticket (ADR-481).
+      const { event } = completed;
+      if (event.kind === 'UNIT_RATE') {
+        Object.values(phones)
+          .find((each) => each.setup.deviceId === event.deviceId)
+          ?.photograph({ of: { kind: 'FIELD_EVENT', id: event.id } });
+      }
+      return event;
     };
 
     // ------------------------------------------------------------------------------------------
@@ -112,10 +120,16 @@ export const p1FieldDays: Story = {
     }
     const dana = uuidv7(clock.now());
     const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      await tx.user.create({ data: { id: dana, name: 'Dana Reyes', role: 'ADMIN' } });
-      const luis = await tx.user.create({ data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST' } });
+      // Each with the address they sign in with at the back office (CONVENTIONS §6).
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      const luis = await tx.user.create({
+        data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
+      });
       // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
       await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
+      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
       const p1 = await setUpP1(tx, story.policy);
       const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
       // The firm's own sub-type of an incident (golden mission §2).
@@ -159,8 +173,8 @@ export const p1FieldDays: Story = {
     const person = (name: string): string => monitor(name).id;
 
     const sites = new SiteSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock);
-    const lists = new ListSetup(api, clock);
+    const forms = new FormSetup(api, clock, story.policy);
+    const lists = new ListSetup(api, clock, story.policy);
     const projects = new ProjectSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
 
@@ -192,7 +206,7 @@ export const p1FieldDays: Story = {
     ]);
 
     const form = async (documentType: FormDocumentType, name: string): Promise<string> =>
-      (await saved(forms.form(dana, { projectId: p1, documentType, name, enabled: true }))).id;
+      (await saved(forms.form(dana, { projectId: p1, documentType, name }))).id;
     const loadForm = await form('LOAD', 'Load');
     const haulOutForm = await form('HAUL_OUT', 'Haul-out');
     await form('UNIT_RATE', 'Unit rate');
@@ -202,7 +216,6 @@ export const p1FieldDays: Story = {
         projectId: p1,
         documentType: 'INCIDENT',
         name: 'Incident',
-        enabled: true,
         incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
       }),
     );
@@ -698,9 +711,9 @@ export const p1FieldDays: Story = {
       ['101001 DISPOSAL PENDING', '101003 DISPOSAL PENDING'],
     );
     story.check(
-      'then Tariq’s, Jo’s and Ana’s: one, three and four',
+      'then Tariq’s, Jo’s and Ana’s: one, three and four; Jo’s three tickets with her crew photograph of each after them (golden mission §2)',
       [await tariq.sync(story.server), await jo.sync(story.server), await ana.sync(story.server)],
-      [1, 3, 4],
+      [1, 6, 4],
     );
     story.check(
       'Monday’s ten field events are on the server, each PENDING; 101004 has only its collection: a preload',
@@ -967,7 +980,7 @@ export const p1FieldDays: Story = {
       'At the yard five phones sync. P1-TWR-TDSR’s battery is flat: its day stays on it',
     );
     story.check(
-      'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident',
+      'Ana’s two, Tariq’s one, Sam’s four, Lee’s receipt and disposal, Jo’s four tickets and her incident, with her crew photograph of each ticket after them',
       [
         await ana.sync(story.server),
         await tariq.sync(story.server),
@@ -975,7 +988,7 @@ export const p1FieldDays: Story = {
         await lee.sync(story.server),
         await jo.sync(story.server),
       ],
-      [2, 1, 4, 2, 5],
+      [2, 1, 4, 2, 9],
     );
     story.check(
       'Tuesday night: 101004, 101005 and 101006 wait with their collection alone, PENDING; nothing is flagged or refused for it',

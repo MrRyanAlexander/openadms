@@ -22,11 +22,11 @@ import {
   unplannedAssignmentAnswerSchema,
   writeAssignmentEndpoint,
 } from '@open-adms/contracts';
-import { masterPasscodeActorId, type Database } from '@open-adms/db';
+import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
+import { enrolledPhone, passcode, provenBoth, senderOf, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, p1Priced, picked, saved, told } from './support/setup.ts';
@@ -51,7 +51,8 @@ const offset = -240;
 const report = (served: Served, bearer: string | undefined, payload: object): Promise<Answer> =>
   served.ask('POST', reportUnplannedAssignmentEndpoint.path, {
     payload,
-    ...(bearer === undefined ? {} : { bearer }),
+    // What a phone sends goes with somebody signed in on it: the master user (ADR-531).
+    ...(bearer === undefined ? {} : { bearer: senderOf(bearer) }),
   });
 
 // What a report was answered: `SAVED`, `ALREADY_SAVED`, or `NOT_SAVED` and why.
@@ -95,7 +96,7 @@ async function tariqAtTheLandfill(served: Served, tx: Tx) {
   const hangers = await entered(priced.each('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00'));
   const vegHaul = await entered(priced.veg15());
   const phone = await enrolledPhone(served, tx, 'P1-TWR-LF');
-  const token = await proven(served, phone);
+  const token = await provenBoth(served, phone);
   const password = '5550177';
   const made = await served.ask('POST', '/phones/current/monitors', {
     bearer: token,
@@ -181,6 +182,12 @@ const events = async (tx: Tx, requestId: string) =>
     event.deviceUtcOffsetMinutes,
   ]);
 
+// What a report answered "not saved" writes: the held record a person resolves, as the device
+// key's actor on the phone that sent it (ADR-526 (5)).
+const heldFor = (phone: TestPhone) => [
+  ['held_record', 'INSERT', deviceKeyActorId, 'DEVICE', phone.id],
+];
+
 const audited = async (tx: Tx, requestId: string) =>
   (
     await tx.auditRecord.findMany({
@@ -205,10 +212,10 @@ const logged = (served: Served, msg: string) =>
     .filter((line) => line['msg'] === msg);
 
 describe('who may report one', () => {
-  it('AC-10-27 it is a proven phone’s call, with nobody signed in and no passcode sent: no token, a back-office session and a body that isn’t whole are refused, and nothing is written', async () => {
+  it('AC-10-27, ADR-531 it is a proven phone’s call with somebody signed in on it, no passcode sent with it: no token, nobody signed in, a back-office session and a body that isn’t whole are refused, and nothing is written', async () => {
     const { access, roles, permission } =
       endpoints.find(({ name }) => name === 'reportUnplannedAssignment') ?? {};
-    expect([access, roles, permission]).toEqual(['PROVEN_PHONE', undefined, undefined]);
+    expect([access, roles, permission]).toEqual(['PHONE_IN_USE', undefined, undefined]);
     await world(async (served, tx) => {
       const { dana, token, phone, setUp } = await tariqAtTheLandfill(served, tx);
       const notProven = [401, 'PHONE_NOT_PROVEN'];
@@ -267,7 +274,7 @@ describe('an unplanned assignment arrives', () => {
       const { priced, landfill, phone, tariq, setUp } = await tariqAtTheLandfill(served, tx);
       // The phone finds signal at 12:05 and proves itself again.
       served.clock.at = new Date('2026-10-12T16:05:00Z');
-      const token = await proven(served, phone);
+      const token = await provenBoth(served, phone);
       served.lines.length = 0;
       const sent = setUp();
       const { said, requestId } = await answered(served, token, sent);
@@ -374,7 +381,7 @@ describe('an unplanned assignment arrives', () => {
     await world(async (served, tx) => {
       const { phone, setUp } = await tariqAtTheLandfill(served, tx);
       served.clock.at = new Date('2026-10-14T13:00:00Z');
-      const token = await proven(served, phone);
+      const token = await provenBoth(served, phone);
       // 23:50 on Monday in Bayline County is already Tuesday by UTC.
       const late = setUp({ madeAt: '2026-10-13T03:50:00.000Z' });
       expect((await answered(served, token, late)).said).toEqual(['SAVED', null]);
@@ -408,7 +415,7 @@ describe('an unplanned assignment arrives', () => {
       expect(await written(tx, phone)).toEqual([1, 2]);
       // Another phone can't claim it, or learn anything of it but that the id is held.
       const other = await enrolledPhone(served, tx, 'P1-COL-1');
-      const others = await proven(served, other);
+      const others = await provenBoth(served, other);
       const held = ['NOT_SAVED', 'ID_ALREADY_HELD'];
       expect((await answered(served, others, sent)).said).toEqual(held);
       // One Dana wrote on the board is no phone's to report.
@@ -484,7 +491,7 @@ describe('an unplanned assignment arrives', () => {
     });
   });
 
-  it('it is not saved where something it names is no record of the kind it must be: a project nobody has, somebody who is no monitor, a site or a pay item that isn’t the project’s, a pay item that is no unit rate pay item; each is said, and nothing is written', async () => {
+  it('it is not saved where something it names is no record of the kind it must be: a project nobody has, somebody who is no monitor, a site or a pay item that isn’t the project’s, a pay item that is no unit rate pay item; each is said, nothing of it is kept as an assignment, and it is held for a person exactly as sent', async () => {
     await world(async (served, tx, who) => {
       const { dana, priced, site, hangers, vegHaul, phone, token, setUp } =
         await tariqAtTheLandfill(served, tx);
@@ -523,10 +530,36 @@ describe('an unplanned assignment arrives', () => {
           'NOT_THE_PROJECTS_UNIT_RATE_PAY_ITEM',
         ],
       ] as const) {
-        const { said, requestId } = await answered(served, token, setUp(more));
+        const report = setUp(more);
+        const { said, requestId } = await answered(served, token, report);
         expect(said, JSON.stringify(more)).toEqual(['NOT_SAVED', reason]);
-        expect(await audited(tx, requestId), reason).toEqual([]);
+        expect(await audited(tx, requestId), reason).toEqual(heldFor(phone));
+        const held = await tx.heldRecord.findFirstOrThrow({ where: { sentId: report.id } });
+        expect([held.syncId, held.reason, held.payload], reason).toEqual([
+          null,
+          'REPORT_NOT_SAVED',
+          JSON.parse(JSON.stringify(report)),
+        ]);
       }
+      expect(await written(tx, phone)).toEqual([0, 0]);
+      expect(await tx.heldRecord.count({ where: { deviceId: phone.id } })).toBe(10);
+    });
+  });
+
+  it('ADR-529 (b) it is not saved on a project closed before it arrived: nothing is written to a closed project, and it is held for a person exactly as sent', async () => {
+    await world(async (served, tx) => {
+      const { priced, phone, token, setUp } = await tariqAtTheLandfill(served, tx);
+      // Closed as an admin's close marks it (its setup's jobs wait for no worker here).
+      await tx.project.update({ where: { id: priced.project.id }, data: { closedAt: new Date() } });
+      const report = setUp();
+      const { said, requestId } = await answered(served, token, report);
+      expect(said).toEqual(['NOT_SAVED', 'PROJECT_CLOSED']);
+      expect(await audited(tx, requestId)).toEqual(heldFor(phone));
+      const held = await tx.heldRecord.findFirstOrThrow({ where: { sentId: report.id } });
+      expect([held.reason, held.payload]).toEqual([
+        'REPORT_NOT_SAVED',
+        JSON.parse(JSON.stringify(report)),
+      ]);
       expect(await written(tx, phone)).toEqual([0, 0]);
     });
   });
@@ -549,7 +582,7 @@ describe('a site move and a monitor switch, reported', () => {
       ]);
       // 13:15: the phone has signal at the TDSR, proves itself and reports the move of 13:10.
       served.clock.at = new Date('2026-10-12T17:15:00Z');
-      const afternoon = await proven(served, phone);
+      const afternoon = await provenBoth(served, phone);
       const at = '2026-10-12T17:10:00.000Z';
       const moved = setUp({ siteId: tdsr.id, madeAt: at });
       const { said, requestId } = await answered(served, afternoon, moved);
@@ -648,7 +681,7 @@ describe('a site move and a monitor switch, reported', () => {
       const first = await kept(tx, tariqs.id);
       expect(tookAt(await signedIn(served, token, sam))).toEqual(['NONE_THAT_DAY', undefined]);
       served.clock.at = new Date('2026-10-12T17:05:00Z');
-      const afternoon = await proven(served, phone);
+      const afternoon = await provenBoth(served, phone);
       served.lines.length = 0;
       const at = '2026-10-12T17:00:00.000Z';
       const sams = setUp({ personId: sam.userId, occasion: 'MONITOR_SWITCH', madeAt: at });
@@ -740,7 +773,7 @@ describe('a site move and a monitor switch, reported', () => {
       expect(told(await on(token, tariqs))).toEqual(stillOn);
       // The phone passes to Sam at 13:00 with no connection, and reports it at 13:05.
       served.clock.at = new Date('2026-10-12T17:05:00Z');
-      const afternoon = await proven(served, phone);
+      const afternoon = await provenBoth(served, phone);
       const switched = setUp({
         personId: sam.userId,
         occasion: 'MONITOR_SWITCH',

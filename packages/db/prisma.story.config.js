@@ -3,13 +3,16 @@
 // prisma.config.js, and the same adms_owner login from the .env beside this file, on the same
 // server; only the database's name changes, to ADMS_STORY_DATABASE, which must name a story's
 // database (adms_story_…). So it can reach no other server, and neither the installation's own
-// database nor its shadow. prisma.config.js, which the installer uses, is untouched by it.
+// database nor its shadow. prisma.config.js, which the installer uses, is untouched by it. The
+// URL asks TLS alone; Prisma's engine is handed it in its own words (prisma.url.js; ADR-517).
 // @ts-check
 import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { URL } from 'node:url';
 import { parseEnv } from 'node:util';
 import { defineConfig } from 'prisma/config';
+
+import { schemaEngineUrl } from './prisma.url.js';
 
 const envFile = new URL('.env', import.meta.url);
 if (!existsSync(envFile)) throw new Error('packages/db/.env is missing: run `pnpm installer`.');
@@ -25,5 +28,5 @@ url.pathname = `/${story}`;
 export default defineConfig({
   schema: 'prisma/schema',
   migrations: { path: 'prisma/migrations' },
-  datasource: { url: url.toString() },
+  datasource: { url: schemaEngineUrl(url.toString()) },
 });

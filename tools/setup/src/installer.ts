@@ -19,7 +19,12 @@ import {
 } from './database.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
-import { StatementTimeout, statementTimeoutName } from './policy.ts';
+import {
+  passcodeLengths,
+  policyInForce,
+  StatementTimeout,
+  statementTimeoutName,
+} from './policy.ts';
 import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
@@ -42,6 +47,8 @@ const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// The API's keys of their own purposes beside its signing secret (ADR-542).
+const partedKeys = ['ADMS_PASSWORD_KEY', 'ADMS_SEALING_KEY'] as const;
 // What the worker's settings name of the map servers (apps/worker/src/process/settings.ts).
 const workerMapKeys = [
   'ADMS_ROUTING_URL',
@@ -61,6 +68,8 @@ const apiMediaKeys = [
   'ADMS_MEDIA_SECRET_KEY',
   'ADMS_MEDIA_CA_FILE',
 ];
+// The certificate and key the API serves HTTPS with (ADR-517): the stack's own for `api`.
+const apiTlsKeys = ['ADMS_API_TLS_CERT_FILE', 'ADMS_API_TLS_KEY_FILE'];
 // The API is reached only through the local stack's proxy, over HTTPS (ADR-385).
 const apiHostname = 'api.adms.localhost';
 
@@ -125,6 +134,8 @@ export class Installer {
           return;
         }
         this.requireSecrets();
+        this.ensurePartedKeys(record);
+        this.ensureDatabaseTls();
       } else {
         await this.refuseLeftovers(database);
         const answers = await this.firstRunQuestions();
@@ -252,7 +263,7 @@ export class Installer {
     );
     for (;;) {
       const passcode = await interview.askSecret('   Master passcode');
-      const problem = hasher.problem(passcode, breached);
+      const problem = hasher.problem(passcode, passcodeLengths(this.policyEnv.read()), breached);
       if (problem !== undefined) console.log(`   ${problem}`);
       else if ((await interview.askSecret('   Once more')) === passcode) return passcode;
       else console.log('   They differ. Again, please.');
@@ -268,7 +279,7 @@ export class Installer {
     const server = this.server();
     const maker = new SecretMaker();
     const url = (role: LoginRole): string =>
-      `postgresql://${role}:${maker.password()}@${host}:${String(server.port)}/${databaseName}`;
+      `postgresql://${role}:${maker.password()}@${host}:${String(server.port)}/${databaseName}${this.databaseTls()}`;
     // Kept in memory for the seed, which puts it in the database; never written to a file.
     this.passcodeHash = await new PasscodeHasher().hash(answers.passcode);
     const header = (who: string): string[] => [
@@ -288,7 +299,11 @@ export class Installer {
         ['DATABASE_URL', url('adms_api')],
         ['READONLY_DATABASE_URL', url('adms_readonly')],
         ['ADMS_TOKEN_SIGNING_SECRET', maker.password()],
+        // One key a purpose (ADR-542): a password's slow hash, and what is sealed at rest.
+        ...partedKeys.map((key): [string, string] => [key, maker.password()]),
         ['SMTP_URL', answers.mail === 'mail catcher' ? `smtp://${host}:${smtpPort}` : ''],
+        ...(answers.mail === 'mail catcher' ? this.apiMailSettings() : []),
+        ...this.apiTlsSettings(),
         ...this.apiMapSettings(),
         ...this.apiMediaSettings(),
       ],
@@ -307,7 +322,7 @@ export class Installer {
       firm: answers.firm,
       mail: answers.mail,
       database: { host, port: server.port, name: databaseName },
-      steps: { secrets: now },
+      steps: { secrets: now, keys: now },
       createdAt: now,
       updatedAt: now,
     };
@@ -348,6 +363,66 @@ export class Installer {
         );
       }
     }
+  }
+
+  // The API's password key and sealing key (ADR-542; the Phase 2 audit's F11): an installation
+  // made before the API held a key a purpose is given them once, at the end of its env file, every
+  // line already there left as it was (what was made under the signing secret before still opens:
+  // the API reads it, and makes it again at its owner's next sign-in). Once made, one gone is a
+  // secret lost, as any other: never made again.
+  private ensurePartedKeys(record: InstallationRecord): void {
+    const name = this.relative(this.apiEnv.path);
+    const held = this.apiEnv.read();
+    const missing = partedKeys.filter((key) => held[key] === undefined);
+    if (missing.length === 0) {
+      console.log(`✓ ${name} holds the API's password key and sealing key`);
+      return;
+    }
+    if (record.steps.keys !== undefined) {
+      throw new Error(
+        `${name} (${missing.join(', ')}) is gone, and with it a secret I won't remake. ` +
+          'Nothing was changed. To start over: `pnpm installer:teardown`, then `pnpm installer`.',
+      );
+    }
+    const maker = new SecretMaker();
+    const added = this.apiEnv.add(missing.map((key): [string, string] => [key, maker.password()]));
+    record.steps.keys = new Date().toISOString();
+    console.log(`+ added to ${name}: ${added.join(', ')} (one key a purpose)`);
+  }
+
+  // Every login's URL asks TLS alone, the server's certificate checked against the stack's root
+  // (KD-78; ADR-517). An installation made before asked nothing: each URL is given the two
+  // parameters, its login and password carried over as they were.
+  private ensureDatabaseTls(): void {
+    for (const login of this.logins) {
+      const name = this.relative(login.file.path);
+      if (login.file.amend(login.key, (url) => this.withDatabaseTls(url))) {
+        console.log(`+ ${name}: ${login.key} now asks TLS (sslmode=verify-full, the stack's root)`);
+      } else {
+        console.log(`✓ ${name}: ${login.key} asks TLS (sslmode=verify-full)`);
+      }
+    }
+  }
+
+  // What every login's URL asks of its connection (ARCHITECTURE §5.7): TLS alone, the server's
+  // name and certificate checked, against the stack's own root.
+  private databaseTls(): string {
+    return `?sslmode=verify-full&sslrootcert=${encodeURIComponent(this.rootCert())}`;
+  }
+
+  private withDatabaseTls(written: string): string {
+    const url = new URL(written);
+    if (
+      url.searchParams.getAll('sslmode').join() === 'verify-full' &&
+      url.searchParams.get('sslrootcert') === this.rootCert()
+    ) {
+      return written;
+    }
+    return `${written.split('?')[0] ?? written}${this.databaseTls()}`;
+  }
+
+  private rootCert(): string {
+    return join(this.root, 'infra/local/.generated/caddy-root.crt');
   }
 
   private async ensureRoles(database: Database, record: InstallationRecord): Promise<void> {
@@ -569,6 +644,15 @@ export class Installer {
       ok: gaps.length === 0,
       text: `every table is guarded${gaps.length === 0 ? '' : ` (${gaps.join('; ')})`}`,
     });
+    checks.push(...this.policyChecks());
+    if (this.apiEnv.exists()) {
+      const held = this.apiEnv.read();
+      const keys = [held['ADMS_TOKEN_SIGNING_SECRET'], ...partedKeys.map((key) => held[key])];
+      checks.push({
+        ok: keys.every((key) => key !== undefined) && new Set(keys).size === keys.length,
+        text: 'the API holds a signing secret, a password key and a sealing key, each its own (ADR-542)',
+      });
+    }
     checks.push(await this.masterPasscodeCheck());
     for (const [seeded, called] of [
       [seededActors.system, 'the system actor'],
@@ -603,10 +687,35 @@ export class Installer {
       ok: mediaUnnamed.length === 0,
       text: `apps/api/.env names the object store the API keeps files in${mediaUnnamed.length === 0 ? '' : ` (missing ${mediaUnnamed.join(', ')}: pnpm installer adds them)`}`,
     });
+    const plain = this.logins.filter(({ file, key }) => {
+      const written = file.exists() ? file.read()[key] : undefined;
+      return written === undefined || this.withDatabaseTls(written) !== written;
+    });
+    checks.push({
+      ok: plain.length === 0,
+      text: `every login's URL asks TLS (sslmode=verify-full, the stack's root)${plain.length === 0 ? '' : ` (not ${plain.map(({ role }) => role).join(', ')}: pnpm installer adds it)`}`,
+    });
+    const tlsUnnamed = apiTlsKeys.filter((key) => !(key in apiStated));
+    checks.push({
+      ok: tlsUnnamed.length === 0,
+      text: `apps/api/.env names the certificate the API serves HTTPS with${tlsUnnamed.length === 0 ? '' : ` (missing ${tlsUnnamed.join(', ')}: pnpm installer adds them)`}`,
+    });
+    const sendsMail = (apiStated['SMTP_URL'] ?? '') !== '';
+    checks.push({
+      ok: !sendsMail || 'ADMS_SMTP_CA_FILE' in apiStated,
+      text: `apps/api/.env names the root the mail catcher is checked against${!sendsMail || 'ADMS_SMTP_CA_FILE' in apiStated ? '' : ' (missing ADMS_SMTP_CA_FILE: pnpm installer adds it)'}`,
+    });
     const apiProblem = await this.apiProblem();
     checks.push({
       ok: apiProblem === undefined,
       text: `the API answers over HTTPS at https://${apiHostname}/health${apiProblem === undefined ? '' : ` (${apiProblem})`}`,
+    });
+    // And it can serve: its database answers it (ADR-507).
+    const readinessProblem =
+      apiProblem === undefined ? await this.apiProblem('/readiness') : 'the API doesn’t answer';
+    checks.push({
+      ok: readinessProblem === undefined,
+      text: `the API reaches its database (https://${apiHostname}/readiness)${readinessProblem === undefined ? '' : ` (${readinessProblem})`}`,
     });
     checks.push({
       ok: this.helper(['worker-health']).status === 0,
@@ -628,7 +737,7 @@ export class Installer {
     return [
       ['ADMS_ROUTING_URL', `https://routing.adms.localhost${at}`],
       ['ADMS_ADDRESSES_URL', `https://addresses.adms.localhost${at}`],
-      ['ADMS_MAP_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
+      ['ADMS_MAP_CA_FILE', this.rootCert()],
       ['ADMS_MAP_EXTRACT_SHA256', sha256],
     ];
   }
@@ -666,15 +775,40 @@ export class Installer {
       ['ADMS_MEDIA_REGION', 'us-east-1'],
       ['ADMS_MEDIA_ACCESS_KEY', accessKey],
       ['ADMS_MEDIA_SECRET_KEY', secretKey],
-      ['ADMS_MEDIA_CA_FILE', join(this.root, 'infra/local/.generated/caddy-root.crt')],
+      ['ADMS_MEDIA_CA_FILE', this.rootCert()],
     ];
   }
 
+  // The certificate and key the API serves HTTPS with (KD-78; ADR-517): the stack's own for
+  // `api`, made by `pnpm local:up`. Paths, not secrets: the key itself stays in its file, its
+  // owner's alone. The API's container is told its own paths to the same files (compose.yaml).
+  private apiTlsSettings(): [string, string][] {
+    return [
+      ['ADMS_API_TLS_CERT_FILE', join(this.root, 'infra/local/.generated/tls/api.crt')],
+      ['ADMS_API_TLS_KEY_FILE', join(this.root, 'infra/local/.generated/tls/api.key')],
+    ];
+  }
+
+  // What the API is told of the mail catcher, where it sends mail through it: the root its
+  // certificate is checked against, as every hop's is (KD-78; ADR-517).
+  private apiMailSettings(): [string, string][] {
+    return [['ADMS_SMTP_CA_FILE', this.rootCert()]];
+  }
+
   // An installation made before the API asked the address server, or before it kept files in
-  // the object store, has an API's env file without them: the settings are added at its end,
-  // every line already there left as it was.
+  // the object store, or before its mail went over TLS, has an API's env file without them: the
+  // settings are added at its end, every line already there left as it was.
   private ensureApiSettings(): void {
     const name = this.relative(this.apiEnv.path);
+    const tls = this.apiEnv.add(this.apiTlsSettings());
+    if (tls.length === 0) console.log(`✓ ${name} names the certificate the API serves HTTPS with`);
+    else console.log(`+ added to ${name}: ${tls.join(', ')}`);
+    if ((this.apiEnv.read()['SMTP_URL'] ?? '') !== '') {
+      const mail = this.apiEnv.add(this.apiMailSettings());
+      if (mail.length === 0)
+        console.log(`✓ ${name} names the root the mail catcher is checked against`);
+      else console.log(`+ added to ${name}: ${mail.join(', ')}`);
+    }
     const added = this.apiEnv.add(this.apiMapSettings());
     if (added.length === 0) console.log(`✓ ${name} names the address server the API asks`);
     else console.log(`+ added to ${name}: ${added.join(', ')}`);
@@ -727,7 +861,7 @@ export class Installer {
   }
 
   // Asked as a caller would: through the proxy, the certificate checked against the stack's own.
-  private apiProblem(): Promise<string | undefined> {
+  private apiProblem(path = '/health'): Promise<string | undefined> {
     const rootCert = join(this.root, 'infra/local/.generated/caddy-root.crt');
     if (!existsSync(rootCert)) return Promise.resolve('start it with `pnpm local:up`');
     const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
@@ -736,7 +870,7 @@ export class Installer {
         {
           host,
           port: Number(port ?? '443'),
-          path: '/health',
+          path,
           servername: apiHostname,
           headers: { host: apiHostname },
           ca: readFileSync(rootCert),
@@ -778,7 +912,7 @@ export class Installer {
       told = `a statement of ${login.role} is stopped after ${String(milliseconds)} ms (${statementTimeoutName})`;
       const url = new URL(login.file.read()[login.key] ?? 'postgresql://missing');
       const found = await Database.statementTimeout(
-        { host: url.hostname, port: Number(url.port) },
+        this.serverOf(url),
         login.role,
         decodeURIComponent(url.password),
         url.pathname.slice(1),
@@ -793,6 +927,26 @@ export class Installer {
       ok: problem === undefined,
       text: `${told}${problem === undefined ? '' : ` (${problem})`}`,
     };
+  }
+
+  // The policy values each service runs under (C53; ADR-395, 530): how many are the release's,
+  // and each its own env file states instead, by name and value. A value that isn't a whole
+  // number is a `✗`; whether one is in its range, the service's own start says.
+  private policyChecks(): Check[] {
+    const release = this.policyEnv.read();
+    return [this.apiEnv, this.workerEnv].map((file) => {
+      const name = this.relative(file.path);
+      const inForce = policyInForce(release, file.exists() ? file.read() : {});
+      const own = inForce.own.map(({ name: value, value: written }) => `${value}=${written}`);
+      const wrong = inForce.own.filter(({ whole }) => !whole).map(({ name: value }) => value);
+      return {
+        ok: wrong.length === 0,
+        text:
+          `${name} runs under ${String(inForce.fromRelease)} of the release's policy values` +
+          (own.length === 0 ? ', none of its own' : ` and its own ${own.join(', ')}`) +
+          (wrong.length === 0 ? '' : ` (not a whole number: ${wrong.join(', ')})`),
+      };
+    });
   }
 
   // The database keeps the master passcode's slow hash, and no file does (ADR-281).
@@ -858,7 +1012,21 @@ export class Installer {
 
   private server(): Server {
     const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_PG_PORT'] : undefined;
-    return { host, port: Number(port ?? '55432') };
+    return { host, port: Number(port ?? '55432'), ssl: this.ssl() };
+  }
+
+  // Where a login's URL says its server is, reached over TLS as the URL asks.
+  private serverOf(url: URL): Server {
+    return { host: url.hostname, port: Number(url.port), ssl: this.ssl() };
+  }
+
+  // The stack's own root, the one certificate authority its Postgres is checked against.
+  private ssl(): Server['ssl'] {
+    const rootCert = this.rootCert();
+    if (!existsSync(rootCert)) {
+      throw new Error('The local stack has no root certificate yet: run `pnpm local:up`.');
+    }
+    return { ca: readFileSync(rootCert, 'utf8'), rejectUnauthorized: true };
   }
 
   private password(login: Login): string {
@@ -880,7 +1048,7 @@ export class Installer {
   private logInProblem(login: Login): Promise<string | undefined> {
     const url = new URL(login.file.read()[login.key] ?? 'postgresql://missing');
     return Database.logInProblem(
-      { host: url.hostname, port: Number(url.port) },
+      this.serverOf(url),
       login.role,
       decodeURIComponent(url.password),
       url.pathname.slice(1),
@@ -891,7 +1059,7 @@ export class Installer {
   private guardGaps(): Promise<string[]> {
     const url = new URL(this.ownerEnv.read()['DATABASE_URL'] ?? 'postgresql://missing');
     return Database.guardGaps(
-      { host: url.hostname, port: Number(url.port) },
+      this.serverOf(url),
       'adms_owner',
       decodeURIComponent(url.password),
       url.pathname.slice(1),
@@ -902,7 +1070,7 @@ export class Installer {
   private seededActorProblem(seeded: SeededActor): Promise<string | undefined> {
     const url = new URL(this.ownerEnv.read()['DATABASE_URL'] ?? 'postgresql://missing');
     return Database.seededActorProblem(
-      { host: url.hostname, port: Number(url.port) },
+      this.serverOf(url),
       'adms_owner',
       decodeURIComponent(url.password),
       url.pathname.slice(1),
@@ -914,7 +1082,7 @@ export class Installer {
   private masterPasscode(): Promise<{ version: number; argon2id: boolean } | undefined> {
     const url = new URL(this.ownerEnv.read()['DATABASE_URL'] ?? 'postgresql://missing');
     return Database.masterPasscode(
-      { host: url.hostname, port: Number(url.port) },
+      this.serverOf(url),
       'adms_owner',
       decodeURIComponent(url.password),
       url.pathname.slice(1),

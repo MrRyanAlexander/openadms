@@ -3,7 +3,7 @@
 // list of known breached passwords, the code a reset by email carries, where mail goes, and what
 // the two reset endpoints refuse before anything is read. The real process, in this test's own
 // memory; nothing here opens the database.
-import { randomUUID } from 'node:crypto';
+import { argon2, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import {
   completePasswordResetEndpoint,
   endpoints,
@@ -21,19 +21,20 @@ import { shippedBreachedPasswords } from '../src/sign-in/breached-list.ts';
 import { mailFor, NoMail, SmtpMail } from '../src/sign-in/mail.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
-import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
+import { madeUpServedOver, madeUpSettings, ready, shippedPolicy } from './support/process.ts';
 
 const long = 'marsh heron delphine ferry';
 
 describe('a password’s slow hash', () => {
-  const hasher = new PasswordHasher('made-up-signing-secret-for-this-test-only');
+  const signingSecret = 'made-up-signing-secret-for-this-test-only';
+  const hasher = new PasswordHasher('made-up-password-key-for-this-test-only', signingSecret);
 
   it('AC-10-20 is Argon2id at OWASP’s 19 MiB, 2 passes, 1 lane, as a PHC string with its own salt', async () => {
     const [first, second] = [await hasher.hash(long), await hasher.hash(long)];
     expect(PasswordHasher.cost).toEqual({ memory: 19456, passes: 2, parallelism: 1 });
     // A 16-byte salt and a 32-byte tag, in unpadded base64: 22 and 43 characters.
     expect(first).toMatch(
-      /^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djE\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/,
+      /^\$argon2id\$v=19\$m=19456,t=2,p=1,keyid=djI\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$/,
     );
     expect(second).not.toBe(first);
     expect(first).not.toContain('marsh');
@@ -61,14 +62,51 @@ describe('a password’s slow hash', () => {
     ).toBe(false);
     // Whoever holds the string alone can't check a guess: with the key's name taken off, the
     // string is an ordinary Argon2id hash, and the password doesn't check against it.
-    expect(await hasher.verify(long, kept.replace(',keyid=djE', ''))).toBe(false);
+    expect(await hasher.verify(long, kept.replace(',keyid=djI', ''))).toBe(false);
     // A key the process doesn't hold checks nothing.
-    expect(await hasher.verify(long, kept.replace('keyid=djE', 'keyid=djI'))).toBe(false);
+    expect(await hasher.verify(long, kept.replace('keyid=djI', 'keyid=djM'))).toBe(false);
+    // Nor is it the signing secret's earlier key (ADR-542): one secret, one purpose.
+    expect(await hasher.verify(long, kept.replace('keyid=djI', 'keyid=djE'))).toBe(false);
+    expect(await new PasswordHasher(signingSecret).verify(long, kept)).toBe(false);
     expect(hasher.stale(kept)).toBe(false);
+  });
+
+  it('AC-10-109 a hash keyed before the keys were parted (v1, the signing secret’s) still checks where the signing secret is given, and is made again; with the password key alone it checks nothing (ADR-542)', async () => {
+    // Made as the API made a hash before ADR-542: a key drawn from the signing secret, `v1`.
+    const earlierKey = createHmac('sha256', signingSecret)
+      .update('open-adms/password-key/v1')
+      .digest();
+    const salt = randomBytes(16);
+    const tag = await new Promise<Buffer>((resolve, reject) => {
+      argon2(
+        'argon2id',
+        {
+          message: long,
+          nonce: salt,
+          memory: 19456,
+          passes: 2,
+          parallelism: 1,
+          tagLength: 32,
+          secret: earlierKey,
+        },
+        (error, made) => {
+          if (error === null) resolve(made);
+          else reject(error);
+        },
+      );
+    });
+    const b64 = (bytes: Buffer): string => bytes.toString('base64').replace(/=+$/, '');
+    const earlier = `$argon2id$v=19$m=19456,t=2,p=1,keyid=djE$${b64(salt)}$${b64(tag)}`;
+    expect(await hasher.verify(long, earlier)).toBe(true);
+    expect(hasher.stale(earlier)).toBe(true);
+    expect(
+      await new PasswordHasher('made-up-password-key-for-this-test-only').verify(long, earlier),
+    ).toBe(false);
   });
 
   it('a hash with no key, or made under lower settings, still checks and is made again (stale)', async () => {
     const earlier =
+      // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no person's
       '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
     expect(hasher.stale(earlier)).toBe(true);
     const kept = await hasher.hash(long);
@@ -80,6 +118,7 @@ describe('a password’s slow hash', () => {
   it('still checks a hash made under other settings: the string carries its own', async () => {
     // Made by the installer's hasher for the stories' made-up master passcode (story-database.ts).
     const earlier =
+      // secretlint-disable-next-line -- the stories' made-up master passcode's hash, no person's
       '$argon2id$v=19$m=19456,t=2,p=1$rLnL+hWkLjJHDKTBWGSsdw$tYeMf5WEtzZTIdv2JQR18zDWwcllaJjVO71qautLsGY';
     expect(await hasher.verify('heron-marsh-delphine', earlier)).toBe(true);
     expect(await hasher.verify('heron-marsh-delphin', earlier)).toBe(false);
@@ -167,7 +206,7 @@ describe('the code a reset by email carries', () => {
 });
 
 describe('the firm’s mail', () => {
-  const settings = { smtpAddress: undefined, mailFrom: Settings.defaultMailFrom };
+  const settings = { smtpAddress: undefined, smtpCaFile: null, mailFrom: Settings.defaultMailFrom };
 
   it('AC-10-25 is never required: with no mail server nothing is sent and the API still starts', () => {
     expect(mailFor({ ...settings, smtpUrl: '' })).toBeInstanceOf(NoMail);
@@ -181,9 +220,12 @@ describe('the firm’s mail', () => {
       DATABASE_URL: madeUpSettings.databaseUrl,
       READONLY_DATABASE_URL: madeUpSettings.databaseUrl,
       ADMS_TOKEN_SIGNING_SECRET: 'made-up-signing-secret-for-this-test-only',
+      ADMS_PASSWORD_KEY: 'made-up-password-key-for-this-test-only',
+      ADMS_SEALING_KEY: 'made-up-sealing-key-for-this-test-only',
       SMTP_URL: '',
       ADMS_API_HOST: '127.0.0.1',
       ADMS_API_PORT: '3000',
+      ...madeUpServedOver,
       ADMS_ADDRESSES_URL: 'https://addresses.adms.localhost',
       ADMS_MEDIA_URL: 'https://s3.adms.localhost',
       ADMS_MEDIA_BUCKET: 'adms-media',

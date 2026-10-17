@@ -161,6 +161,7 @@ describe('an endpoint that asks for a session, before anything is read', () => {
   it('AC-10-27 every endpoint says who may call it; only these need nobody signed in', () => {
     expect(endpoints.filter(({ access }) => access === 'ANYBODY').map(({ name }) => name)).toEqual([
       'health',
+      'readiness',
       'requestPasswordReset',
       'completePasswordReset',
       'signIn',

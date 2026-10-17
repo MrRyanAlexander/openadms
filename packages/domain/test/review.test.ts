@@ -8,13 +8,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AcceptanceWithdrawal,
+  BackOfficePhotograph,
   BatchName,
   FlagAccepting,
+  FormAnswersGiven,
   InvoiceLocking,
   LockedTicket,
   PickedReason,
+  HeldResolution,
+  heldSentAs,
   QuarantineResolution,
   Renumber,
+  ReprocessAsking,
   Reviewer,
   reviewPermissions,
   TicketOnItsOwn,
@@ -27,7 +33,7 @@ const luis: ReviewingPerson = {
   name: 'Luis Ortega',
   role: 'MANAGER_ANALYST',
   archived: false,
-  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED'],
+  granted: ['CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG', 'QC', 'LOCK_INVOICED', 'VIEW_REVIEW'],
 };
 const dana: ReviewingPerson = { name: 'Dana Reyes', role: 'ADMIN', archived: false, granted: [] };
 
@@ -40,22 +46,32 @@ describe('who may do a reviewer’s action', () => {
 
   it('AC-08-05 a manager/analyst may do each action he is granted, and no other: Luis, granted no unlock, can’t unlock', () => {
     const reviewer = new Reviewer(luis);
-    for (const permission of luis.granted) {
-      expect(reviewer.refusal(permission as (typeof reviewPermissions)[number])).toBeNull();
+    for (const permission of reviewPermissions.filter((each) => luis.granted.includes(each))) {
+      expect(reviewer.refusal(permission)).toBeNull();
     }
     expect(reviewer.refusal('UNLOCK_INVOICED')).toEqual({
       code: 'NOT_PERMITTED',
       message:
-        'Luis Ortega may not unlock an invoiced ticket: it takes an admin, or a manager/analyst granted "unlock". Nothing was changed.',
+        'Luis Ortega may not unlock an invoiced ticket: it takes an admin, or a manager/analyst granted "unlock" and "view review". Nothing was changed.',
     });
   });
 
   it('AC-08-05 a manager/analyst without void can’t void, in plain words', () => {
     const withoutVoid = { ...luis, granted: luis.granted.filter((grant) => grant !== 'VOID') };
     expect(new Reviewer(withoutVoid).refusal('VOID')?.message).toBe(
-      'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void". Nothing was changed.',
+      'Luis Ortega may not void or unvoid a ticket: it takes an admin, or a manager/analyst granted "void" and "view review". Nothing was changed.',
     );
     expect(new Reviewer(withoutVoid).refusal('CORRECT')).toBeNull();
+  });
+
+  it('AC-10-107 a manager/analyst granted an action but not “view review” can’t do it', () => {
+    const blind = { ...luis, granted: luis.granted.filter((grant) => grant !== 'VIEW_REVIEW') };
+    for (const permission of reviewPermissions) {
+      expect(new Reviewer(blind).refusal(permission)?.code, permission).toBe('NOT_PERMITTED');
+    }
+    expect(new Reviewer(blind).refusal('QC')?.message).toBe(
+      'Luis Ortega may not set a QC status: it takes an admin, or a manager/analyst granted "QC" and "view review". Nothing was changed.',
+    );
   });
 
   it('AC-08-06 a monitor, a read-only viewer and the system actor may do none, whatever a row says they are granted', () => {
@@ -72,7 +88,7 @@ describe('who may do a reviewer’s action', () => {
         'CORRECT',
       )?.message,
     ).toBe(
-      'Ana Brooks may not correct a record: it takes an admin, or a manager/analyst granted "correct". Nothing was changed.',
+      'Ana Brooks may not correct a record: it takes an admin, or a manager/analyst granted "correct" and "view review". Nothing was changed.',
     );
   });
 
@@ -226,13 +242,13 @@ describe('a quarantined record’s resolution', () => {
 
 describe('who may accept a flag', () => {
   it('AC-08-05 accept flags is a grant of its own: a manager/analyst granted correct alone can’t accept (the user, 2026-10-06, KD-74)', () => {
-    const correctsOnly = new Reviewer({ ...luis, granted: ['CORRECT'] });
+    const correctsOnly = new Reviewer({ ...luis, granted: ['CORRECT', 'VIEW_REVIEW'] });
 
     expect(correctsOnly.refusal('CORRECT')).toBeNull();
     expect(correctsOnly.refusal('ACCEPT_FLAG')).toEqual({
       code: 'NOT_PERMITTED',
       message:
-        'Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags". Nothing was changed.',
+        'Luis Ortega may not accept a flag: it takes an admin, or a manager/analyst granted "accept flags" and "view review". Nothing was changed.',
     });
     expect(new Reviewer({ ...luis, granted: ['ACCEPT_FLAG'] }).refusal('CORRECT')?.code).toBe(
       'NOT_PERMITTED',
@@ -273,6 +289,40 @@ describe('a person’s void and unvoid', () => {
       code: 'NOT_VOID',
       message: 'Ticket 301003 isn’t void. Nothing was changed.',
     });
+  });
+});
+
+describe('an acceptance taken back, answers given and a photograph added in the back office (ADR-534)', () => {
+  it('AC-08-70 an acceptance standing may be taken back, once', () => {
+    const message = 'Ticket 101003: load call 96%. Flagged for review.';
+    expect(new AcceptanceWithdrawal({ message, withdrawn: false }).refusal()).toBeNull();
+    expect(new AcceptanceWithdrawal({ message, withdrawn: true }).refusal()).toEqual({
+      code: 'ALREADY_WITHDRAWN',
+      message:
+        'This acceptance was already taken back ("Ticket 101003: load call 96%. Flagged for review."). Nothing was changed.',
+    });
+  });
+
+  it('AC-08-69 answers that don’t fit say which fields, by their labels; another form’s version and none at all are told so', () => {
+    expect(FormAnswersGiven.notFitting(2, ['Photos taken?'])).toEqual({
+      code: 'ANSWERS_DO_NOT_FIT',
+      message:
+        'The answers don’t fit the form’s own fields as version 2 has them (Photos taken?). Nothing was saved.',
+    });
+    expect(FormAnswersGiven.notFitting(1, []).message).toBe(
+      'The answers don’t fit the form’s own fields as version 1 has them. Nothing was saved.',
+    );
+    expect(FormAnswersGiven.notThisForm('survey').code).toBe('ANSWERS_DO_NOT_FIT');
+    expect(FormAnswersGiven.noFields().code).toBe('ANSWERS_DO_NOT_FIT');
+  });
+
+  it('AC-10-92 a photograph goes only on a record made in the back office, and a view only on a certification’s', () => {
+    expect(BackOfficePhotograph.notMadeInTheBackOffice('ROE')).toEqual({
+      code: 'NOT_MADE_IN_THE_BACK_OFFICE',
+      message:
+        'This ROE was made on a phone: its photographs are its phone’s, and none is added in the back office. Nothing was saved.',
+    });
+    expect(BackOfficePhotograph.viewOnlyOnACertification().code).toBe('VIEW_NOT_ON_THIS_RECORD');
   });
 });
 
@@ -420,5 +470,117 @@ describe('locking a ticket as invoiced', () => {
       'This project already has an invoice batch named "Bayline ROW, week of 12 Oct". Nothing was saved.',
     );
     expect(BatchName.onAnotherProject().code).toBe('BATCH_ON_ANOTHER_PROJECT');
+  });
+});
+
+describe('a reprocess a person asks for with nothing changed (ADR-498)', () => {
+  const ticket = (ticketNumber: string, fieldEvents = 2) => ({ ticketNumber, fieldEvents });
+
+  it('asks for as many tickets as one job names at the most, each a ticket of the project', () => {
+    const asking = new ReprocessAsking(3);
+    expect(asking.ticketsRefusal([ticket('101001'), ticket('101003'), ticket('301001', 1)])).toBe(
+      null,
+    );
+    expect(
+      asking.ticketsRefusal([
+        ticket('101001'),
+        ticket('101002'),
+        ticket('101003'),
+        ticket('101004'),
+      ]),
+    ).toEqual({
+      code: 'TOO_MANY_TICKETS',
+      message:
+        '4 tickets were named: a reprocess asks for 3 at the most. Ask for them in parts. Nothing was queued.',
+    });
+    expect(asking.countRefusal(3)).toBeNull();
+    expect(asking.countRefusal(4)?.code).toBe('TOO_MANY_TICKETS');
+    expect(asking.ticketsRefusal([ticket('101001'), ticket('101077', 0)])).toEqual({
+      code: 'NOT_A_TICKET',
+      message:
+        'No field event of this project is under 101077: there is no such ticket to reprocess. Nothing was queued.',
+    });
+  });
+
+  it('puts back only a job of the project the worker set aside', () => {
+    expect(ReprocessAsking.jobRefusal({ onThisProject: true, setAside: true })).toBeNull();
+    expect(ReprocessAsking.jobRefusal({ onThisProject: true, setAside: false })).toEqual({
+      code: 'NOT_SET_ASIDE',
+      message:
+        'That job isn’t set aside: it waits for the worker, or the worker has finished it. Nothing was queued.',
+    });
+    expect(ReprocessAsking.jobRefusal({ onThisProject: false, setAside: true })).toEqual({
+      code: 'NOT_ON_THIS_PROJECT',
+      message: 'That job is another project’s. Nothing was queued.',
+    });
+  });
+});
+
+describe('what a sync held, resolved (ADR-526 (2), (3))', () => {
+  const id = '0199c2d4-1a00-7000-8000-000000101022';
+
+  it('AC-10-74 a held record is saved under the id its phone made, as the kind it was sent as; a report and one with no id are not saved so', () => {
+    const waiting = new HeldResolution(null);
+    expect(waiting.refusal()).toBeNull();
+    for (const kind of heldSentAs.filter((one) => one !== 'REPORT')) {
+      expect(waiting.savingRefusal({ sentId: id, sentAs: kind }, { id, kind }), kind).toBeNull();
+    }
+    // What was sent may say no kind: then it is saved as the reviewer says.
+    expect(waiting.savingRefusal({ sentId: id, sentAs: null }, { id, kind: 'SURVEY' })).toBeNull();
+    expect(
+      [
+        waiting.savingRefusal({ sentId: id, sentAs: 'REPORT' }, { id, kind: 'FIELD_EVENT' }),
+        waiting.savingRefusal({ sentId: null, sentAs: 'FIELD_EVENT' }, { id, kind: 'FIELD_EVENT' }),
+        waiting.savingRefusal(
+          { sentId: id, sentAs: 'FIELD_EVENT' },
+          { id: '0199c2d4-1a00-7000-8000-000000101023', kind: 'FIELD_EVENT' },
+        ),
+        waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' }),
+        waiting.savingRefusal({ sentId: id, sentAs: 'PHOTO' }, { id, kind: 'CERTIFICATION' }),
+      ].map((refusal) => refusal?.code),
+    ).toEqual([
+      'CLOSED_ONLY',
+      'NO_ID_SENT',
+      'NOT_THE_ID_SENT',
+      'NOT_THE_KIND_SENT',
+      'NOT_THE_KIND_SENT',
+    ]);
+    expect(
+      waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' })?.message,
+    ).toBe('This held record was sent as a field event: it is saved as one. Nothing was changed.');
+    expect(
+      waiting.savingRefusal(
+        { sentId: id, sentAs: 'CERTIFICATION' },
+        { id: '0199c2d4-1a00-7000-8000-000000101023', kind: 'CERTIFICATION' },
+      )?.message,
+    ).toBe(
+      `A record saved from a held one keeps the id its phone made, ${id}. Nothing was changed.`,
+    );
+  });
+
+  it('AC-10-75 says how it was resolved, in words its record keeps, and is resolved once', () => {
+    const waiting = new HeldResolution(null);
+    expect(waiting.saved('CERTIFICATION')).toBe(
+      'Saved as corrected: a certification under the id its phone made, with its photographs.',
+    );
+    expect(waiting.closed()).toBe(
+      'Closed, never to be saved: what was sent stays here, with its photographs.',
+    );
+    expect(new HeldResolution(null, 'SET_ASIDE_FILE').closed()).toBe(
+      'Closed: the photograph’s own file won’t come; this file stays beside it.',
+    );
+    expect(new HeldResolution('Closed, never to be saved.').refusal()).toEqual({
+      code: 'ALREADY_RESOLVED',
+      message:
+        'This held record is already resolved (Closed, never to be saved.). Nothing was changed.',
+    });
+    expect(new HeldResolution('Closed.', 'SET_ASIDE_FILE').refusal()?.message).toBe(
+      'This file set aside is already resolved (Closed.). Nothing was changed.',
+    );
+    expect(waiting.certNumberHeld('730416')).toEqual({
+      code: 'NUMBER_HELD',
+      message: 'This project already has a certification 730416. Nothing was changed.',
+    });
+    expect(waiting.notInTheProjectSent().code).toBe('NOT_IN_THE_PROJECT_SENT');
   });
 });

@@ -1,12 +1,14 @@
 // The endpoints of a day's assignments (ARCHITECTURE §7; AC-02-24…32; AC-10-27; BACKLOG 2.4.3,
 // C102; ADR-240, 429): a project's board for one day read a page at a time, an assignment
-// written, changed and withdrawn. The door has already asked the caller's role and, for a
+// written, changed, withdrawn (with a note) and put back (ADR-527 (13)). The door has already asked the caller's role and, for a
 // change, that they hold Dispatch (admission.ts); the service asks again inside its own piece of
 // work. The log says what was done or why not, by code: never a name.
 import {
   assignmentsAnswerSchema,
   changeAssignmentEndpoint,
   listAssignmentsEndpoint,
+  searchBoardEndpoint,
+  reinstateAssignmentEndpoint,
   withdrawAssignmentEndpoint,
   writeAssignmentEndpoint,
   type AssignmentsAnswer,
@@ -59,6 +61,25 @@ export class AssignmentsController {
     });
   }
 
+  @Serves(searchBoardEndpoint)
+  async search(
+    @Query() query: QueryOf<typeof searchBoardEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const found = await this.assignments.search(callerOf(request).userId, {
+      userId: query.userId,
+      deviceId: query.deviceId,
+      projectId: query.projectId,
+      from: query.from,
+      to: query.to,
+      withdrawn: query.withdrawn === 'true',
+      after: query.after,
+      limit: query.limit === undefined ? assignmentsPage : Number(query.limit),
+    });
+    if (found === null) throw new Refusal('NOT_ALLOWED', 403);
+    return searchBoardEndpoint.answer.parse(found);
+  }
+
   @Serves(writeAssignmentEndpoint)
   async write(
     @Param() params: ParamsOf<typeof writeAssignmentEndpoint>,
@@ -93,11 +114,27 @@ export class AssignmentsController {
   @Serves(withdrawAssignmentEndpoint)
   async withdraw(
     @Param() params: ParamsOf<typeof withdrawAssignmentEndpoint>,
+    @Body() body: BodyOf<typeof withdrawAssignmentEndpoint>,
     @Req() request: FastifyRequest,
   ) {
-    const outcome = await this.assignments.withdraw(callerOf(request).userId, params.assignmentId);
+    const outcome = await this.assignments.withdraw(
+      callerOf(request).userId,
+      params.assignmentId,
+      body?.note,
+    );
     return withdrawAssignmentEndpoint.answer.parse(
       answered(request, outcome, asRead, 'An assignment was withdrawn.'),
+    );
+  }
+
+  @Serves(reinstateAssignmentEndpoint)
+  async reinstate(
+    @Param() params: ParamsOf<typeof reinstateAssignmentEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.assignments.reinstate(callerOf(request).userId, params.assignmentId);
+    return reinstateAssignmentEndpoint.answer.parse(
+      answered(request, outcome, asRead, 'An assignment was put back.'),
     );
   }
 }

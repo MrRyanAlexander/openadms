@@ -19,14 +19,16 @@
 // that a phone made it:** the phone has proved itself, and the server says both (ADR-466).
 //
 // A time is sent as a UTC instant, with how far the phone's clock stood from UTC beside it
-// (ADR-100), and is read as a `Date`. A photograph's record comes with its upload (2.6.4): a
-// certification's five are photographs like any other's, each naming its certification.
+// (ADR-100), and is read as a `Date`. A photograph's record is not one of these: it is sent
+// after them, in a sync's own part (`syncedPhotoSchema`; ARCHITECTURE §9 (2); ADR-481).
 import {
   boxShapes,
   boxSigns,
+  certificationViews,
   type CertificationKind,
   FieldEventDetails,
   fieldEventKinds,
+  masterPasscodeSessions,
   measuredAs,
   workflows,
 } from '@open-adms/domain';
@@ -92,8 +94,10 @@ export const syncedFieldEventSchema = z
     // The assignment the phone held, and the version of its lists (ADR-240, 324).
     assignmentId: id,
     setupVersion,
-    // Made under the master passcode's temporary session for this monitor (ADR-120).
-    temporarySession: z.boolean(),
+    // Made in a session opened under the master passcode, and which way: as the phone's monitor
+    // or the temporary session for a monitor picked from the roster (ADR-120, 462, 534;
+    // AC-02-42); none in a monitor's own sign-in.
+    masterPasscodeSession: z.enum(masterPasscodeSessions).nullable(),
     // Typed because the barcode wouldn't read, with the reason picked (ADR-111, 173).
     numberTyped: z.boolean(),
     numberTypedReasonId: id.nullable(),
@@ -363,6 +367,53 @@ export const syncedRecordSchema = z.discriminatedUnion('record', [
   z.strictObject({ record: z.literal('CERTIFICATION'), certification: syncedCertificationSchema }),
 ]);
 
+// What a photograph belongs to: a record its phone made, by that record's id (ADR-101, 292).
+export const photoOwnerKinds = [
+  'FIELD_EVENT',
+  'SCALE_RECEIPT',
+  'ROE',
+  'SURVEY',
+  'INCIDENT',
+  'DROP_OFF_LOG',
+  'CERTIFICATION',
+] as const;
+
+// A SHA-256, as 64 lower-case hexadecimal digits (ARCHITECTURE §11).
+const sha256 = z.string().regex(/^[0-9a-f]{64}$/, { message: 'is not a SHA-256 in hex' });
+
+// A photograph's record, sent after the records (ARCHITECTURE §9 (2), §11; ADR-101, 179, 481):
+// what it is of, who took it, when and where, and the two fingerprints, the one taken at
+// capture and the one of the file the phone will upload, each the phone's word, written once.
+// **Never where its file is kept:** the server makes that place, and no phone names one
+// (ADR-481). Whether a depth file goes beside it, where the depth couldn't travel inside, is
+// the phone's to say, by giving that file's own fingerprint too, the phone's word like the other
+// two (ADR-482): the media endpoint checks each file against its own. A certification's five are photographs like any other's, each naming its
+// certification and saying which view it is; no other photograph has a view.
+export const syncedPhotoSchema = z
+  .strictObject({
+    id,
+    projectId: id,
+    owner: z.strictObject({ kind: z.enum(photoOwnerKinds), id }),
+    view: z.enum(certificationViews).nullable(),
+    takenById: id,
+    capturedAt: instant,
+    deviceUtcOffsetMinutes: offset,
+    latitude: fixHalf,
+    longitude: fixHalf,
+    originalSha256: sha256,
+    uploadedSha256: sha256,
+    depthSha256: sha256.nullable(),
+  })
+  .superRefine((photo, context) => {
+    if (photo.view !== null && photo.owner.kind !== 'CERTIFICATION') {
+      context.addIssue({
+        code: 'custom',
+        message: 'Only a certification’s photograph is one of its views.',
+        path: ['view'],
+      });
+    }
+  });
+
 // `Synced…` is a record as a phone sends it (a time as text); `Received…` as the server reads
 // it (a time as a `Date`).
 export type SyncedItem = z.input<typeof syncedItemSchema>;
@@ -384,3 +435,6 @@ export type ReceivedSurvey = z.output<typeof syncedSurveySchema>;
 export type ReceivedRoe = z.output<typeof syncedRoeSchema>;
 export type ReceivedCertification = z.output<typeof syncedCertificationSchema>;
 export type ReceivedRecord = z.output<typeof syncedRecordSchema>;
+export type PhotoOwnerKind = (typeof photoOwnerKinds)[number];
+export type SyncedPhoto = z.input<typeof syncedPhotoSchema>;
+export type ReceivedPhoto = z.output<typeof syncedPhotoSchema>;

@@ -15,9 +15,16 @@
 // ROE number its ROE, a corrected debris type its form. Nothing here judges the correction or
 // the renumber: renumbering a phantom is saved like any other (ADR-028, 051).
 //
-// Not corrected here: a record's id, its project, its workflow and its kind; the server's
-// received time; anything the worker concludes; the audit log. A record under a void, and one
-// locked as invoiced, are tasks 1.8.4's and 1.8.5's to say (ADR-364).
+// Since task 2.8.7 (ADR-534) every captured field is correctable: an ROE's number too (what named
+// the number finds its ROE again, and what named the old one no longer does), the answers to a
+// form's own fields (checked against the version they answer, `answersKept`), and every detail
+// of a certification (its driver, tag, vehicle type, prime and subs, a box's shape, sign and
+// feature, a box added or taken off: `Certifications`).
+//
+// Not corrected here: a record's id, its project, its workflow and its kind (a field event of the
+// wrong kind is made again and the wrong one voided, ADR-364); the server's received time;
+// anything the worker concludes; the audit log. A record locked as invoiced is refused, unless
+// it is one several tickets share, whose locked tickets wait (ADR-367).
 import type {
   AddressSource,
   CarriedTicket,
@@ -33,10 +40,23 @@ import type {
   Survey,
 } from '@open-adms/db';
 import { Prisma } from '@open-adms/db';
-import { fieldEventDetails, GpsFix, type MeasuredAs, Renumber } from '@open-adms/domain';
+import {
+  fieldEventDetails,
+  GpsFix,
+  type MeasuredAs,
+  QuarantineResolution,
+  Renumber,
+} from '@open-adms/domain';
 
-import { type BoxMeasurements, Certifications } from '../certification/certifications.ts';
-import { day, type Outcome, Refused } from '../setup/setup-service.ts';
+import {
+  type BoxCorrection,
+  type BoxInput,
+  type CertificationCorrection,
+  Certifications,
+  type Corrected,
+} from '../certification/certifications.ts';
+import { day, type Outcome, Refused, type Warn } from '../setup/setup-service.ts';
+import { type AnswersGiven, answersKept } from './answers-given.ts';
 import { ReviewService, type Reviewed, ticketOf, type Tx } from './review-service.ts';
 
 // A fix as a reviewer corrects one: both halves as exact decimal text, or none.
@@ -111,6 +131,8 @@ const plain = [
 ] as const satisfies readonly (keyof FieldEventCorrection)[];
 
 export interface RoeCorrection {
+  // Its number corrected: what names it finds this ROE, and what named the old one finds none.
+  readonly roeNumber?: string;
   readonly parcelId?: string | null;
   readonly address?: string | null;
   readonly ownerName?: string | null;
@@ -118,6 +140,7 @@ export interface RoeCorrection {
   // A calendar day, 2026-10-09.
   readonly signedDate?: string | null;
   readonly notes?: string | null;
+  readonly answers?: AnswersGiven;
 }
 
 // One pick of an ROE's scope: a debris type of the project's load form, or a payable type.
@@ -130,6 +153,7 @@ export interface SurveyCorrection {
   readonly surveyNumber?: string | null;
   readonly roeNumber?: string | null;
   readonly notes?: string | null;
+  readonly answers?: AnswersGiven;
 }
 
 export interface IncidentCorrection {
@@ -142,6 +166,7 @@ export interface IncidentCorrection {
   readonly certNumber?: string | null;
   readonly roeNumber?: string | null;
   readonly notes?: string | null;
+  readonly answers?: AnswersGiven;
 }
 
 export interface DropOffLogCorrection {
@@ -149,6 +174,7 @@ export interface DropOffLogCorrection {
   readonly residentName?: string | null;
   readonly originAddress?: string | null;
   readonly notes?: string | null;
+  readonly answers?: AnswersGiven;
 }
 
 export interface ScaleReceiptCorrection {
@@ -165,14 +191,15 @@ function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
 }
 
-// A fix a reviewer typed that can't be one is refused: nobody is waiting at the curb for it.
-export function fixOf(end: 'start' | 'end', corrected: CorrectedFix): CorrectedFix {
+// A fix a reviewer typed that can't be one is refused: nobody is waiting at the curb for it. A
+// form's one fix has no end to name.
+export function fixOf(end: 'start' | 'end' | null, corrected: CorrectedFix): CorrectedFix {
   if (corrected === null) return null;
   const read = new GpsFix(corrected).read();
   if (read.fix === null) {
     throw new Refused({
       code: 'GPS_UNREADABLE',
-      message: `The ${end} GPS can’t be a fix: latitude ${JSON.stringify(corrected.latitude)}, longitude ${JSON.stringify(corrected.longitude)}. Nothing was changed.`,
+      message: `The ${end === null ? '' : `${end} `}GPS can’t be a fix: latitude ${JSON.stringify(corrected.latitude)}, longitude ${JSON.stringify(corrected.longitude)}. Nothing was changed.`,
     });
   }
   return read.fix;
@@ -189,6 +216,7 @@ export class Corrections extends ReviewService {
     return this.review(person, 'CORRECT', note, async (tx, moves) => {
       const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
       const { projectId } = event;
+      await ReviewService.refusedIfLocked(tx, projectId, [ticketOf(event)]);
       // Its certification, its times or its scale receipt may be what is corrected: the
       // tickets that read it as it stands are queued with it.
       await moves(projectId, ticketOf(event));
@@ -275,6 +303,10 @@ export class Corrections extends ReviewService {
         asked.renumber = renumber;
         const refusal = renumber.refusal();
         if (refusal !== null) throw new Refused(refusal);
+        await ReviewService.refusedIfLocked(tx, event.projectId, [
+          ticketOf(event),
+          { workflow: event.workflow, ticketNumber: renumber.to.ticketNumber },
+        ]);
         const record = await tx.fieldEvent.update({
           where: { id: fieldEventId },
           data: renumber.to,
@@ -302,6 +334,7 @@ export class Corrections extends ReviewService {
   ): Promise<Outcome<Reviewed<FieldEventItem>>> {
     return this.review(person, 'CORRECT', note, async (tx) => {
       const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
+      await ReviewService.refusedIfLocked(tx, event.projectId, [ticketOf(event)]);
       const line = { fieldEventId_itemNameId: { fieldEventId, itemNameId } };
       const record =
         quantity === 'TAKEN_OFF'
@@ -329,6 +362,7 @@ export class Corrections extends ReviewService {
   ): Promise<Outcome<Reviewed<CarriedTicket>>> {
     return this.review(person, 'CORRECT', note, async (tx, moves) => {
       const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
+      await ReviewService.refusedIfLocked(tx, event.projectId, [ticketOf(event)]);
       // Another load that lists the same ticket is flagged for it until this one stops.
       await moves(event.projectId, ticketOf(event));
       const listed = { fieldEventId_carriedTicketNumber: { fieldEventId, carriedTicketNumber } };
@@ -406,24 +440,67 @@ export class Corrections extends ReviewService {
       'CORRECT',
       note,
       async (tx) => {
-        const { signedDate, ...rest } = changes;
+        const { signedDate, roeNumber, answers, ...rest } = changes;
+        const roe = await tx.roe.findUniqueOrThrow({ where: { id: roeId } });
+        const { projectId } = roe;
+        const renumbered = roeNumber !== undefined && roeNumber !== roe.roeNumber;
+        if (renumbered) {
+          const holder = await tx.roe.findUnique({
+            where: { projectId_roeNumber: { projectId, roeNumber } },
+          });
+          if (holder !== null) {
+            throw new Refused(new QuarantineResolution(null).roeNumberHeld(roeNumber));
+          }
+        }
+        // The tickets that read it as it stood, before its number moves what points at it.
+        const before = await ReviewService.ticketsOf(tx, { roeId });
         const record = await tx.roe.update({
           where: { id: roeId },
           data: {
             ...rest,
+            ...(renumbered ? { roeNumber } : {}),
             ...(signedDate === undefined
               ? {}
               : { signedDate: signedDate === null ? null : day(signedDate) }),
+            ...(answers === undefined
+              ? {}
+              : await answersKept(
+                  tx,
+                  { projectId, kind: 'ROE', formDefinitionId: roe.formDefinitionId },
+                  answers,
+                )),
           },
         });
+        if (renumbered) await Corrections.repointed(tx, record);
+        const after = await ReviewService.ticketsOf(tx, { roeId });
         return {
           record,
-          projectId: record.projectId,
-          tickets: await ReviewService.ticketsOf(tx, { roeId }),
+          projectId,
+          tickets: [...before, ...after],
+          // A survey's flags read its ROE: the project's surveys are checked again.
+          ...(renumbered ? { projectRecords: true } : {}),
         };
       },
       'PASSED_BY',
     );
+  }
+
+  // A number finds its record (ADR-292, 534 (3)): what names the ROE's number now, and found no
+  // ROE, points at it; what pointed at it under another number points at none. What each
+  // record says it named is never changed.
+  private static async repointed(tx: Tx, roe: Roe): Promise<void> {
+    const { id: roeId, projectId, roeNumber } = roe;
+    const named = { projectId, roeNumber, roeId: null };
+    const left = { roeId, roeNumber: { not: roeNumber } };
+    await tx.fieldEvent.updateMany({ where: left, data: { roeId: null } });
+    await tx.survey.updateMany({ where: left, data: { roeId: null } });
+    await tx.incident.updateMany({ where: left, data: { roeId: null } });
+    await tx.fieldEvent.updateMany({
+      where: { ...named, kind: { in: [...fieldEventDetails.roeId] } },
+      data: { roeId },
+    });
+    await tx.survey.updateMany({ where: named, data: { roeId } });
+    await tx.incident.updateMany({ where: named, data: { roeId } });
   }
 
   // An ROE's scope: a pick added, taken off (the row stays, marked) or put back.
@@ -490,10 +567,18 @@ export class Corrections extends ReviewService {
     return this.review(person, 'CORRECT', note, async (tx) => {
       const survey = await tx.survey.findUniqueOrThrow({ where: { id: surveyId } });
       const { projectId } = survey;
+      const { answers, ...rest } = changes;
       const record = await tx.survey.update({
         where: { id: surveyId },
         data: {
-          ...changes,
+          ...rest,
+          ...(answers === undefined
+            ? {}
+            : await answersKept(
+                tx,
+                { projectId, kind: 'SURVEY', formDefinitionId: survey.formDefinitionId },
+                answers,
+              )),
           ...(changes.roeNumber === undefined
             ? {}
             : { roeId: await Corrections.roeOf(tx, projectId, changes.roeNumber) }),
@@ -519,10 +604,18 @@ export class Corrections extends ReviewService {
           : await tx.certification.findUnique({
               where: { projectId_certNumber: { projectId, certNumber: changes.certNumber } },
             });
+      const { answers, ...rest } = changes;
       const record = await tx.incident.update({
         where: { id: incidentId },
         data: {
-          ...changes,
+          ...rest,
+          ...(answers === undefined
+            ? {}
+            : await answersKept(
+                tx,
+                { projectId, kind: 'INCIDENT', formDefinitionId: incident.formDefinitionId },
+                answers,
+              )),
           ...(changes.certNumber === undefined
             ? {}
             : { certificationId: certification?.id ?? null }),
@@ -542,28 +635,84 @@ export class Corrections extends ReviewService {
     note?: string,
   ): Promise<Outcome<Reviewed<DropOffLog>>> {
     return this.review(person, 'CORRECT', note, async (tx) => {
-      const record = await tx.dropOffLog.update({ where: { id: dropOffLogId }, data: changes });
+      const log = await tx.dropOffLog.findUniqueOrThrow({ where: { id: dropOffLogId } });
+      const { answers, ...rest } = changes;
+      const record = await tx.dropOffLog.update({
+        where: { id: dropOffLogId },
+        data: {
+          ...rest,
+          ...(answers === undefined
+            ? {}
+            : await answersKept(
+                tx,
+                {
+                  projectId: log.projectId,
+                  kind: 'DROP_OFF_LOG',
+                  formDefinitionId: log.formDefinitionId,
+                },
+                answers,
+              )),
+        },
+      });
       return { record, projectId: record.projectId, tickets: [] };
     });
   }
 
-  // A measuring mistake on a certification: its box corrected, its capacity worked out again
-  // (Certifications.measured), and every ticket that scanned it queued to reprocess at the new
-  // capacity, all in one piece of work. One locked as invoiced is named, left off the job, and
-  // waits for its unlock (ADR-057, 079).
+  // A measuring mistake on a certification: one of its boxes corrected (its measurements, its
+  // shape, sign or feature), taken off or put back, its capacity worked out again
+  // (Certifications.boxCorrected), and every ticket that scanned it queued to reprocess at the
+  // new capacity, all in one piece of work. One locked as invoiced is named, left off the job,
+  // and waits for its unlock (ADR-057, 079).
   certification(
     person: string,
     certificationId: string,
     position: number,
-    measurements: BoxMeasurements,
+    change: BoxCorrection,
     note?: string,
   ): Promise<Outcome<Reviewed<Certification>>> {
-    return this.mark(person, 'CORRECT', note, async (tx) => {
-      const { record, queued } = await new Certifications(
-        this.db,
-        this.clock,
-        this.policy,
-      ).measured(tx, person, certificationId, position, measurements);
+    return this.throughCertifications(person, note, (certifications, tx) =>
+      certifications.boxCorrected(tx, person, certificationId, position, change),
+    );
+  }
+
+  // A box the sheet had and the certification lacks: added after its last.
+  certificationBox(
+    person: string,
+    certificationId: string,
+    box: BoxInput,
+    note?: string,
+  ): Promise<Outcome<Reviewed<Certification>>> {
+    return this.throughCertifications(person, note, (certifications, tx) =>
+      certifications.boxAdded(tx, person, certificationId, box),
+    );
+  }
+
+  // The rest of a certification keyed wrong: its driver, tag, vehicle type, prime and subs (the
+  // fix for two spellings of one sub, ADR-529 (f)), representatives and notes.
+  certificationDetails(
+    person: string,
+    certificationId: string,
+    changes: CertificationCorrection,
+    note?: string,
+  ): Promise<Outcome<Reviewed<Certification>>> {
+    return this.throughCertifications(person, note, (certifications, tx, warn) =>
+      certifications.detailsCorrected(tx, warn, person, certificationId, changes),
+    );
+  }
+
+  // A certification's correction, made by its own service in this piece of work, answered with
+  // what it queued: every ticket on its number (and their neighbours), one locked left waiting.
+  private throughCertifications(
+    person: string,
+    note: string | undefined,
+    work: (certifications: Certifications, tx: Tx, warn: Warn) => Promise<Corrected>,
+  ): Promise<Outcome<Reviewed<Certification>>> {
+    return this.mark(person, 'CORRECT', note, async (tx, warn) => {
+      const { record, queued } = await work(
+        new Certifications(this.db, this.clock, this.policy),
+        tx,
+        warn,
+      );
       // Queued by the certification's own service: said in this correction's answer.
       if (queued.jobs.length > 0) this.keep(tx, queued);
       const asked = await ReviewService.asked(

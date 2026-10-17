@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Assignments } from '../src/dispatch/assignments.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { enrolledPhone, proven } from './support/phones.ts';
+import { enrolledPhone, provenWithPasscode } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -116,18 +116,31 @@ const noWork = {
 const assignmentsOn = (tx: Tx, projectId: string) => tx.assignment.count({ where: { projectId } });
 
 describe('who may ask', () => {
-  it('AC-10-27 a day’s board is read by the back office; an assignment is written, changed and withdrawn by an admin or a manager/analyst who holds Dispatch', () => {
+  it('AC-10-27 a day’s board is read by an admin or a manager/analyst let see dispatch; an assignment is written, changed and withdrawn by an admin or a manager/analyst who holds Dispatch', () => {
     const asked = (name: string) => {
       const { access, roles, permission } = endpoints.find((one) => one.name === name) ?? {};
       return [access, roles, permission];
     };
-    expect(asked('listAssignments')).toEqual(['SIGNED_IN', backOfficeRoles, undefined]);
-    for (const name of ['writeAssignment', 'changeAssignment', 'withdrawAssignment']) {
+    expect(asked('listAssignments')).toEqual(['SIGNED_IN', backOfficeRoles, 'VIEW_DISPATCH']);
+    for (const name of [
+      'writeAssignment',
+      'changeAssignment',
+      'withdrawAssignment',
+      'reinstateAssignment',
+    ]) {
       expect(asked(name), name).toEqual(['SIGNED_IN', backOfficeRoles, 'DISPATCH']);
     }
     expect(
       endpoints.filter(({ permission }) => permission === 'DISPATCH').map(({ name }) => name),
-    ).toEqual(['removePhone', 'writeAssignment', 'changeAssignment', 'withdrawAssignment']);
+    ).toEqual([
+      'renamePhone',
+      'removePhone',
+      'returnPhone',
+      'writeAssignment',
+      'changeAssignment',
+      'withdrawAssignment',
+      'reinstateAssignment',
+    ]);
   });
 
   it('AC-10-27 each is refused to nobody and to a read-only viewer; writing, changing and withdrawing to a manager/analyst without the grant, before anything sent is read; Setup opens nothing here; nothing is written', async () => {
@@ -220,7 +233,7 @@ describe('who may ask', () => {
       }
       const luis = await service.withdraw(who.luis, kims.id);
       expect(luis.saved ? '' : luis.refusal.message).toBe(
-        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch". Nothing was changed.',
+        'Luis Ortega may not dispatch: it takes an admin, or a manager/analyst granted "dispatch" and "view dispatch". Nothing was changed.',
       );
       const kept = await tx.assignment.findMany({ where: { projectId: p1.project.id } });
       expect(kept.map(({ id, certifying, archivedAt }) => [id, certifying, archivedAt])).toEqual([
@@ -261,6 +274,7 @@ describe('Monday’s board', () => {
           origin: 'PLANNED',
           madeBy: { id: who.luis, name: 'Luis Ortega' },
           withdrawnAt: null,
+          withdrawalNote: null,
         },
         warnings: [],
       });
@@ -372,7 +386,11 @@ describe('Monday’s board', () => {
       await tx.user.update({ where: { id: p1.jo.id }, data: { archivedAt: new Date() } });
       await tx.device.update({
         where: { id: p1.phones.landfillTower.id },
-        data: { status: 'LOST', outOfServiceAt: new Date('2026-10-12T22:10:00Z') },
+        data: {
+          status: 'LOST',
+          outOfServiceAt: new Date('2026-10-12T22:10:00Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00Z'),
+        },
       });
       expect(notSaved(await write({ ...kims, personId: who.viewer }))).toEqual([
         'PERSON_NOT_ASSIGNABLE',
@@ -581,7 +599,11 @@ describe('an assignment changed and withdrawn', () => {
       ]);
       await tx.device.update({
         where: { id: p1.phones.landfillTower.id },
-        data: { status: 'RETIRED', outOfServiceAt: new Date('2026-10-12T22:10:00Z') },
+        data: {
+          status: 'RETIRED',
+          outOfServiceAt: new Date('2026-10-12T22:10:00Z'),
+          outOfServiceMarkedAt: new Date('2026-10-12T22:10:00Z'),
+        },
       });
       expect(notSaved(await change({ deviceId: p1.phones.landfillTower.id }))[0]).toBe(
         'PHONE_OUT_OF_SERVICE',
@@ -626,6 +648,7 @@ describe('an assignment changed and withdrawn', () => {
       expect(saved(withdrawAssignmentEndpoint, answer).record).toEqual({
         ...kims,
         withdrawnAt: '2026-10-12T10:05:00.000Z',
+        withdrawalNote: null,
       });
       expect(
         await tx.auditRecord.findMany({
@@ -682,7 +705,8 @@ describe('an assignment changed and withdrawn', () => {
       const tower = await enrolledPhone(served, tx, 'P1-TWR-LF');
       const unplanned = { id: randomUUID() };
       const reported = await served.ask('POST', reportUnplannedAssignmentEndpoint.path, {
-        bearer: await proven(served, tower),
+        // The supervisor who set it up, at the phone: the passcode beside its proof (ADR-531).
+        bearer: await provenWithPasscode(served, tower),
         payload: {
           id: unplanned.id,
           projectId: p1.project.id,

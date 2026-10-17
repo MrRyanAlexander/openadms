@@ -7,14 +7,21 @@
 import {
   backOfficeCreated,
   backOfficeRolesChanged,
+  boxShapes,
+  boxSigns,
+  certificationViews,
+  countShapes,
   crewTimeConversions,
   fieldEventKinds,
+  flagCodes,
   incidentOffers,
+  mapFileTypes,
   masterPasscodeSessions,
   measuredAs,
   numberSeries,
   permissions,
   phoneRemovals,
+  photoFileTypes,
   qcStatuses,
   ruleActionKinds,
   ruleCriterionKeys,
@@ -28,12 +35,14 @@ import {
   assignmentRecordSchema,
   assignmentsAnswerSchema,
   csrfAnswerSchema,
+  firmSettingsAnswerSchema,
   healthAnswerSchema,
   masterPasscodeAnswerSchema,
   phoneChallengeAnswerSchema,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
   passcodeSessionOpenedAnswerSchema,
+  offlineSignInTakenAnswerSchema,
   passcodeUseAnswerSchema,
   phoneAddressLookupAnswerSchema,
   phoneListsAnswerSchema,
@@ -41,6 +50,9 @@ import {
   phoneLoginListAnswerSchema,
   phoneMonitorAnswerSchema,
   unplannedAssignmentAnswerSchema,
+  keptFileAnswerSchema,
+  photoFileAnswerSchema,
+  photoFiles,
   phoneEnrolledAnswerSchema,
   phoneProvenAnswerSchema,
   provenPhoneAnswerSchema,
@@ -60,10 +72,57 @@ import {
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
 } from './api-answers.ts';
+import {
+  correctedRecordSchema,
+  heldRecordSchema,
+  heldRecordsAnswerSchema,
+  quarantinedRecordsAnswerSchema,
+  setAsideFileSchema,
+  setAsideFilesAnswerSchema,
+} from './held-answers.ts';
 import { places } from './field-event-details.ts';
+import {
+  boardSearchAnswerSchema,
+  certificationReadSchema,
+  certificationsAnswerSchema,
+  dropOffLogsAnswerSchema,
+  fieldEventAnswerSchema,
+  flagsAnswerSchema,
+  formsAnswerSchema,
+  incidentsAnswerSchema,
+  invoiceBatchAnswerSchema,
+  invoiceBatchesAnswerSchema,
+  listValuesAnswerSchema,
+  mapVersionAnswerSchema,
+  mapVersionsAnswerSchema,
+  payItemRatesAnswerSchema,
+  payItemsAnswerSchema,
+  phoneSessionsAnswerSchema,
+  previewAnswer,
+  projectAnswerSchema,
+  projectsAnswerSchema,
+  reviewQueueAnswerSchema,
+  roesAnswerSchema,
+  rulesAnswerSchema,
+  scaleReceiptAnswerSchema,
+  severalAnswer,
+  siteShapeVersionsAnswerSchema,
+  sitesAnswerSchema,
+  surveysAnswerSchema,
+  ticketAnswerSchema,
+  ticketDecisionsAnswerSchema,
+  auditTrailAnswerSchema,
+  setAsideJobsAnswerSchema,
+  viewerCertificationsAnswerSchema,
+  viewerDropOffLogsAnswerSchema,
+  viewerIncidentsAnswerSchema,
+  viewerSetupAnswerSchema,
+  viewerSurveysAnswerSchema,
+} from './read-answers.ts';
 import { formDefinitionFields } from './form-definition.ts';
 import {
   assignedWork,
+  offlineSignInReportSchema,
   once,
   passcodeUseReportSchema,
   unplannedAssignmentReportSchema,
@@ -82,6 +141,7 @@ import {
   photographRecordSchema,
   qcMarkRecordSchema,
   quarantinedRecordSchema,
+  reprocessRecordSchema,
   roeRecordSchema,
   roeScopeItemRecordSchema,
   scaleReceiptRecordSchema,
@@ -89,25 +149,38 @@ import {
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
 } from './review-answers.ts';
-import { cornerCount, inches } from './sync-records.ts';
+import {
+  certificationBoxesAtMost,
+  certificationHelpersAtMost,
+  cornerCount,
+  inches,
+  syncedCertificationBoxSchema,
+} from './sync-records.ts';
 import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
+import { turnInAnswerSchema, turnInSentSchema } from './turn-in.ts';
 import {
   billingUnits,
   clientRecordSchema,
+  closingCheckAnswerSchema,
   contractorKinds,
   contractorPlaceRecordSchema,
   contractorRecordSchema,
   contractRecordSchema,
   controlRangeRecordSchema,
+  crewDayStepsRecordSchema,
   declarationEventRecordSchema,
   fieldTagRecordSchema,
+  firmLists,
   formDebrisTypeRecordSchema,
+  reasonUses,
   formDefinitionRecordSchema,
   formDocumentTypes,
   formRecordSchema,
   foundAnswer,
   listValueRecordSchema,
   mapSources,
+  mapFileId,
+  mapFileRecordSchema,
   mapVersionRecordSchema,
   numberSeriesRecordSchema,
   payItemRateRecordSchema,
@@ -121,6 +194,7 @@ import {
   setupCheckAnswerSchema,
   siteAreaSources,
   siteAreaVersionRecordSchema,
+  siteLabelRecordSchema,
   siteRecordSchema,
   siteTippingFeeRecordSchema,
   ticketNumberSources,
@@ -139,13 +213,17 @@ export type EndpointMethod = (typeof endpointMethods)[number];
 // device key, by the token its proof gave it, sent as `Authorization: Bearer` and never as a
 // cookie (ARCHITECTURE §6, Device sessions; ADR-440). `MONITOR_ON_PHONE`: a proven phone, by
 // that token, and the monitor signed in on it, by their session's token in the header named
-// below: both are read from the database on every request (ADR-443).
+// below: both are read from the database on every request (ADR-443). `PHONE_IN_USE`: a proven
+// phone with somebody signed in on it (ADR-531, the user: a phone with nobody signed in sends
+// nothing): a monitor's session, as `MONITOR_ON_PHONE` takes it, or the master passcode sent
+// beside its proof, the master user at the phone. What a phone sends is open to it alone.
 export const endpointAccess = [
   'ANYBODY',
   'SIGNED_IN',
   'REFRESH_TOKEN',
   'PROVEN_PHONE',
   'MONITOR_ON_PHONE',
+  'PHONE_IN_USE',
 ] as const;
 
 export type EndpointAccess = (typeof endpointAccess)[number];
@@ -181,6 +259,12 @@ export interface Endpoint {
   // Served even to a person who must first set an authenticator up (ADR-412): only what they
   // need to do that. Left out, such a person is refused.
   readonly beforeTwoStepSetup?: true;
+  // On a `PROVEN_PHONE` or `PHONE_IN_USE` endpoint, and only there: served even to a phone taken
+  // out of service, and to one whose key the firm's time revoked, proven with the master passcode
+  // beside it (ADR-530, 531): only what gets its records onto the server and the phone turned in,
+  // and its read of itself. Left out, a phone out of service is refused (`PHONE_OUT_OF_SERVICE`),
+  // and a revoked one is proven no more.
+  readonly outOfServiceToo?: true;
   readonly method: EndpointMethod;
   // From the root, a parameter written `:name`: `/projects/:projectId`.
   readonly path: string;
@@ -188,8 +272,26 @@ export interface Endpoint {
   readonly params?: z.ZodObject;
   readonly query?: z.ZodObject;
   readonly body?: z.ZodType;
+  // The one kind of endpoint that takes a file (AC-10-47; ADR-482, 485): its body is a part of
+  // one, as bytes of `filePartMediaType`, never JSON, and no `body` schema is given. Only the
+  // media endpoint is one, and the map's file, sent whole at the back office (KD-76).
+  readonly file?: true;
+  // The one kind of endpoint that answers a file (AC-10-48; ADR-483): its answer is the bytes
+  // that were kept, under one of `answerFileTypes`, never JSON, and always a download. Only the
+  // back office's read of a photograph's file is one, and only a `GET`.
+  readonly answersFile?: true;
+  // The types the file it answers is kept under, where they are not a photograph's: a map's
+  // file (ADR-535 (2)).
+  readonly answersFileOf?: readonly string[];
   readonly answer: z.ZodType;
 }
+
+// What a part of a file is sent as (the tus protocol's word for bytes that go at an offset).
+export const filePartMediaType = 'application/offset+octet-stream';
+
+// The types a file is answered under: the kinds of image a photograph's file is kept as, told by
+// its own first bytes (the domain's `photoFileTypes`, ADR-482 (3)).
+export const answerFileTypes = photoFileTypes;
 
 type JsonSchema = Readonly<Record<string, unknown>>;
 
@@ -230,6 +332,17 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
       `The endpoint ${defined.name} would take a field nobody named: ${open.join(', ')}.`,
     );
   }
+  if (defined.file === true && (defined.body !== undefined || defined.method === 'GET')) {
+    throw new Error(
+      `The endpoint ${defined.name} takes a file: its body is that, and nothing else.`,
+    );
+  }
+  if (defined.answersFileOf !== undefined && defined.answersFile !== true) {
+    throw new Error(`The endpoint ${defined.name} names the types of a file it doesn’t answer.`);
+  }
+  if (defined.answersFile === true && (defined.method !== 'GET' || defined.file === true)) {
+    throw new Error(`The endpoint ${defined.name} answers a file: it is a GET, and takes none.`);
+  }
   const roles = defined.roles ?? [];
   const signedIn = defined.access === 'SIGNED_IN';
   if (
@@ -238,6 +351,20 @@ export function endpoint<const E extends Endpoint>(defined: E): E {
   ) {
     throw new Error(
       `The endpoint ${defined.name} doesn’t say whole who may call it: a signed-in endpoint names its roles, no other does, and a permission is asked only where a manager/analyst may call.`,
+    );
+  }
+  if (
+    defined.outOfServiceToo === true &&
+    defined.access !== 'PROVEN_PHONE' &&
+    defined.access !== 'PHONE_IN_USE'
+  ) {
+    throw new Error(
+      `The endpoint ${defined.name}: only a proven phone’s endpoint is served to a phone out of service.`,
+    );
+  }
+  if (defined.access === 'PHONE_IN_USE' && defined.outOfServiceToo !== true) {
+    throw new Error(
+      `The endpoint ${defined.name}: what a phone sends is taken from a phone out of service too (ADR-134).`,
     );
   }
   return defined;
@@ -258,14 +385,20 @@ export interface Sent {
   readonly body: unknown;
 }
 
+// A part of a file, as a request's body: bytes, at least one.
+export const isFilePart = (body: unknown): body is Uint8Array =>
+  body instanceof Uint8Array && body.byteLength > 0;
+
 // What a request sent, as the endpoint's schemas read it; undefined when any part is refused.
 export function taken(served: Endpoint, sent: Sent): Sent | undefined {
   const params = (served.params ?? nothing).safeParse(sent.params ?? {});
   const query = (served.query ?? nothing).safeParse(sent.query ?? {});
   const body =
-    served.body === undefined
-      ? { success: sent.body === undefined, data: undefined }
-      : served.body.safeParse(sent.body);
+    served.file === true
+      ? { success: isFilePart(sent.body), data: sent.body }
+      : served.body === undefined
+        ? { success: sent.body === undefined, data: undefined }
+        : served.body.safeParse(sent.body);
   if (!params.success || !query.success || !body.success) return undefined;
   return { params: params.data, query: query.data, body: body.data };
 }
@@ -276,6 +409,18 @@ export const healthEndpoint = endpoint({
   access: 'ANYBODY',
   method: 'GET',
   path: '/health',
+  answer: healthAnswerSchema,
+});
+
+// Whether the API can serve now (ADR-507): it answers and its database answers it. Status 503
+// `UNAVAILABLE` otherwise, never which part or why. Anybody may ask, as the health answer.
+export const readinessEndpoint = endpoint({
+  name: 'readiness',
+  summary:
+    'That the API answers and its database answers it: status 503 UNAVAILABLE otherwise. Anybody may ask.',
+  access: 'ANYBODY',
+  method: 'GET',
+  path: '/readiness',
   answer: healthAnswerSchema,
 });
 
@@ -427,6 +572,22 @@ export const confirmTwoStepSetupEndpoint = endpoint({
   answer: sessionAnswerSchema,
 });
 
+// A person removes their own authenticator with a code from it (ADR-530; ASVS 6.4.x; C91): a
+// code good once, a wrong one a wrong try, as at sign-in. Their other sessions end, it is a
+// security event, and they are told by mail. Whoever's role needs one sets the next one up
+// before anything else: replacing an authenticator is removing it and setting the next one up.
+export const removeOwnTwoStepEndpoint = endpoint({
+  name: 'removeOwnTwoStep',
+  summary:
+    'The signed-in person removes their own authenticator, giving a code from it. Their other sessions end; it is a security event, and they are told by mail. Whoever must have one then sets a new one up before anything else. A code that isn’t taken is a wrong try, as at sign-in.',
+  access: 'SIGNED_IN',
+  roles: signedInRoles,
+  method: 'POST',
+  path: '/two-step/removals',
+  body: z.strictObject({ code: z.string().min(1).max(32) }),
+  answer: twoStepClearedAnswerSchema,
+});
+
 // An admin clears the authenticator of somebody who lost the phone that held it (AC-10-26). The
 // person's sessions end, and they set one up again at their next sign-in.
 export const clearTwoStepEndpoint = endpoint({
@@ -487,6 +648,7 @@ export const readPersonEndpoint = endpoint({
     'One person, as an admin or a manager/analyst reads them. A monitor’s phone number is in an admin’s answer only.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/people/:userId',
   params: personId,
@@ -572,14 +734,19 @@ export const peoplePageAtMost = 200;
 export const listPeopleEndpoint = endpoint({
   name: 'listPeople',
   summary:
-    'The firm’s people, a page at a time, in the order they were added: those in service, or the archived ones. A monitor’s phone number is in an admin’s answer only.',
+    'The firm’s people, a page at a time, in the order they were added or by name: those in service, or the archived ones, of one role, or those whose name holds what is searched. A monitor’s phone number is in an admin’s answer only.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/people',
   query: z.strictObject({
     role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'MONITOR', 'READ_ONLY_VIEWER']).optional(),
     archived: z.enum(['true', 'false']).optional(),
+    // What the name holds, anywhere in it, in any case (C101; ADR-535 (1)).
+    name: z.string().trim().min(1).max(200).optional(),
+    // In the order they were added (left out), or by name.
+    order: z.enum(['ADDED', 'NAME']).optional(),
     // The last person of the page before: the answer's `next`.
     after: z.uuid().optional(),
     // How many at most: 50 where none is said.
@@ -599,7 +766,7 @@ export const listPeopleEndpoint = endpoint({
 export const changePersonEndpoint = endpoint({
   name: 'changePerson',
   summary:
-    'An admin changes a person’s name, email address or phone number, and a read-only viewer’s kind, contractor and whether they see private citizens by name. Only what is stated changes. A changed sign-in address is told to the old one where the firm has mail.',
+    'An admin changes a person’s name, email address or phone number, their employer and its ID for them, and a read-only viewer’s kind, contractor and whether they see private citizens by name. Only what is stated changes; an address is cleared only on a monitor. A changed sign-in address is told to the old one where the firm has mail.',
   access: 'SIGNED_IN',
   roles: adminOnly,
   method: 'PATCH',
@@ -608,11 +775,16 @@ export const changePersonEndpoint = endpoint({
   body: z
     .strictObject({
       name: newPerson.name.optional(),
-      email: newPerson.email.optional(),
+      // Cleared with null only on a person who doesn't sign in with it: a monitor.
+      email: newPerson.email.nullable().optional(),
       phone: z.string().trim().min(1).max(40).nullable().optional(),
       viewerKind: z.enum(['CLIENT', 'CONTRACTOR', 'AUDITOR']).optional(),
       contractorId: z.uuid().optional(),
       seesPrivateCitizens: z.boolean().optional(),
+      // Who employs them when it isn't the firm (a contractor of the firm's), and the ID that
+      // employer gives them; each cleared with null (AC-02-03; ADR-527 (12)).
+      employerId: z.uuid().nullable().optional(),
+      employerNumber: z.string().trim().min(1).max(60).nullable().optional(),
     })
     .refine((changes) => Object.keys(changes).length > 0),
   answer: personAnswerSchema,
@@ -667,11 +839,35 @@ const contact = {
 };
 // A calendar day: 2026-10-12.
 const day = z.iso.date();
-// The start of what a search matches, anywhere in the name; left out, everything not archived.
-const searched = z.strictObject({ search: z.string().trim().max(200).optional() });
+// What a search matches, anywhere in the name, a page at a time in name order (ADR-527 (3)):
+// left out, every record. A page holds 50 where none is said, 200 at most.
+const searched = z.strictObject({
+  search: z.string().trim().max(200).optional(),
+  // The last record of the page before: the answer's `next`.
+  after: z.uuid().optional(),
+  limit: z
+    .string()
+    .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+    .optional(),
+});
+// A firm-wide record changed (ADR-527 (1)): only what is stated, a contact or a note cleared
+// with null.
+const changedContact = {
+  contactName: contact.contactName.unwrap().nullable().optional(),
+  contactEmail: contact.contactEmail.unwrap().nullable().optional(),
+  contactPhone: contact.contactPhone.unwrap().nullable().optional(),
+};
+const clientId = z.strictObject({ clientId: z.uuid() });
+const declarationEventId = z.strictObject({ declarationEventId: z.uuid() });
+const contractorId = z.strictObject({ contractorId: z.uuid() });
+const contractId = z.strictObject({ contractId: z.uuid() });
 const projectId = z.strictObject({ projectId: z.uuid() });
 // A number of a series: the database says where a series may start and end.
 const seriesNumber = z.number().int().min(1).max(2_000_000_000);
+// A whole number a column holds (Postgres's `integer`): one past it is refused here, never sent
+// to the database to fail there (OWASP ASVS 5.0 1.4.2; AC-10-63; ADR-513). Inside that range a
+// column's own check says what it refuses, in plain words (ADR-424).
+const columnInteger = z.number().int().min(-2_147_483_648).max(2_147_483_647);
 const stated = (changes: object): boolean => Object.keys(changes).length > 0;
 
 // Step 1: search first; a client the firm has is picked, never created again (ADR-023).
@@ -699,6 +895,24 @@ export const createClientEndpoint = endpoint({
   answer: savedAnswer(clientRecordSchema),
 });
 
+export const changeClientEndpoint = endpoint({
+  ...setup,
+  name: 'changeClient',
+  summary:
+    'Changes a client’s name, contact or notes; one left out stays as it is, and a contact or the notes are cleared with null. Audited with the value before.',
+  method: 'PATCH',
+  path: '/clients/:clientId',
+  params: clientId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      ...changedContact,
+      notes: z.string().trim().min(1).max(4000).nullable().optional(),
+    })
+    .refine(stated),
+  answer: savedAnswer(clientRecordSchema),
+});
+
 // Step 2: by its name or its reference; one declaration event is shared by every client's
 // projects under it (ADR-026).
 export const findDeclarationEventsEndpoint = endpoint({
@@ -719,6 +933,24 @@ export const createDeclarationEventEndpoint = endpoint({
   method: 'POST',
   path: '/declaration-events',
   body: z.strictObject({ name: named, reference: named, referenceTypeId: z.uuid() }),
+  answer: savedAnswer(declarationEventRecordSchema),
+});
+
+export const changeDeclarationEventEndpoint = endpoint({
+  ...setup,
+  name: 'changeDeclarationEvent',
+  summary:
+    'Changes a declaration event’s name, its reference as written or its reference type; one left out stays as it is. Audited with the value before.',
+  method: 'PATCH',
+  path: '/declaration-events/:declarationEventId',
+  params: declarationEventId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      reference: named.optional(),
+      referenceTypeId: z.uuid().optional(),
+    })
+    .refine(stated),
   answer: savedAnswer(declarationEventRecordSchema),
 });
 
@@ -770,12 +1002,12 @@ export const changeProjectSettingsEndpoint = endpoint({
     .strictObject({
       allowSplitLoads: z.boolean().optional(),
       // Empty switches the limit off.
-      loadCallLowLimit: z.number().int().nullable().optional(),
-      loadCallHighLimit: z.number().int().nullable().optional(),
-      stumpFillDepthInches: z.number().int().optional(),
+      loadCallLowLimit: columnInteger.nullable().optional(),
+      loadCallHighLimit: columnInteger.nullable().optional(),
+      stumpFillDepthInches: columnInteger.optional(),
       stumpCheckRootBallWider: z.boolean().optional(),
       stumpCheckFillNeedsExposure: z.boolean().optional(),
-      siteCircleMeters: z.number().int().optional(),
+      siteCircleMeters: columnInteger.optional(),
       timeClockEnabled: z.boolean().optional(),
     })
     .refine(stated),
@@ -796,13 +1028,43 @@ export const changeProjectWindowEndpoint = endpoint({
   answer: savedAnswer(projectRecordSchema),
 });
 
+// A project closed is closed (ADR-529 (b)): an admin closes it by hand, having read what is still
+// open; nothing in it changes after (the database refuses it), and field work for it that arrives
+// later is held for a person. An admin reopens it, with a reason.
+export const closingCheckEndpoint = endpoint({
+  name: 'closingCheck',
+  summary:
+    'What is still open on a project before an admin closes it: phones that took its work and weren’t turned in, tickets not QC Approved or not locked as invoiced, records waiting for a person. It never stops the close.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'GET',
+  path: '/projects/:projectId/closing-check',
+  params: projectId,
+  answer: closingCheckAnswerSchema,
+});
+
 export const closeProjectEndpoint = endpoint({
-  ...setup,
   name: 'closeProject',
-  summary: 'Closes a project: the mark and its time. Nothing under it is deleted or refused after.',
+  summary:
+    'An admin closes a project: its assignments are withdrawn and its phones’ unused numbers retired, and nothing in it changes after; what was still open is said with it. Field work for it that arrives later is held for a person. A project closed already is answered as it stands. Refused only while the worker is still working its tickets.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
   method: 'POST',
   path: '/projects/:projectId/closings',
   params: projectId,
+  answer: savedAnswer(projectRecordSchema),
+});
+
+export const reopenProjectEndpoint = endpoint({
+  name: 'reopenProject',
+  summary:
+    'An admin reopens a closed project, with a reason, audited. Its withdrawn assignments and retired numbers stay as they are.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/projects/:projectId/reopenings',
+  params: projectId,
+  body: z.strictObject({ reason: z.string().trim().min(1).max(500) }),
   answer: savedAnswer(projectRecordSchema),
 });
 
@@ -878,6 +1140,24 @@ export const createContractorEndpoint = endpoint({
   answer: savedAnswer(contractorRecordSchema),
 });
 
+export const changeContractorEndpoint = endpoint({
+  ...setup,
+  name: 'changeContractor',
+  summary:
+    'Changes a contractor’s name, kind or contact; one left out stays as it is, and a contact is cleared with null. Audited with the value before.',
+  method: 'PATCH',
+  path: '/contractors/:contractorId',
+  params: contractorId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      kind: z.enum(contractorKinds).optional(),
+      ...changedContact,
+    })
+    .refine(stated),
+  answer: savedAnswer(contractorRecordSchema),
+});
+
 export const addPrimeEndpoint = endpoint({
   ...setup,
   name: 'addPrime',
@@ -909,6 +1189,28 @@ export const createContractEndpoint = endpoint({
   answer: savedAnswer(contractRecordSchema),
 });
 
+// Its prime stays as entered: the prime is what its rules run on (ADR-527 (2)).
+export const changeContractEndpoint = endpoint({
+  ...setup,
+  name: 'changeContract',
+  summary:
+    'Changes a contract’s name or the link to its signed copy (cleared with null); its prime stays as entered (a contract has one prime; another prime has a contract of its own). Audited with the value before.',
+  method: 'PATCH',
+  path: '/contracts/:contractId',
+  params: contractId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      signedCopyUrl: z
+        .url({ protocol: /^https$/ })
+        .max(2000)
+        .nullable()
+        .optional(),
+    })
+    .refine(stated),
+  answer: savedAnswer(contractRecordSchema),
+});
+
 // The firm's own values on its lists (spec/LISTS.md): added at the end, with a name and no key.
 export const addDebrisTypeEndpoint = endpoint({
   ...setup,
@@ -927,6 +1229,65 @@ export const addPayableTypeEndpoint = endpoint({
   method: 'POST',
   path: '/payable-types',
   body: z.strictObject({ name: named }),
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+// A value of any of the firm's lists, or a project's field tag, by its list and its id
+// (spec/LISTS.md; ADR-527 (6)): renamed, archived and put back. A built-in value is renamed if
+// the firm uses another word, never archived.
+const listValue = z.strictObject({ list: z.enum(firmLists), valueId: z.uuid() });
+
+export const addListValueEndpoint = endpoint({
+  ...setup,
+  name: 'addListValue',
+  summary:
+    'Adds a value of the firm’s own to one of its lists, at the end, with a name and what its list asks beside it: a program type whether it requires ROEs, a kind of unit rate work the shape of its count, an item name its kind of work, a vehicle type what it certifies, an incident sub-type its incident type, a reason where it is offered. A field tag is added on its project.',
+  method: 'POST',
+  path: '/lists/:list/values',
+  params: z.strictObject({ list: z.enum(firmLists) }),
+  body: z.strictObject({
+    name: named,
+    requiresRoe: z.boolean().optional(),
+    countShape: z.enum(countShapes).optional(),
+    kindOfWorkId: z.uuid().optional(),
+    certifies: z.enum(['CONTAINER', 'CREW']).optional(),
+    incidentTypeId: z.uuid().optional(),
+    uses: z.array(z.enum(reasonUses)).min(1).max(reasonUses.length).refine(once).optional(),
+  }),
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+export const renameListValueEndpoint = endpoint({
+  ...setup,
+  name: 'renameListValue',
+  summary:
+    'Renames a value of one of the firm’s lists, or a project’s field tag; a built-in value too. Nothing the system does follows a name.',
+  method: 'PATCH',
+  path: '/lists/:list/values/:valueId',
+  params: listValue,
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+export const archiveListValueEndpoint = endpoint({
+  ...setup,
+  name: 'archiveListValue',
+  summary:
+    'Archives a value of one of the firm’s lists, or a project’s field tag: off new picks, kept on old records. A built-in value is never archived. Each project whose rules pick it has its tickets not locked as invoiced queued.',
+  method: 'POST',
+  path: '/lists/:list/values/:valueId/archivings',
+  params: listValue,
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+export const unarchiveListValueEndpoint = endpoint({
+  ...setup,
+  name: 'unarchiveListValue',
+  summary:
+    'Puts an archived list value back, as it was. Each project whose rules pick it has its tickets not locked as invoiced queued.',
+  method: 'POST',
+  path: '/lists/:list/values/:valueId/unarchivings',
+  params: listValue,
   answer: savedAnswer(listValueRecordSchema),
 });
 
@@ -951,7 +1312,6 @@ export const createFormEndpoint = endpoint({
   body: z.strictObject({
     documentType: z.enum(formDocumentTypes),
     name: named,
-    enabled: z.boolean(),
     gpsRequired: z.boolean().optional(),
     // An empty list: the incident form offers none of the three.
     incidentOffers: z
@@ -960,6 +1320,32 @@ export const createFormEndpoint = endpoint({
       .refine(once)
       .optional(),
   }),
+  answer: savedAnswer(formRecordSchema),
+});
+
+// What a form says is changed (ADR-527 (4)): "GPS required" on the ROE form, and what an incident
+// offers on the incident form, and on no other, as the database holds them. A form is never
+// archived and has no Enabled box (ADR-529 (d)): a load, haul-out or unit rate form is used by
+// the project's workflows, and the forms that are no ticket's by the day's assignments.
+export const changeFormEndpoint = endpoint({
+  ...setup,
+  name: 'changeForm',
+  summary:
+    'Changes a form’s name, "GPS required" (the ROE form’s) or what an incident offers the monitors (the incident form’s); one left out stays as it is.',
+  method: 'PATCH',
+  path: '/forms/:formId',
+  params: formId,
+  body: z
+    .strictObject({
+      name: named.optional(),
+      gpsRequired: z.boolean().optional(),
+      incidentOffers: z
+        .array(z.enum(incidentOffers))
+        .max(incidentOffers.length)
+        .refine(once)
+        .optional(),
+    })
+    .refine(stated),
   answer: savedAnswer(formRecordSchema),
 });
 
@@ -977,6 +1363,26 @@ export const addFormDebrisTypeEndpoint = endpoint({
     reductionMethodId: z.uuid().optional(),
     hiddenOnPhones: z.boolean(),
   }),
+  answer: savedAnswer(formDebrisTypeRecordSchema),
+});
+
+const formDebrisTypeId = z.strictObject({ formDebrisTypeId: z.uuid() });
+
+export const changeFormDebrisTypeEndpoint = endpoint({
+  ...setup,
+  name: 'changeFormDebrisType',
+  summary:
+    'Changes a debris type’s entry on a form: Reduced, its reduction method (cleared with null) or whether phones hide it; one left out stays as it is. One not Reduced on a haul-out form is saved with a warning.',
+  method: 'PATCH',
+  path: '/form-debris-types/:formDebrisTypeId',
+  params: formDebrisTypeId,
+  body: z
+    .strictObject({
+      reduced: z.boolean().optional(),
+      reductionMethodId: z.uuid().nullable().optional(),
+      hiddenOnPhones: z.boolean().optional(),
+    })
+    .refine(stated),
   answer: savedAnswer(formDebrisTypeRecordSchema),
 });
 
@@ -1076,6 +1482,27 @@ export const setPayItemRateEndpoint = endpoint({
   params: z.strictObject({ payItemId: z.uuid(), primeId: z.uuid() }),
   body: z.strictObject({ rate }),
   answer: savedAnswer(payItemRateRecordSchema),
+});
+
+// A crew day's steps, stated whole (ADR-087, 527 (7)): hours to a hundredth, a quantity to four
+// decimals, as exact decimals. A step not named is archived.
+const stepHours = z.string().regex(/^\d{1,2}(\.\d{1,2})?$/);
+const stepQuantity = z.string().regex(/^\d{1,10}(\.\d{1,4})?$/);
+
+export const setCrewDayStepsEndpoint = endpoint({
+  ...setup,
+  name: 'setCrewDaySteps',
+  summary:
+    'States a pay item’s crew day steps whole: hours from and to, both included, and the quantity they bill. One not named is taken off. Two that share an hour aren’t saved. The project’s tickets not locked as invoiced are queued.',
+  method: 'PUT',
+  path: '/pay-items/:payItemId/crew-day-steps',
+  params: payItemId,
+  body: z.strictObject({
+    steps: z
+      .array(z.strictObject({ fromHours: stepHours, toHours: stepHours, quantity: stepQuantity }))
+      .max(50),
+  }),
+  answer: savedAnswer(crewDayStepsRecordSchema),
 });
 
 // Step 8. One line of a rule's "ifs" (spec/RULES.md §3, §4): a picked value by its record's id
@@ -1181,19 +1608,6 @@ const siteFacts = {
 // and a zone's name and nothing else; what it can't read isn't saved, and the answer says why.
 const geoJson = z.json();
 
-// The second spelling is archived, pointing at the one kept; nothing is deleted (ADR-108, 321).
-export const mergeContractorEndpoint = endpoint({
-  ...setup,
-  name: 'mergeContractor',
-  summary:
-    'Merges a sub typed twice at certification into the contractor that is kept: the kept one takes its place on each project, the certifications that named it name the kept one, and it is archived. The tickets of those certifications not locked as invoiced are queued.',
-  method: 'POST',
-  path: '/contractors/:contractorId/merges',
-  params: z.strictObject({ contractorId: z.uuid() }),
-  body: z.strictObject({ intoContractorId: z.uuid() }),
-  answer: savedAnswer(contractorRecordSchema),
-});
-
 // Step 7. A site belongs to one project and is entered again on each that uses it (ADR-145).
 export const createSiteEndpoint = endpoint({
   ...setup,
@@ -1245,6 +1659,33 @@ export const changeSiteEndpoint = endpoint({
   answer: savedAnswer(siteRecordSchema),
 });
 
+// One of the firm's own labels on a site: given, removed when given by mistake, and given back on
+// the same row (ADR-194, 215, 529 (g); AC-01-58). It changes nothing the system does, so nothing
+// is queued.
+const siteLabel = z.strictObject({ siteId: z.uuid(), siteLabelId: z.uuid() });
+
+export const giveSiteLabelEndpoint = endpoint({
+  ...setup,
+  name: 'giveSiteLabel',
+  summary:
+    'Gives a site one of the firm’s own site labels, or gives back one removed. It changes nothing the system does.',
+  method: 'PUT',
+  path: '/sites/:siteId/labels/:siteLabelId',
+  params: siteLabel,
+  answer: savedAnswer(siteLabelRecordSchema),
+});
+
+export const removeSiteLabelEndpoint = endpoint({
+  ...setup,
+  name: 'removeSiteLabel',
+  summary:
+    'Removes a label given to a site by mistake: audited, never deleted; give it again to put it back.',
+  method: 'POST',
+  path: '/sites/:siteId/labels/:siteLabelId/removals',
+  params: siteLabel,
+  answer: savedAnswer(siteLabelRecordSchema),
+});
+
 export const addSiteShapeEndpoint = endpoint({
   ...setup,
   name: 'addSiteShape',
@@ -1261,11 +1702,22 @@ export const linkTippingFeeEndpoint = endpoint({
   ...setup,
   name: 'linkTippingFee',
   summary:
-    'Links a site to a tipping fee pay item written from it: how a fee line is told from a hauling line. A site may keep several.',
+    'Links a site to a tipping fee pay item written from it: how a fee line is told from a hauling line. A site may keep several. A link removed is linked again.',
   method: 'POST',
   path: '/sites/:siteId/tipping-fees',
   params: siteId,
   body: z.strictObject({ payItemId: z.uuid() }),
+  answer: savedAnswer(siteTippingFeeRecordSchema),
+});
+
+export const removeTippingFeeEndpoint = endpoint({
+  ...setup,
+  name: 'removeTippingFee',
+  summary:
+    'Removes a site’s link to a tipping fee pay item made by mistake: audited, never deleted; link it again to put it back. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/sites/:siteId/tipping-fees/:payItemId/removals',
+  params: z.strictObject({ siteId: z.uuid(), payItemId: z.uuid() }),
   answer: savedAnswer(siteTippingFeeRecordSchema),
 });
 
@@ -1290,14 +1742,122 @@ export const loadMapEndpoint = endpoint({
   answer: savedAnswer(mapVersionRecordSchema),
 });
 
+// A map's file, larger than a request's body may be (ARCHITECTURE §3 "Project boundary and
+// zones", §6 "Uploads"; BACKLOG 2.6.4, C86, C100; ADR-311, 401, 485; KD-76): a zipped shapefile
+// (with its `.prj`, converted to longitude and latitude where it is projected) or a GeoJSON
+// file, sent whole, as bytes, by a route with its own size limit (`MAP_FILE_BYTES_AT_MOST`).
+// The server tells its kind by its first bytes, reads it, and keeps it once, where it places
+// it, only when it holds a layer; the answer says what it found. A map or a site's shape is
+// then loaded from it by its id, the layers picked by name. Its name is never sent with it: a
+// map version is told the name the person knows it by, as a label (`sourceName`).
+const mapFileNamed = z.strictObject({ projectId: z.uuid(), mapFileId });
+const mapLayer = z.string().min(1).max(500);
+
+export const sendMapFileEndpoint = endpoint({
+  ...setup,
+  name: 'sendMapFile',
+  summary:
+    'Sends a map’s file for a project, whole, as bytes: a zipped shapefile (its .shp, .dbf and .prj; a projected one is converted to longitude and latitude) or a GeoJSON file, at most the policy’s size. The server tells its kind by its own first bytes, reads every layer it holds and keeps it once, where it places it; a file it can’t read is not kept, and the answer says why. The answer is the file’s id and, for each layer, its features, its fields and whether it is one shape. The same file sent again is the same file. Nothing is loaded yet.',
+  method: 'POST',
+  path: '/projects/:projectId/map-files',
+  params: projectId,
+  file: true,
+  answer: savedAnswer(mapFileRecordSchema),
+});
+
+export const loadMapFileEndpoint = endpoint({
+  ...setup,
+  name: 'loadMapFile',
+  summary:
+    'Loads a project’s map from a map’s file sent before, as its next version: the layer that is its boundary and, if it has any, the layer of its zones, each named in the field picked. A layer left unnamed is the file’s only one. The file is kept with the version. An earlier version and its zones stay as they were. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/map-files/:mapFileId/map-versions',
+  params: mapFileNamed,
+  body: z.strictObject({
+    // The file's name, as the person knows it.
+    sourceName: z.string().trim().min(1).max(2000).nullable(),
+    boundaryLayer: mapLayer.nullable(),
+    // Empty: the map has no zones.
+    zones: z.strictObject({ layer: mapLayer.nullable(), nameField: named }).nullable(),
+  }),
+  answer: savedAnswer(mapVersionRecordSchema),
+});
+
+export const addSiteShapeFileEndpoint = endpoint({
+  ...setup,
+  name: 'addSiteShapeFile',
+  summary:
+    'Saves a site’s own shape from a map’s file sent before for the site’s project, as its next version: the layer named, or the file’s only one, as one shape. From then on the site is checked against the shape in place of the project’s circle, and an earlier shape stays as it was. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/sites/:siteId/map-files/:mapFileId/shapes',
+  params: z.strictObject({ siteId: z.uuid(), mapFileId }),
+  body: z.strictObject({ layer: mapLayer.nullable() }),
+  answer: savedAnswer(siteAreaVersionRecordSchema),
+});
+
+// An Esri feature layer, linked by its address (ARCHITECTURE §3 "Project boundary and zones";
+// ADR-523, 527 (15)). The API asks the layer for every feature as GeoJSON in WGS84 and keeps the
+// copy, as a map's file is kept. The address is a layer's (`…/FeatureServer/<n>` or
+// `…/MapServer/<n>`), over HTTPS, with no user, password, query or fragment; it is held against
+// server-side request forgery where the request is made, never only here. **A secured layer's
+// token is sent in the body**, used for that fetch alone, and never kept, logged or answered.
+const esriLayer = z
+  .url({ protocol: /^https$/ })
+  .max(2000)
+  // No user or password before the host, and no query or fragment after the path.
+  .regex(/^https:\/\/[^/@?#]+\/[^?#]*$/);
+const esriToken = z.string().min(1).max(4096).optional();
+
+export const loadEsriMapEndpoint = endpoint({
+  ...setup,
+  name: 'loadEsriMap',
+  summary:
+    'Loads a project’s map from Esri feature layers as its next version: the boundary’s layer and, if it has any, the zones’ layer (the same or another), named in the field picked. The API fetches each as GeoJSON in WGS84 and keeps the copy with the version. An earlier version and its zones stay as they were. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/projects/:projectId/esri-map-versions',
+  params: projectId,
+  body: z.strictObject({
+    boundaryLayer: esriLayer,
+    // Empty: the map has no zones.
+    zones: z.strictObject({ layer: esriLayer, nameField: named }).nullable(),
+    token: esriToken,
+  }),
+  answer: savedAnswer(mapVersionRecordSchema),
+});
+
+export const refreshEsriMapEndpoint = endpoint({
+  ...setup,
+  name: 'refreshEsriMap',
+  summary:
+    'Refresh from Esri: loads a project’s map again from the layers a version fetched from Esri named, as its next version. The version itself never changes. The project’s tickets not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/map-versions/:mapVersionId/esri-refreshes',
+  params: z.strictObject({ mapVersionId: z.uuid() }),
+  // No body: a layer that isn't secured.
+  body: z.strictObject({ token: esriToken }).optional(),
+  answer: savedAnswer(mapVersionRecordSchema),
+});
+
+export const addSiteShapeFromEsriEndpoint = endpoint({
+  ...setup,
+  name: 'addSiteShapeFromEsri',
+  summary:
+    'Saves a site’s own shape from an Esri feature layer as its next version, the layer’s features as one shape. The API fetches it as GeoJSON in WGS84 and keeps the copy. An earlier shape stays as it was. The tickets with a field event at the site not locked as invoiced are queued.',
+  method: 'POST',
+  path: '/sites/:siteId/esri-shapes',
+  params: siteId,
+  body: z.strictObject({ layer: esriLayer, token: esriToken }),
+  answer: savedAnswer(siteAreaVersionRecordSchema),
+});
+
 // The setup as it stands (AC-01-69…77; ADR-229, 423, 426): the setup check and what each site's
-// phones ask for. They read and change nothing, and hold no rate: **open to every admin and
-// manager/analyst, whether or not they hold Setup**, since whoever reviews a ticket that paid
-// nothing needs the list that says why.
+// phones ask for. They read and change nothing, and hold no rate: open to an admin and to a
+// manager/analyst granted "view setup", whether or not they hold Setup (the user, ADR-539).
 const standing = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
 
 export const setupCheckEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'setupCheck',
   summary:
     'The setup check: everything a project’s setup leaves open, in plain words; none when it is whole. It lists and never refuses.',
@@ -1309,6 +1869,7 @@ export const setupCheckEndpoint = endpoint({
 
 export const quantityLookupEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'quantityLookup',
   summary:
     'What each site’s phones ask for: the load call, the scale weight, a count of the items carried or nothing more, for each site, debris type and prime. Worked out from the setup as it stands.',
@@ -1320,6 +1881,7 @@ export const quantityLookupEndpoint = endpoint({
 
 export const siteQuantityLookupEndpoint = endpoint({
   ...standing,
+  permission: 'VIEW_SETUP',
   name: 'siteQuantityLookup',
   summary:
     'What one site’s phones ask for: its rows of the project’s quantity lookup, worked out from the setup as it stands; or, asked with a setup version, as its phones held them under that version, for the debris types phones are shown. No such version of its project: not found.',
@@ -1437,9 +1999,10 @@ const dispatch = { access: 'SIGNED_IN', roles: backOfficeRoles, permission: 'DIS
 export const listPhonesEndpoint = endpoint({
   name: 'listPhones',
   summary:
-    'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds.',
+    'The firm’s phones, a page at a time, in the order they were enrolled: those in service, or those taken out of it. Each says which version of the master passcode’s check it holds, when it was marked lost or retired and why, and which revoked its key.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/phones',
   query: z.strictObject({
@@ -1486,7 +2049,11 @@ export const enrolPhoneEndpoint = endpoint({
 // server keeps nothing of a challenge it has made, and makes one for any id, so asking tells a
 // stranger nothing of which phones the firm has. A proof that isn't one is refused by one code.
 // A phone taken out of service still proves itself (its work is received and flagged, ADR-134);
-// one whose key is revoked does not. The limits here only bound what is read.
+// one whose key its turn-in revoked does not. **One whose key the firm's time revoked** (ADR-530)
+// proves itself with the master passcode beside its signature, checked by the one check every
+// act under it shares, and is given a token that opens its sync and its turn-in alone; with no
+// passcode it is told `MASTER_PASSCODE_NEEDED`, and only once its signature is its own. The
+// limits here only bound what is read.
 const phoneNamed = z.strictObject({ deviceId: z.uuid() });
 
 export const challengePhoneEndpoint = endpoint({
@@ -1503,7 +2070,7 @@ export const challengePhoneEndpoint = endpoint({
 export const provePhoneEndpoint = endpoint({
   name: 'provePhone',
   summary:
-    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key is revoked does not.',
+    'A phone proves itself: it sends back the challenge it was made and its signature over it. The answer is a token for that phone, good for the policy’s minutes, which the calls of its sync carry as Authorization: Bearer. A challenge is good once. A proof that isn’t one is refused by one code, whatever the reason; a phone taken out of service still proves itself, one whose key its turn-in revoked does not. Whoever holds the master passcode may send it beside the signature: the master user is then at the phone, and its token opens what a proof by the key opens and counts as somebody signed in on the phone for what it sends. A phone whose key the firm’s time revoked proves itself only so, and its token opens only its sync, its photographs’ files, its reports, its turn-in and its read of itself; without the passcode it is told the passcode is needed. Each passcode taken is a security event; one that isn’t is refused by the proof’s one code, and counts as a wrong try as it does when a phone is enrolled.',
   access: 'ANYBODY',
   method: 'POST',
   path: '/phones/:deviceId/proofs',
@@ -1511,6 +2078,7 @@ export const provePhoneEndpoint = endpoint({
   body: z.strictObject({
     challenge: z.string().min(1).max(400),
     signature: z.string().min(1).max(400),
+    passcode: z.string().min(1).max(4096).optional(),
   }),
   answer: phoneProvenAnswerSchema,
 });
@@ -1522,6 +2090,7 @@ export const provenPhoneEndpoint = endpoint({
   summary:
     'The phone a proof’s token is of, as the server has it now: its name, whether it is in service, the version of the master passcode whose check it holds and the version in force. Open to a phone that has proved itself, by its token.',
   access: 'PROVEN_PHONE',
+  outOfServiceToo: true,
   method: 'GET',
   path: '/phones/current',
   answer: provenPhoneAnswerSchema,
@@ -1600,6 +2169,24 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
   answer: passcodeSessionOpenedAnswerSchema,
 });
 
+// A sign-in made on the phone with no connection, reported once it has one (ARCHITECTURE §7.2,
+// §7.3; ADR-105, 454, 462, 531): a monitor's own password checked against the phone's login list,
+// or a session opened under the master passcode. The phone proves it with what only what was
+// typed could make (the domain's `OfflineSignInRules`), and the server checks that proof itself
+// against what it keeps: it never takes the phone's word for who signed in. Taken, it is a
+// session as an online sign-in is, from when it was made. Reported first, before anything the
+// phone sends while that monitor is signed in.
+export const takeOfflineSignInOnPhoneEndpoint = endpoint({
+  name: 'takeOfflineSignInOnPhone',
+  summary:
+    'A phone reports a sign-in made on it with no connection, once it has one: the monitor’s own password checked against its login list, or a session opened under the master passcode as the phone’s monitor or the temporary one. It says who, how, when by its own clock with the offset, the version of the master passcode whose check it held (under the passcode only), and its proof: an HMAC-SHA256 over what the sign-in says, keyed by the first slow hash of what was typed, which the server checks against the monitor’s offline seed or its own hash of the passcode in force. Taken, the answer is a session’s token for the x-adms-monitor-session header and how long it has left, counted from the sign-in by the firm’s hours (a temporary session also ends with the project’s day); any other session on the phone ends, and it is a security event. Refused by one code, and written as a security event the back office is shown, where the proof isn’t one, the password was set anew or the passcode changed since, the monitor is not in service, the session has already run out, or the server knows of a sign-in or sign-out on the phone after it: the phone keeps everything and its monitor signs in online. The same sign-in reported again by the phone gives a new token and ends the one before. Open to a phone in service that has proved itself, by its token.',
+  access: 'PROVEN_PHONE',
+  method: 'POST',
+  path: '/phones/current/offline-sign-ins',
+  body: offlineSignInReportSchema,
+  answer: offlineSignInTakenAnswerSchema,
+});
+
 // A use of the firm's master passcode a phone logged with no connection, reported when it has
 // one (ARCHITECTURE §7's notes, §7.3, §7.5, §10; AC-02-23, 42, 46; BACKLOG 2.5.4, C122…C125;
 // ADR-106, 456 (3), (5)(e), 462, 464; REQ-202b). Only what no other report carries: a setup, a
@@ -1609,12 +2196,14 @@ export const openPasscodeSessionOnPhoneEndpoint = endpoint({
 // the passcode against its own check; the server is not sent it, takes the phone's word, the
 // phone having proved itself with its device key, and counts no try: a wrong try on a phone
 // never moves the server's own count or its lock. The id is the phone's own, so the same
-// report sent again is answered "already saved" and kept once. Nobody need be signed in.
+// report sent again is answered "already saved" and kept once. Somebody is signed in on the
+// phone, as for all it sends (ADR-531).
 export const reportPasscodeUseEndpoint = endpoint({
   name: 'reportPasscodeUse',
   summary:
-    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
+    'A phone reports a use of the firm’s master passcode it logged with no connection: the phone passed to a monitor who has their own assignment, a session opened on it as the phone’s monitor or the temporary session for a monitor picked from the roster, or the passcode typed wrong. It says when by the phone’s own clock, with the clock’s offset, and for which monitor; a wrong try names nobody. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, for a monitor archived since and from a phone out of service too, and is not saved only where it names somebody who is no monitor or its id is another record’s. The passcode itself is never sent: the phone checked it, and a wrong try reported here does not count toward the lock on the server’s own check. Each one saved is a security event at the phone’s own time: a phone switched and a use of the master passcode; a use that says which way a session was opened; or a failed try. A switch or a session saved ends what anybody else had open on that phone before it, by the phone’s clock. A setup, a site move and a switch to a monitor who has no assignment are reported as an unplanned assignment instead. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/passcode-uses',
   body: passcodeUseReportSchema,
@@ -1659,7 +2248,7 @@ export const phoneLoginListEndpoint = endpoint({
   method: 'POST',
   path: '/phones/current/login-list',
   body: z.strictObject({
-    masterPasscodeVersion: z.number().int().min(1).nullable(),
+    masterPasscodeVersion: z.number().int().min(1).max(2_147_483_647).nullable(),
     entries: z
       .array(z.strictObject({ monitorId: z.uuid(), mark: z.string().min(1).max(100) }))
       .max(5000),
@@ -1683,20 +2272,111 @@ export const phoneAddressLookupEndpoint = endpoint({
   answer: phoneAddressLookupAnswerSchema,
 });
 
+// A phone renamed, and a found one put back in service (ADR-530; C102). A phone whose key is
+// revoked stays as it is: it is wiped and enrolled anew.
+export const renamePhoneEndpoint = endpoint({
+  name: 'renamePhone',
+  summary:
+    'A phone is given another name, as the dispatch board calls it. Nothing else of it changes.',
+  ...dispatch,
+  method: 'PATCH',
+  path: '/phones/:deviceId',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  body: z.strictObject({ name: z.string().trim().min(1).max(80) }),
+  answer: savedAnswer(phoneRecordSchema),
+});
+
 export const removePhoneEndpoint = endpoint({
   name: 'removePhone',
   summary:
-    'A phone is taken out of service, as lost or retired, from this moment. Its record is kept; what it made later is received and flagged, never refused. Refused for a phone already out of service.',
+    'A phone is taken out of service, as lost or retired, from this moment or from a removal time stated by hand (never after now, never before it was enrolled), with a reason from the firm’s list where one is picked. A phone marked lost may then be marked retired, its removal time kept unless one is stated. Its record is kept; what it made later is received and flagged, never refused. Each mark starts the firm’s time again, after which the worker revokes its key. Refused for a phone already out of service otherwise, and for one whose key is revoked.',
   ...dispatch,
   method: 'POST',
   path: '/phones/:deviceId/removals',
   params: z.strictObject({ deviceId: z.uuid() }),
   body: z.strictObject({
     status: z.enum(phoneRemovals),
+    // The removal time stated by hand, where it isn't now.
+    outOfServiceAt: z.iso.datetime().optional(),
+    // From the firm's reasons list, a value offered for a phone's removal.
+    reasonId: z.uuid().optional(),
     // Why, in the person's own words: kept beside the change in the audit log.
     note: z.string().trim().min(1).max(500).optional(),
   }),
   answer: savedAnswer(phoneRecordSchema),
+});
+
+export const returnPhoneEndpoint = endpoint({
+  name: 'returnPhone',
+  summary:
+    'A phone found again is put back in service, with a note saying why. Refused for a phone in service, and for one whose key is revoked: that one is wiped and enrolled anew.',
+  ...dispatch,
+  method: 'POST',
+  path: '/phones/:deviceId/returns',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  body: z.strictObject({ note: z.string().trim().min(1).max(500) }),
+  answer: savedAnswer(phoneRecordSchema),
+});
+
+// The firm's own settings (REQ-214, 215; ARCHITECTURE §6, §7.4; ADR-520, 530): read by an admin
+// or a manager/analyst holding Setup. The hours a lost phone keeps its key are changed by either;
+// whether read-only viewers must use two-step sign-in, by an admin alone. Each change audited.
+export const firmSettingsEndpoint = endpoint({
+  name: 'firmSettings',
+  summary:
+    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, and how many hours a monitor’s sign-in on a phone lasts.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'GET',
+  path: '/firm-settings',
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changePhoneKeyHoursEndpoint = endpoint({
+  name: 'changePhoneKeyHours',
+  summary:
+    'Sets how many whole hours (1 to 8,760) a phone marked lost or retired keeps its key, counted from its last mark, before the worker revokes it; null switches it off. A phone revoked so may still sync and be turned in under the master passcode. Audited.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'PATCH',
+  path: '/firm-settings/phone-key',
+  body: z.strictObject({
+    hours: z.number().int().min(1).max(8760).nullable(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changeViewerTwoStepEndpoint = endpoint({
+  name: 'changeViewerTwoStep',
+  summary:
+    'An admin sets whether read-only viewers must use two-step sign-in. Once it is required, a viewer with no authenticator sets one up before anything else, at their very next request. Turning it off clears nobody’s. Audited.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PATCH',
+  path: '/firm-settings/viewer-two-step',
+  body: z.strictObject({
+    required: z.boolean(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+export const changeMonitorSessionHoursEndpoint = endpoint({
+  name: 'changeMonitorSessionHours',
+  summary:
+    'An admin sets how many whole hours (1 to 24) a monitor’s sign-in on a phone lasts, online or made with no connection, and a session under the master passcode at most. It applies to sign-ins made from then on; a session already open keeps its end. Audited.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'PATCH',
+  path: '/firm-settings/monitor-sessions',
+  body: z.strictObject({
+    hours: z.number().int().min(1).max(24),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
 });
 
 // The firm's one master passcode (ADR-106). A change is a new version: no earlier one is edited
@@ -1706,7 +2386,7 @@ export const removePhoneEndpoint = endpoint({
 export const changeMasterPasscodeEndpoint = endpoint({
   name: 'changeMasterPasscode',
   summary:
-    'An admin changes the firm’s master passcode, giving their own password again. A new version is kept, as a slow hash only; each phone’s check moves to it at its next sync. Refused for a passcode under 8 or over 128 characters, or known from breaches.',
+    'An admin changes the firm’s master passcode, giving their own password again. A new version is kept, as a slow hash only; each phone’s check moves to it at its next sync. Refused for a passcode shorter or longer than the policy allows (8 and 128 characters as shipped), or known from breaches.',
   access: 'SIGNED_IN',
   roles: adminOnly,
   method: 'POST',
@@ -1732,6 +2412,7 @@ export const listAssignmentsEndpoint = endpoint({
     'One project’s dispatch board for one day, a page at a time, in the order the assignments were written: those that stand, or the withdrawn ones. One made on a phone under the master passcode is among them, marked unplanned.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
+  permission: 'VIEW_DISPATCH',
   method: 'GET',
   path: '/projects/:projectId/assignments',
   params: projectId,
@@ -1776,10 +2457,23 @@ export const changeAssignmentEndpoint = endpoint({
 export const withdrawAssignmentEndpoint = endpoint({
   name: 'withdrawAssignment',
   summary:
-    'An assignment is withdrawn from the board, from this moment. It is kept, and so is everything recorded under it. Refused for one already withdrawn and for one made on a phone.',
+    'An assignment is withdrawn from the board, from this moment, with a note if the dispatcher writes one. It is kept, and so is everything recorded under it. Refused for one already withdrawn and for one made on a phone.',
   ...dispatch,
   method: 'POST',
   path: '/assignments/:assignmentId/withdrawals',
+  params: assignmentId,
+  // No body: withdrawn with no note.
+  body: z.strictObject({ note: z.string().trim().min(1).max(500).optional() }).optional(),
+  answer: savedAnswer(assignmentRecordSchema),
+});
+
+export const reinstateAssignmentEndpoint = endpoint({
+  name: 'reinstateAssignment',
+  summary:
+    'A withdrawn assignment is put back on the board, as it was; its note is cleared (the audit keeps it). Refused for one that stands, one made on a phone, an archived person and a phone out of service.',
+  ...dispatch,
+  method: 'POST',
+  path: '/assignments/:assignmentId/reinstatements',
   params: assignmentId,
   answer: savedAnswer(assignmentRecordSchema),
 });
@@ -1816,7 +2510,8 @@ export const phoneSetupChoicesEndpoint = endpoint({
 // a connection. The phone checked the passcode against its own check; the server is not sent
 // it and takes the phone's word, the phone having proved itself with its device key. The id is
 // the phone's own, so the same report sent again is answered "already saved" and kept once. The
-// day is the day the phone's clock said, in the project's time zone. Nobody need be signed in.
+// day is the day the phone's clock said, in the project's time zone. Somebody is signed in on the
+// phone, as for all it sends (ADR-531): the master user who set it up, at the least.
 // **A site move and a monitor switch are reported the same way** (AC-02-46, 47; ADR-456 (5),
 // 458): the phone moved to another of its project's sites is set up anew there, a new
 // unplanned assignment, and the earlier one stands; the phone passed to a monitor who has no
@@ -1826,8 +2521,9 @@ export const phoneSetupChoicesEndpoint = endpoint({
 export const reportUnplannedAssignmentEndpoint = endpoint({
   name: 'reportUnplannedAssignment',
   summary:
-    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
+    'A phone reports an unplanned assignment made on it under the firm’s master passcode, when its monitor had none: the project, the monitor, their work (the kinds of field event, certifying, the forms, the unit rate pay items), one site where the work is at one, and when it was made by the phone’s own clock, with the clock’s offset. The id is the phone’s own: the same report sent again is answered as already saved and kept once. It is kept as the phone reports it, marked unplanned on the dispatch board and never flagged, for a phone out of service too; its day is the day the phone’s clock said, in the project’s time zone. It is not saved only where something it names is no record of the kind it must be, or its id is another record’s. The passcode itself is never sent: the phone checked it. It says what it was made at: the phone set up (a phone moved to another of its project’s sites is set up anew there, and the earlier assignment stands with everything recorded under it), or the phone passed to another monitor, who had no assignment it could take. Each one saved is two security events at the phone’s own time: a phone set up or a phone switched, and a use of the master passcode. Where several of a monitor’s assignments for a day name one phone, their sign-in on it takes the one made on it last. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/unplanned-assignments',
   body: unplannedAssignmentReportSchema,
@@ -1836,18 +2532,82 @@ export const reportUnplannedAssignmentEndpoint = endpoint({
 
 // One sync, whole (ARCHITECTURE §9, §10; spec/parts/05-sync.md steps 2…8; AC-05-03, 04, 15, 16,
 // 20, 45…47; AC-10-35, 46, 51; BACKLOG 2.6.2, C64, C69, C126…C131; ADR-022, 052, 065, 100, 466…472;
-// REQ-016, 203). The phone has proved itself; it never says which phone it is. The body and the
-// answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
+// REQ-016, 203). The phone has proved itself, with somebody signed in on it (ADR-531); it never
+// says which phone it is, and what it is given is decided by its standing, read once (ADR-531:
+// a phone out of service only sends). The body and the answer are `sync.ts`'s. Nothing is refused over eligibility, and nothing is reconciled while
 // the phone waits.
 export const syncPhoneEndpoint = endpoint({
   name: 'syncPhone',
   summary:
-    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token; nobody need be signed in.',
-  access: 'PROVEN_PHONE',
+    'A phone syncs: it sends its clock, the unplanned assignments made on it, the uses of the master passcode it logged, its records (field events, scale receipts, incidents, drop-off logs, surveys, ROEs and certifications, each under the id the phone made for it, 200 at most) and the last number it used of each series. The server keeps the sync with both clocks and their difference, then reads each thing in that order and gives each its own answer, in the order sent. A record is saved; already saved, where it was sent before (never stored twice, and never taken for a duplicate ticket number); kept in quarantine, not saved, where another record holds its number, with the reason and the record that holds it; or not saved, where it can’t be read, names something the server doesn’t have, was made under an assignment that was not saved, or is a certification its own rules refuse: what was sent is then held on the server exactly as sent, for a person, and the answer says so. One record never stops the others. Nothing is refused over eligibility, and no answer carries a status, a flag or money: reconciliation is queued for what arrived and never waited for. For each series reported the answer lists the blocks of numbers the phone holds now, topped up to a full block where the project has such a series and the phone is in service. A phone in service is brought the master passcode’s version in force, with its check where the phone holds another, and the setup version of the project whose lists it holds; a phone out of service, or proven with the passcode because the firm’s time revoked its key, is given no numbers and brought nothing. A phone with more than one sync’s worth sends another. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
   method: 'POST',
   path: '/phones/current/syncs',
   body: syncSentSchema,
   answer: syncAnsweredSchema,
+});
+
+// A phone turned in: "Sync and turn in" under the firm's master passcode, with or without its
+// monitor (ARCHITECTURE §7.4, §7.5, §8; AC-02-58, 60, 61; AC-05-56; AC-10-46; BACKLOG 2.6.5, C47,
+// C64, C126, C139; ADR-065, 096, 134, 468, 488; REQ-202a, 202b, 209). The body and the answer are
+// `turn-in.ts`'s. The phone has synced and sent its files first; it is told to wipe only when the
+// server has everything it still holds, and its key is revoked in the same piece of work. The
+// passcode is checked by the one check every act under it shares. The limits here only bound
+// what is read.
+export const turnInPhoneEndpoint = endpoint({
+  name: 'turnInPhone',
+  summary:
+    'A phone is turned in ("Sync and turn in") under the firm’s master passcode, after it has synced every queue and sent every photograph’s file. It sends the passcode, everything it still holds by the ids it made (its unplanned assignments, the uses of the master passcode it logged, its records, its photographs) and by fingerprint what it sent with no id the server could read, and the last number it used of each series it holds numbers of. Only when the server has all of it from that phone (a record saved, kept in quarantine, or held for a person; a photograph saved with every file kept) is the phone turned in: the unused rest of each series it reported is handed back for the next phone, and a series it doesn’t report, or every block of a phone marked lost, is retired whole; a phone in service is taken out of service as retired; its sessions end; its key is revoked, so it proves nothing again; and the answer tells it to wipe. Otherwise nothing is changed and nothing is wiped, and the answer names what the server doesn’t have. A phone out of service is turned in the same way. Each use of the passcode is a security event, and a turn-in another. Open to a phone that has proved itself, by its token; nobody need be signed in. A passcode that isn’t taken is refused by one code; wrong tries count as they do when a phone is enrolled.',
+  access: 'PROVEN_PHONE',
+  outOfServiceToo: true,
+  method: 'POST',
+  path: '/phones/current/turn-ins',
+  body: turnInSentSchema,
+  answer: turnInAnswerSchema,
+});
+
+// A photograph's files, sent by the phone that took it after its record is saved: **the media
+// endpoint, the one endpoint that takes a file** (ARCHITECTURE §6 "Uploads", §9 (2), (5), §11;
+// spec/parts/05-sync.md; AC-04-77, AC-05-09, AC-10-47…49; spec/THREAT-MODEL.md T-25; BACKLOG
+// 2.6.4, C84 (12), C86, C137; ADR-101, 401, 480…482; REQ-203). Named by the photograph's own id
+// and which file, never by a place: the server made the place with the record. Resumable as the
+// tus protocol is (tus.io 1.0, core): a part goes at the offset where the last one ended, and an
+// interrupted upload goes on from the last part the server took. The limits here only bound
+// what is read; the policy's are smaller.
+const photoFileNamed = z.strictObject({
+  photoId: z.uuid(),
+  // The photograph itself, or the depth file beside it.
+  file: z.enum(photoFiles),
+});
+
+export const photoFileEndpoint = endpoint({
+  name: 'photoFile',
+  summary:
+    'Where a photograph’s file stands: kept (nothing more to send), or how many of its bytes the server has taken, of a file how long, so the phone sends the rest from there (none, where it holds none). The photograph is named by its own id, and the file is the photograph itself or the depth file beside it; only the phone that took it may ask, once its record is saved. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
+  method: 'GET',
+  path: '/phones/current/photos/:photoId/files/:file',
+  params: photoFileNamed,
+  answer: photoFileAnswerSchema,
+});
+
+export const sendPhotoFilePartEndpoint = endpoint({
+  name: 'sendPhotoFilePart',
+  summary:
+    'A part of a photograph’s file, sent by the phone that took it, once its record is saved: the bytes in the body, the offset they go at and the whole file’s length in the query. Taken only where it goes on from the last part the server took, or starts the file; otherwise the answer says where to go on from. The file is at most the policy’s size and a part at most the policy’s; its first part is told to be an image by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF), or refused. When the last part arrives the server reads the whole file’s SHA-256: the one the phone gave in the photograph’s record (or the depth file’s) and the file is kept, once, where the server placed it, never overwritten, and its upload time written; any other, and the file is set aside on the server for a person, never kept as the photograph’s, and the phone sends its file again from the first byte. A file kept already is answered kept, and nothing changes. Open to a phone that has proved itself, by its token, with somebody signed in on it: the monitor, by their session’s token in the x-adms-monitor-session header, or the master user, by the master passcode sent beside the phone’s proof. A phone taken out of service sends it too.',
+  access: 'PHONE_IN_USE',
+  outOfServiceToo: true,
+  method: 'PATCH',
+  path: '/phones/current/photos/:photoId/files/:file',
+  params: photoFileNamed,
+  query: z.strictObject({
+    offset: z.string().regex(/^(0|[1-9][0-9]{0,9})$/),
+    length: z.string().regex(/^[1-9][0-9]{0,9}$/),
+  }),
+  file: true,
+  answer: photoFileAnswerSchema,
 });
 
 // Review's marks (spec/parts/08-review-and-corrections.md steps 5…7; spec/parts/09, invoicing;
@@ -1929,6 +2689,21 @@ export const acceptFlagEndpoint = endpoint({
   answer: savedAnswer(flagAcceptanceRecordSchema),
 });
 
+// An acceptance taken back (ADR-534 (8)): the flag stands again on the next run, and accepting it
+// again is an acceptance of its own. The note is required: it is why.
+export const withdrawAcceptanceEndpoint = endpoint({
+  name: 'withdrawAcceptance',
+  summary:
+    'A flag’s acceptance is taken back, with the reviewer’s note: who and when are kept on it, and the flag stands again on the run it queues. Accepting the flag again is a new acceptance. Refused for an acceptance already taken back and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'ACCEPT_FLAG',
+  method: 'POST',
+  path: '/flag-acceptances/:flagAcceptanceId/withdrawals',
+  params: z.strictObject({ flagAcceptanceId: z.uuid() }),
+  body: z.strictObject({ note: z.string().trim().min(1).max(500) }),
+  answer: savedAnswer(flagAcceptanceRecordSchema),
+});
+
 // A record has one QC mark, so the status is put: set again, it is the same mark changed, the
 // status before kept in the audit log (ADR-107). It changes nothing on the record and queues
 // nothing.
@@ -1995,6 +2770,35 @@ export const unlockInvoicedEndpoint = endpoint({
   path: '/invoice-unlocks',
   body: z.strictObject({ ticket: ticketMarked, note: reviewNote }),
   answer: savedAnswer(invoiceLockRecordSchema),
+});
+
+// A reprocess a person asks for with nothing changed (spec/parts/08-review-and-corrections.md
+// step 4; ADR-498): a ticket the worker couldn't process, worked again; or a job the worker set
+// aside after too many tries, put back by its id as the worker's log names it. Part of
+// correcting, so it takes `CORRECT`: no grant of its own. It changes no record: it queues one
+// job of the tickets alone (`REPROCESS`, naming the person), since nothing changed that another
+// ticket reads; a ticket locked as invoiced is left off it and counted. The job set aside stays
+// as it is, the record of what failed. How many tickets one request names at the most is the
+// installation's policy (JOB_TICKETS_AT_MOST), refused by the domain's rule; the schema bounds
+// only what is read, at the most that policy may be.
+const ticketsAskedAtMost = 100_000;
+export const reprocessTicketsEndpoint = endpoint({
+  name: 'reprocessTickets',
+  summary:
+    'Tickets of the project are queued to be worked again as their records and the setup stand, nothing changed: those named, or the tickets of a job the worker set aside, by its id. One job, naming the person; a ticket locked as invoiced is left off it and counted. Refused for more tickets than the installation’s policy lets one job name, a number no field event of the project is under, and a job that isn’t one of the project’s set aside.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/reprocesses',
+  params: projectId,
+  body: z.union([
+    z.strictObject({
+      tickets: z.array(z.strictObject(ticketNamed)).min(1).max(ticketsAskedAtMost),
+      note: reviewNote,
+    }),
+    z.strictObject({ setAsideJobId: z.uuid(), note: reviewNote }),
+  ]),
+  answer: savedAnswer(reprocessRecordSchema),
 });
 
 // Corrections to a ticket's own records (spec/parts/08-review-and-corrections.md steps 2…4;
@@ -2149,6 +2953,62 @@ export const markPhotographEndpoint = endpoint({
   answer: savedAnswer(photographRecordSchema),
 });
 
+// A photograph's file, read by the back office (ARCHITECTURE §6 "Uploads"; AC-10-48; T-25;
+// ADR-482 (10), 483). **Open to an admin and to a manager/analyst granted "view review"**
+// (ADR-539): a reviewer reads a photograph to review its ticket. What OWASP ASVS 5.0 asks of a file handed back, and how the
+// API meets it: the bytes that were stored and nothing made of them; the type they were kept
+// under, which their own first bytes said; `X-Content-Type-Options: nosniff`, so no browser
+// guesses another; `Content-Disposition: attachment`, with a name the server makes and never the
+// phone's, and a policy that sandboxes it, so it is never run as a page (V3.2.1, V5.4); never
+// where it is kept (API3). A removed photograph's file is read all the same: nothing is deleted.
+export const photographFileEndpoint = endpoint({
+  name: 'photographFile',
+  summary:
+    'A photograph’s file as it was kept: the photograph itself or the depth file beside it, the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph removed from the record is read all the same. One whose file hasn’t arrived, or that has no depth file, is not found.',
+  ...reviewer,
+  permission: 'VIEW_REVIEW',
+  method: 'GET',
+  path: '/photographs/:photoId/files/:file',
+  params: photoFileNamed,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
+});
+
+// A photograph added in the back office (ARCHITECTURE §6 "Uploads", §11; T-25; BACKLOG 2.8.7;
+// ADR-101, 482, 521, 534 (2)): **the third endpoint that takes a file**, sent whole, as bytes, by a
+// route with its own size limit (`MEDIA_FILE_BYTES_AT_MOST`), as a map's file is. Only onto a
+// record made in the back office: a phone's record keeps its phone's photographs. What it is on,
+// its view (a certification's, one of the five, or none) and when it was taken go in the query;
+// its kind is told by its own first bytes; both its fingerprints are the server's reading of the
+// bytes; the server makes its place.
+export const backOfficePhotographOwners = [
+  'FIELD_EVENT',
+  'CERTIFICATION',
+  'ROE',
+  'SURVEY',
+  'INCIDENT',
+  'DROP_OFF_LOG',
+] as const;
+
+export const addPhotographEndpoint = endpoint({
+  name: 'addPhotograph',
+  summary:
+    'A photograph is added in the back office to a record made there (a field event, a certification, an ROE, a survey, an incident or a drop-off log), its file sent whole as bytes, at most the policy’s size: what it is on, a certification’s view where it has one, and when it was taken with its clock’s offset, in the query. Its kind is told by its own first bytes (JPEG, HEIC or HEIF, PNG, TIFF); it is kept once where the server places it, its fingerprints the server’s reading of the bytes. The ticket it is on is queued, or a certification’s own flags. Refused for a record a phone made, a view on anything but a certification and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/photographs',
+  query: z.strictObject({
+    on: z.enum(backOfficePhotographOwners),
+    recordId: z.uuid(),
+    view: z.enum(certificationViews).optional(),
+    capturedAt: z.iso.datetime(),
+    utcOffsetMinutes: z.string().regex(/^(0|-?[1-9][0-9]{0,2})$/),
+  }),
+  file: true,
+  answer: savedAnswer(photographRecordSchema),
+});
+
 // A receipt several tickets may share (a tandem's two): each ticket on it is queued, and one
 // locked as invoiced waits for its unlock.
 export const correctScaleReceiptEndpoint = endpoint({
@@ -2180,18 +3040,36 @@ export const correctScaleReceiptEndpoint = endpoint({
 
 // Corrections to an ROE and to the forms, a quarantined record resolved, and a record created in
 // the back office (spec/parts/08-review-and-corrections.md steps 2, 9, "One review queue";
-// AC-08-19, 21, 25, 26; AC-10-27, 28, 37; BACKLOG 2.4.4, C66, C79, C105; ADR-022, 149, 156, 327,
-// 338, 364, 432). **A correction and a record created in the back office take `CORRECT`;
-// resolving a quarantined record takes `RENUMBER`**, as their services ask again. Not here,
-// because no service does it yet (BACKLOG C79): an ROE's number corrected, the answers to a
-// form's own fields corrected, and an ROE, a survey, an incident or a drop-off log created in
-// the back office.
+// AC-08-19, 21, 25, 26; AC-10-27, 28, 37; BACKLOG 2.4.4, 2.8.7, C66, C79, C105; ADR-022, 149,
+// 156, 327, 338, 364, 432, 534). **A correction and a record created in the back office take
+// `CORRECT`; resolving a quarantined record takes `RENUMBER`**, as their services ask again. An
+// ROE's number is corrected too (what names it finds it, and what named the old one no longer
+// does), and the answers to a form's own fields, given whole against the version they answer
+// and refused where they don't fit it.
 const roeId = z.strictObject({ roeId: z.uuid() });
+
+// The answers to the firm's own fields, keyed by field id, whole, and the version of the form's
+// fields they answer (left out: the one the record answers already).
+const answersGiven = z.strictObject({
+  answers: z
+    .record(
+      z.string().min(1).max(100),
+      z.union([
+        z.string().max(2000),
+        z.number().min(-9_999_999_999.99).max(9_999_999_999.99),
+        z.boolean(),
+      ]),
+    )
+    .refine((answers) => Object.keys(answers).length <= 200, {
+      message: 'At most 200 answers.',
+    }),
+  formDefinitionId: z.uuid().optional(),
+});
 
 export const correctRoeEndpoint = endpoint({
   name: 'correctRoe',
   summary:
-    'An ROE is corrected in place: its parcel, address, owner, whether and when it was signed, and its notes; only what is stated changes, and `null` empties a detail that may be empty. Every ticket on it is queued; one locked as invoiced is left as it is. Never its number.',
+    'An ROE is corrected in place: its number, parcel, address, owner, whether and when it was signed, its notes and the answers to its form’s own fields; only what is stated changes, and `null` empties a detail that may be empty. A corrected number is found by what names it, and what named the old one finds no ROE; what each says it named never changes. Every ticket on it, before and after, is queued; one locked as invoiced is left as it is. Refused for a number another ROE of the project holds and answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2200,12 +3078,14 @@ export const correctRoeEndpoint = endpoint({
   body: z.strictObject({
     changes: z
       .strictObject({
+        roeNumber: numberAsWritten,
         parcelId: numberAsWritten.nullable(),
         address: typed.nullable(),
         ownerName: named.nullable(),
         signed: z.boolean(),
         signedDate: day.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -2241,7 +3121,7 @@ export const correctRoeScopeEndpoint = endpoint({
 export const correctSurveyEndpoint = endpoint({
   name: 'correctSurvey',
   summary:
-    'A survey is corrected in place: its work type, its survey number, the ROE number it names and its notes; only what is stated changes. A corrected ROE number finds its ROE again. The project’s surveys are checked again on the next run. Never the answers to the firm’s own fields.',
+    'A survey is corrected in place: its work type, its survey number, the ROE number it names and its notes; only what is stated changes. A corrected ROE number finds its ROE again. The answers to its form’s own fields are given whole, against the version they answer. The project’s surveys are checked again on the next run. Refused for answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2254,6 +3134,7 @@ export const correctSurveyEndpoint = endpoint({
         surveyNumber: numberAsWritten.nullable(),
         roeNumber: numberAsWritten.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -2265,7 +3146,7 @@ export const correctSurveyEndpoint = endpoint({
 export const correctIncidentEndpoint = endpoint({
   name: 'correctIncident',
   summary:
-    'An incident is corrected in place: its type and sub-type, what happened, who was involved, where, the contractor, cert number and ROE number it names, and its notes; only what is stated changes. A corrected cert number finds its certification again, an ROE number its ROE. It is on no ticket, so nothing is queued. Never the answers to the firm’s own fields.',
+    'An incident is corrected in place: its type and sub-type, what happened, who was involved, where, the contractor, cert number and ROE number it names, and its notes; only what is stated changes. A corrected cert number finds its certification again, an ROE number its ROE. The answers to its form’s own fields are given whole, against the version they answer. It is on no ticket, so nothing is queued. Refused for answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2283,6 +3164,7 @@ export const correctIncidentEndpoint = endpoint({
         certNumber: numberAsWritten.nullable(),
         roeNumber: numberAsWritten.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -2294,7 +3176,7 @@ export const correctIncidentEndpoint = endpoint({
 export const correctDropOffLogEndpoint = endpoint({
   name: 'correctDropOffLog',
   summary:
-    'A citizen drop-off log is corrected in place: its site, the resident’s name, where the debris came from and its notes; only what is stated changes. It is on no ticket, so nothing is queued. Refused for a site of another project.',
+    'A citizen drop-off log is corrected in place: its site, the resident’s name, where the debris came from, its notes and the answers to its form’s own fields; only what is stated changes. It is on no ticket, so nothing is queued. Refused for a site of another project and answers that don’t fit their version.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2307,6 +3189,7 @@ export const correctDropOffLogEndpoint = endpoint({
         residentName: named.nullable(),
         originAddress: typed.nullable(),
         notes: typed.nullable(),
+        answers: answersGiven,
       })
       .partial()
       .refine(stated),
@@ -2350,6 +3233,121 @@ export const markSecondCopyEndpoint = endpoint({
   params: quarantinedRecordId,
   body: z.strictObject({ note: reviewNote }),
   answer: savedAnswer(quarantinedRecordSchema),
+});
+
+// What a sync held for a person and what waits in quarantine (spec/parts/05-sync.md step 6;
+// spec/parts/08-review-and-corrections.md, "One review queue"; AC-05-46; AC-10-73…76; ADR-468,
+// 471, 482, 526). **The three reads are open to every admin and manager/analyst, whether or not
+// they hold a permission**, as a photograph's file is (ADR-482 (10); ADR-526 (1) (a)): the back
+// office sees everything. Each a page at a time, oldest first, by project or by phone (both, or
+// neither), waiting or resolved (both where neither is said). A resolution is once, by a person,
+// with a reason, at its own permission (ADR-526 (2), (3)).
+const waitingQuery = z.strictObject({
+  projectId: z.uuid().optional(),
+  deviceId: z.uuid().optional(),
+  // Only those still waiting for a person, or only those resolved.
+  waiting: z.enum(['true', 'false']).optional(),
+  // The last of the page before: the answer's `next`.
+  after: z.uuid().optional(),
+  // How many at most: 50 where none is said.
+  limit: z
+    .string()
+    .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+    .optional(),
+});
+// Why, in the reviewer's own words: required, since nothing else says why (ADR-526 (2) (b)).
+const resolutionNote = z.string().trim().min(1).max(500);
+const heldRecordId = z.strictObject({ heldRecordId: z.uuid() });
+const setAsideFileId = z.strictObject({ setAsideFileId: z.uuid() });
+
+export const listHeldRecordsEndpoint = endpoint({
+  name: 'listHeldRecords',
+  summary:
+    'What a phone sent that the server couldn’t save, held for a person, a page at a time, oldest first: by project (as sent) or by phone, waiting or resolved. Each exactly as sent, with what it was sent as, why it is held, the words its phone was told, the photographs kept with it and how it was resolved.',
+  ...reviewer,
+  permission: 'VIEW_REVIEW',
+  method: 'GET',
+  path: '/held-records',
+  query: waitingQuery,
+  answer: heldRecordsAnswerSchema,
+});
+
+export const saveHeldRecordEndpoint = endpoint({
+  name: 'saveHeldRecord',
+  summary:
+    'A held record is resolved by saving it as corrected: the record as it should be, in the sync’s own shape, under the id its phone made and of the kind it was sent as. It is written as the reviewer, as the phone’s record it was, with the photographs kept with it; its tickets are queued. Resolved once. Refused for a held record with no id, another id, another kind, a report (closed only), a number another record holds, what the database refuses and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/held-records/:heldRecordId/savings',
+  params: heldRecordId,
+  body: z.strictObject({ record: correctedRecordSchema, note: resolutionNote }),
+  answer: savedAnswer(heldRecordSchema),
+});
+
+export const closeHeldRecordEndpoint = endpoint({
+  name: 'closeHeldRecord',
+  summary:
+    'A held record is closed, never to be saved: nothing is made from it, and what was sent stays, with its photographs, marked with who closed it, when and why. Resolved once.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/held-records/:heldRecordId/closings',
+  params: heldRecordId,
+  body: z.strictObject({ note: resolutionNote }),
+  answer: savedAnswer(heldRecordSchema),
+});
+
+export const listSetAsideFilesEndpoint = endpoint({
+  name: 'listSetAsideFiles',
+  summary:
+    'The files a phone uploaded for a photograph that weren’t the file it fingerprinted, a page at a time, oldest first: by project or by phone, waiting or resolved. Each beside its photograph (what it belongs to, the fingerprint its phone gave and whether that file has been kept since), with what arrived and how it was resolved. Never where either is kept.',
+  ...reviewer,
+  permission: 'VIEW_REVIEW',
+  method: 'GET',
+  path: '/set-aside-files',
+  query: waitingQuery,
+  answer: setAsideFilesAnswerSchema,
+});
+
+// The bytes as `photographFileEndpoint` hands a photograph's: as stored, under the type their own
+// first bytes said, as a download (ADR-482 (10), 483).
+export const setAsideFileEndpoint = endpoint({
+  name: 'setAsideFile',
+  summary:
+    'A file set aside, as it was kept: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page.',
+  ...reviewer,
+  permission: 'VIEW_REVIEW',
+  method: 'GET',
+  path: '/set-aside-files/:setAsideFileId/file',
+  params: setAsideFileId,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
+});
+
+export const closeSetAsideFileEndpoint = endpoint({
+  name: 'closeSetAsideFile',
+  summary:
+    'A file set aside is closed: the photograph’s own file won’t come, and this one stays beside it, kept, never the photograph’s. Marked with who closed it, when and why. Resolved once.',
+  ...reviewer,
+  permission: 'VOID',
+  method: 'POST',
+  path: '/set-aside-files/:setAsideFileId/closings',
+  params: setAsideFileId,
+  body: z.strictObject({ note: resolutionNote }),
+  answer: savedAnswer(setAsideFileSchema),
+});
+
+export const listQuarantinedRecordsEndpoint = endpoint({
+  name: 'listQuarantinedRecords',
+  summary:
+    'The records a phone sent whose number another record holds, a page at a time, oldest first: by project or by phone, waiting or resolved. Each with what the phone sent, its phone and monitor, why, the record that holds its number and how it was resolved.',
+  ...reviewer,
+  permission: 'VIEW_REVIEW',
+  method: 'GET',
+  path: '/quarantined-records',
+  query: waitingQuery,
+  answer: quarantinedRecordsAnswerSchema,
 });
 
 // A phone failed, and paper is never the record (ADR-156): the field event the monitor would have
@@ -2396,20 +3394,120 @@ export const createFieldEventEndpoint = endpoint({
   answer: savedAnswer(fieldEventRecordSchema),
 });
 
+// A form made on paper, entered in the back office (ADR-156, 534 (9)): as its monitor would have
+// made it, naming that monitor, with a reason from the firm's list; when by the paper, where if
+// known, the answers to the form's own fields against the version they answer. What a phone
+// alone would have said (its phone, its assignment, its lists' version) isn't entered.
+const formEntered = {
+  monitorId: z.uuid(),
+  madeAt: instant,
+  deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+  fix: correctedFix,
+  notes: typed.nullable(),
+  answers: answersGiven,
+  reasonId: z.uuid(),
+};
+
+export const createRoeEndpoint = endpoint({
+  name: 'createRoe',
+  summary:
+    'An ROE made on paper is entered in the back office: its number off the paper, parcel, address, owner, whether and when it was signed, where, its notes and the answers to its form’s own fields; it names the person who entered it. What was already waiting for its number points at it, and those tickets are queued. Refused for a number another ROE of the project holds, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/roes',
+  params: projectId,
+  body: z.strictObject({
+    roeNumber: numberAsWritten,
+    parcelId: numberAsWritten.nullable(),
+    address: typed.nullable(),
+    ownerName: named.nullable(),
+    signed: z.boolean(),
+    signedDate: day.nullable(),
+    fix: correctedFix,
+    madeAt: instant.nullable(),
+    notes: typed.nullable(),
+    answers: answersGiven,
+  }),
+  answer: savedAnswer(roeRecordSchema),
+});
+
+export const createSurveyEndpoint = endpoint({
+  name: 'createSurvey',
+  summary:
+    'A survey made on paper is entered in the back office: the monitor whose work it was, when and where, its work type, survey number, the ROE number it names (which finds its ROE), notes and the answers to its form’s own fields, with a reason picked from the firm’s list. The project’s surveys are checked on the next run. Refused for a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/surveys',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    workTypeId: z.uuid(),
+    surveyNumber: numberAsWritten.nullable(),
+    roeNumber: numberAsWritten.nullable(),
+  }),
+  answer: savedAnswer(surveyRecordSchema),
+});
+
+export const createIncidentEndpoint = endpoint({
+  name: 'createIncident',
+  summary:
+    'An incident written on paper is entered in the back office: the monitor whose record it was, when and where, its type and sub-type, what happened, who was involved, the address, the contractor, cert number and ROE number it names (each finds its record), notes and the answers to its form’s own fields, with a reason picked from the firm’s list. It is on no ticket, so nothing is queued. Refused for a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/incidents',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    incidentTypeId: z.uuid(),
+    incidentSubTypeId: z.uuid().nullable(),
+    description: typed.nullable(),
+    parties: typed.nullable(),
+    address: typed.nullable(),
+    contractorId: z.uuid().nullable(),
+    certNumber: numberAsWritten.nullable(),
+    roeNumber: numberAsWritten.nullable(),
+  }),
+  answer: savedAnswer(incidentRecordSchema),
+});
+
+export const createDropOffLogEndpoint = endpoint({
+  name: 'createDropOffLog',
+  summary:
+    'A citizen drop-off log kept on paper is entered in the back office: the monitor whose log it was, when and where, the site, the resident’s name and where the debris came from, notes and the answers to its form’s own fields, with a reason picked from the firm’s list. It is on no ticket, so nothing is queued. Refused for a site of another project, a reason the firm doesn’t offer for this, a fix that can’t be one and answers that don’t fit their version.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/drop-off-logs',
+  params: projectId,
+  body: z.strictObject({
+    ...formEntered,
+    siteId: z.uuid(),
+    residentName: named.nullable(),
+    originAddress: typed.nullable(),
+  }),
+  answer: savedAnswer(dropOffLogRecordSchema),
+});
+
 // The back office's changes to a certification (spec/parts/03-certification.md steps 10…13;
 // AC-03-38, 55; AC-10-27, 28, 35, 37; BACKLOG 2.4.4, C106; ADR-079, 080, 082, 364, 433). **A
 // measuring mistake takes `CORRECT`, signatures on file take `QC`, and a revocation is an
 // admin's alone**: no permission opens it to a manager/analyst. Each service asks again inside
 // its own piece of work. **Nobody sends a capacity**: it is worked out again from the boxes, and
-// measurements that give none are answered `NOT_SAVED` in the domain's own words. Not here: a
-// certification is made, and a modified truck certified again, on a phone, so both arrive with
-// its sync (BACKLOG 2.6.2); its QC status is `setQcStatus`'s.
+// measurements that give none are answered `NOT_SAVED` in the domain's own words. A certification
+// is made, and a modified truck certified again, on a phone, so both arrive with its sync
+// (BACKLOG 2.6.2); **or, where the phone failed, entered from the paper sheet** (ADR-521, 534
+// (1)), which takes `CORRECT` as a field event made in the back office does. Every captured field
+// is corrected (ADR-534 (5), (6)), and a revocation is taken back by an admin alone (7). Its QC
+// status is `setQcStatus`'s.
 const certificationId = z.strictObject({ certificationId: z.uuid() });
 
 export const correctCertificationBoxEndpoint = endpoint({
   name: 'correctCertificationBox',
   summary:
-    'A measuring mistake on one of a container certification’s boxes is corrected in place (box 0 is the primary): only the measurements stated change, in whole inches, and the capacity is worked out again from the boxes, never sent. Every ticket that scanned the certification is queued where the capacity changed; one locked as invoiced is left as it is. Refused for a box the certification doesn’t have, for measurements that give no capacity and for a measurement the box’s shape doesn’t hold. Never a box’s shape, its sign or its feature.',
+    'A mistake on one of a container certification’s boxes is corrected in place (box 0 is the primary): its measurements in whole inches, its shape (with the measurements that shape holds, and no others), whether it adds or subtracts, its feature (picked or typed), or the box taken off or put back; only what is stated changes, and the capacity is worked out again from the boxes, never sent. Every ticket that scanned the certification is queued where the capacity changed; one locked as invoiced is left as it is. Refused for a box the certification doesn’t have, for the primary taken off, for measurements that give no capacity and for a measurement the box’s shape doesn’t hold.',
   ...reviewer,
   permission: 'CORRECT',
   method: 'PATCH',
@@ -2431,6 +3529,67 @@ export const correctCertificationBoxEndpoint = endpoint({
         radius: inches,
         run: inches,
         corners: cornerCount,
+        shape: z.enum(boxShapes),
+        sign: z.enum(boxSigns),
+        // A feature picked from the firm's list, or typed: stating one clears the other.
+        featureId: z.uuid().nullable(),
+        featureOther: z.string().trim().min(1).max(200).nullable(),
+        takenOff: z.boolean(),
+      })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// A box the sheet had and the certification lacks: added after its last.
+export const addCertificationBoxEndpoint = endpoint({
+  name: 'addCertificationBox',
+  summary:
+    'A box is added to a container certification after its last, as the sheet has it: a feature (picked or typed), a shape with its own measurements in whole inches, and whether it adds or subtracts. The capacity is worked out again from the boxes, never sent, and every ticket that scanned the certification is queued where it changed; one locked as invoiced is left as it is. Refused for a crew, which is never measured, and for measurements that give no capacity.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/certifications/:certificationId/boxes',
+  params: certificationId,
+  body: z.strictObject({ box: syncedCertificationBoxSchema, note: reviewNote }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// The rest of what was keyed on a certification (ADR-534 (5)): the subs are typed names, placed
+// as a phone's are; a prime changed takes the subs it had under it by name.
+const keyed = z.string().trim().min(1).max(200);
+
+export const correctCertificationEndpoint = endpoint({
+  name: 'correctCertification',
+  summary:
+    'A certification is corrected in place: its prime and subs (typed by name, placed under the prime as at certifying, a name already placed elsewhere on the project saved as a separate contractor with a warning), what was certified (picked or typed) or the crew type, the driver, the tag, the representatives and notes; only what is stated changes, and `null` empties a detail that may be empty. With the prime changed, the subs it had are placed again under the new prime by name. Every ticket that scanned it is queued, with the tickets that read them; one locked as invoiced is left as it is. Refused for a prime that isn’t one of the project’s and a second tier with no first.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/certifications/:certificationId',
+  params: certificationId,
+  body: z.strictObject({
+    changes: z
+      .strictObject({
+        primeId: z.uuid(),
+        firstTierSub: keyed.nullable(),
+        secondTierSub: keyed.nullable(),
+        vehicleTypeId: z.uuid().nullable(),
+        vehicleTypeOther: keyed.nullable(),
+        crewTypeId: z.uuid().nullable(),
+        driverName: keyed.nullable(),
+        driverPhone: keyed.nullable(),
+        driverLicenceNumber: keyed.nullable(),
+        driverLicenceState: keyed.nullable(),
+        driverLicenceExpiry: day.nullable(),
+        tagNumber: keyed.nullable(),
+        tagState: keyed.nullable(),
+        tagExpiry: day.nullable(),
+        clientRepresentativeName: keyed.nullable(),
+        contractorRepresentativeName: keyed.nullable(),
+        notes: typed.nullable(),
       })
       .partial()
       .refine(stated),
@@ -2468,8 +3627,830 @@ export const revokeCertificationEndpoint = endpoint({
   answer: savedAnswer(certificationRecordSchema),
 });
 
+// A revocation taken back (ADR-534 (7)): an admin's alone, as revoking is, with a reason the
+// audit log keeps beside the revocation it clears.
+export const unrevokeCertificationEndpoint = endpoint({
+  name: 'unrevokeCertification',
+  summary:
+    'A certification’s revocation is taken back, with a reason: its day, reason and admin are cleared, the audit log keeping them, and every ticket that scanned it is queued, flagged no more for it; one locked as invoiced is left as it is. Refused for a certification that isn’t revoked.',
+  access: 'SIGNED_IN',
+  roles: adminOnly,
+  method: 'POST',
+  path: '/certifications/:certificationId/unrevocations',
+  params: certificationId,
+  body: z.strictObject({ reason: typed }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// A certification sheet whose phone failed, entered in the back office (ADR-521, 534 (1)): the
+// monitor who certified it, the sheet's own number (pre-printed, or the one the phone gave the
+// placard), when by the sheet, what was certified, the boxes measured (never a capacity), the
+// helpers picked, the driver and tag, the representatives, and the reason picked; a modified
+// truck names the certification it replaces. What a phone alone would have said (its phone, its
+// assignment) isn't entered.
+export const createCertificationEndpoint = endpoint({
+  name: 'createCertification',
+  summary:
+    'A certification sheet whose phone failed is entered in the back office: its number as the sheet has it, a container or a crew, the prime picked and the subs typed, what was certified, the boxes measured (the primary first; the capacity is worked out, never sent), the driver and the tag, when it was certified by the sheet, the monitor who certified it and the helpers, the representatives, the certification it replaces where a modified truck was certified again, notes and a reason picked from the firm’s list. It names the person who entered it. The field events already on its number are linked to it, and their tickets queued (the replaced one’s too). Refused for a number another certification of the project has, a reason the firm doesn’t offer for this and measurements that give no capacity.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'POST',
+  path: '/projects/:projectId/certifications',
+  params: projectId,
+  body: z
+    .strictObject({
+      certNumber: numberAsWritten,
+      kind: z.enum(['CONTAINER', 'CREW']),
+      primeId: z.uuid(),
+      firstTierSub: keyed.nullable(),
+      secondTierSub: keyed.nullable(),
+      vehicleTypeId: z.uuid().nullable(),
+      vehicleTypeOther: keyed.nullable(),
+      crewTypeId: z.uuid().nullable(),
+      boxes: z.array(syncedCertificationBoxSchema).max(certificationBoxesAtMost),
+      driverName: keyed.nullable(),
+      driverPhone: keyed.nullable(),
+      driverLicenceNumber: keyed.nullable(),
+      driverLicenceState: keyed.nullable(),
+      driverLicenceExpiry: day.nullable(),
+      tagNumber: keyed.nullable(),
+      tagState: keyed.nullable(),
+      tagExpiry: day.nullable(),
+      certifiedAt: instant,
+      deviceUtcOffsetMinutes: z.number().int().min(-720).max(840),
+      certifiedById: z.uuid(),
+      helperIds: z
+        .array(z.uuid())
+        .max(certificationHelpersAtMost)
+        .refine((helpers) => new Set(helpers).size === helpers.length, {
+          message: 'A helper is picked once.',
+        }),
+      clientRepresentativeName: keyed.nullable(),
+      contractorRepresentativeName: keyed.nullable(),
+      replaces: z.strictObject({ certificationId: z.uuid(), reason: typed }).nullable(),
+      notes: typed.nullable(),
+      reasonId: z.uuid(),
+    })
+    .superRefine((sheet, context) => {
+      if (sheet.vehicleTypeId !== null && sheet.vehicleTypeOther !== null) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A vehicle type is picked or typed, never both.',
+          path: ['vehicleTypeOther'],
+        });
+      }
+      if (sheet.kind === 'CONTAINER' && sheet.crewTypeId !== null) {
+        context.addIssue({
+          code: 'custom',
+          message: 'A container has no crew type.',
+          path: ['crewTypeId'],
+        });
+      }
+    }),
+  answer: savedAnswer(certificationRecordSchema),
+});
+
+// ---------------------------------------------------------------------------------------------
+// The back office's reads, setup's reads, a save's preview, the bulk acts and the viewers' reads of
+// the same records (REQ-217; BACKLOG 2.8.8; ADR-535). **A read takes its area's view** (the user,
+// ADR-539): `VIEW_REVIEW`, `VIEW_SETUP` or `VIEW_DISPATCH`, which an admin holds and a
+// manager/analyst is granted; the projects and the lists' values are every one of theirs to read.
+// Asked again inside the read; a pay item's rates take Setup. Every list is a page, oldest first
+// or in the order it names, 50 where none is said and 200 at most.
+const readPage = z
+  .string()
+  .regex(/^([1-9][0-9]?|1[0-9]{2}|200)$/)
+  .optional();
+const pagedAfter = z.strictObject({
+  // The last of the page before: the answer's `next`.
+  after: z.uuid().optional(),
+  limit: readPage,
+});
+const read = { access: 'SIGNED_IN', roles: backOfficeRoles } as const;
+const projectTicket = z.strictObject({
+  projectId: z.uuid(),
+  workflow: z.enum(workflows),
+  ticketNumber: z.string().trim().min(1).max(40),
+});
+
+export const listProjectsEndpoint = endpoint({
+  ...read,
+  name: 'listProjects',
+  summary:
+    'The firm’s projects, a page at a time, in name order: each with its settings, its active window and whether it is closed.',
+  method: 'GET',
+  path: '/projects',
+  query: z.strictObject({
+    // Left out, every project; `true`, only those closed; `false`, only those open.
+    closed: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: projectsAnswerSchema,
+});
+
+export const readProjectEndpoint = endpoint({
+  ...read,
+  name: 'readProject',
+  summary:
+    'One project’s page: its settings, active window and whether it is closed, its kinds of work, each contractor’s place on it by name, and its contracts.',
+  method: 'GET',
+  path: '/projects/:projectId',
+  params: projectId,
+  answer: projectAnswerSchema,
+});
+
+// The one review queue (spec/parts/08, "One review queue"; ADR-228): flags grouped by cause, and
+// the tickets waiting for a person, one workflow a page, by number as text.
+export const reviewQueueEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'reviewQueue',
+  summary:
+    'The review queue of one workflow on a project: the tickets whose field events stand pending or in review, a page at a time by number, each with its open flags (not cleared, no acceptance in force); and the project’s open flags counted by cause. Narrowed to one cause, only the tickets with an open flag of it.',
+  method: 'GET',
+  path: '/projects/:projectId/review-queue',
+  params: projectId,
+  query: z.strictObject({
+    workflow: z.enum(workflows),
+    // One cause: a flag's code.
+    cause: z.enum(flagCodes).optional(),
+    // The last ticket number of the page before: the answer's `next`.
+    after: z.string().trim().min(1).max(40).optional(),
+    limit: readPage,
+  }),
+  answer: reviewQueueAnswerSchema,
+});
+
+export const listFlagsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listFlags',
+  summary:
+    'A project’s flags, a page at a time, oldest first: on a ticket or on another record (a certification, a site, a survey), of one cause or every one, open or cleared, each with every acceptance it had and whether it was taken back.',
+  method: 'GET',
+  path: '/projects/:projectId/flags',
+  params: projectId,
+  query: z.strictObject({
+    // One cause: a flag's code.
+    cause: z.enum(flagCodes).optional(),
+    // Left out, both; `true`, only those not cleared; `false`, only those cleared.
+    open: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: flagsAnswerSchema,
+});
+
+export const readTicketEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readTicket',
+  summary:
+    'One ticket whole, as the back office reads it: its field events in field time (as recorded and corrected, with their status, zone and worked-out pay item), the completed record that stands with its collection rows, its lines with their rates and amounts, its flags with their acceptances, its QC mark, every lock it had, its voids and unvoids. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber',
+  params: projectTicket,
+  answer: ticketAnswerSchema,
+});
+
+export const readTicketDecisionsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readTicketDecisions',
+  summary:
+    'What each reconciliation run decided for one ticket and why, newest first, a page at a time: the run (what started it, when), the status it left, its words, the field events it grouped and the kinds still to arrive, the lines it priced with the rule that made each, the flags it raised, and the rule or person that voided it; whether the ticket could be processed. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber/decisions',
+  params: projectTicket,
+  query: pagedAfter,
+  answer: ticketDecisionsAnswerSchema,
+});
+
+// The audit log, read (ARCHITECTURE §5.3; invariant 3; REQ-407; ADR-544; the Phase 2 audit's F5):
+// "corrected in place, prior value kept" is a promise to an auditor, kept here. A page of it, newest
+// first, by its own number.
+const auditPage = z.strictObject({
+  // The last entry of the page before: the answer's `next`.
+  after: z
+    .string()
+    .regex(/^[1-9][0-9]{0,18}$/)
+    .optional(),
+  limit: readPage,
+});
+
+export const readTicketHistoryEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readTicketHistory',
+  summary:
+    'What the audit log holds of one ticket, newest first, a page at a time: every change to its field events and what is recorded beside them (item lines, carried tickets, photographs’ records), the completed record and its rows, its lines (those the worker removed included, each copied whole first), its flags and their acceptances, and its QC marks, locks, voids and unvoids; each with the values before and after, who made it, from where and why. A ticket with no field event is not found.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets/:workflow/:ticketNumber/history',
+  params: projectTicket,
+  query: auditPage,
+  answer: auditTrailAnswerSchema,
+});
+
+export const readRecordHistoryEndpoint = endpoint({
+  ...read,
+  name: 'readRecordHistory',
+  summary:
+    'What the audit log holds of one record, by its table and id, newest first, a page at a time. Read by the area it belongs to: a ticket’s records with view review, setup with view setup, people, phones and the board with view dispatch; sign-in’s and the firm’s security records by an admin alone. A person’s phone number is shown to an admin alone.',
+  method: 'GET',
+  path: '/audit-records',
+  query: auditPage.extend({
+    tableName: z.string().regex(/^[a-z][a-z_]{0,62}$/),
+    recordId: z.string().regex(/^[0-9A-Za-z-]{1,40}$/),
+  }),
+  answer: auditTrailAnswerSchema,
+});
+
+export const listSetAsideJobsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listSetAsideJobs',
+  summary:
+    'A project’s jobs set aside after failing too often, newest first, a page at a time: when each was queued and set aside, what queued it and who asked, its tries, and its tickets, each said to be waiting where no job has worked it since. Put one back with a reprocess naming it. Never why it failed.',
+  method: 'GET',
+  path: '/projects/:projectId/set-aside-jobs',
+  params: projectId,
+  query: pagedAfter,
+  answer: setAsideJobsAnswerSchema,
+});
+
+export const readFieldEventEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readFieldEvent',
+  summary:
+    'One field event as recorded and corrected, with its status, its item lines and the tickets it carries (those taken off kept, marked), its photographs’ records (each with its view, when it was taken and when its file reached storage) and the scale receipt it names. Never where a file is kept.',
+  method: 'GET',
+  path: '/field-events/:fieldEventId',
+  params: z.strictObject({ fieldEventId: z.uuid() }),
+  answer: fieldEventAnswerSchema,
+});
+
+export const readScaleReceiptEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readScaleReceipt',
+  summary:
+    'One scale receipt as the tower copied it, with its photographs’ records and the field events that name it.',
+  method: 'GET',
+  path: '/scale-receipts/:scaleReceiptId',
+  params: z.strictObject({ scaleReceiptId: z.uuid() }),
+  answer: scaleReceiptAnswerSchema,
+});
+
+export const listCertificationsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listCertifications',
+  summary:
+    'A project’s certifications, a page at a time, by cert number as written: each whole, with its boxes, helpers, photographs’ records, QC mark and its own flags, where it came from (its phone, or the paper sheet with who entered it and why) and any revocation.',
+  method: 'GET',
+  path: '/projects/:projectId/certifications',
+  params: projectId,
+  query: z.strictObject({
+    // One cert number, as written.
+    certNumber: z.string().trim().min(1).max(40).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: certificationsAnswerSchema,
+});
+
+export const readCertificationEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readCertification',
+  summary:
+    'One certification whole: its boxes (those taken off kept, marked), helpers, photographs’ records, QC mark and its own flags, where it came from and any revocation. Never the driver’s phone or licence number.',
+  method: 'GET',
+  path: '/certifications/:certificationId',
+  params: z.strictObject({ certificationId: z.uuid() }),
+  answer: certificationReadSchema,
+});
+
+export const listRoesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listRoes',
+  summary:
+    'A project’s ROEs, a page at a time, in the order they were made: each with its scope, its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/roes',
+  params: projectId,
+  query: pagedAfter,
+  answer: roesAnswerSchema,
+});
+
+export const listSurveysEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listSurveys',
+  summary:
+    'A project’s surveys, a page at a time, in the order they were made: each with its own flags, its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/surveys',
+  params: projectId,
+  query: pagedAfter,
+  answer: surveysAnswerSchema,
+});
+
+export const listIncidentsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listIncidents',
+  summary:
+    'A project’s incidents, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/incidents',
+  params: projectId,
+  query: pagedAfter,
+  answer: incidentsAnswerSchema,
+});
+
+export const listDropOffLogsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listDropOffLogs',
+  summary:
+    'A project’s citizen drop-off logs, a page at a time, in the order they were made: each with its photographs’ records and its QC mark.',
+  method: 'GET',
+  path: '/projects/:projectId/drop-off-logs',
+  params: projectId,
+  query: pagedAfter,
+  answer: dropOffLogsAnswerSchema,
+});
+
+export const listInvoiceBatchesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listInvoiceBatches',
+  summary:
+    'A project’s invoice batches, a page at a time, in name order: each with how many locks in force it holds.',
+  method: 'GET',
+  path: '/projects/:projectId/invoice-batches',
+  params: projectId,
+  query: pagedAfter,
+  answer: invoiceBatchesAnswerSchema,
+});
+
+const invoiceBatchId = z.strictObject({ invoiceBatchId: z.uuid() });
+
+export const readInvoiceBatchEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readInvoiceBatch',
+  summary:
+    'One invoice batch and what it holds: each lock in force that names it, with the ticket it locks. No amount: a batch is a name and its tickets.',
+  method: 'GET',
+  path: '/invoice-batches/:invoiceBatchId',
+  params: invoiceBatchId,
+  answer: invoiceBatchAnswerSchema,
+});
+
+// A batch is renamed, never archived: it is kept for ever (ADR-363, 529, 535 (4)).
+export const renameInvoiceBatchEndpoint = endpoint({
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  name: 'renameInvoiceBatch',
+  summary:
+    'An invoice batch is renamed: a name used once on its project, never blank. Its locks and tickets are as they were.',
+  method: 'PATCH',
+  path: '/invoice-batches/:invoiceBatchId',
+  params: invoiceBatchId,
+  body: z.strictObject({ name: named }),
+  answer: savedAnswer(invoiceBatchRecordSchema),
+});
+
+// The board searched by person or phone, across projects and days (C103, C115; ADR-535 (1)).
+export const searchBoardEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_DISPATCH',
+  name: 'searchBoard',
+  summary:
+    'The dispatch board searched: a person’s or a phone’s assignments (or a project’s), from one day to another (62 days at most), standing or withdrawn, a page at a time by day and then in the order written; each with what the board warns of beside it (a second assignment for the person or the phone that day, a day outside the project’s active window, a closed project, unit rate pay items named with no unit rate work, a site not yet active or closed). A warning never stops anything.',
+  method: 'GET',
+  path: '/assignments',
+  query: z
+    .strictObject({
+      userId: z.uuid().optional(),
+      deviceId: z.uuid().optional(),
+      projectId: z.uuid().optional(),
+      from: day,
+      to: day,
+      withdrawn: z.enum(['true', 'false']).optional(),
+      after: z.uuid().optional(),
+      limit: readPage,
+    })
+    .refine(
+      (query) =>
+        query.userId !== undefined || query.deviceId !== undefined || query.projectId !== undefined,
+      { message: 'Name a person, a phone or a project.', path: ['userId'] },
+    )
+    .refine(
+      (query) => {
+        const days = (Date.parse(query.to) - Date.parse(query.from)) / 86_400_000;
+        return days >= 0 && days <= 61;
+      },
+      { message: 'From one day to another, 62 days at most.', path: ['to'] },
+    ),
+  answer: boardSearchAnswerSchema,
+});
+
+export const listPhoneSessionsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_DISPATCH',
+  name: 'listPhoneSessions',
+  summary:
+    'A phone’s sessions, a page at a time, newest first: whose, when made, until when and whether ended, which way one opened under the master passcode was, and whether it came from a sign-in made on the phone offline. Never a token.',
+  method: 'GET',
+  path: '/phones/:deviceId/sessions',
+  params: z.strictObject({ deviceId: z.uuid() }),
+  query: pagedAfter,
+  answer: phoneSessionsAnswerSchema,
+});
+
+// Setup's reads (C99, C100, C169).
+export const listFormsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listForms',
+  summary:
+    'A project’s forms, one for each document type at most: each with its debris types’ entries (those archived kept, marked) and the newest version of its own fields.',
+  method: 'GET',
+  path: '/projects/:projectId/forms',
+  params: projectId,
+  answer: formsAnswerSchema,
+});
+
+export const listPayItemsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listPayItems',
+  summary:
+    'A project’s pay items, a page at a time, by code: each as the firm entered it, with its crew day’s steps in force. Never a rate: a pay item’s rates are a read that takes Setup.',
+  method: 'GET',
+  path: '/projects/:projectId/pay-items',
+  params: projectId,
+  query: pagedAfter,
+  answer: payItemsAnswerSchema,
+});
+
+export const listPayItemRatesEndpoint = endpoint({
+  ...setup,
+  name: 'listPayItemRates',
+  summary:
+    'A project’s rates, a page at a time, by pay item and then prime: each an exact decimal, those archived kept, marked. Read only by whoever may set one.',
+  method: 'GET',
+  path: '/projects/:projectId/pay-item-rates',
+  params: projectId,
+  query: pagedAfter,
+  answer: payItemRatesAnswerSchema,
+});
+
+export const listRulesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listRules',
+  summary:
+    'A project’s rules, a page at a time, in the order written: each whole as the rule builder states it (each picked value with its name and whether it is gone), the pay item whose "Pays when" wrote it, and whether it is valid now and why not.',
+  method: 'GET',
+  path: '/projects/:projectId/rules',
+  params: projectId,
+  query: z.strictObject({
+    // Left out, every rule; `true`, only those archived; `false`, only those in force.
+    archived: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: rulesAnswerSchema,
+});
+
+export const listSitesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listSites',
+  summary:
+    'A project’s sites, a page at a time, in name order: each with its labels, its tipping fee links and its own shape’s newest version.',
+  method: 'GET',
+  path: '/projects/:projectId/sites',
+  params: projectId,
+  query: pagedAfter,
+  answer: sitesAnswerSchema,
+});
+
+export const listSiteShapesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listSiteShapes',
+  summary:
+    'A site’s own shape, every version, newest first: each with its shape, how it came (drawn, a file, an Esri layer), its file’s name or the layer’s address, and whether its file was kept. Never where.',
+  method: 'GET',
+  path: '/sites/:siteId/shapes',
+  params: z.strictObject({ siteId: z.uuid() }),
+  query: pagedAfter,
+  answer: siteShapeVersionsAnswerSchema,
+});
+
+// A kept map's file, answered as a photograph's is (ADR-483, 535 (2)): the bytes stored, under the
+// type kept with them, as a download and never as a page.
+export const siteShapeFileEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'siteShapeFile',
+  summary:
+    'The file a site’s shape version was loaded from, as it was kept: the bytes that were stored, under the type they were kept as, sent as a download and never as a page. None for a shape that was drawn.',
+  method: 'GET',
+  path: '/site-shapes/:siteAreaVersionId/file',
+  params: z.strictObject({ siteAreaVersionId: z.uuid() }),
+  answersFile: true,
+  answersFileOf: mapFileTypes,
+  answer: keptFileAnswerSchema,
+});
+
+export const listMapVersionsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'listMapVersions',
+  summary:
+    'A project’s map versions, a page at a time, newest first: each with how it came, its file’s name or the layer’s address, the zones’ own layer and whether its copy was kept, and its zones’ names.',
+  method: 'GET',
+  path: '/projects/:projectId/map-versions',
+  params: projectId,
+  query: pagedAfter,
+  answer: mapVersionsAnswerSchema,
+});
+
+const mapVersionId = z.strictObject({ mapVersionId: z.uuid() });
+
+export const readMapVersionEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'readMapVersion',
+  summary: 'One map version with its boundary and each zone’s shape, as they were loaded.',
+  method: 'GET',
+  path: '/map-versions/:mapVersionId',
+  params: mapVersionId,
+  answer: mapVersionAnswerSchema,
+});
+
+export const mapVersionFileEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_SETUP',
+  name: 'mapVersionFile',
+  summary:
+    'A map version’s file as it was kept, or the copy of its zones’ own Esri layer: the bytes that were stored, under the type they were kept as, sent as a download and never as a page.',
+  method: 'GET',
+  path: '/map-versions/:mapVersionId/files/:file',
+  params: z.strictObject({ mapVersionId: z.uuid(), file: z.enum(['map', 'zones']) }),
+  answersFile: true,
+  answersFileOf: mapFileTypes,
+  answer: keptFileAnswerSchema,
+});
+
+export const listListValuesEndpoint = endpoint({
+  ...read,
+  name: 'listListValues',
+  summary:
+    'One of the firm’s lists, a page at a time, in its order: its values in service, or the archived ones apart, each with what its list asks beside its name (a field tag its project).',
+  method: 'GET',
+  path: '/lists/:list/values',
+  params: z.strictObject({ list: z.enum(firmLists) }),
+  query: z.strictObject({
+    archived: z.enum(['true', 'false']).optional(),
+    after: z.uuid().optional(),
+    limit: readPage,
+  }),
+  answer: listValuesAnswerSchema,
+});
+
+// What a setup save would change, before it is saved (ADR-229, 535 (3)): each takes exactly its
+// save's body, and nothing of it is kept.
+const preview = (of: string) =>
+  `What ${of} would do, before it is saved: the record as it would be, its warnings and how many tickets it would queue (and pass by, locked as invoiced), or why it wouldn’t be saved. Nothing is kept.`;
+
+export const previewPayItemChangeEndpoint = endpoint({
+  ...setup,
+  name: 'previewPayItemChange',
+  summary: preview('a change to a pay item'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/previews',
+  params: payItemId,
+  body: changePayItemEndpoint.body,
+  answer: previewAnswer(payItemRecordSchema),
+});
+
+export const previewPaysWhenEndpoint = endpoint({
+  ...setup,
+  name: 'previewPaysWhen',
+  summary: preview('saving a pay item’s "Pays when"'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/pays-when/previews',
+  params: payItemId,
+  body: savePaysWhenEndpoint.body,
+  answer: previewAnswer(rulesKeptRecordSchema),
+});
+
+export const previewPayItemRateEndpoint = endpoint({
+  ...setup,
+  name: 'previewPayItemRate',
+  summary: preview('a prime’s rate'),
+  method: 'POST',
+  path: '/pay-items/:payItemId/rates/:primeId/previews',
+  params: setPayItemRateEndpoint.params,
+  body: setPayItemRateEndpoint.body,
+  answer: previewAnswer(payItemRateRecordSchema),
+});
+
+export const previewNewRuleEndpoint = endpoint({
+  ...setup,
+  name: 'previewNewRule',
+  summary: preview('a new rule'),
+  method: 'POST',
+  path: '/projects/:projectId/rules/previews',
+  params: projectId,
+  body: ruleBody,
+  answer: previewAnswer(savedRuleRecordSchema),
+});
+
+export const previewRuleChangeEndpoint = endpoint({
+  ...setup,
+  name: 'previewRuleChange',
+  summary: preview('a change to a rule'),
+  method: 'POST',
+  path: '/rules/:ruleId/previews',
+  params: z.strictObject({ ruleId: z.uuid() }),
+  body: ruleBody,
+  answer: previewAnswer(savedRuleRecordSchema),
+});
+
+// QC and a lock for many tickets in one request (C148; ADR-535 (4)): each its own piece of work,
+// in order, each answered.
+const severalAtMost = 200;
+
+export const setQcStatusesEndpoint = endpoint({
+  ...reviewer,
+  permission: 'QC',
+  name: 'setQcStatuses',
+  summary:
+    'QC statuses set on many records at once, up to 200, each as one would be: in the order sent, each its own piece of work and each answered, saved with its mark or not with its reason and words (a ticket locked as invoiced among them). One refused never stops the rest.',
+  method: 'PUT',
+  path: '/qc-marks/several',
+  body: z.strictObject({
+    marks: z
+      .array(z.strictObject({ record: qcMarked, status: z.enum(qcStatuses), note: reviewNote }))
+      .min(1)
+      .max(severalAtMost),
+  }),
+  answer: severalAnswer(qcMarkRecordSchema),
+});
+
+export const lockSeveralAsInvoicedEndpoint = endpoint({
+  ...reviewer,
+  permission: 'LOCK_INVOICED',
+  name: 'lockSeveralAsInvoiced',
+  summary:
+    'Many tickets locked as invoiced at once, up to 200, each in the batch named where one is: in the order sent, each its own piece of work and each answered, locked or not with its reason and words (not QC Approved, not whole, flagged, already locked). One refused never stops the rest.',
+  method: 'POST',
+  path: '/invoice-locks/several',
+  body: z.strictObject({
+    tickets: z.array(ticketMarked).min(1).max(severalAtMost),
+    invoiceBatchId: z.uuid().optional(),
+  }),
+  answer: severalAnswer(invoiceLockRecordSchema),
+});
+
+// The viewers' reads of the same records (ADR-520 (3), 535 (6)): what the database shows the
+// signed-in viewer and no more.
+const viewerRead = { access: 'SIGNED_IN', roles: viewerOnly } as const;
+const viewerPaged = z.strictObject({ after: z.uuid().optional(), limit: viewerPage });
+
+// What the audit log holds of one ticket, as the database shows it to a client user or an auditor
+// (ADR-544): the same changes the back office reads, with what this viewer reads of each row and
+// nothing more, never why. A contractor user is shown none. A ticket the viewer isn't shown is not
+// found.
+export const viewerTicketHistoryEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerTicketHistory',
+  summary:
+    'What the audit log holds of one ticket as the signed-in client user or auditor is shown it, newest first, a page at a time: each change to its records, the values before and after as this viewer reads them, who made it and from where; never why. A contractor user is shown none; a ticket the viewer isn’t shown is not found.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/tickets/:workflow/:ticketNumber/history',
+  params: z.strictObject({
+    projectId: z.uuid(),
+    workflow: z.enum(workflows),
+    ticketNumber: viewedNumber,
+  }),
+  query: z.strictObject({
+    after: z
+      .string()
+      .regex(/^[1-9][0-9]{0,18}$/)
+      .optional(),
+    limit: viewerPage,
+  }),
+  answer: auditTrailAnswerSchema,
+});
+
+export const viewerCertificationsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerCertifications',
+  summary:
+    'A project’s certifications as the signed-in viewer is shown them, a page at a time, by cert number: each with its boxes, who it names by name and any revocation; never the driver’s phone or licence number. A contractor user is shown those naming its contractor.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/certifications',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerCertificationsAnswerSchema,
+});
+
+export const viewerSurveysEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSurveys',
+  summary:
+    'A project’s surveys as the signed-in viewer is shown them, a page at a time, in the order they were made. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/surveys',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerSurveysAnswerSchema,
+});
+
+export const viewerIncidentsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerIncidents',
+  summary:
+    'A project’s incidents as the signed-in viewer is shown them, a page at a time, in the order they were made. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/incidents',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerIncidentsAnswerSchema,
+});
+
+export const viewerDropOffLogsEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerDropOffLogs',
+  summary:
+    'A project’s citizen drop-off logs as the signed-in viewer is shown them, a page at a time, in the order they were made: the resident and where their debris came from only where the firm lets this viewer see private citizens by name. A contractor user is shown none.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/drop-off-logs',
+  params: projectId,
+  query: viewerPaged,
+  answer: viewerDropOffLogsAnswerSchema,
+});
+
+export const viewerSetupEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSetup',
+  summary:
+    'A project’s setup as a client user or an auditor reads it: its forms and debris types, its pay items by code and description (never a rate), its sites and their facts, its contracts and their primes, its rules by name. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/setup',
+  params: projectId,
+  answer: viewerSetupAnswerSchema,
+});
+
+export const viewerSetupCheckEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerSetupCheck',
+  summary:
+    'The setup check as a client user or an auditor reads it: everything the project’s setup leaves open, each in plain words. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/setup-check',
+  params: projectId,
+  answer: setupCheckAnswerSchema,
+});
+
+export const viewerQuantityLookupEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerQuantityLookup',
+  summary:
+    'What each of the project’s sites’ phones ask for, as a client user or an auditor reads it. Not found for a contractor user.',
+  method: 'GET',
+  path: '/viewer/projects/:projectId/quantity-lookup',
+  params: projectId,
+  answer: quantityLookupAnswerSchema,
+});
+
+export const viewerPhotographFileEndpoint = endpoint({
+  ...viewerRead,
+  name: 'viewerPhotographFile',
+  summary:
+    'A photograph’s file, or its depth file, as kept, for a viewer the database shows the photograph’s record: the bytes that were stored, under the type their own first bytes said, sent as a download and never as a page. A photograph the viewer isn’t shown is not found.',
+  method: 'GET',
+  path: '/viewer/photographs/:photoId/files/:file',
+  params: photoFileNamed,
+  answersFile: true,
+  answer: keptFileAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
+  readinessEndpoint,
   requestPasswordResetEndpoint,
   completePasswordResetEndpoint,
   signInEndpoint,
@@ -2480,6 +4461,7 @@ export const endpoints: readonly Endpoint[] = [
   changePasswordEndpoint,
   beginTwoStepSetupEndpoint,
   confirmTwoStepSetupEndpoint,
+  removeOwnTwoStepEndpoint,
   clearTwoStepEndpoint,
   createPersonEndpoint,
   listPeopleEndpoint,
@@ -2494,41 +4476,92 @@ export const endpoints: readonly Endpoint[] = [
   unarchivePersonEndpoint,
   findClientsEndpoint,
   createClientEndpoint,
+  changeClientEndpoint,
   findDeclarationEventsEndpoint,
   createDeclarationEventEndpoint,
+  changeDeclarationEventEndpoint,
   createProjectEndpoint,
+  listProjectsEndpoint,
+  readProjectEndpoint,
+  reviewQueueEndpoint,
+  listFlagsEndpoint,
+  readTicketEndpoint,
+  readTicketDecisionsEndpoint,
+  readTicketHistoryEndpoint,
+  readRecordHistoryEndpoint,
+  listSetAsideJobsEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
+  closingCheckEndpoint,
   closeProjectEndpoint,
+  reopenProjectEndpoint,
   startNumberSeriesEndpoint,
   enterControlRangeEndpoint,
   archiveControlRangeEndpoint,
   addFieldTagEndpoint,
   findContractorsEndpoint,
   createContractorEndpoint,
+  changeContractorEndpoint,
   addPrimeEndpoint,
   createContractEndpoint,
+  changeContractEndpoint,
   addDebrisTypeEndpoint,
   addPayableTypeEndpoint,
+  addListValueEndpoint,
+  listListValuesEndpoint,
+  renameListValueEndpoint,
+  archiveListValueEndpoint,
+  unarchiveListValueEndpoint,
+  listFormsEndpoint,
   createFormEndpoint,
+  changeFormEndpoint,
   addFormDebrisTypeEndpoint,
+  changeFormDebrisTypeEndpoint,
   addFormDefinitionEndpoint,
+  listPayItemsEndpoint,
   createPayItemEndpoint,
+  listPayItemRatesEndpoint,
   changePayItemEndpoint,
+  previewPayItemChangeEndpoint,
   setPayItemRateEndpoint,
+  previewPayItemRateEndpoint,
+  setCrewDayStepsEndpoint,
   savePaysWhenEndpoint,
+  previewPaysWhenEndpoint,
+  listRulesEndpoint,
   createRuleEndpoint,
+  previewNewRuleEndpoint,
   changeRuleEndpoint,
-  mergeContractorEndpoint,
+  previewRuleChangeEndpoint,
+  listSitesEndpoint,
   createSiteEndpoint,
   changeSiteEndpoint,
+  giveSiteLabelEndpoint,
+  removeSiteLabelEndpoint,
+  listSiteShapesEndpoint,
   addSiteShapeEndpoint,
+  siteShapeFileEndpoint,
   linkTippingFeeEndpoint,
+  removeTippingFeeEndpoint,
+  listMapVersionsEndpoint,
   loadMapEndpoint,
+  readMapVersionEndpoint,
+  mapVersionFileEndpoint,
+  sendMapFileEndpoint,
+  loadMapFileEndpoint,
+  addSiteShapeFileEndpoint,
+  loadEsriMapEndpoint,
+  refreshEsriMapEndpoint,
+  addSiteShapeFromEsriEndpoint,
   setupCheckEndpoint,
   quantityLookupEndpoint,
   siteQuantityLookupEndpoint,
+  firmSettingsEndpoint,
+  changePhoneKeyHoursEndpoint,
+  changeViewerTwoStepEndpoint,
+  changeMonitorSessionHoursEndpoint,
   listPhonesEndpoint,
+  listPhoneSessionsEndpoint,
   enrolPhoneEndpoint,
   challengePhoneEndpoint,
   provePhoneEndpoint,
@@ -2536,6 +4569,7 @@ export const endpoints: readonly Endpoint[] = [
   createMonitorOnPhoneEndpoint,
   signInOnPhoneEndpoint,
   openPasscodeSessionOnPhoneEndpoint,
+  takeOfflineSignInOnPhoneEndpoint,
   reportPasscodeUseEndpoint,
   signOutOnPhoneEndpoint,
   phoneMonitorEndpoint,
@@ -2545,25 +4579,43 @@ export const endpoints: readonly Endpoint[] = [
   phoneSetupChoicesEndpoint,
   reportUnplannedAssignmentEndpoint,
   syncPhoneEndpoint,
+  turnInPhoneEndpoint,
+  photoFileEndpoint,
+  sendPhotoFilePartEndpoint,
+  renamePhoneEndpoint,
   removePhoneEndpoint,
+  returnPhoneEndpoint,
   changeMasterPasscodeEndpoint,
   listAssignmentsEndpoint,
   writeAssignmentEndpoint,
   changeAssignmentEndpoint,
   withdrawAssignmentEndpoint,
+  reinstateAssignmentEndpoint,
+  searchBoardEndpoint,
   voidTicketEndpoint,
   unvoidTicketEndpoint,
   acceptFlagEndpoint,
+  withdrawAcceptanceEndpoint,
   setQcStatusEndpoint,
+  setQcStatusesEndpoint,
+  listInvoiceBatchesEndpoint,
   createInvoiceBatchEndpoint,
+  readInvoiceBatchEndpoint,
+  renameInvoiceBatchEndpoint,
   lockAsInvoicedEndpoint,
+  lockSeveralAsInvoicedEndpoint,
   setLockBatchEndpoint,
   unlockInvoicedEndpoint,
+  reprocessTicketsEndpoint,
+  readFieldEventEndpoint,
   correctFieldEventEndpoint,
   renumberFieldEventEndpoint,
   correctItemLineEndpoint,
   correctCarriedTicketEndpoint,
   markPhotographEndpoint,
+  photographFileEndpoint,
+  addPhotographEndpoint,
+  readScaleReceiptEndpoint,
   correctScaleReceiptEndpoint,
   correctRoeEndpoint,
   correctRoeScopeEndpoint,
@@ -2572,12 +4624,42 @@ export const endpoints: readonly Endpoint[] = [
   correctDropOffLogEndpoint,
   renumberQuarantinedRecordEndpoint,
   markSecondCopyEndpoint,
+  listHeldRecordsEndpoint,
+  saveHeldRecordEndpoint,
+  closeHeldRecordEndpoint,
+  listSetAsideFilesEndpoint,
+  setAsideFileEndpoint,
+  closeSetAsideFileEndpoint,
+  listQuarantinedRecordsEndpoint,
   createFieldEventEndpoint,
+  listRoesEndpoint,
+  createRoeEndpoint,
+  listSurveysEndpoint,
+  createSurveyEndpoint,
+  listIncidentsEndpoint,
+  createIncidentEndpoint,
+  listDropOffLogsEndpoint,
+  createDropOffLogEndpoint,
+  listCertificationsEndpoint,
+  createCertificationEndpoint,
+  readCertificationEndpoint,
+  correctCertificationEndpoint,
   correctCertificationBoxEndpoint,
+  addCertificationBoxEndpoint,
   markSignaturesOnFileEndpoint,
   revokeCertificationEndpoint,
+  unrevokeCertificationEndpoint,
   viewerProjectsEndpoint,
   viewerRoesEndpoint,
+  viewerTicketHistoryEndpoint,
+  viewerCertificationsEndpoint,
+  viewerSurveysEndpoint,
+  viewerIncidentsEndpoint,
+  viewerDropOffLogsEndpoint,
+  viewerSetupEndpoint,
+  viewerSetupCheckEndpoint,
+  viewerQuantityLookupEndpoint,
   viewerTicketsEndpoint,
   viewerTicketEndpoint,
+  viewerPhotographFileEndpoint,
 ];

@@ -5,6 +5,7 @@
 import {
   openDatabase,
   openViewerDatabase,
+  type Connection,
   type Database,
   type ViewerDatabase,
 } from '@open-adms/db';
@@ -15,16 +16,12 @@ import type { Settings } from './settings.ts';
 // What a class names to be handed the database: `@Inject(apiDatabase)`.
 export const apiDatabase = Symbol('the API’s database');
 
-// `maxConnections` is the policy's (ADR-419); a tool that opens it for one question leaves it out.
-export function openApiDatabase(
-  settings: Pick<Settings, 'databaseUrl'>,
-  maxConnections?: number,
-): Database {
-  return openDatabase({
-    url: settings.databaseUrl,
-    requestNow,
-    ...(maxConnections === undefined ? {} : { maxConnections }),
-  });
+// The pool's size and each piece of work's limits, the policy's (ADR-419, 524); a tool that opens
+// it for one question leaves them out.
+export type ApiPool = Pick<Connection, 'maxConnections' | 'pieceOfWork'>;
+
+export function openApiDatabase(settings: Pick<Settings, 'databaseUrl'>, pool?: ApiPool): Database {
+  return openDatabase({ url: settings.databaseUrl, requestNow, ...pool });
 }
 
 // What a class names to be handed the read-only login's database: `@Inject(apiViewerDatabase)`.
@@ -35,10 +32,10 @@ export const apiViewerDatabase = Symbol('the API’s database for a read-only vi
 // else, so no read is made as that login without its viewer stated.
 export function openApiViewerDatabase(
   settings: Pick<Settings, 'readOnlyDatabaseUrl'>,
-  maxConnections?: number,
+  pool?: ApiPool,
 ): ViewerDatabase {
-  return openViewerDatabase({
-    url: settings.readOnlyDatabaseUrl,
-    ...(maxConnections === undefined ? {} : { maxConnections }),
-  });
+  return openViewerDatabase({ url: settings.readOnlyDatabaseUrl, ...pool });
 }
+
+// Where the API keeps files: the object store, or a test's own (ADR-480, 482).
+export const apiMedia = Symbol('where the API keeps files');
