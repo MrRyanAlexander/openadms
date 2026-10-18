@@ -15,7 +15,7 @@ iPhone, then Android (ADR-099), one codebase (`apps/field`, React + Vite + Capac
 ADR-519's rule: a phase's own server work never moves to a later phase by agent default). **Done
 when** the golden mission's field events are captured through the field app's screens and come out
 with the numbers the user approved, every scenario with a Phase 3 part passes at its layer
-(`spec/acceptance/11-field-app.md`: 123), and its 33 REQs are ticked from runs that were seen. Exit
+(`spec/acceptance/11-field-app.md`: 128), and its 33 REQs are ticked from runs that were seen. Exit
 criteria: `NEXT.md`.
 
 **The order** (ADR-558): the answer and the foundation → the phone's store, identity and sign-in →
@@ -176,20 +176,27 @@ time clock → iPhone → Android → prove it.
 ### Milestone 3.5 — Capture (`adms-field-app` §4A; `adms-ticket-workflows`)
 - [ ] **3.5.1 The collection, and what every capture shares** (REQ-303, 308a, 309, 317 in part, 318,
   319; C68, C96, C121, C135; AC-02-44, 45, AC-04-08, 11, 24, 91, 92, 95, 96, 98, AC-08-06,
-  AC-11-05, 36…39, 68): badge first, number last; a badge not in the lists warned, refreshed or keyed by
-  hand; the debris type and field tag by name; GPS and waypoints; the address looked up or typed;
-  normal or split, and the split chain; the number scanned or shown and entered again, a typed one
-  with its reason; the phone's own duplicate check; cancel; sealed at submit. The number entered
+  AC-11-05, 36…39, 68, 74…78; C179, C180): **the badge, then the number, at New** (ADR-571, the
+  user): the control ticket scanned or the next generated number shown, entered again, a typed one
+  with its reason; **the open list**: a ticket left at any step and resumed where it was left, kept
+  across sign-outs and restarts, several open, **never two for one truck** (its badge opens the one
+  open); a badge not in the lists warned, refreshed or keyed by hand; the debris type and field tag by
+  name; GPS and **waypoints** ("Mark waypoint"), **their server half first** (C180); the address
+  looked up or typed; normal or split, and the split chain; **photos at any step**, the review showing
+  the photos themselves; the phone's own duplicate check; cancel (the number kept, unsent); sealed
+  at submit; the harness's phone moved to the new order (C179). The number entered
   twice as the user answered it at 3.1.4's prototype (WCAG 3.3.7; file 11, left 2).
 - [ ] **3.5.2 The tower and the haul-out** (REQ-304, 305, 124f, 321; C74, C83, C97, C100; AC-04-38,
-  44, AC-11-40, 41): the site from the assignment; the debris type picked on its own; one quantity
+  44, AC-11-40, 41, 74, 75, 78): the site from the assignment; the badge, then the driver's ticket
+  scanned at New, and the open list as at the curb (ADR-571); the review's photos; the debris type picked on its own; one quantity
   from the site's lookup (the load call typed 0–100, the scale weight and receipt, or the count of
   tickets carried); no ticket list; the haul-out's call at its loading end, split piles; a
   handwritten disposal receipt on a control-ticket project; a load turned away gets nothing.
-- [ ] **3.5.3 Unit rate** (REQ-306, 320, 112b; AC-04-70, AC-11-43): the crew badge kept and
-  confirmed; the crew photo; the payable type by name; each kind of work's screen (a count, a
+- [ ] **3.5.3 Unit rate** (REQ-306, 320, 112b; AC-04-70, AC-11-43, 74, 76): the crew badge kept and
+  confirmed; the number generated at New, right after the crew badge (ADR-571); open tickets, a crew
+  not held to one; the crew photo; the payable type by name; each kind of work's screen (a count, a
   measurement, a stump, items, items with hours); the pay item from the domain's bands; ineligible
-  where the pay item allows; one GPS point; the number generated and entered again.
+  where the pay item allows; one GPS point.
 - [ ] **3.5.4 Forms** (REQ-307; C66, C67, C69, C118's last part; AC-04-101): the ROE (a number from
   the block or typed), pre- and post-work surveys (the post-work picks from ROEs whose pre-work
   survey is done), the incident (type, sub-type, what its form offers), the citizen drop-off log,
@@ -201,8 +208,9 @@ time clock → iPhone → Android → prove it.
   sent; a hand-keyed truck's typed capacity, every detail not recorded `null`.
 
 ### Milestone 3.6 — Photographs, printing and scanning, in the browser build (ARCHITECTURE §11, §12)
-- [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44, 68): from the camera only, at
-  most 8 per ticket and a certification's five views; SHA-256 at capture; the native shrink's
+- [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44, 68, 78): from the camera only, at
+  most 8 per ticket and a certification's five views; at any step while the ticket is open, shown on
+  the review, retaken or removed before submitting (ADR-571); SHA-256 at capture; the native shrink's
   interface (the browser build keeps the original).
 - [ ] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
   receipt content model (its package by ADR: the back office's receipt batch reads it too), to PDF
@@ -445,7 +453,7 @@ The historical Phase 1 closeout on `database/` (H1.x, struck 2026-10-06 by ADR-3
 ### 📌 Carry-forward register: known later concerns (ADR-274; rewritten live-only by ADR-532)
 
 What a task's ADRs leave for later, filed under the task or phase that picks it up, each line named
-by its C-number (the numbers never change and are never reused; the next is **C179**). **Rule for
+by its C-number (the numbers never change and are never reused; the next is **C181**). **Rule for
 every agent:** at a task's start, read the standing rules below and the items under its heading,
 and do each or say in the task's ADR why it waits and move it. At close-out, a new "later" in an
 ADR gets a line here in the same response, under the task or phase that takes it (**a server
@@ -486,11 +494,13 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C177 → 3.5.1…3.5.3 · C178 → 3.8.1, 3.9.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C179, C180 → 3.5.1 · C177 → 3.5.1…3.5.3 · C178 → 3.8.1, 3.9.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+- **C179.** The harness's phone (`packages/scenarios/src/device.ts`, ADR-332) takes the number at Complete and a cancelled field event has no number; ADR-571 moves the number to New, right after the badge, keeps a cancelled ticket's number, and holds one open ticket per truck on a phone. 3.5.1 moves the harness with the screens, the story `p1-field-days` and AC-04-10, 11, 91 proven again (the payloads don't change: a field event never says when its number was taken).
+- **C180.** Waypoints (ADR-571, the user; Q-104, REQ-303): a collection's ordered list of the phone's time and whatever fix it had. The data model holds only a start and an end fix, so 3.5.1 builds their server half first, by the endpoint recipe: the record and its guards (decimal(38,8), on the earth or none, its field event's project), audited and correctable by permission like any captured field, the sync contract's shape and its limit (a policy number), `spec/DATA-MODEL.md` written for them, and the back office's read where it reads a field event; nothing in the engine reads them (AC-11-77).
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
 - **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Have:* the automated check beside the browser end-to-end tests (3.1.3, ADR-566). *Left:* each screen's own check in its task (automatic once its screen names itself); the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C175.** React 19.3.1 (published 2026-10-14 on every React line at once) and Playwright 1.64.1 (2026-10-14) are read again once seven days old, from 2026-10-21: an advisory against 19.3.0 or 1.64.0 published by then, or what 19.3.1 fixes, decides whether to take them (ADR-563, 564). Whichever task runs then (3.1.3's checker ADR is a good moment).
-- **C177.** The user's answers to **Q-215…Q-218** (ADR-569: a confirmation after each value, a monitor scorecard, the bottom menu, the number typed again) are read by the capture tasks before they build, each answer an ADR and its scenarios in file 11; until then capture follows ADR-209. **The prototype** (`apps/field/prototype/`, ADR-568) goes when the capture screens it shows are built (3.5.3 at the latest), its screens leaving `e2e/screens.ts`'s list and its test with it.
+- **C177.** The user's answers to **Q-215…Q-218** (ADR-569: a confirmation after each value, a monitor scorecard, the bottom menu, the number typed again) are read by the capture tasks before they build, each answer an ADR and its scenarios in file 11; until then capture follows ADR-209 as amended by ADR-571 (the number at New). **The prototype** (`apps/field/prototype/`, ADR-568) goes when the capture screens it shows are built (3.5.3 at the latest), its screens leaving `e2e/screens.ts`'s list and its test with it.
 - **C176.** The field app's `Permissions-Policy` turns the camera and the phone's place off until a screen needs one (`apps/field/page.ts`, `servedHeaders`; ADR-565): the place opens to `(self)` with the first capture screen that stamps GPS (3.5.1), the camera with the photographs (3.6.1), each in its task, with its scenario (AC-11-68). The microphone, payment and USB stay off.
 - **C66, C67 (c).** What a phone lets a monitor change on an ROE after their shift; "GPS required" asked by the phone; a photo field's capture; the incident screen shows only what the form offers.
 - **C68.** The phone's screens, its own duplicate check, what a cancelled field event shows, whether a typed number is entered twice, whether hand re-entry stays (ADR-209; put to the user as Q-218, ADR-569: C177).

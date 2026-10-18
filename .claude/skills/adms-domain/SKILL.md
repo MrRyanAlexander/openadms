@@ -3,9 +3,9 @@ name: adms-domain
 description: Open ADMS domain grounding and glossary. Read this before your first task in any conversation, and before explaining or demonstrating the domain. Covers what an ADMS is, why a load is recorded as two field events by two monitors who cannot see each other, joined on the ticket number, the load call, who's who (the firm that installs it, its users, client users, the outside parties it keeps records of), a ticket's life from setup to the client package, why nothing is deleted, the glossary in today's terms, the system invariants, and where the product is headed.
 ---
 
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241; a pay item's unique code and description, ADR-301; the policy values built, ADR-303) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-232; field events and pay items, ADR-236, 237; contracts on rules, assignments, time clock, ADR-239…241; a pay item's unique code and description, ADR-301; the policy values built, ADR-303; the number at New, ADR-571) -->
 
-> **This page states today's rules** (last changed by ADR-303, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-571, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > of all of it is `spec/golden/MISSION.md`. **Names and examples** follow `spec/CONVENTIONS.md`
@@ -190,9 +190,10 @@ display labels only (ADR-046, 062). The life of one load:
    With none, the master passcode sets the phone up on the spot, recorded as an *unplanned
    assignment* (ADR-095, 195, 240).
 3. **Capture (offline): each monitor records a field event.** **New** → scan the badge (the
-   certification says whose work it is) → the event waits while the truck loads → **Complete**: the details (a load's **debris type**; the
-   tower's load call or weight) → **the number last**, scanned or shown, then re-entered by hand →
-   printed receipt. **Sealed for the monitor once submitted**: never reopened or edited by them, synced or
+   certification says whose work it is) → **the number**, scanned or shown, then re-entered by hand →
+   the event waits in the open list while the truck loads, left and resumed as the work allows (one
+   open per truck on a phone) → **Complete**: the details (a load's **debris type**; the tower's load
+   call or weight) → printed receipt (ADR-571 moved the number to New). **Sealed for the monitor once submitted**: never reopened or edited by them, synced or
    not; until then open and theirs to adjust, for days if the work takes days (ADR-209, 477). Each event records its assignment and the setup version the phone had.
 4. **Sync (whenever there's signal, any order).** Every event is received, and each one queues reconciliation of
    its ticket. The only rejection is a duplicate
@@ -373,6 +374,8 @@ What this page used to say, and why it changed. Never build from the left-hand s
   assignment (ADR-241).
 - A pay item with a code, a name and a description → a code, unique on its project, and a
   description, both the firm's own (ADR-301, correcting ADR-147's reading of Q-139).
+- "New → badge … Complete → the number last" → the number at New, right after the badge; tickets
+  left and resumed, one open per truck on a phone (the user, ADR-209 → 571).
 - "Reopenable until the monitor ends the shift", the phone's edit log (ADR-072, 240 (6)) → **sealed for
   the monitor once submitted on the phone**, synced or not; only the back office changes it; one not
   yet submitted stays open and theirs to adjust (ADR-477, the user, 2026-10-12).

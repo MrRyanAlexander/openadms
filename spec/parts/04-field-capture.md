@@ -4,7 +4,7 @@
 
 ← [Part 3 — Certify](03-certification.md) · [Index](../INDEX.md) · Next: [Part 5 — Sync](05-sync.md)
 
-> **Approved by the user 2026-09-29** (ADR-269), in today's rules (rewritten 2026-09-29, ADR-247). Sequence here; rules in the
+> **Approved by the user 2026-09-29** (ADR-269), in today's rules (rewritten 2026-09-29, ADR-247; the number at New and open tickets, the user, 2026-10-18, ADR-571). Sequence here; rules in the
 > skills, which win on disagreement (the detail of every workflow: `adms-ticket-workflows` §4.1a–§4.6).
 > How the phone stores, prints, scans and photographs: `spec/ARCHITECTURE.md` §8, §11, §12.
 
@@ -15,20 +15,24 @@ Each monitor records a **field event**: what they saw, where and when, under a t
 only the main ticket, fast; fees, pricing, zones, mileage and checks are the system's work, after
 sync (ADR-224). The phone never refuses honest work; every problem is flagged later (ADR-052).
 
-## Every capture: badge first, number last (ADR-209)
+## Every capture: the badge, then the number, at New (ADR-209, 571)
 
 1. **New: scan the badge** (the crew badge for unit rate). The certification loads, capacity
    included; **a monitor never types capacity** except for a truck keyed in by hand, which is flagged
    and bills the certification's capacity (ADR-154). **The certification says whose work it is**
-   (ADR-186). The field event waits in the phone's open list while the truck loads.
+   (ADR-186). **Then the number**: the control ticket scanned, or the phone's next generated number
+   shown, then **re-entered by hand** to confirm (the user, ADR-571, amending ADR-209's number at the
+   end). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
+   field event waits in the phone's **open list** while the truck loads: the monitor leaves it at
+   any step and comes back to finish it, and a phone holds several, **never two for one truck**
+   (the user, ADR-571).
 2. **The phone records** who (the monitor), which phone, the **assignment** and **setup version**
    (ADR-240), the device clock's time, shown in the project's time zone (ADR-100), and whatever GPS
    fix it has, never judged on the phone (ADR-083). **Photos** come from the camera, never the
-   gallery, fingerprinted when taken, at most 8 per ticket (ADR-101, 157).
+   gallery, fingerprinted when taken, at most 8 per ticket, at any step while the ticket is open; the
+   review shows them (ADR-101, 157, 571).
 3. **Complete: the details**, picked **by name, never a code or a rate** (ADR-207).
-4. **The number**: the control ticket scanned, or a generated number shown at that point, then
-   **re-entered by hand** to confirm. A number typed because a barcode won't read is flagged and
-   needs a reason (ADR-111, 209). Then **the receipt prints**, on every project (ADR-102, 115).
+4. **Submit**: the review, then **the receipt prints**, on every project (ADR-102, 115).
 
 A field event started by mistake can be **cancelled**; it stays on the phone, unsynced (ADR-056). **Once
 submitted it is sealed for the monitor**: no reopen and no edit, even to undo a mistake; the back
@@ -39,20 +43,24 @@ assignment**, never picked (ADR-195, 240).
 ## Workflow A — a load (`COL` → `DIS`)
 
 **The collection event, at the curb** (the phone has no site):
-1. **New**: scan the badge. GPS at load start and load end.
+1. **New**: scan the badge, then the number, scanned or shown, re-entered. GPS at load start and
+   load end; **"Mark waypoint"** as the truck loads (Q-104, ADR-571); photos from the start of
+   loading.
 2. **Complete**: the **debris type** from the load form's list, and optionally a **field tag**
    (ADR-211, 218); on an ROE project the **ROE**; on a split the property's **estimate**; on a load
    that carries tickets, each carried ticket **by its number** (ADR-192, 204). **Capture GPS**, then
    **Look up address** (our own Nominatim server when online; else the street number and name typed)
    (ADR-111, 119). No load call, no zone, no destination: the system checks where debris went,
    never where it was headed (ADR-135, 205).
-3. **The number**, scanned or shown, re-entered. **Print** two copies, or hand over the control
-   ticket and keep its stub (Q-95). The truck carries the number.
+3. **Print** two copies, or hand over the control ticket and keep its stub (Q-95). The truck carries
+   the number.
 
 **The disposal event, at the tower** (a different monitor who never saw the curb). The phone's
 assignment names the site, and its lists carry **that site's lookup** of what to ask for, per
 debris type and prime (ADR-227, 240, 243):
-1. **New**: scan the badge (it gives the prime).
+1. **New**: scan the badge (it gives the prime), then **the number** the truck carries, scanned and
+   re-entered; never generated here. The tower holds no ticket list and trusts the scan (ADR-071,
+   571).
 2. **Complete**: the **debris type**, picked on its own (compared later, never copied).
 3. **One quantity, never both** (ADR-223):
    - the **load call**, a whole percentage of certified capacity, typed: **the billing number**. No
@@ -61,9 +69,7 @@ debris type and prime (ADR-227, 240, 243):
      (`adms-scale-receipts`); a Final Disposal tower may also offer the receipt number (ADR-227);
    - or, for a load that carries tickets, a **count** of the stumps or items on the truck; the worker
      compares it with the collection's list after sync (ADR-192, 243).
-4. **The number** the truck carries, scanned and re-entered; never generated here. The tower holds no
-   ticket list and trusts the scan (ADR-071).
-5. The end GPS (checked later against the site's area) and **empty-bed photos**. **Print** the
+4. The end GPS (checked later against the site's area) and **empty-bed photos**. **Print** the
    disposal copy for the driver; on a control-ticket project the details may be written on the back of
    the control ticket instead (ADR-115).
 
@@ -104,7 +110,8 @@ is paid by weight.
 ## Workflow C — unit rate (`URT`, one event, no pairing)
 
 1. **New**: scan the **crew badge**; it stays on the phone until the monitor changes crew (ADR-111).
-   A crew is its certification (ADR-228).
+   A crew is its certification (ADR-228). **The number** (always generated) is shown and re-entered
+   here (ADR-571).
 2. **The crew photo**, then pick the **payable type** by name (Hangers, Leaners, Stumps, White Goods,
    Crew time…; each shown once). The phone **works out the pay item** from the size bands and prints
    it; the monitor never sees a code or a rate (ADR-207, 213).
@@ -114,7 +121,7 @@ is paid by weight.
    an item list (HHW pounds as the count); crew time as items with hours to the quarter hour
    (ADR-126, 158, 177, 198). Optionally a field tag; the ROE on an ROE project. Where the pay item
    allows it, the monitor may **mark the work ineligible** (flagged, ADR-210).
-4. **The number** (always generated), shown and re-entered; **print** the crew copy (Q-95).
+4. **Print** the crew copy (Q-95).
 
 What each kind captures and bills, bands, stumps and fill: `adms-ticket-workflows` §4.5.
 

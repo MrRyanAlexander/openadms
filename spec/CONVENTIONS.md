@@ -374,7 +374,7 @@ us pivot back in a few places." The ADRs win where they differ (KD-63).
 
 **What it's missing** (and where it lives): the two witnesses and the load call (`adms-domain`
 §1.2–§1.3); capacity math (`adms-certifications` §3A.3); rules per form with numbered slots
-(`spec/RULES.md`); one pay item holding a rate for each prime (ADR-206); badge first, number last
-(ADR-209); preloads, and an unpartnered event that never expires (ADR-053); splits shared by estimate
+(`spec/RULES.md`); one pay item holding a rate for each prime (ADR-206); the badge, then the number, at New
+(ADR-209, 571); preloads, and an unpartnered event that never expires (ADR-053); splits shared by estimate
 (ADR-162); one quantity per load (ADR-223); the setup check (ADR-229); the invoice lock and batches
 (ADR-228).

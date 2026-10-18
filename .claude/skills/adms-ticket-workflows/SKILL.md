@@ -1,10 +1,10 @@
 ---
 name: adms-ticket-workflows
-description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge first, number last), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
+description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge, then the number, at New), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306; the number at New, open tickets, waypoints, ADR-571) -->
 
-> **This page states today's rules** (last changed by ADR-306, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-571, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
@@ -148,19 +148,29 @@ pay items and their settings for unit rate work (ADR-176, 213); **no pay items f
 
 ## 4.1a How every capture starts
 
-**Badge first, number last** (ADR-209), on every phone, for every workflow:
+**Badge, then the number, at New** (ADR-209 as amended by ADR-571, the user), on every phone, for every workflow:
 
 1. **New**: scan the **badge** (the crew badge for unit rate). The phone loads the certification:
    the container or crew, its prime and sub, its capacity. **Whose work it is comes from the
-   certification, never from a pick** (ADR-186, 239). The field event opens and waits in the phone's
-   open list while the truck loads. One truck has one open load at a time (ADR-027).
-2. **Complete**: the details the workflow asks for (§4.2–§4.5). The monitor **picks by name, never a
+   certification, never from a pick** (ADR-186, 239). **Then the number**: the control ticket
+   scanned, or the phone's next generated number shown, then **re-entered by hand** to confirm,
+   generated numbers too (when it is typed again: Q-218). **User, 2026-09-28 (round 22):** "We'd
+   want manual re-entry still on generated to confirm the logged it down correct." **User,
+   2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor
+   starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard)
+   and then they scan the printed ticket. If the project is generating number, they'd generate the
+   ticket number at that time." *Agent default:* the re-entry must match before the ticket opens:
+   data entry, not an eligibility check (ADR-209). *Agent readings (ADR-571):* the tower and the
+   haul-out's disposal scan the driver's ticket here; unit rate takes its generated number here.
+   The field event opens and waits in home's **open list** while the truck loads.
+2. **Open tickets**: the monitor leaves a ticket at any step and comes back to finish it, what they
+   entered kept on the phone across sign-outs and restarts; a phone holds several. **One truck has
+   one open load at a time** (ADR-027), and **a phone never holds two open tickets for one truck**:
+   its badge opens the one already open (the user, ADR-571). Nothing open is sent.
+3. **Complete**: the details the workflow asks for (§4.2–§4.5). The monitor **picks by name, never a
    code or a rate**: a load's or haul-out's **debris type** from the form's list; a unit rate
-   **payable type** after the crew photo (ADR-207, 213).
-3. **The number**: the control ticket scanned, or a generated number shown at that same point, then
-   **re-entered by hand** to confirm, generated numbers too. **User, 2026-09-28 (round 22):** "We'd
-   want manual re-entry still on generated to confirm the logged it down correct." *Agent default:*
-   the re-entry must match before the field event saves: data entry, not an eligibility check (ADR-209).
+   **payable type** after the crew photo (ADR-207, 213). Photos at any step while the ticket is open;
+   the review shows them (ADR-571).
 4. **Receipt**: printed on every project (the barcode is the bare number); receipts are never
    records (ADR-102, 115).
 
@@ -191,7 +201,9 @@ disposal sites (ADR-156).
   **field tag** (ADR-218);
 - on an ROE project, the **ROE** (ADR-149); on a split, the property's **estimate** in CY (ADR-055);
 - on a load that carries tickets, **the tickets it carries**, by number (§4.2b);
-- photos.
+- **waypoints**, marked while the truck loads (**"Mark waypoint"**: the time and whatever fix, in
+  order; nothing in the engine reads them; the user, Q-104, ADR-571);
+- photos, at any step while the ticket is open, the start of loading included (ADR-571).
 
 It records **no load call** (the truck isn't finished being judged), **no zone** (the worker attaches
 it from the GPS, ADR-135), **no site and no destination**: the hauler takes the debris where it goes,
@@ -567,6 +579,9 @@ What this page used to say, and why it changed. Never build from the left-hand s
   27, 28, 29, 35.
 - Round-by-round ⚠️ notes (rounds 13–22) on top of the historical body → absorbed; rewritten in the
   present tense, in field events and today's words (ADR-138, 234, 236, 242).
+- Badge at New, **the number last** at the end of Complete (ADR-209) → **badge, then the number, at
+  New**; tickets left and resumed, one open per truck on a phone; a collection's waypoints spelled out
+  (the user, ADR-571).
 - A pay item with a name and a description of "the contract's words and line", codes that could
   repeat, and nothing said of a copied rule → a unique code and the firm's own description; an exact
   duplicate of a rule refused before it is saved (ADR-147 → 301).

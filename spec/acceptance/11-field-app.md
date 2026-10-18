@@ -18,7 +18,7 @@
 > security checklist. **It adds no rule to the domain**: the phone builds against the sync contract
 > and the lists Phase 2 serves (BACKLOG, Phase 3's brief).
 >
-> **Two parts.** Sections A…K are the new scenarios, `AC-11-01`…`AC-11-73`. Section L lists, by ID,
+> **Two parts.** Sections A…K are the new scenarios, `AC-11-01`…`AC-11-78` (AC-11-74…78 from the user's notes on the prototype, ADR-571). Section L lists, by ID,
 > every scenario of files 01…10 with a field app part, with the task that proves it.
 
 **One more column: Answers.** The checklist item a scenario answers (ARCHITECTURE §16; ADR-559):
@@ -120,6 +120,10 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 | AC-11-41 | **Given** the site's lookup says a load is paid from the tickets it carries, **then** the tower asks for the number of tickets the load carries, never a load call | ADR-243, 370 (user); C83 · REQ-304, 124f | — | browser (3.5.2) | |
 | AC-11-42 | **Given** Sam Grant measures `730415`'s boxes on `P1-HO-TDSR`, **then** the phone works out 65 CY with the domain's `Capacity` and shows it; it is never typed; the sync sends the boxes, never a capacity; a certification the server refuses is shown with its words and kept | ADR-320, 469; C129; `adms-certifications` §3A.3 · REQ-322 | — | browser (3.5.5) | |
 | AC-11-43 | **Given** Jo Kim's hanger on `301001`, **then** the phone works out its pay item from the payable type and the measurement with the domain's bands, and shows neither its code nor a rate | ADR-207, 213; invariant 20 · REQ-306 | MASVS-PLATFORM-3 | browser (3.5.3) | |
+| AC-11-74 | **Given** `P1-COL-1` on a project whose numbers the phone makes, **when** Ana scans `730415`'s badge at New, **then** the phone shows its next number, `101001`, right there and she enters it again; the collection opens under it in home's open list before any detail is asked. On a control-ticket project she scans the control ticket at the same point; at the tower Kim scans the driver's ticket right after the badge (never a number made there); Jo Kim's unit rate number is made right after the crew badge | ADR-209, 571 (the user) · REQ-303, 304, 306 | — | browser (3.5.1, 3.5.2, 3.5.3) | |
+| AC-11-75 | **Given** Ana has `101001` open on `730415`, **when** she starts `101002` on `730416` and leaves each part way through, **then** home's open list shows both, each by its truck and number; she opens either and carries on where she left off; both are still there after she signs out and the app is closed and opened again; neither is sent until she submits it | ADR-477, 570, 571 (the user) · REQ-302, 303 | — | browser (3.5.1) | |
+| AC-11-76 | **Given** `101001` is open on `730415`, **when** Ana scans `730415`'s badge at New again (or keys that truck in by hand), **then** the phone opens `101001` rather than a second ticket, and another starts for that truck only once she submits or cancels it. A cancelled ticket keeps its number, unsent: a number the phone made is never made again, and a control ticket started by mistake can be scanned again. A split chain is its truck's one open ticket; Jo Kim's crew is not held to one | ADR-027, 056, 571 (the user; the rest agent defaults) · REQ-303 | — | browser (3.5.1, 3.5.3) | |
+| AC-11-77 | **Given** `101001` is open, **when** Ana presses "Mark waypoint" three times as the truck loads along Heron St., **then** the collection holds three waypoints in order, each the phone's time and whatever fix it had, and the sync sends them with it; the server keeps them as recorded. The phone offers at most the policy number of them, saying so when she reaches it, and the sync contract's limit is that number; nothing in the engine reads them | Q-104; ADR-083, 571 (the user; the rest agent defaults); C180 · REQ-303 | MASVS-CODE-4 | browser (3.5.1); API and database (3.5.1, the server half) | |
 
 ## H. Photographs
 
@@ -127,6 +131,7 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 |---|---|---|---|---|---|
 | AC-11-44 | **When** Ana takes a photograph, **then** the phone records the SHA-256 of the original at capture, shrinks it natively at the original resolution keeping its location, time and depth data (or the depth as a linked file, hashed too), and sends both fingerprints; the browser build keeps the original | ARCHITECTURE §11; ADR-101 · REQ-316 | MASVS-CRYPTO-1 | browser (3.6.1); iPhone (3.8.2); Android (3.9.1) | |
 | AC-11-45 | **Given** the shrink's size and quality, **then** they come from configuration, set from what was measured on real phones, never from code | ARCHITECTURE §11; C137 · REQ-316 | — | iPhone (3.8.2); Android (3.9.1) | |
+| AC-11-78 | **Given** `101001` is open, **when** Ana photographs the pile at New and the loaded truck at Complete, **then** both count toward its 8; the review shows each photograph itself, opened full size with a press, each with words a screen reader says ("Photo 1 of 2, 08:41"), never only a count; before submitting she may retake or remove one, and a removed one is never sent. Kim's review at the tower shows hers the same way | ADR-157, 477, 571 (the user; the rest agent defaults) · REQ-303, 304, 316 | WCAG 1.1.1 | browser (3.5.1, 3.5.2, 3.6.1) | |
 
 ## I. Printing and scanning
 
@@ -210,9 +215,9 @@ the layer its own row names; the field app's part by the task below, under a tes
 
 | | Scenarios | Passing |
 |---|---|---|
-| Sections A…K, new | 73 (AC-11-61…73 by task 3.1.1, ADR-562) | 5 whole (AC-11-01, 02, 04, 06, task 3.1.2, ADR-565; AC-11-51, task 3.1.3, ADR-566), 11 in part (AC-11-03, 61, 69, 72, task 3.1.2; AC-11-52, 55, 56, task 3.1.4, ADR-568; AC-11-07, 08, 10, 34, task 3.2.1, ADR-570) |
+| Sections A…K, new | 78 (AC-11-61…73 by task 3.1.1, ADR-562; AC-11-74…78 by ADR-571) | 5 whole (AC-11-01, 02, 04, 06, task 3.1.2, ADR-565; AC-11-51, task 3.1.3, ADR-566), 11 in part (AC-11-03, 61, 69, 72, task 3.1.2; AC-11-52, 55, 56, task 3.1.4, ADR-568; AC-11-07, 08, 10, 34, task 3.2.1, ADR-570) |
 | Section L, a field app part of files 02…10 | 50 | 1 in part (AC-02-19's browser build, task 3.2.1, ADR-570); each still passes at the layers it already does |
-| **Phase 3's** | **123** | **5, and 12 in part** |
+| **Phase 3's** | **128** | **5, and 12 in part** |
 
 ## Left to the task that builds it
 
@@ -220,7 +225,7 @@ the layer its own row names; the field app's part by the task below, under a tes
    MASVS v2.1.0, profile MAS-L2 + MAS-P with MAS-R not taken, the numbers in the Answers column;
    certificate pinning and the app-switcher cover proposed (`spec/CHECKLIST-FIELD.md` §1, §4;
    AC-11-61…73), for the user.
-2. 🟡 **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (3.1.4, put to the user with the prototype, ADR-561; built by 3.5.1). **Read by task 3.1.4 (ADR-569 (4)):** essential where a person copied the number (one the phone made, one typed because the barcode won't read), not after a scan; the choice is put to the user as **Q-218**, the agent recommending re-entry only where a person copied it. The number scanned
+2. 🟡 **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (*taken at New since ADR-571*) (3.1.4, put to the user with the prototype, ADR-561; built by 3.5.1). **Read by task 3.1.4 (ADR-569 (4)):** essential where a person copied the number (one the phone made, one typed because the barcode won't read), not after a scan; the choice is put to the user as **Q-218**, the agent recommending re-entry only where a person copied it. The number scanned
    or shown and then typed again by hand (ADR-209, an agent default) asks for information already
    given in the same process. WCAG lets that stand where entering it again is essential. The task
    says whether this case is essential and, if it isn't, puts the choice to the user. The user

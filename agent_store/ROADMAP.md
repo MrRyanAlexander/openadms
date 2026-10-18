@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-18 (**Task 3.2.1, the phone's store, is done (ADR-570):** everything a phone keeps (its tickets, the photographs waiting to go, its lists, its login list, an earlier monitor's unsent work, and what the server answered) now goes into one encrypted store. In the browser build it is sealed under keys the browser makes and never lets out, made from nothing anyone types, so a supervisor can sync a phone its monitor walked away from; nothing of what it holds, not even a Monitor ID, is readable in the browser's storage. The iPhone and Android builds put the same store in the phone's own encrypted database later (3.8, 3.9). **Next: task 3.2.2, enrolling a phone.** Your answers to Q-215 to Q-218 still wait, read before the capture screens.)
+> **Last updated:** 2026-10-18 (**Your notes on the prototype are recorded (ADR-571):** a ticket's number is now taken at New, right after the badge (a paper ticket scanned there, or the phone's number made there); a ticket can be left at any step and finished later, and a phone never holds two open tickets for one truck; collections take waypoints, built with their server side in task 3.5.1; photos can be taken at any step and the review shows them. The capture tasks (3.5.1–3.5.3, 3.6.1) and five new phone scenarios carry them; Phase 3 now has 128 scenarios. Phase 3 stays 6 of 33 tasks; next is task 3.2.2, enrolment.)
 >
 > *This line holds the latest session alone (ADR-516); what each session did is its ADR and `DECISIONS.md`'s session log.*
 
@@ -82,7 +82,7 @@ WCAG 2.2 AA with its report written; every new table guarded; the chain green wi
 tests in it; rules and shapes in one place; the on-device runs on a real iPhone and Android phone
 with you; three clean full runs.
 
-**Scenarios with a Phase 3 part:** 123 (`spec/acceptance/11-field-app.md`, ADR-560, 562): 73 new, and
+**Scenarios with a Phase 3 part:** 128 (`spec/acceptance/11-field-app.md`, ADR-560, 562, 571): 78 new, and
 50 earlier ones whose field app part is still to come. 5 passing whole (AC-11-01, 02, 04, 06, ADR-565; AC-11-51, ADR-566), twelve more in part (AC-11-07, 08, 10, 34 and AC-02-19 the store's, ADR-570).
 
 ---

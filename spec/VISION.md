@@ -64,10 +64,11 @@ installation, open source (AGPL-3.0). *(ADR-050, 063, 099, 171)*
    any enrolled phone and it takes their assignment; with none, the master passcode sets the phone up
    on the spot, marked. *(ADR-240)*
 4. **Capture field events, offline.** **New**: scan the badge (the certification says whose work it
-   is). **Complete**: the details (a load's **debris type**; the tower's one quantity, worked out ahead
+   is), then **the number**, scanned or shown and re-entered by hand; the ticket waits in the open
+   list, left and finished as the work allows, one open per truck on a phone (the user, ADR-571).
+   **Complete**: the details (a load's **debris type**; the tower's one quantity, worked out ahead
    for its site: the **load call**, the scale weight where the paying pay items are by weight, or a
-   count of the tickets a load carries), then **the number last**, scanned or shown and
-   re-entered by hand, and a printed receipt. A haul-out takes its call at the TDSR; unit rate work is
+   count of the tickets a load carries), and a printed receipt. A haul-out takes its call at the TDSR; unit rate work is
    one event, the monitor picking the work by name and measuring. Forms (ROE, surveys, incidents,
    drop-off logs) are records, not events. Once a monitor submits an event it is sealed for them; only the back office corrects it (ADR-477).
    *(ADR-207, 209, 213, 223, 227, 236, 240, 243)*

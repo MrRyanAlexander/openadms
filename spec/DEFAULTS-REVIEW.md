@@ -221,7 +221,7 @@ An overturned row becomes its own task. Nothing changes until you answer.
 |---|---|---|---|
 | D131 | Setup lists every active site for any work; a phone set up at a site without the matching fact still works and its tickets are flagged | 205 | |
 | D132 | A corrected site GPS recomputes the mileage of un-invoiced tickets there | 208 | |
-| D133 | The re-entered ticket number must match before the ticket saves; the tower's order is badge, load call (or weight), then the number | 209 | |
+| D133 | The re-entered ticket number must match before the ticket saves; the tower's order is badge, load call (or weight), then the number *(the order since amended by the user: the number at New, right after the badge, ADR-571)* | 209 | |
 | D134 | *Reduced* joins the debris type criterion; setup **warns** (never refuses) when an entry not marked *Reduced* is added to the haul-out form | 214, 308 | |
 | D135 | Drop-off logs aren't checked against the site's facts | 215 | |
 | D136 | The tower may offer a scale receipt number, optional, at Final Disposal sites | 227 | |

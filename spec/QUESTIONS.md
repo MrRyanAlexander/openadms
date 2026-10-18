@@ -5294,3 +5294,6 @@ or one typed because the barcode won't read), **recommended**, or **always**, af
 today? Either way the typed-again number must match before the ticket is submitted. If you keep
 "always", the field app's accessibility conformance report says 3.3.7 is partly supported, and why.
 *(Prototype switch 4. ADR-209, 559, 561 (7), ADR-569 (4); file 11, left 2.)*
+
+**Agent note, 2026-10-18 (ADR-571):** your notes on the prototype moved the number to **New**, right
+after the badge; the question stands as asked, and the typing again happens there.

@@ -39,7 +39,7 @@ one task per response (ADR-558); read its brief before any task.
    approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
    every story still passing.
 2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
-   (`spec/acceptance/11-field-app.md`: 123).
+   (`spec/acceptance/11-field-app.md`: 128).
 3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
 4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
    control by control; the threat model's phone rows read again; `pnpm security` passing.
@@ -72,7 +72,10 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   the phone's scenarios (`spec/acceptance/11-field-app.md`), the security checklist
   (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
   chain, every screen checked by axe-core, the look and its components (`apps/field/src/look/`) and
-  a clickable prototype; **Q-215…Q-218 wait on the user** (C177). **Task 3.2.1 done (ADR-570):** the
+  a clickable prototype; **Q-215…Q-218 wait on the user** (C177). **The user's notes on the prototype
+  are recorded (ADR-571):** the number at New after the badge, tickets left and resumed (one open per
+  truck on a phone), waypoints (their server half in 3.5.1, C180), photos at any step and shown on
+  the review; 3.5.1…3.5.3 and 3.6.1 carry them. **Task 3.2.1 done (ADR-570):** the
   phone's store, `PhoneStore` (`apps/field/src/store/`), the browser build's in IndexedDB under
   WebCrypto keys that can't be read out, made from nothing typed. **Next: task 3.2.2.** What each
   task did is its ADR and its `BACKLOG.md` tick.
@@ -120,8 +123,9 @@ monitor enters only the main ticket, the system and the back office do the rest.
   each person a daily **assignment**; the phone takes it at sign-in; setup by master passcode is the
   fallback; phones sync whenever there's signal, with somebody signed in. The optional **time
   clock** hangs on the assignment.
-- **Field:** each monitor records a **field event** (`COL` `DIS` · `HOC` `HOD` · `URT`). **Badge
-  first, number last.** Picks **by name, never a code**. One quantity: a load call, or a scale
+- **Field:** each monitor records a **field event** (`COL` `DIS` · `HOC` `HOD` · `URT`). **The badge,
+  then the number, at New**; a ticket left at any step and resumed, one open per truck on a phone
+  (ADR-571). Picks **by name, never a code**. One quantity: a load call, or a scale
   weight when the paying pay item is by weight. A submitted record is sealed for its monitor.
 - **Engine:** groups field events on project + workflow + bare number; flags, never blocks;
   attaches zone and mileage; runs every passing rule in # order; writes the completed load and the
