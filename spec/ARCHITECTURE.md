@@ -658,6 +658,20 @@ ADR-106 (master passcode) and ADR-120 (changing monitors, username). **The word 
 > for** (ADR-449): anyone who reads a phone's list out can guess a seven-digit password, so the
 > protection is §7.2's five safeguards, as approved.
 
+> ⚠️ **ADR-553 (2026-10-17, task 2.9.1; ADR-552 (3) at the user's word, the rest agent defaults;
+> this note awaits approval, building didn't wait): what certifying and a tower pick from.** To a
+> phone whose assignment certifies or takes disposals (`DIS`, `HOD`), **the truck lists**: the
+> firm's vehicle types (each saying whether it certifies a container or a crew), vehicle features
+> and crew types in service, and the project's primes, each with the subs placed under it and
+> their tier, by id and name, never a contact (a sub is still typed, ADR-108; the prime's are
+> offered). To a certifying one, **who may be picked as a helper**: the others with an
+> assignment on the project that day, by id and name alone. To every phone, **each site's place**:
+> its GPS and its area as it stands (its newest own shape, or else the project's circle round its
+> GPS), for the phone's advisory "not at this site"; the worker's check is the one that flags.
+> The truck lists and the sites' places are part of the setup version, so a new sub, a feature
+> taken off a list or a shape drawn makes a new one; the helpers are the day's board, not the
+> setup. A phone sends a record as it made it, whatever lists it holds later.
+
 > ⚠️ **ADR-454 (2026-10-09; ADR-449 (5) built as proposed, the rest agent defaults; this note
 > awaits approval, building didn't wait): the login list and the master passcode's check.** A
 > phone whose monitor is signed in asks for them whenever it has a connection, saying what it

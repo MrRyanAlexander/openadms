@@ -8,9 +8,11 @@
 // - **Trimmed to the assignment:** the unit rate pay items it names now (one taken off the
 //   assignment is left out), the item names of their kinds of work, the incident and survey
 //   lists only where the assignment makes those forms, the ROEs only where its work names one,
-//   and its one site's quantity lookup.
+//   the truck lists only where it certifies or takes disposals, who may be picked as a helper
+//   only where it certifies (ADR-552 (3)), and its one site's quantity lookup.
 // - **The least a monitor needs** (ASVS 14.2.6): a certification's number, kind, capacity, prime
-//   and subs, never its driver; an ROE's number, address and parcel, never its owner.
+//   and subs, never its driver; an ROE's number, address and parcel, never its owner; a helper's
+//   id and name, never their Monitor ID or phone number; a contractor's name, never its contact.
 // - **Never a rate, a rule, a transaction or a load's pay item** (invariant 20): none is read
 //   here, so none can be sent. A unit rate pay item carries its code, which the phone prints.
 // - **Which assignment** is the sign-in's own rule, asked again at each read (`taken`), so a
@@ -27,7 +29,7 @@ import type {
   QuantityAskName,
 } from '@open-adms/domain';
 
-import { SetupVersions } from '../setup/setup-versions.ts';
+import { SetupVersions, type SetupShown, type SiteShown } from '../setup/setup-versions.ts';
 import type { PhoneAssignment, PhoneAssignments } from './phone-assignments.ts';
 
 interface Named {
@@ -68,11 +70,8 @@ export interface PhoneListsHeld {
     readonly firstTierSub: Named | null;
     readonly secondTierSub: Named | null;
   }[];
-  readonly sites: readonly (Named & {
-    readonly siteType: Named;
-    readonly takesLoads: boolean;
-    readonly haulOutsLeaveHere: boolean;
-  })[];
+  // Each with its place: its GPS and its area as it stands (ADR-552 (3)(d)).
+  readonly sites: readonly SiteShown[];
   // The project's ROEs to pick one from, each saying whether its pre-work survey is done
   // (ADR-150); none for a phone whose work names no ROE.
   readonly roes: readonly {
@@ -103,6 +102,14 @@ export interface PhoneListsHeld {
   readonly incidentOffers: readonly IncidentOffer[];
   readonly contractors: readonly Named[];
   readonly surveyWorkTypes: readonly Named[];
+  // The truck lists, for a phone whose assignment certifies or takes disposals (ADR-552 (3)(a)):
+  // what certifying picks, and what a tower finds a truck keyed in by hand from.
+  readonly vehicleTypes: SetupShown['vehicleTypes'];
+  readonly vehicleFeatures: SetupShown['vehicleFeatures'];
+  readonly crewTypes: SetupShown['crewTypes'];
+  readonly primes: SetupShown['primes'];
+  // Who a certifying phone's monitor may pick as a helper (ADR-294, 552 (3)(c)).
+  readonly helpers: readonly Named[];
   // What the assignment's site's phones ask for (ADR-227, 243), for the debris types this
   // phone holds; none for a phone at no site.
   readonly quantityLookup: readonly {
@@ -205,6 +212,29 @@ export class PhoneLists {
       });
       const itsPayItems = new Set(assigned.map((one) => one.payItemId));
       const itsKindsOfWork = new Set(assigned.map((one) => one.kindOfWorkId));
+      // The truck lists go to a phone that certifies or takes disposals: a tower keys in by hand
+      // a truck its certifications don't hold (the user, ADR-552 (3)(a)).
+      const trucks =
+        assignment.certifying ||
+        assignment.fieldEventKinds.some(
+          (kind) => kind === 'DISPOSAL' || kind === 'HAUL_OUT_DISPOSAL',
+        );
+      // A helper is picked from the others with an assignment on the project that day, by id
+      // and name alone (ADR-294).
+      const helpers = assignment.certifying
+        ? await tx.assignment.findMany({
+            where: {
+              projectId,
+              workDate: assignment.workDate,
+              archivedAt: null,
+              personId: { not: assignment.personId },
+            },
+            select: { person: { select: { id: true, name: true } } },
+            orderBy: [{ person: { name: 'asc' } }, { personId: 'asc' }],
+          })
+        : [];
+      // Once each, though the board gave somebody two assignments that day.
+      const helped = [...new Map(helpers.map(({ person }) => [person.id, name(person)])).values()];
       return {
         projectId,
         shown,
@@ -246,6 +276,11 @@ export class PhoneLists {
           incidentOffers: makes('INCIDENT') ? shown.incidentOffers : [],
           contractors: makes('INCIDENT') ? shown.contractors : [],
           surveyWorkTypes: makes('SURVEY') ? shown.surveyWorkTypes : [],
+          vehicleTypes: trucks ? shown.vehicleTypes : [],
+          vehicleFeatures: trucks ? shown.vehicleFeatures : [],
+          crewTypes: trucks ? shown.crewTypes : [],
+          primes: trucks ? shown.primes : [],
+          helpers: helped,
           // What the assignment's one site's phones ask for; none for a phone at no site.
           quantityLookup: shown.quantityLookup
             .filter((ask) => ask.siteId === assignment.siteId)

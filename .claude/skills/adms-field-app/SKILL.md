@@ -204,7 +204,15 @@ defaults), `POST /phones/current/login-list`: the phone says what it holds (a ma
 entry, the passcode's version) and is made only what it lacks, a bounded number a call; on the
 list are the monitors in service with an assignment that stands on its project for today or
 later; an entry is a slow hash made for that phone from a seed the server keeps sealed, checked
-on the phone in two steps; the server keeps no entry.
+on the phone in two steps; the server keeps no entry. **And (ADR-553, task 2.9.1; the user's
+choices in ADR-552 (3), the rest agent defaults) what certifying and a tower pick from:** to a
+phone that certifies or takes disposals (`DIS`, `HOD`), **the truck lists** (the firm's vehicle
+types, each saying whether it certifies a container or a crew; its vehicle features and crew
+types; the project's primes, each with the subs placed under it and their tier; by id and name);
+to a certifying phone, **the helpers** it may pick (the others with an assignment on the project
+that day, id and name alone); to every phone, **each site's GPS and its area as it stands** (its
+newest own shape, or the project's circle round its GPS), for the advisory "not at this site".
+The truck lists and the sites' places are part of the setup version; the helpers are not.
 
 - **Never on a phone: rates, rules, or a load's pay items.** No phone knows which pay item a load is
   paid at: its mileage, so its pay item, is known only after sync (ADR-221, 223).

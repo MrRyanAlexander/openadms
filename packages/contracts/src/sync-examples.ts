@@ -4,6 +4,7 @@
 // not beside the tests.
 import { certificationViews } from '@open-adms/domain';
 
+import type { PhoneListsRecord } from './api-answers.ts';
 import type {
   SyncedCertification,
   SyncedFieldEvent,
@@ -163,6 +164,39 @@ export const certification: SyncedCertification = {
   contractorRepresentativeName: null,
   replaces: null,
   notes: null,
+};
+
+// The lists Sam's phone holds when it finds signal on Monday (ADR-552 (3)): the truck lists it
+// picked 730416 from, with Rivera now under Coastline, and no helper: Lee's Saturday is past.
+// The certification still names Lee, as Sam picked him.
+export const listsAfterwards: PhoneListsRecord = {
+  setupVersion: 4,
+  blocks: [],
+  controlRanges: [],
+  debrisTypes: { LOAD: [], HAUL_OUT: [] },
+  fieldTags: [],
+  typedNumberReasons: [],
+  certifications: [],
+  sites: [],
+  roes: [],
+  payItems: [],
+  itemNames: [],
+  incidentTypes: [],
+  incidentOffers: [],
+  contractors: [],
+  surveyWorkTypes: [],
+  vehicleTypes: [{ id: made('f5'), name: 'Self-Loading Truck', kind: 'CONTAINER' }],
+  vehicleFeatures: [{ id: dogBox, name: 'Dog Box' }],
+  crewTypes: [{ id: made('f6'), name: 'Bucket Truck' }],
+  primes: [
+    {
+      id: coastline,
+      name: 'Coastline Haulers LLC',
+      subs: [{ id: made('a3'), name: 'Rivera Trucking', tier: 1 }],
+    },
+  ],
+  helpers: [],
+  quantityLookup: [],
 };
 
 // Coastline's bucket truck crew as 730417: nothing measured.

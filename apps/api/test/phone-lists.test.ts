@@ -9,6 +9,9 @@
 import {
   addFieldTagEndpoint,
   addFormDebrisTypeEndpoint,
+  addPrimeEndpoint,
+  addSiteShapeEndpoint,
+  changeProjectSettingsEndpoint,
   createRuleEndpoint,
   createSiteEndpoint,
   endpoints,
@@ -200,6 +203,12 @@ describe('the lists a phone takes', () => {
         incidentOffers: [],
         contractors: [],
         surveyWorkTypes: [],
+        // Unit rate work neither certifies nor takes disposals: no truck list, no helper.
+        vehicleTypes: [],
+        vehicleFeatures: [],
+        crewTypes: [],
+        primes: [],
+        helpers: [],
         // The assignment is at no site.
         quantityLookup: [],
       });
@@ -311,8 +320,22 @@ describe('the lists a phone takes', () => {
       const second = phoneListsAnswerSchema.parse(answer.body);
       const rivera = await tx.contractor.findFirstOrThrow({ where: { name: 'Rivera Trucking' } });
       // 240 × 90 × 60 = 1,296,000 cu in ÷ 46,656 = 27.78 → 28 CY.
-      // A new certification is a record, not a change to the setup: the version stands.
-      expect([first.lists?.setupVersion, second.lists?.setupVersion]).toEqual([1, 1]);
+      // A new certification is a record, not a change to the setup; but the sub it placed under
+      // Coastline is in the truck lists a phone is shown, so the version moves (ADR-552 (3)(e)).
+      expect([first.lists?.setupVersion, second.lists?.setupVersion]).toEqual([1, 2]);
+      expect(second.lists?.primes).toEqual([
+        {
+          id: priced.coastline,
+          name: 'Coastline Haulers LLC',
+          subs: [
+            {
+              id: (await tx.contractor.findFirstOrThrow({ where: { name: 'Rivera Trucking' } })).id,
+              name: 'Rivera Trucking',
+              tier: 1,
+            },
+          ],
+        },
+      ]);
       expect(second.lists?.certifications).toEqual([
         {
           id: trailer.id,
@@ -440,6 +463,13 @@ describe('the lists a phone takes', () => {
         finalDisposal: await tx.siteType.findUniqueOrThrow({ where: { key: 'FINAL_DISPOSAL' } }),
         tdsr: await tx.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } }),
       };
+      // Each with its place, for the phone's advisory "not at this site" (ADR-552 (3)(d)): its
+      // GPS and, with no shape of its own, P1's circle round it.
+      const place = {
+        latitude: '39.09000000',
+        longitude: '-75.62000000',
+        area: { kind: 'CIRCLE', meters: priced.project.siteCircleMeters },
+      };
       expect(held.lists?.sites).toEqual([
         {
           id: cypress.id,
@@ -447,6 +477,7 @@ describe('the lists a phone takes', () => {
           siteType: { id: types.finalDisposal.id, name: types.finalDisposal.name },
           takesLoads: true,
           haulOutsLeaveHere: false,
+          ...place,
         },
         {
           id: marshRoad.id,
@@ -454,6 +485,7 @@ describe('the lists a phone takes', () => {
           siteType: { id: types.tdsr.id, name: types.tdsr.name },
           takesLoads: true,
           haulOutsLeaveHere: true,
+          ...place,
         },
       ]);
       expect(held.lists?.quantityLookup).toEqual([
@@ -476,22 +508,13 @@ describe('the lists a phone takes', () => {
           .filter((row) => row.debrisTypeId === vegetative.id)
           .map(({ form, debrisTypeId, primeId, asks }) => ({ form, debrisTypeId, primeId, asks })),
       ).toEqual(held.lists?.quantityLookup);
-      // Why the tower asks for a weight stays on the server: no pay item, rate, rule, fee,
-      // permit or GPS (AC-07-91).
-      for (const never of [
-        '31.25',
-        'VEG-DISP-TN',
-        'per ton',
-        'by the ton',
-        'FDEP',
-        '39.09',
-        '75.62',
-        'C&D',
-      ]) {
+      // Why the tower asks for a weight stays on the server: no pay item, rate, rule, fee or
+      // permit (AC-07-91). A site's GPS is sent since ADR-552 (3)(d).
+      for (const never of ['31.25', 'VEG-DISP-TN', 'per ton', 'by the ton', 'FDEP', 'C&D']) {
         expect(answer.text.includes(never), never).toBe(false);
       }
       expect(answer.text).not.toMatch(
-        /"\w*(rate|rule|transaction|price|amount|fee|permit|latitude|ineligible)\w*":/i,
+        /"\w*(rate|rule|transaction|price|amount|fee|permit|ineligible)\w*":/i,
       );
       // The version kept is what the project's phones are shown, whole, and holds none of it
       // either: nor a certification, an ROE or a phone's numbers (ADR-453).
@@ -504,21 +527,13 @@ describe('the lists a phone takes', () => {
           })
         ).map(({ version, content }) => ({ version, kept: JSON.stringify(content) }));
       const [first] = await versions();
-      for (const never of [
-        '31.25',
-        'VEG-DISP-TN',
-        'per ton',
-        'by the ton',
-        'FDEP',
-        '39.09',
-        'C&D',
-      ]) {
+      for (const never of ['31.25', 'VEG-DISP-TN', 'per ton', 'by the ton', 'FDEP', 'C&D']) {
         expect(first?.kept.includes(never), never).toBe(false);
       }
       expect(first?.kept).not.toMatch(
-        /"\w*(rate|rule|transaction|price|amount|fee|permit|latitude|ineligible|cert|roe|block)\w*":/i,
+        /"\w*(rate|rule|transaction|price|amount|fee|permit|ineligible|cert|roe|block|helper)\w*":/i,
       );
-      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(12);
+      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(16);
 
       // The board moves Lee to the curb: the sites stay, the lookup goes. The project's setup
       // is as it was, so the version is too.
@@ -767,6 +782,266 @@ describe('the lists a phone takes', () => {
       expect(told(await lists(served, other, session))).toEqual([401, 'NOT_SIGNED_IN']);
       const asDana = await served.ask('GET', phoneListsEndpoint.path, { cookies: dana.cookies });
       expect(told(asDana)).toEqual([401, 'PHONE_NOT_PROVEN']);
+    });
+  });
+
+  it('AC-10-117, AC-10-118 a certifying phone holds the truck lists and who may help: the firm’s vehicle types with what each certifies, its features and crew types, and P1’s primes, Coastline with Rivera and Tidewater under it by tier and Summit with none; Sam Grant, assigned to P1 that day, as the one helper, never Lee himself, nobody on another day and nobody withdrawn; a tower and a haul-out’s disposal hold the truck lists and no helper; the curb and unit rate work hold neither; never a contractor’s contact', async () => {
+    await world(async (served, tx, _who, within) => {
+      const { dana, priced, token, lee, signIn, assigned } = await leeOnP1(served, tx);
+      const summit = await priced.contractor('Summit Debris Services');
+      saved(
+        addPrimeEndpoint,
+        await ask(served, dana, addPrimeEndpoint, {
+          ids: priced.ids,
+          payload: { contractorId: summit },
+        }),
+      );
+      await tx.contractor.update({
+        where: { id: priced.coastline },
+        data: { contactName: 'Pat Coastline', contactPhone: '302-555-0101' },
+      });
+      // Rivera and Tidewater are placed under Coastline when a truck is certified naming them.
+      const certified = await new Certifications(within, served.clock, shippedPolicy).certify({
+        projectId: priced.project.id,
+        certNumber: '730423',
+        kind: 'CONTAINER',
+        primeId: priced.coastline,
+        firstTierSub: 'Rivera Trucking',
+        secondTierSub: 'Tidewater Hauling',
+        certifiedById: lee.userId,
+        certifiedAt: mondayMorning,
+        deviceUtcOffsetMinutes: -240,
+        boxes: [{ shape: 'RECTANGLE', sign: 'ADD', length: 240, width: 90, height: 60 }],
+      });
+      expect(certified.saved).toBe(true);
+      const contractorNamed = async (name: string) =>
+        (await tx.contractor.findFirstOrThrow({ where: { name } })).id;
+      // The others on the board: Sam on P1 that day, Ana on P1 on Tuesday, Kim withdrawn.
+      const someone = async (name: string, workDate: string) => {
+        const made = await served.ask('POST', '/phones/current/monitors', {
+          bearer: token,
+          payload: { name, password: '5550199', passcode },
+        });
+        expect(told(made)).toEqual([200, undefined]);
+        const person = monitorCreatedAnswerSchema.parse(made.body);
+        return assigned({ personId: person.userId, workDate, fieldEventKinds: ['COLLECTION'] });
+      };
+      const sams = await someone('Sam Grant', monday);
+      await someone('Ana Brooks', '2026-10-13');
+      const kims = await someone('Kim Tran', monday);
+      await tx.assignment.update({ where: { id: kims.id }, data: { archivedAt: mondayMorning } });
+
+      const certifying = await assigned({ certifying: true });
+      const session = (await signIn()).token;
+      const answer = await lists(served, token, session);
+      const held = phoneListsAnswerSchema.parse(answer.body).lists;
+      const firms = { where: { archivedAt: null }, orderBy: { position: 'asc' } } as const;
+      expect(held?.vehicleTypes).toEqual(
+        (await tx.vehicleType.findMany(firms)).map(({ id, name, certifies }) => ({
+          id,
+          name,
+          kind: certifies,
+        })),
+      );
+      expect(held?.vehicleTypes.find(({ name }) => name === 'Self-Loading Truck')?.kind).toBe(
+        'CONTAINER',
+      );
+      expect(held?.vehicleFeatures).toEqual(
+        (await tx.vehicleFeature.findMany(firms)).map(({ id, name }) => ({ id, name })),
+      );
+      expect(held?.crewTypes).toEqual(
+        (await tx.crewType.findMany(firms)).map(({ id, name }) => ({ id, name })),
+      );
+      expect(held?.vehicleFeatures.map(({ name }) => name)).toContain('Dog Box');
+      expect(held?.crewTypes.map(({ name }) => name)).toEqual(
+        expect.arrayContaining(['Bucket Truck', 'Skid Steer']),
+      );
+      expect(held?.primes).toEqual([
+        {
+          id: priced.coastline,
+          name: 'Coastline Haulers LLC',
+          subs: [
+            { id: await contractorNamed('Rivera Trucking'), name: 'Rivera Trucking', tier: 1 },
+            { id: await contractorNamed('Tidewater Hauling'), name: 'Tidewater Hauling', tier: 2 },
+          ],
+        },
+        { id: summit, name: 'Summit Debris Services', subs: [] },
+      ]);
+      const sam = await tx.assignment.findUniqueOrThrow({
+        where: { id: sams.id },
+        select: { person: { select: { id: true, name: true } } },
+      });
+      expect(held?.helpers).toEqual([{ id: sam.person.id, name: 'Sam Grant' }]);
+      // The least a monitor needs (ASVS 14.2.6): no contact, no Monitor ID, no phone number.
+      for (const never of ['Pat Coastline', '302-555-0101', '5550199']) {
+        expect(answer.text.includes(never), never).toBe(false);
+      }
+      expect(answer.text).not.toMatch(/"\w*(contact|email|phone|monitorNumber)\w*":/i);
+
+      // Each kind of work: the truck lists to a phone that certifies or takes disposals, a
+      // helper only to one that certifies (ADR-552 (3)).
+      const holds = async (work: object) => {
+        await tx.assignment.update({
+          where: { id: certifying.id },
+          data: { certifying: false, fieldEventKinds: [], ...work },
+        });
+        const got = (await read(served, token, session)).lists;
+        return [
+          (got?.vehicleTypes.length ?? 0) > 0,
+          (got?.vehicleFeatures.length ?? 0) > 0,
+          (got?.crewTypes.length ?? 0) > 0,
+          got?.primes.length,
+          got?.helpers.length,
+        ];
+      };
+      expect(await holds({ fieldEventKinds: ['DISPOSAL'] })).toEqual([true, true, true, 2, 0]);
+      expect(await holds({ fieldEventKinds: ['HAUL_OUT_DISPOSAL'] })).toEqual([
+        true,
+        true,
+        true,
+        2,
+        0,
+      ]);
+      expect(await holds({ fieldEventKinds: ['COLLECTION', 'HAUL_OUT_COLLECTION'] })).toEqual([
+        false,
+        false,
+        false,
+        0,
+        0,
+      ]);
+      expect(await holds({ fieldEventKinds: ['UNIT_RATE'] })).toEqual([false, false, false, 0, 0]);
+      expect(await holds({ certifying: true })).toEqual([true, true, true, 2, 1]);
+    });
+  });
+
+  it('AC-10-119 each site carries its GPS and its area as it stands: P1’s circle round Cypress Creek’s GPS, and Marsh Road TDSR’s own shape once one is drawn; a new shape, a changed circle, a feature taken off the firm’s list and a sub placed under a prime each make a new setup version at the next read, and a certification alone does not', async () => {
+    await world(async (served, tx, _who, within) => {
+      const { dana, priced, token, lee, signIn, assigned } = await leeOnP1(served, tx);
+      const siteType = async (key: string) =>
+        (await tx.siteType.findUniqueOrThrow({ where: { key } })).id;
+      const site = async (name: string, key: string, latitude: string, longitude: string) =>
+        saved(
+          createSiteEndpoint,
+          await ask(served, dana, createSiteEndpoint, {
+            ids: priced.ids,
+            payload: {
+              name,
+              siteTypeId: await siteType(key),
+              takesLoads: true,
+              haulOutsLeaveHere: false,
+              chargesTippingFee: false,
+              ineligibleSite: false,
+              permitNumber: null,
+              latitude,
+              longitude,
+              activationDate: monday,
+            },
+          }),
+        ).record;
+      const cypress = await site(
+        'Cypress Creek Landfill',
+        'FINAL_DISPOSAL',
+        '39.07100000',
+        '-75.60400000',
+      );
+      const marshRoad = await site('Marsh Road TDSR', 'TDSR', '39.09000000', '-75.62000000');
+      await assigned({ fieldEventKinds: ['DISPOSAL'], siteId: cypress.id });
+      const session = (await signIn()).token;
+      const placeOf = async () =>
+        Object.fromEntries(
+          ((await read(served, token, session)).lists?.sites ?? []).map(
+            ({ name, latitude, longitude, area }) => [name, { latitude, longitude, area }],
+          ),
+        );
+      const version = async () => (await read(served, token, session)).lists?.setupVersion;
+      const circle = { kind: 'CIRCLE', meters: priced.project.siteCircleMeters };
+      expect(await placeOf()).toEqual({
+        'Cypress Creek Landfill': {
+          latitude: '39.07100000',
+          longitude: '-75.60400000',
+          area: circle,
+        },
+        'Marsh Road TDSR': { latitude: '39.09000000', longitude: '-75.62000000', area: circle },
+      });
+      expect(await version()).toBe(1);
+
+      // Dana draws Marsh Road's own shape: it stands in place of the circle.
+      const shape = {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-75.622, 39.088],
+            [-75.618, 39.088],
+            [-75.618, 39.092],
+            [-75.622, 39.092],
+            [-75.622, 39.088],
+          ],
+        ],
+      };
+      saved(
+        addSiteShapeEndpoint,
+        await ask(served, dana, addSiteShapeEndpoint, {
+          ids: { siteId: marshRoad.id },
+          payload: { source: 'DRAWN', shape },
+        }),
+      );
+      const drawn = await placeOf();
+      expect(drawn['Marsh Road TDSR']?.area).toEqual({
+        kind: 'SHAPE',
+        geometry: shape,
+        box: {
+          westLongitude: '-75.62200000',
+          southLatitude: '39.08800000',
+          eastLongitude: '-75.61800000',
+          northLatitude: '39.09200000',
+        },
+      });
+      expect(drawn['Cypress Creek Landfill']?.area).toEqual(circle);
+      expect(await version()).toBe(2);
+
+      // The circle round every site without a shape.
+      saved(
+        changeProjectSettingsEndpoint,
+        await ask(served, dana, changeProjectSettingsEndpoint, {
+          ids: priced.ids,
+          payload: { siteCircleMeters: 250 },
+        }),
+      );
+      expect((await placeOf())['Cypress Creek Landfill']?.area).toEqual({
+        kind: 'CIRCLE',
+        meters: 250,
+      });
+      expect(await version()).toBe(3);
+
+      // A feature the firm takes off its list.
+      const wheelWells = await tx.vehicleFeature.findFirstOrThrow({
+        where: { archivedAt: null },
+        orderBy: { position: 'desc' },
+      });
+      await tx.vehicleFeature.update({
+        where: { id: wheelWells.id },
+        data: { archivedAt: mondayMorning },
+      });
+      expect(await version()).toBe(4);
+
+      // A certification is a record, not the setup; the sub it places under Coastline is.
+      const certifications = new Certifications(within, served.clock, shippedPolicy);
+      const certify = (certNumber: string, firstTierSub?: string) =>
+        certifications.certify({
+          projectId: priced.project.id,
+          certNumber,
+          kind: 'CONTAINER',
+          primeId: priced.coastline,
+          ...(firstTierSub === undefined ? {} : { firstTierSub }),
+          certifiedById: lee.userId,
+          certifiedAt: mondayMorning,
+          deviceUtcOffsetMinutes: -240,
+          boxes: [{ shape: 'RECTANGLE', sign: 'ADD', length: 240, width: 90, height: 60 }],
+        });
+      expect((await certify('730415')).saved).toBe(true);
+      expect(await version()).toBe(4);
+      expect((await certify('730416', 'Rivera Trucking')).saved).toBe(true);
+      expect(await version()).toBe(5);
     });
   });
 });

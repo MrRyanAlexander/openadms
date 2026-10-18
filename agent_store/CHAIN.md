@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-17, the Phase 2 audit answered (ADR-541…550), on the user's Mac, the installation at head: `pnpm chain` 8 of 9 (its test step met a second chain still running beside it, the stories' port and the database shared: the agent's own overlap), then `pnpm chain test` alone passed and `pnpm security` passed; every count below as seen (what moved: seven migrations, the tests of AC-10-108…116, the two flags, the policy's four values, a check each in `p1-queued` and `p1-viewed`, a check of the installer's).
+**Seen whole:** 2026-10-17, task 2.9.1 (ADR-553), on the user's Mac, the installation at head: `pnpm chain` 9 of 9 in 12 min 21 s; every count below as seen (what moved: the API's two tests of AC-10-117…119, the sync suite's check 19 in `packages/contracts` and `packages/scenarios`, a check in `certification`).
 
 ## `pnpm ready`
 
@@ -20,15 +20,15 @@
 
 ## `pnpm test`
 
-**`Test Files 187 passed (187)`, `Tests 3253 passed (3253)`.**
+**`Test Files 187 passed (187)`, `Tests 3257 passed (3257)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 859 | 45 | nothing |
-| `packages/contracts` | 91 | 9 | nothing |
-| `apps/api` | 750 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/contracts` | 92 | 9 | nothing |
+| `apps/api` | 752 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1090 | 49 | `pnpm ready` |
-| `packages/scenarios` | 159 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (25), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/scenarios` | 160 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (26), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
 | `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
 | `tools/security` | 141 | 3 | nothing (the scan's and the grant tests' rules 49, who reaches Postgres 35, the guard hook 57) |
@@ -51,7 +51,7 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `ticket-101001` | 16 | | `p1-priced` | 29 |
 | `dispatch-monday` | 22 | | `p1-reviewed` | 36 |
 | `setup` | 52 | | `p1-voided` | 32 |
-| `certification` | 28 | | `p1-invoiced` | 27 |
+| `certification` | 29 | | `p1-invoiced` | 27 |
 | `numbering` | 16 | | `golden-mission` | 32 |
 | `p1-field-days` | 35 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |

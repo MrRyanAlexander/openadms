@@ -93,9 +93,11 @@ describe('the lists a phone takes', () => {
         /rate|rule|transaction|price|amount|description|owner|driver/i.test(key),
       ),
     ).toEqual([]);
-    // A prime is named only as whose truck or crew a certification is, and as whose trucks a
-    // row of the site's lookup is for.
-    expect(keys.filter((key) => /prime/i.test(key))).toEqual(['prime', 'primeId']);
+    // A prime is named only as whose truck or crew a certification is, as whose trucks a row of
+    // the site's lookup is for, and in the truck lists (ADR-552 (3)(a)).
+    expect(keys.filter((key) => /prime/i.test(key))).toEqual(['prime', 'primes', 'primeId']);
+    // AC-10-117: never a contractor's contact, nor a helper's.
+    expect(keys.filter((key) => /contact|email|phone/i.test(key))).toEqual([]);
     // The one code is a unit rate pay item's, which the phone prints (ADR-213, 301).
     expect(keys.filter((key) => /code/i.test(key))).toEqual(['code']);
     const whole = {
@@ -114,6 +116,11 @@ describe('the lists a phone takes', () => {
       incidentOffers: [],
       contractors: [],
       surveyWorkTypes: [],
+      vehicleTypes: [],
+      vehicleFeatures: [],
+      crewTypes: [],
+      primes: [],
+      helpers: [],
       quantityLookup: [],
     };
     expect(phoneListsSchema.safeParse(whole).success).toBe(true);
@@ -132,7 +139,9 @@ describe('the lists a phone takes', () => {
         /rate|rule|transaction|price|amount|description|owner|driver|cert|roe|block/i.test(key),
       ),
     ).toEqual([]);
-    expect(keys.filter((key) => /prime|code/i.test(key))).toEqual(['code', 'primeId']);
+    expect(keys.filter((key) => /prime|code/i.test(key))).toEqual(['code', 'primes', 'primeId']);
+    // Who may be picked as a helper is a record of the day's board, never a version's.
+    expect(keys.filter((key) => /helper/i.test(key))).toEqual([]);
     const shown = {
       controlRanges: [],
       debrisTypes: { LOAD: [], HAUL_OUT: [] },
@@ -145,15 +154,32 @@ describe('the lists a phone takes', () => {
       incidentOffers: [],
       contractors: [],
       surveyWorkTypes: [],
+      vehicleTypes: [],
+      vehicleFeatures: [],
+      crewTypes: [],
+      primes: [],
       quantityLookup: [],
     };
     expect(setupShownSchema.safeParse(shown).success).toBe(true);
     expect(setupShownSchema.safeParse({ ...shown, rules: [] }).success).toBe(false);
-    const lists = { ...shown, setupVersion: 1, blocks: [], certifications: [], roes: [] };
+    const lists = {
+      ...shown,
+      setupVersion: 1,
+      blocks: [],
+      certifications: [],
+      roes: [],
+      helpers: [],
+    };
     expect(phoneListsSchema.safeParse(lists).success).toBe(true);
     expect(phoneListsSchema.safeParse({ ...lists, setupVersion: 0 }).success).toBe(false);
     expect(
-      phoneListsSchema.safeParse({ ...shown, blocks: [], certifications: [], roes: [] }).success,
+      phoneListsSchema.safeParse({
+        ...shown,
+        blocks: [],
+        certifications: [],
+        roes: [],
+        helpers: [],
+      }).success,
     ).toBe(false);
   });
 

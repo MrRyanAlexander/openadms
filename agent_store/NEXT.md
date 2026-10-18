@@ -77,10 +77,10 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   green, every count as `CHAIN.md`'s): a phone's lists hold none of what a certification picks
   (vehicle types and features, crew types, primes and their subs, helpers) nor a site's place, and
   every story passed only because the harness's phone was handed those ids from the database.
-  **Milestone 2.9:** 2.9.1 the lists (the truck lists to certifying *and* disposal assignments, at
-  the user's word), 2.9.2 three faults (a lock race answered 500, review reads two queries a row,
-  the address server's control-socket error), 2.9.3 the exit and the records. Not begun: **the
-  user says go.**
+  **Milestone 2.9:** 2.9.1 the lists ✅ (ADR-553: the truck lists, the helpers, each site's
+  place; the harness's phone certifies by name and sends no id it wasn't sent), 2.9.2 three faults
+  (a lock race answered 500, review reads two queries a row, the address server's control-socket
+  error), 2.9.3 the exit and the records. Begun at the user's word ("work on the next task").
 - **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole**
   (ADR-541…550), its three questions by the user (ADR-551).
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
@@ -89,7 +89,7 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
   §3a–§3b and `DECISIONS.md`.
 - **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**, withdrawn by ADR-552; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Milestone 2.9 (ADR-552):** 2.9.1…2.9.3, none begun. What each task left is `BACKLOG.md`'s
+  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**, withdrawn by ADR-552; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Milestone 2.9 (ADR-552):** 2.9.1 done (ADR-553); 2.9.2, 2.9.3 to do. What each task left is `BACKLOG.md`'s
   carry-forward register (live items only since ADR-532).
 - **Housekeeping, 2026-10-15 (ADR-532), at the user's word:** `SUMMARY.md` cut by topic (432 → 202
   KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
@@ -107,7 +107,7 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
 - **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
-- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** their "go" for task 2.9.1;
+- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks;
   every agent default on `spec/DEFAULTS-REVIEW.md` is answered (ADR-538), `SUMMARY.md` §4 lists what stays open.
 - **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
   in security is suggested, say what the standard asks before building it.**
@@ -233,16 +233,15 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 2.9.1, what a phone needs to pick, sent with its lists (REQ-218, C118, ADR-552 (3)) —
-waiting on the user's "go".** Read its line in `BACKLOG.md` (Milestone 2.9) and the register's
-"For Milestone 2.9"; ground it in `packages/contracts/src/api-answers.ts` (`phoneListsSchema`,
-`phoneAssignmentSchema`), `apps/api/src/phone/phone-lists.ts`, `apps/api/src/setup/setup-versions.ts`
-and `packages/scenarios/src/device.ts` (`certify`, which takes ids where every other record
-`pick`s by name); load `adms-certifications` and `adms-field-app`. **The truck lists go to an
-assignment that certifies or takes disposals (`DIS`, `HOD`): the agent's reading of the user's
-"both roles need the trucks list", put back to them (ADR-552 (3a)).** Then 2.9.2, then 2.9.3
-(Phase 2's exit). Phase 3 stays gated; its first question, when it opens, is the accessibility
-standard (REQ-324, C41).
+**Task 2.9.2, three faults put right (ADR-552 (4); C174 (a)).** Read its line in `BACKLOG.md`
+(Milestone 2.9) and the register's "For Milestone 2.9": (1) a lock made between a review
+service's check and its write answered as a refusal in words ("locked as invoiced"), never a 500,
+with a test that makes the race (`apps/api/src/process/database-refusal.ts`, the review services);
+(2) the four review reads (ROEs, surveys, incidents, drop-off logs) take a page's QC marks and
+photographs in one query each, never two a row nor two at once on one connection; `pg` stays on 8;
+(3) the address server's gunicorn started with `--no-control-socket` (`infra/local/compose.yaml`
+and `compose.test.ts` together), its start-up log read again. Then 2.9.3 (Phase 2's exit). Phase 3
+stays gated; its first question, when it opens, is the accessibility standard (REQ-324, C41).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

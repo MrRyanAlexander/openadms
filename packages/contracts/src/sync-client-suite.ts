@@ -33,6 +33,7 @@
 import {
   toldToWait,
   waitAnswers,
+  type PhoneListsRecord,
   type PhotoFileAnswer,
   type PhotoFileName,
 } from './api-answers.ts';
@@ -45,10 +46,12 @@ import {
 import { turnInSentSchema, type TurnInAnswer, type TurnInSent } from './turn-in.ts';
 import {
   assignment,
+  certification,
   certificationPhotos,
   collection,
   disposal,
   landfill,
+  listsAfterwards,
   made,
   p1,
   pilePhoto,
@@ -86,6 +89,9 @@ export interface SyncClientHolds {
   readonly files: readonly HeldPhotoFile[];
   // The most a part of a file may hold, as the server it sends to takes them.
   readonly filePartBytesAtMost: number;
+  // The lists it holds now, where a check says: taken since its records were made, so they may
+  // no longer hold what a record picked (ADR-552 (3)).
+  readonly lists?: PhoneListsRecord;
 }
 
 // A photograph's file a client holds: the bytes its record's fingerprint is of
@@ -1154,6 +1160,23 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
           `Told to wait (${code}), what it sent again is not what it sent before.`,
         );
       }
+    },
+  },
+  {
+    name: 'a record goes as it was made, whatever its lists hold now: a certification naming a helper the lists taken since no longer name is still sent, once and unchanged, never dropped or picked again; a phone warns, and never refuses (ADR-052, 421, 552 (3)(f); AC-10-120)',
+    async run(make) {
+      const made: SyncedRecord = { record: 'CERTIFICATION', certification };
+      const lists = listsAfterwards;
+      held(
+        certification.helperIds.some((id) => !lists.helpers.some((one) => one.id === id)),
+        'The suite’s own lists still name the helper its certification picked.',
+      );
+      const client = await make({ ...nothing, records: [made], lists });
+      const sync = onTheWire(client.sends());
+      held(
+        sync.records.length === 1 && same(sync.records[0], made),
+        'The certification was not sent as it was made, once, with the lists it holds now.',
+      );
     },
   },
 ];

@@ -3,7 +3,8 @@
 // C118; ADR-240, 453).
 //
 // - **What is numbered is the project's setup as a phone is shown it**, whole for the project:
-//   the lists a monitor picks from and what each site's phones ask for. A phone's own lists are
+//   the lists a monitor picks from (the firm's truck lists and the project's primes and subs
+//   among them, ADR-552 (3)(e)), each site's place, and what each site's phones ask for. A phone's own lists are
 //   its assignment's part of it, so a field event's assignment and version together say what
 //   its phone showed. Not the certifications, the ROEs or a phone's blocks of numbers: each is
 //   a record with its own history, and a new one makes no new version.
@@ -15,8 +16,11 @@
 // - Never a rate, a rule, a transaction or a load's pay item (invariant 20): none is read here.
 import { byDeviceKey, type Database, type Prisma } from '@open-adms/db';
 import type {
+  BoundingBox,
+  CertificationKind,
   DumpedForm,
   IncidentOffer,
+  MapGeometry,
   NumberSeriesName,
   QuantityAskName,
 } from '@open-adms/domain';
@@ -27,6 +31,21 @@ interface Named {
   readonly id: string;
   readonly name: string;
 }
+
+// A site's area as it stands (ADR-346): the project's circle round its GPS, or its newest own
+// shape, as the worker reads it.
+export type SiteAreaShown =
+  | { readonly kind: 'CIRCLE'; readonly meters: number }
+  | { readonly kind: 'SHAPE'; readonly geometry: MapGeometry; readonly box: BoundingBox };
+
+export type SiteShown = Named & {
+  readonly siteType: Named;
+  readonly takesLoads: boolean;
+  readonly haulOutsLeaveHere: boolean;
+  readonly latitude: string;
+  readonly longitude: string;
+  readonly area: SiteAreaShown;
+};
 
 // What a project's phones are shown of its setup: the contracts' `setupShownSchema`.
 export interface SetupShown {
@@ -41,11 +60,7 @@ export interface SetupShown {
   readonly debrisTypes: { readonly LOAD: readonly Named[]; readonly HAUL_OUT: readonly Named[] };
   readonly fieldTags: readonly Named[];
   readonly typedNumberReasons: readonly Named[];
-  readonly sites: readonly (Named & {
-    readonly siteType: Named;
-    readonly takesLoads: boolean;
-    readonly haulOutsLeaveHere: boolean;
-  })[];
+  readonly sites: readonly SiteShown[];
   // Every unit rate pay item of the project; a phone holds those its assignment names.
   readonly payItems: readonly {
     readonly id: string;
@@ -68,6 +83,14 @@ export interface SetupShown {
   readonly incidentOffers: readonly IncidentOffer[];
   readonly contractors: readonly Named[];
   readonly surveyWorkTypes: readonly Named[];
+  // The truck lists (ADR-552 (3)(a), (b)): the firm's vehicle types, features and crew types, and
+  // the project's primes, each with the subs placed under it.
+  readonly vehicleTypes: readonly (Named & { readonly kind: CertificationKind })[];
+  readonly vehicleFeatures: readonly Named[];
+  readonly crewTypes: readonly Named[];
+  readonly primes: readonly (Named & {
+    readonly subs: readonly (Named & { readonly tier: 1 | 2 })[];
+  })[];
   // What each live site's phones ask for (ADR-227, 243), for the debris types phones hold.
   readonly quantityLookup: readonly {
     readonly siteId: string;
@@ -98,11 +121,17 @@ export class SetupVersions {
     this.db = db;
   }
 
-  // The project's live sites, as a phone is shown one: its name, its type and what it is for.
+  // The project's live sites, as a phone is shown one: its name, its type, what it is for, and
+  // its place: its GPS and its area as it stands, its newest own shape or else the project's
+  // circle round its GPS, as the worker reads it (ADR-346, 552 (3)(d)).
   static async sitesShownIn(
     tx: Prisma.TransactionClient,
     projectId: string,
   ): Promise<SetupShown['sites']> {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { siteCircleMeters: true },
+    });
     const sites = await tx.disposalSite.findMany({
       where: { projectId, archivedAt: null },
       select: {
@@ -110,16 +139,81 @@ export class SetupVersions {
         name: true,
         takesLoads: true,
         haulOutsLeaveHere: true,
+        latitude: true,
+        longitude: true,
         siteType: { select: { id: true, name: true } },
+        areaVersions: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: {
+            geometry: true,
+            westLongitude: true,
+            southLatitude: true,
+            eastLongitude: true,
+            northLatitude: true,
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
-    return sites.map((site) => ({
-      ...name(site),
-      siteType: name(site.siteType),
-      takesLoads: site.takesLoads,
-      haulOutsLeaveHere: site.haulOutsLeaveHere,
-    }));
+    return sites.map((site) => {
+      const [newest] = site.areaVersions;
+      return {
+        ...name(site),
+        siteType: name(site.siteType),
+        takesLoads: site.takesLoads,
+        haulOutsLeaveHere: site.haulOutsLeaveHere,
+        latitude: site.latitude.toFixed(8),
+        longitude: site.longitude.toFixed(8),
+        area:
+          newest === undefined
+            ? { kind: 'CIRCLE', meters: project.siteCircleMeters }
+            : {
+                kind: 'SHAPE',
+                geometry: newest.geometry as unknown as MapGeometry,
+                box: {
+                  westLongitude: newest.westLongitude.toFixed(8),
+                  southLatitude: newest.southLatitude.toFixed(8),
+                  eastLongitude: newest.eastLongitude.toFixed(8),
+                  northLatitude: newest.northLatitude.toFixed(8),
+                },
+              },
+      };
+    });
+  }
+
+  // The truck lists (ADR-552 (3)(a), (b)): the firm's vehicle types, vehicle features and crew
+  // types in service, in the firm's order; and the project's primes, each with the subs placed
+  // under it, by id and name.
+  static async truckListsShownIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<Pick<SetupShown, 'vehicleTypes' | 'vehicleFeatures' | 'crewTypes' | 'primes'>> {
+    const firms = { where: { archivedAt: null }, orderBy: { position: 'asc' } } as const;
+    const vehicleTypes = await tx.vehicleType.findMany(firms);
+    const vehicleFeatures = await tx.vehicleFeature.findMany(firms);
+    const crewTypes = await tx.crewType.findMany(firms);
+    const placed = await tx.projectContractor.findMany({
+      where: { projectId, archivedAt: null },
+      include: { contractor: { select: { id: true, name: true } } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return {
+      vehicleTypes: vehicleTypes.map((type) => ({ ...name(type), kind: type.certifies })),
+      vehicleFeatures: vehicleFeatures.map(name),
+      crewTypes: crewTypes.map(name),
+      primes: placed
+        .filter((place) => place.position === 'PRIME')
+        .map((prime) => ({
+          ...name(prime.contractor),
+          subs: placed
+            .filter((place) => place.position !== 'PRIME' && place.primeId === prime.contractorId)
+            .map((sub) => ({
+              ...name(sub.contractor),
+              tier: sub.position === 'SUB_TIER_1' ? (1 as const) : (2 as const),
+            })),
+        })),
+    };
   }
 
   // The project's unit rate pay items, as a phone is shown one: its code and capture settings,
@@ -238,6 +332,7 @@ export class SetupVersions {
       where: { archivedAt: null },
       orderBy: { position: 'asc' },
     });
+    const trucks = await SetupVersions.truckListsShownIn(tx, projectId);
     // What each site's phones ask for, for the debris types a phone holds: one hidden on phones
     // has no row.
     const carried = new Set(entries.map((entry) => entry.id));
@@ -261,6 +356,7 @@ export class SetupVersions {
       incidentOffers,
       contractors: placed.map((place) => name(place.contractor)),
       surveyWorkTypes: surveyWorkTypes.map(name),
+      ...trucks,
       quantityLookup: asks
         .filter((ask) => carried.has(ask.debrisTypeId))
         .map(({ siteId, form, debrisTypeId, primeId, asks }) => ({

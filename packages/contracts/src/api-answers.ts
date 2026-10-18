@@ -777,11 +777,13 @@ export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;
 // a phone showed when a field event recorded that version; a phone's own lists are its
 // assignment's part of it. The control ranges; the load and haul-out forms' debris types
 // without those hidden on phones, the field tags, the firm's reasons for a typed number; the
-// live sites; every unit rate pay item with its capture settings and the item names of their
-// kinds of work; what incidents and surveys pick from; and what each site's phones ask for.
-// **Never a rate, a rule, a transaction or a load's pay item.** Not the certifications, the
-// ROEs or a phone's blocks of numbers: those are records with their own history, and a new one
-// makes no new version.
+// live sites with their place (GPS and area as it stands); every unit rate pay item with its
+// capture settings and the item names of their kinds of work; what incidents and surveys pick
+// from; the truck lists (the firm's vehicle types, features and crew types, the project's primes
+// and their subs: ADR-552 (3)(e)); and what each site's phones ask for. **Never a rate, a rule,
+// a transaction or a load's pay item.** Not the certifications, the ROEs, the helpers or a
+// phone's blocks of numbers: those are records with their own history, and a new one makes no
+// new version.
 const controlRanges = z.array(
   z.strictObject({
     series: z.enum(numberSeries),
@@ -790,6 +792,28 @@ const controlRanges = z.array(
   }),
 );
 const debrisTypes = z.strictObject({ LOAD: z.array(named), HAUL_OUT: z.array(named) });
+// A site's area as it stands, for the phone's advisory "not at this site" (ADR-346, 552 (3)(d)):
+// the project's circle round its GPS, or its newest own shape, a Polygon or a MultiPolygon in
+// longitude and latitude with its bounding box. The worker's check is the one that flags.
+const position = z.tuple([z.number(), z.number()]);
+const ring = z.array(position);
+const decimal = z.string().regex(/^-?\d+\.\d{8}$/);
+const siteArea = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('CIRCLE'), meters: z.number().int().min(1) }),
+  z.strictObject({
+    kind: z.literal('SHAPE'),
+    geometry: z.discriminatedUnion('type', [
+      z.strictObject({ type: z.literal('Polygon'), coordinates: z.array(ring) }),
+      z.strictObject({ type: z.literal('MultiPolygon'), coordinates: z.array(z.array(ring)) }),
+    ]),
+    box: z.strictObject({
+      westLongitude: decimal,
+      southLatitude: decimal,
+      eastLongitude: decimal,
+      northLatitude: decimal,
+    }),
+  }),
+]);
 const sites = z.array(
   z.strictObject({
     id: z.uuid(),
@@ -797,6 +821,31 @@ const sites = z.array(
     siteType: named,
     takesLoads: z.boolean(),
     haulOutsLeaveHere: z.boolean(),
+    // Its GPS as entered, exact decimals (invariant 15).
+    latitude: decimal,
+    longitude: decimal,
+    area: siteArea,
+  }),
+);
+// The truck lists (ADR-108, 552 (3)(a), (b)): what certifying picks, and what a tower's monitor
+// finds a truck keyed in by hand from. The firm's vehicle types, each saying whether it is of a
+// container or a crew; its vehicle features, which name a box after the primary; its crew types;
+// and the project's primes, each with the subs placed under it and their tier, to offer when a
+// sub is typed (any other is typed whole). By id and name: never a code or a contact.
+const vehicleTypes = z.array(
+  z.strictObject({ id: z.uuid(), name: z.string(), kind: z.enum(['CONTAINER', 'CREW']) }),
+);
+const primes = z.array(
+  z.strictObject({
+    id: z.uuid(),
+    name: z.string(),
+    subs: z.array(
+      z.strictObject({
+        id: z.uuid(),
+        name: z.string(),
+        tier: z.union([z.literal(1), z.literal(2)]),
+      }),
+    ),
   }),
 );
 const payItems = z.array(
@@ -842,6 +891,10 @@ export const setupShownSchema = z.strictObject({
   incidentOffers: z.array(z.enum(incidentOffers)),
   contractors: z.array(named),
   surveyWorkTypes: z.array(named),
+  vehicleTypes,
+  vehicleFeatures: z.array(named),
+  crewTypes: z.array(named),
+  primes,
   // A row for each live site, debris type a phone holds and prime.
   quantityLookup: z.array(z.strictObject({ siteId: z.uuid(), ...quantityAsk })),
 });
@@ -855,10 +908,12 @@ export type SetupShownRecord = z.infer<typeof setupShownSchema>;
 // the project's control ranges; the load and haul-out forms' debris types without those hidden
 // on phones, the field tags, the firm's reasons for a typed number; the project's
 // certifications (number, kind, capacity, prime and subs by name: never the driver) and its
-// sites; its ROEs, each with whether its pre-work survey is done (number, address and parcel:
-// never the owner); the unit rate pay items the assignment names with their capture settings
-// and the item names of their kinds of work; what its incidents and surveys pick from; and, for
-// a phone at a site, what that site's phones ask for. **Never a rate, a rule, a transaction or
+// sites with their place; its ROEs, each with whether its pre-work survey is done (number,
+// address and parcel: never the owner); the unit rate pay items the assignment names with their
+// capture settings and the item names of their kinds of work; what its incidents and surveys
+// pick from; for a phone that certifies or takes disposals, the truck lists, and for one that
+// certifies, who may be picked as a helper (ADR-552 (3)); and, for a phone at a site, what that
+// site's phones ask for. **Never a rate, a rule, a transaction or
 // a load's pay item**: a monitor picks by name, and the only code here is a unit rate pay
 // item's, which the phone prints. Strict, so nothing more can be sent unnoticed.
 export const phoneListsSchema = z.strictObject({
@@ -905,6 +960,14 @@ export const phoneListsSchema = z.strictObject({
   incidentOffers: z.array(z.enum(incidentOffers)),
   contractors: z.array(named),
   surveyWorkTypes: z.array(named),
+  // The truck lists, for a phone that certifies or takes disposals; empty for any other.
+  vehicleTypes,
+  vehicleFeatures: z.array(named),
+  crewTypes: z.array(named),
+  primes,
+  // Who a certifying phone's monitor may pick as a helper: the others with an assignment on the
+  // project that day, by id and name alone (ADR-294); none for a phone that doesn't certify.
+  helpers: z.array(named),
   // For a phone at a site: a row for each debris type the phone holds and each prime.
   quantityLookup: z.array(z.strictObject(quantityAsk)),
 });

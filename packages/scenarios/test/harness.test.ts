@@ -45,6 +45,12 @@ const nothingToPick: PhoneLists = {
   incidentOffers: [],
   contractors: [],
   surveyWorkTypes: [],
+  certifications: [],
+  vehicleTypes: [],
+  vehicleFeatures: [],
+  crewTypes: [],
+  primes: [],
+  helpers: [],
 };
 
 const setup = {
@@ -351,6 +357,12 @@ const lists: PhoneLists = {
   incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
   contractors: [named('Coastline Haulers LLC'), named('Rivera Trucking')],
   surveyWorkTypes: [named('Pre-work'), named('Post-work')],
+  certifications: [],
+  vehicleTypes: [],
+  vehicleFeatures: [],
+  crewTypes: [],
+  primes: [],
+  helpers: [],
 };
 const tdsr = '00000000-0000-7000-8000-00000000000e';
 const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string } = {}) => {

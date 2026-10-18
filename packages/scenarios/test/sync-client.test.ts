@@ -32,6 +32,12 @@ const lists: PhoneLists = {
   incidentOffers: [],
   contractors: [],
   surveyWorkTypes: [],
+  certifications: [],
+  vehicleTypes: [],
+  vehicleFeatures: [],
+  crewTypes: [],
+  primes: [],
+  helpers: [],
 };
 const deviceId = syncExamples.made('97');
 // The tower's phone at 17:30 on Monday, holding what the suite hands it; on a clock of its own
@@ -62,7 +68,7 @@ describe('the harness’s phone, held to the suite any client of the sync contra
   for (const check of syncClientSuite) {
     it(check.name, async () => {
       await check.run((holds) => {
-        const client = phone(holds);
+        const client = phone(holds, holds.lists ?? lists);
         return {
           sends: () => client.sends(),
           answered: (answer) => {
@@ -204,9 +210,10 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
   });
 
   it('AC-05-09, ADR-483 each photograph it takes is a real file, the depth file beside it where one is taken; the record carries the SHA-256 of the very bytes it sends, after the sync that saved the record, in parts no larger than it was told', async () => {
-    const client = phone({ ...records, records: [], filePartBytesAtMost: 1500 });
+    // The phone photographs a field event it holds: a phone photographs only its own records.
     const [first] = records.records;
     if (first?.record !== 'FIELD_EVENT') throw new Error('The examples have no field event.');
+    const client = phone({ ...records, records: [first], filePartBytesAtMost: 1500 });
     const pile = client.photograph({ of: { kind: 'FIELD_EVENT', id: first.fieldEvent.id } });
     const bed = client.photograph({
       of: { kind: 'FIELD_EVENT', id: first.fieldEvent.id },
@@ -222,7 +229,11 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
           answered: {
             unplannedAssignments: [],
             passcodeUses: [],
-            records: [],
+            records: sent.records.map(() => ({
+              answer: 'SAVED' as const,
+              id: first.fieldEvent.id,
+              notes: [],
+            })),
             photos: sent.photos.map((one) => ({
               answer: 'SAVED' as const,
               id: (one as { id: string }).id,
@@ -248,7 +259,7 @@ describe('the harness’s phone, syncing through the API’s own service', () =>
       },
     };
     expect(client.holdsFiles).toEqual([`${pile.id} photo`, `${bed.id} photo`, `${bed.id} depth`]);
-    expect(await client.sync(made)).toBe(2);
+    expect(await client.sync(made)).toBe(3);
     expect(client.holdsFiles).toEqual([]);
     expect(
       parts.map(({ file, offset, length, bytes }) => [file, offset, length, bytes.length]),

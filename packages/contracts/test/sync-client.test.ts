@@ -70,6 +70,7 @@ const faults = [
   'KEEPS_WHAT_IT_SHOWS',
   'PACKS_BY_COUNT_ONLY',
   'SHOWS_A_WAIT_AS_NOT_SAVED',
+  'DROPS_WHAT_ITS_LISTS_LACK',
 ] as const;
 type Fault = (typeof faults)[number];
 
@@ -123,7 +124,15 @@ const phone =
         const first = unplanned.slice(0, all ? undefined : syncUnplannedAssignmentsAtMost);
         const later = new Set(unplanned.slice(first.length).map((each) => each.id));
         const ordered: SyncedRecord[] = [];
-        for (const record of waiting) {
+        // A record naming a helper its lists no longer hold, dropped as if it couldn't be.
+        const lacks = (record: SyncedRecord): boolean =>
+          fault === 'DROPS_WHAT_ITS_LISTS_LACK' &&
+          holds.lists !== undefined &&
+          record.record === 'CERTIFICATION' &&
+          record.certification.helperIds.some(
+            (id) => !(holds.lists?.helpers ?? []).some((one) => one.id === id),
+          );
+        for (const record of waiting.filter((one) => !lacks(one))) {
           const named =
             record.record === 'SCALE_RECEIPT' && fault !== 'SENDS_AS_RECORDED'
               ? ordered.findIndex(
@@ -358,7 +367,7 @@ describe('the suite any client of the sync contract must pass', () => {
     const caught: Record<string, number[]> = {};
     for (const fault of faults) caught[fault] = await failed(phone(fault));
     expect(caught).toEqual({
-      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17],
+      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19],
       SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18],
       TRIMS_A_NUMBER: [2],
       SENDS_AS_RECORDED: [3],
@@ -389,6 +398,8 @@ describe('the suite any client of the sync contract must pass', () => {
       PACKS_BY_COUNT_ONLY: [17],
       // Told to wait (ADR-524).
       SHOWS_A_WAIT_AS_NOT_SAVED: [18],
+      // Lists taken since a record was made (ADR-552 (3)(f)).
+      DROPS_WHAT_ITS_LISTS_LACK: [19],
     });
   });
 

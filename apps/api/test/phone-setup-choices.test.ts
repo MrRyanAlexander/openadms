@@ -358,6 +358,10 @@ describe('what a phone being set up picks from', () => {
           siteType: finalDisposal,
           takesLoads: true,
           haulOutsLeaveHere: false,
+          // Its place, as a phone's lists show it (ADR-552 (3)(d)).
+          latitude: '39.09000000',
+          longitude: '-75.62000000',
+          area: { kind: 'CIRCLE', meters: p1.siteCircleMeters },
         },
       ]);
       const named = async (name: string) => ({

@@ -61,16 +61,13 @@ export const heldForReview: Story = {
       ana: await story.enrolled('P1-COL-1'),
     };
     const dana = uuidv7(clock.now());
-    const { p1, coastline } = await api.$write(
-      { actorId: dana, source: 'BACK_OFFICE' },
-      async (tx) => {
-        await tx.user.create({
-          data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
-        });
-        const made = await setUpP1(tx, story.policy);
-        return { p1: made.project, coastline: made.prime };
-      },
-    );
+    const { p1 } = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
+      await tx.user.create({
+        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
+      });
+      const made = await setUpP1(tx, story.policy);
+      return { p1: made.project };
+    });
     const sam = await story.monitor('Sam Grant', phones.sam.id);
     const lee = await story.monitor('Lee Morgan', phones.lee.id);
     const ana = await story.monitor('Ana Brooks', phones.ana.id);
@@ -147,24 +144,19 @@ export const heldForReview: Story = {
       saturday('09:40'),
       'Sam certifies Rivera’s self-loader and Lee a dump trailer, each typing sheet number 730416; both phones find signal at once and sync',
     );
-    const selfLoader = await api.vehicleType.findFirstOrThrow({
-      where: { name: 'Self-Loading Truck' },
-    });
-    const dumpTrailer = await api.vehicleType.findFirstOrThrow({
-      where: { name: 'Hydraulic Dump Trailer' },
-    });
+    // Each picks from the lists his phone was sent (ADR-552 (3)).
     const sams = samsPhone.certify({
       kind: 'CONTAINER',
       paperNumber: '730416',
-      primeId: coastline,
-      vehicleTypeId: selfLoader.id,
+      prime: 'Coastline Haulers LLC',
+      vehicleType: 'Self-Loading Truck',
       boxes: [{ shape: 'RECTANGLE', sign: 'ADD', length: 264, width: 92, height: 96 }],
     });
     const lees = leesPhone.certify({
       kind: 'CONTAINER',
       paperNumber: '730416',
-      primeId: coastline,
-      vehicleTypeId: dumpTrailer.id,
+      prime: 'Coastline Haulers LLC',
+      vehicleType: 'Hydraulic Dump Trailer',
       boxes: [{ shape: 'RECTANGLE', sign: 'ADD', length: 360, width: 96, height: 72 }],
     });
     const sheets = [

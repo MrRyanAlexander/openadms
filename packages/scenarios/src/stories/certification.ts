@@ -275,6 +275,39 @@ export const certification: Story = {
       lists: await story.lists.held({ assignmentId: certifying, deviceId: world.phone }),
       timeZone,
     });
+    // What Sam picks is by name from the lists his phone was sent (ADR-552 (3)): the truck lists
+    // and his helper, Lee, the one other person on P1's board today.
+    const samsLists = samsPhone.setup.lists;
+    story.check(
+      'AC-10-117, AC-10-118 Sam’s certifying phone holds the truck lists, P1’s two primes with nobody under them yet, and Lee as the one helper he may pick',
+      [
+        samsLists.vehicleTypes
+          .filter(({ name }) => ['Hydraulic Dump Trailer', 'Self-Loading Truck'].includes(name))
+          .map(({ name, kind }) => `${name}: ${kind}`),
+        samsLists.vehicleFeatures.some(({ name }) => name === 'Dog Box'),
+        samsLists.crewTypes.filter(({ name }) => ['Bucket Truck', 'Skid Steer'].includes(name))
+          .length,
+        samsLists.primes.map(({ name, subs }) => `${name} (${String(subs.length)} subs)`),
+        samsLists.helpers.map(({ name }) => name),
+      ],
+      [
+        ['Hydraulic Dump Trailer: CONTAINER', 'Self-Loading Truck: CONTAINER'],
+        true,
+        2,
+        ['Coastline Haulers LLC (0 subs)', 'Summit Debris Services (0 subs)'],
+        ['Lee Morgan'],
+      ],
+    );
+    const riverasDriverAndTag = {
+      driverName: 'Marco Rivera',
+      driverLicenceNumber: 'R160-542-80-112-0',
+      driverLicenceState: 'FL',
+      driverLicenceExpiry: '2028-03-31',
+      tagNumber: 'RVT 4821',
+      tagState: 'FL',
+      tagExpiry: '2027-03-31',
+    };
+    // The self-loader's sheet as the service takes it, by id: certified again on Wednesday.
     const selfLoaderSheet = {
       firstTierSub: 'Rivera Trucking',
       vehicleTypeId: await picked('vehicleType', 'Self-Loading Truck'),
@@ -289,19 +322,27 @@ export const certification: Story = {
           featureId: dogBox,
         },
       ] satisfies BoxInput[],
-      driverName: 'Marco Rivera',
-      driverLicenceNumber: 'R160-542-80-112-0',
-      driverLicenceState: 'FL',
-      driverLicenceExpiry: '2028-03-31',
-      tagNumber: 'RVT 4821',
-      tagState: 'FL',
-      tagExpiry: '2027-03-31',
+      ...riverasDriverAndTag,
     };
+    // On his phone, the same sheet picked by name.
     const selfLoader = samsPhone.certify({
       kind: 'CONTAINER',
       paperNumber: '730416',
-      primeId: coastline,
-      ...selfLoaderSheet,
+      prime: 'Coastline Haulers LLC',
+      firstTierSub: 'Rivera Trucking',
+      vehicleType: 'Self-Loading Truck',
+      ...riverasDriverAndTag,
+      boxes: [
+        primary(264, 92, 96),
+        {
+          shape: 'TRIANGLE',
+          sign: 'SUBTRACT',
+          length: 36,
+          width: 92,
+          height: 48,
+          feature: 'Dog Box',
+        },
+      ],
     });
     const onTheWire = JSON.stringify(samsPhone.sends());
     story.check(
@@ -403,8 +444,8 @@ export const certification: Story = {
       samsPhone.certify({
         kind: 'CREW',
         paperNumber: certNumber,
-        primeId: coastline,
-        crewTypeId: await picked('crewType', crewType),
+        prime: 'Coastline Haulers LLC',
+        crewType,
         boxes: [],
       });
     }

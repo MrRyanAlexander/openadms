@@ -199,6 +199,20 @@ function fileOf(of: string, bytes: number, kind: 'jpeg' | 'png'): Buffer {
 
 const sha256Of = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
+// Every id a value holds, however deep, added to those given: what a phone was sent, or what a
+// record it sends names.
+const anId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function idsIn(value: unknown, ids: Set<string>): Set<string> {
+  if (typeof value === 'string') {
+    if (anId.test(value)) ids.add(value);
+  } else if (Array.isArray(value)) {
+    for (const each of value) idsIn(each, ids);
+  } else if (value !== null && typeof value === 'object') {
+    for (const each of Object.values(value)) idsIn(each, ids);
+  }
+  return ids;
+}
+
 // What the phone names a thing it sent with no id the server could read by, at turn-in: the
 // SHA-256 of what was sent as canonical JSON (the contracts' `sentCanonical`), as the server
 // knows the record it holds (ADR-472, 488).
@@ -318,6 +332,19 @@ export interface PhoneLists {
   readonly contractors: readonly Named[];
   // The firm's survey work types, for a phone whose assignment makes surveys (ADR-150).
   readonly surveyWorkTypes: readonly Named[];
+  // The project's certifications, by number: a replaced one is picked from them (ADR-082).
+  readonly certifications: readonly { readonly id: string; readonly certNumber: string }[];
+  // The truck lists, for a phone that certifies or takes disposals (ADR-552 (3)(a), (b)): the
+  // firm's vehicle types, vehicle features and crew types, and the project's primes, each with
+  // the subs placed under it.
+  readonly vehicleTypes: readonly (Named & { readonly kind: CertificationKind })[];
+  readonly vehicleFeatures: readonly Named[];
+  readonly crewTypes: readonly Named[];
+  readonly primes: readonly (Named & {
+    readonly subs: readonly (Named & { readonly tier: 1 | 2 })[];
+  })[];
+  // Who a certifying phone's monitor may pick as a helper (ADR-294, 552 (3)(c)).
+  readonly helpers: readonly Named[];
 }
 
 export interface PhoneSetup {
@@ -469,11 +496,11 @@ export interface NewRoe {
 }
 
 // One measured box, as the sheet has it: a shape's own measurements, whole inches; the first is
-// the primary, each after it a feature, picked (by the id the firm's list holds) or typed.
+// the primary, each after it a feature, picked by name from the phone's lists or typed.
 export interface NewBox {
   readonly shape: BoxShape;
   readonly sign: BoxSign;
-  readonly featureId?: string;
+  readonly feature?: string;
   readonly featureOther?: string;
   readonly length?: number | null;
   readonly secondLength?: number | null;
@@ -485,19 +512,20 @@ export interface NewBox {
   readonly corners?: number | null;
 }
 
-// A certification made on the phone (adms-certifications §3A). The prime, the vehicle type, a
-// feature and the crew type are picked on screens the harness doesn't have (Phase 3): a story
-// states the id each list holds.
+// A certification made on the phone (adms-certifications §3A): picked as every other record is,
+// by name from the phone's lists (ADR-552 (3)(f)): the prime, the vehicle type or crew type, each
+// box's feature and any helper; a replaced certification by its number. A sub is typed, into
+// tier 1 or 2 (ADR-108), and a vehicle type or a feature the list doesn't have may be typed.
 export interface NewCertification {
   readonly kind: CertificationKind;
   // The pre-printed sheet's number, typed; without one the next of the phone's block (ADR-045).
   readonly paperNumber?: string;
-  readonly primeId: string;
+  readonly prime: string;
   readonly firstTierSub?: string;
   readonly secondTierSub?: string;
-  readonly vehicleTypeId?: string;
+  readonly vehicleType?: string;
   readonly vehicleTypeOther?: string;
-  readonly crewTypeId?: string;
+  readonly crewType?: string;
   readonly boxes: readonly NewBox[];
   readonly driverName?: string;
   readonly driverPhone?: string;
@@ -507,10 +535,11 @@ export interface NewCertification {
   readonly tagNumber?: string;
   readonly tagState?: string;
   readonly tagExpiry?: string;
-  readonly helperIds?: readonly string[];
+  // Each by name, from the people the phone's lists name as helpers (ADR-294).
+  readonly helpers?: readonly string[];
   readonly clientRepresentativeName?: string;
   readonly contractorRepresentativeName?: string;
-  readonly replaces?: { readonly replacedId: string; readonly reason: string };
+  readonly replaces?: { readonly certNumber: string; readonly reason: string };
   readonly notes?: string;
 }
 
@@ -581,6 +610,11 @@ export class SimulatedDevice {
   private passcodeVersion: number | null;
   // The setup version its last sync answered for its project, where one was.
   private setupVersionNow: number | null = null;
+  // Every id it was sent (its setups and their lists, from each sign-in) and every record and
+  // photograph it made: a record it makes names no other (ADR-552 (3)(f)). And what it was
+  // handed by the harness (`hold`), which it sends as it was handed.
+  private readonly known = new Set<string>();
+  private readonly handed = new Set<string>();
 
   // `partBytesAtMost`: the most a part of a file may hold, as the server takes them: the
   // release's `MEDIA_PART_BYTES_AT_MOST` where not said.
@@ -591,6 +625,7 @@ export class SimulatedDevice {
   ) {
     this.current = setup;
     this.clock = clock;
+    idsIn(setup, this.known);
     this.passcodeVersion = setup.masterPasscodeVersion ?? null;
     this.partBytes = partBytesAtMost;
   }
@@ -619,6 +654,7 @@ export class SimulatedDevice {
       throw new Error(`${this.name} is one phone: it can't sign in as ${setup.name}.`);
     }
     this.current = setup;
+    idsIn(setup, this.known);
     this.crew = undefined;
     this.toppedUp.clear();
     this.setupVersionNow = null;
@@ -938,8 +974,10 @@ export class SimulatedDevice {
     readonly record: RecordedCertification;
     readonly capacityCy: number | null;
   } {
+    const picked = (what: string, list: readonly Named[], name: string | undefined) =>
+      name === undefined ? null : this.pick(what, list, name).id;
     const boxes = certification.boxes.map((box) => ({
-      featureId: box.featureId ?? null,
+      featureId: picked('vehicle feature', this.lists.vehicleFeatures, box.feature),
       featureOther: box.featureOther ?? null,
       shape: box.shape,
       sign: box.sign,
@@ -963,12 +1001,12 @@ export class SimulatedDevice {
       projectId: this.current.projectId,
       certNumber: certification.paperNumber ?? this.takeCertNumber(),
       kind: certification.kind,
-      primeId: certification.primeId,
+      primeId: this.pick('prime', this.lists.primes, certification.prime).id,
       firstTierSub: certification.firstTierSub ?? null,
       secondTierSub: certification.secondTierSub ?? null,
-      vehicleTypeId: certification.vehicleTypeId ?? null,
+      vehicleTypeId: picked('vehicle type', this.lists.vehicleTypes, certification.vehicleType),
       vehicleTypeOther: certification.vehicleTypeOther ?? null,
-      crewTypeId: certification.crewTypeId ?? null,
+      crewTypeId: picked('crew type', this.lists.crewTypes, certification.crewType),
       boxes,
       driverName: certification.driverName ?? null,
       driverPhone: certification.driverPhone ?? null,
@@ -983,10 +1021,18 @@ export class SimulatedDevice {
       certifiedById: this.current.monitorId,
       deviceId: this.current.deviceId,
       assignmentId: this.current.assignmentId,
-      helperIds: [...(certification.helperIds ?? [])],
+      helperIds: (certification.helpers ?? []).map(
+        (helper) => this.pick('helper', this.lists.helpers, helper).id,
+      ),
       clientRepresentativeName: certification.clientRepresentativeName ?? null,
       contractorRepresentativeName: certification.contractorRepresentativeName ?? null,
-      replaces: certification.replaces ?? null,
+      replaces:
+        certification.replaces === undefined
+          ? null
+          : {
+              replacedId: this.certificationNumbered(certification.replaces.certNumber).id,
+              reason: certification.replaces.reason,
+            },
       notes: certification.notes ?? null,
     };
     this.outbox.push({ record: 'CERTIFICATION', certification: record });
@@ -1068,11 +1114,14 @@ export class SimulatedDevice {
     for (const record of more.records) {
       const read = recordRead(record);
       if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
-      this.outbox.push(fromPhone(this.current.deviceId, read.record));
+      const handed = fromPhone(this.current.deviceId, read.record);
+      this.handed.add(heldId(handed));
+      this.outbox.push(handed);
     }
     for (const photo of more.photos) {
       const read = photoRead(photo);
       if (!read.read) throw new Error(`${this.name}: ${read.notice.message}`);
+      this.handed.add(photo.id);
       this.photoOutbox.push(photo);
     }
     // A file of a photograph it was not handed had its record saved before.
@@ -1118,8 +1167,23 @@ export class SimulatedDevice {
       this.reports.unplannedAssignments.slice(syncUnplannedAssignmentsAtMost).map(({ id }) => id),
     );
     const ordered: { readonly held: HeldRecord; readonly wire: SyncedRecord }[] = [];
+    const made = new Set([
+      ...this.outbox.map(heldId),
+      ...this.photoOutbox.map(({ id }) => id),
+      ...this.told.map(({ sent }) => heldId(sent)),
+    ]);
+    const namesOnlyWhatItHolds = (id: string, wire: unknown): void => {
+      if (this.handed.has(id)) return;
+      for (const named of idsIn(wire, new Set())) {
+        if (!this.known.has(named) && !made.has(named)) {
+          throw new Error(`${this.name} sends ${named} in ${id}, an id it was never sent.`);
+        }
+      }
+    };
+    for (const photo of this.photoOutbox) namesOnlyWhatItHolds(photo.id, photo);
     for (const held of this.outbox) {
       const wire = onTheWire(held);
+      namesOnlyWhatItHolds(heldId(held), wire);
       const pointsAtIt =
         wire.record === 'SCALE_RECEIPT'
           ? ordered.findIndex(
@@ -1498,6 +1562,12 @@ export class SimulatedDevice {
       throw new Error(`${this.name}: ${what} is a site's, and this assignment has no site.`);
     }
     return this.current.siteId;
+  }
+
+  private certificationNumbered(certNumber: string): { readonly id: string } {
+    const found = this.lists.certifications.find((one) => one.certNumber === certNumber);
+    if (found === undefined) throw new Error(`${this.name} has no certification ${certNumber}.`);
+    return found;
   }
 
   private pick<T extends Named>(what: string, list: readonly T[], name: string): T {
