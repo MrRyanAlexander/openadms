@@ -142,7 +142,7 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-11-51 | **Given** every screen of the field app, **then** the browser end-to-end run checks it against WCAG 2.2's automatable A and AA rules and finds no violation; a screen the run doesn't reach fails the chain | ADR-559; ARCHITECTURE §15; C41 · REQ-324 | WCAG 2.2 A, AA | browser (3.1.3, then each screen's task) | |
+| AC-11-51 | **Given** every screen of the field app, **then** the browser end-to-end run checks it against WCAG 2.2's automatable A and AA rules and finds no violation; a screen the run doesn't reach fails the chain | ADR-559; ARCHITECTURE §15; C41 · REQ-324 | WCAG 2.2 A, AA | browser (3.1.3, then each screen's task) | ✅ 3.1.3 (ADR-566): `apps/field/e2e/accessible.ts` on every browser test, `e2e/screens.ts` failing an unreached screen, `apps/field/test/screens.test.ts` (each screen added later is checked in the test that reaches it) |
 | AC-11-52 | **Given** any control a monitor taps, **then** its target is at least 24 by 24 CSS pixels, or spaced as WCAG allows | ADR-559 · REQ-324 | WCAG 2.5.8 | browser (each screen's task) | |
 | AC-11-53 | **Given** any action, **then** a single tap does it; nothing needs a drag | ADR-559 · REQ-324 | WCAG 2.5.7 | browser (each screen's task) | |
 | AC-11-54 | **Given** a sign-in or the master passcode, **then** the field takes a paste, and no step asks a puzzle or a memory test | ADR-559 · REQ-324 | WCAG 3.3.8 · MASVS-AUTH-1 | browser (3.2.3, 3.2.4, 3.3.1) | |

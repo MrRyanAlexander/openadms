@@ -3,10 +3,11 @@
 // phone's token, and the shell's first screen in the translation file's words.
 import { request } from 'node:http';
 
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 import { localApiOrigin, pagePolicy, servedHeaders, servedPolicy } from '../page.ts';
 import english from '../src/words/en.json' with { type: 'json' };
+import { expect, test } from './accessible.ts';
 import { anotherOrigin, apiOrigin, fieldOrigin, servedOverHttps } from './stack.ts';
 
 // Every word the translation file holds, at any depth.

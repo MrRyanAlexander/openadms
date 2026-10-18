@@ -22,7 +22,7 @@ export function Shell({ server }: { readonly server: Server }) {
   }, [server]);
 
   return (
-    <main>
+    <main data-screen="shell">
       <h1>{words.app.name}</h1>
       <p>{words.shell.testBuild}</p>
       <p>{words.shell.notSetUp}</p>

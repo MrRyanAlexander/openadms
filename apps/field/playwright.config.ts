@@ -13,7 +13,7 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   forbidOnly: true,
   retries: 0,
-  reporter: 'list',
+  reporter: [['list'], ['./e2e/screens.ts']],
   outputDir: '../../.cache/adms/e2e',
   use: {
     ...devices['Pixel 7'],

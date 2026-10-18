@@ -236,7 +236,7 @@ describe('each step’s reading', () => {
     ]);
   });
 
-  it('e2e: every browser test counted, whatever became of it, each that failed by name', () => {
+  it('e2e: every browser test counted, whatever became of it, each that failed by name; the app’s screens counted, each left unchecked named', () => {
     const output = [
       'Running 7 tests using 1 worker',
       '  ✓  1 e2e/door.e2e.ts:33:1 › AC-11-01, AC-11-03: the browser build is served over HTTPS (456ms)',
@@ -247,12 +247,24 @@ describe('each step’s reading', () => {
       '    e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy ',
       '  1 skipped',
       '  5 passed (2.4s)',
+      '',
+      'Accessibility: 1 of 2 screens checked, in 4 checks; 0 found.',
+      '✗ the home screen was reached by no browser test',
     ].join('\n');
     const reading = read('e2e', output);
-    expect(reading.counts).toEqual([{ key: 'browser tests', value: 7 }]);
-    expect(reading.lines).toEqual(['1 failed', '1 skipped', '5 passed (2.4s)']);
+    expect(reading.counts).toEqual([
+      { key: 'browser tests', value: 7 },
+      { key: 'screens', value: 2 },
+    ]);
+    expect(reading.lines).toEqual([
+      '1 failed',
+      '1 skipped',
+      '5 passed (2.4s)',
+      'Accessibility: 1 of 2 screens checked, in 4 checks; 0 found.',
+    ]);
     expect(reading.problems).toEqual([
       'e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy',
+      'the home screen was reached by no browser test',
     ]);
     expect(read('e2e', 'Error: browserType.launch: Executable doesn’t exist').counts).toEqual([]);
   });
@@ -299,7 +311,7 @@ failed.\`**
 
 ## \`pnpm e2e\`
 
-**7 browser tests**, \`7 passed (1.9s)\`
+**7 browser tests**, \`7 passed (1.9s)\`; **1 screen of the app**
 
 ## \`pnpm security\`
 
@@ -323,6 +335,7 @@ describe('CHAIN.md', () => {
       ['scenarios', 'checks in ticket-101001', 16],
       ['scenarios', 'checks in p1-priced', 28],
       ['e2e', 'browser tests', 7],
+      ['e2e', 'screens', 1],
       ['security', 'grant test files', 48],
       ['security', 'grant tests', 1083],
       ['security', 'security checks', 12],

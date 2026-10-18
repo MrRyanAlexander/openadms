@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-18, task 3.1.2 (ADR-565), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 9 min 10 s; every count below as seen.
+**Seen whole:** 2026-10-18, task 3.1.3 (ADR-566), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 11 min 55 s; every count below as seen.
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 191 passed (191)`, `Tests 3295 passed (3295)`.**
+**`Test Files 192 passed (192)`, `Tests 3301 passed (3301)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -34,12 +34,12 @@
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 22 | 3 | nothing (what the field app holds 7, its words 5, its page's policy and the API it names 10; ADR-565) |
+| `apps/field` | 28 | 4 | nothing (what the field app holds 7, its words 5, its page's policy and the API it names 10, ADR-565; the accessibility check's screens, rules and reporter 6, ADR-566) |
 
 ## `pnpm lint`, `pnpm licences`
 
 - Lint: `All matched files use Prettier code style!`, exit 0 (ESLint under a 4 GB heap, ADR-465).
-- Licences: **`458 packages: 458 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
+- Licences: **`459 packages: 459 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
   Linux (the lockfile's Mac-only packages aren't installed there; not seen there since ADR-479).
 
 ## `pnpm scenarios`
@@ -68,11 +68,11 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**7 browser tests**, `7 passed (1.7s)` (`apps/field/e2e/door.e2e.ts`; ADR-564, 565): the field app built first (`dist/web/assets/index-….js` about 512 kB), then Chromium's headless shell fetched if missing; needs `pnpm ready`.
+**7 browser tests**, `7 passed (2.5s)` (`apps/field/e2e/door.e2e.ts`; ADR-564, 565): the field app built first (`dist/web/assets/index-….js` about 512 kB), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 1 of 1 screens checked, in 4 checks; 0 found.`, **1 screen of the app** (the shell), checked at the end of each of the four tests that end on it.
 
 ## `pnpm security`
 
-`✓ 0 open advisories` (3 accepted by id; 482 packages); secretlint `0 found`; the installation's own secrets
+`✓ 0 open advisories` (3 accepted by id; 483 packages); secretlint `0 found`; the installation's own secrets
 (13 values from 4 env files; the eleventh the API's key file's path, ADR-517; the twelfth and thirteenth the password and sealing keys, ADR-542) `0 found`; a password-like setting `0 found`; a whole slow hash, an
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); **the built field app's four scans `0 found`** (`Secrets scan of the built field app (2 files in apps/field/dist/web)`, ADR-565); env files
 `✓ every one ignored by git and untracked`; who reaches Postgres: `of 14 workspaces, the
@@ -88,7 +88,7 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm chain`, the whole chain, 9 min 10 s (seen 2026-10-18; `pnpm test` 4 min 20 s of it, `pnpm scenarios` 3 min 20 s, `pnpm e2e` 3 s).
+`pnpm chain`, the whole chain, 11 min 55 s (seen 2026-10-18; `pnpm test` 4 min 16 s of it, `pnpm scenarios` 4 min 58 s, `pnpm e2e` 6 s).
 `pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

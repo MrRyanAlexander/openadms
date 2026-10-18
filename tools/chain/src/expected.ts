@@ -46,6 +46,7 @@ export function writtenCounts(page: string): Written[] {
 
   const browserTests = section(page, '`pnpm e2e`');
   add('e2e', 'browser tests', first(browserTests, /\*\*(\d+) browser tests\*\*/));
+  add('e2e', 'screens', first(browserTests, /\*\*(\d+) screens? of the app\*\*/));
 
   const checks = section(page, '`pnpm security`');
   const grants = /(\d+) files, (\d+)\s+tests: \d+ passed/.exec(checks);

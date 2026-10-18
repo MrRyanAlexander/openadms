@@ -5,9 +5,25 @@ HTTPS through Caddy, in Playwright 1.64.0's Chromium headless shell, as a phone 
 7']`). **Needs `pnpm ready`.** `pnpm e2e` typechecks and builds the field app (`tsc --build && vite
 build` into `apps/field/dist/web/`, which Caddy serves as it is: a build is live at once), fetches
 the browser if it is missing (`playwright install --only-shell chromium`, into the person's own
-cache), then runs `apps/field/e2e/*.e2e.ts`. A step of `pnpm chain` after the stories; its count is
+cache), then runs `apps/field/e2e/*.e2e.ts`, each screen they reach checked for WCAG 2.2 A and AA. A step of `pnpm chain` after the stories; its count is
 `CHAIN.md`'s. Only these: `cd apps/field && node_modules/.bin/playwright test` (`-g <words>` for
-some). Their output and any failure's context: `.cache/adms/e2e/`.
+some, with `ADMS_E2E_SOME=1`). Their output and any failure's context: `.cache/adms/e2e/`.
+
+## The accessibility check (ADR-566; AC-11-51)
+
+**Every browser test imports `test` and `expect` from `e2e/accessible.ts`, never from
+`@playwright/test`.** Its fixture checks the screen a test ends on with axe-core 4.14.0's WCAG
+2.0–2.2 A and AA rules (`e2e/wcag.ts`, 70 with its experimental ones), put into the page through
+DevTools so the page's policy is untouched. A test that moves through several screens calls
+`checkScreen(page)` before it leaves each. **A screen is the element with `data-screen="…"`** in
+`apps/field/src`, a literal, once: a new screen gets one, and the chain fails until a browser test
+reaches it. A violation or an `incomplete` fails, with axe-core's own words and the element; fix
+the screen, or name the one finding in `accessible.ts` with its reason, never turn a rule off.
+The run's last line, `Accessibility: N of M screens checked, in K checks; F found.`, is the
+reporter's (`e2e/screens.ts`), and its `✗` lines fail the run: a screen no test reached, anything
+found, a screen the app lacks. **A run of some tests alone** (`-g`) sets `ADMS_E2E_SOME=1`, or it
+fails for the screens it skipped. A loosening of a screen proves the check: a button with no name,
+faint text, a target under 24 px and a role that isn't one are each caught (task 3.1.3).
 
 ## What earlier tasks learned
 

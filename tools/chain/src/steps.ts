@@ -199,22 +199,33 @@ function scenarios(output: string): Reading {
 
 // Playwright's list reporter (ADR-564): `  ✘  3 e2e/door.e2e.ts:77:1 › AC-11-61: … (205ms)` for a
 // test that failed, then its totals, `  1 failed`, `  6 passed (2.4s)`, and any flaky, skipped
-// or not run. Every test it ran is counted, whatever became of it.
+// or not run. Every test it ran is counted, whatever became of it. Then the accessibility check's
+// line (ADR-566), `Accessibility: 1 of 1 screens checked, in 4 checks; 0 found.`, counting the
+// app's screens, and `✗ the shell screen was reached by no browser test` for each it failed on.
 function browser(output: string): Reading {
   const lines = plainLines(output).map(tidy);
   const totals = lines.flatMap((line) => {
     const found = /^(\d+) (passed|failed|flaky|skipped|did not run)\b/.exec(line);
     return found?.[1] === undefined ? [] : [{ line, value: Number(found[1]) }];
   });
+  const screens = lines.flatMap((line) => {
+    const found = /^Accessibility: \d+ of (\d+) screens checked\b/.exec(line);
+    return found?.[1] === undefined ? [] : [{ line, value: Number(found[1]) }];
+  });
   return {
-    lines: totals.map(({ line }) => line),
-    counts:
-      totals.length === 0
+    lines: [...totals, ...screens].map(({ line }) => line),
+    counts: [
+      ...(totals.length === 0
         ? []
-        : [{ key: 'browser tests', value: totals.reduce((sum, { value }) => sum + value, 0) }],
-    problems: lines
-      .filter((line) => /^[✘x]\s+\d+ /.test(line))
-      .map((line) => line.replace(/^[✘x]\s+\d+ /, '').replace(/ \(\d+(\.\d+)?m?s\)$/, '')),
+        : [{ key: 'browser tests', value: totals.reduce((sum, { value }) => sum + value, 0) }]),
+      ...screens.map(({ value }) => ({ key: 'screens', value })),
+    ],
+    problems: [
+      ...lines
+        .filter((line) => /^[✘x]\s+\d+ /.test(line))
+        .map((line) => line.replace(/^[✘x]\s+\d+ /, '').replace(/ \(\d+(\.\d+)?m?s\)$/, '')),
+      ...lines.filter((line) => line.startsWith('✗ ')).map((line) => line.slice(2)),
+    ],
   };
 }
 

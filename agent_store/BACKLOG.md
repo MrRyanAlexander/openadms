@@ -95,9 +95,16 @@ time clock → iPhone → Android → prove it.
   checks of what `apps/field` holds; the secrets scan over the built bundle. C24, C31 done; C86's
   and C112's parts done. **The object store's CORS list was not widened** (no page reaches it:
   ADR-565 (5)). What it leaves: C175, C176; C86's back office part (Phase 4).
-- [ ] **3.1.3 The accessibility check** (REQ-324 in part; C41; AC-11-51): an automated WCAG 2.2
+- [x] **3.1.3 The accessibility check** (REQ-324 in part; C41; AC-11-51): an automated WCAG 2.2
   A/AA checker by ADR, run on every screen the browser end-to-end tests reach, against the local
   stack; a screen they don't reach fails the chain; counts in `CHAIN.md`.
+  ✅ done 2026-10-18 (ADR-566): axe-core 4.14.0 (its Playwright wrapper too young), its 70 WCAG
+  2.0–2.2 A/AA rules run by `apps/field/e2e/accessible.ts` on the screen each test ends on (and
+  any it leaves by `checkScreen`); a screen names itself by `data-screen`; `e2e/screens.ts` fails
+  the run for an unreached screen or anything found; the chain counts the app's screens. Loosenings
+  12 of 12 caught by the unit tests, 7 of 8 by the browser tests; the eighth (a test's own check
+  weakened) needs a fault beside it, and with one the reporter failed the run (seen). C41's part done. AC-11-51 proven. What it leaves: each screen's own check (automatic
+  when it names itself), C175 from 2026-10-21.
 - [ ] **3.1.4 The look, the components and the prototype** (REQ-301, 324 in part; ADR-561;
   file 11, left 2 and 8): React Aria by ADR; the look as tokens (the light theme first, the dark
   theme, type, spacing, the main button's height); the components ADR-561 (6) lists, each through
@@ -266,51 +273,7 @@ back office's endpoints → phones (enrolment, sign-in, the lists) → sync → 
 
 ### Brief for every Phase 2 task (ADR-377)
 
-- **One task per response.** Each ends with real observed output (`adms-verify`), the close-out
-  (`adms-close-out`) and the user's git block with named paths. Don't tick a box on "should work".
-- **Don't cut a task ahead of time (the user, 2026-10-14; ADR-516).** Take the whole task and do as
-  much of it as the response holds. Cut only when the work truly can't go on (a question only the
-  user can answer, or the context runs out), and then say what was left in the task's tick line,
-  never in an ADR of its own or a list of defaults to overturn. Never write "cut it when started"
-  into the next pointer, and never cut a piece again.
-- **Read first:** `spec/ARCHITECTURE.md` §6…§9, §13, §16 and the ⚠️ ADR-240 notes in §7 and §9;
-  the task's scenarios (`spec/acceptance/`, the rows that name Phase 2, and file 10 once task
-  2.1.1 has written it); `spec/THREAT-MODEL.md` once written; `spec/DATA-MODEL.md` §2.2 and §4.5
-  for every model and field name; the task's carried items in the register below; the owning
-  skill (`adms-field-app` for a phone's side, `adms-exceptions` for quarantine and a phone out of
-  service).
-- **No new rule.** An endpoint calls one service of `apps/api/src/<part>/`, which calls
-  `packages/domain`. If a task finds it needs a rule nothing records, that is an ADR (agent
-  default, or a question under ADR-230), written into `packages/domain`, never into a controller.
-- **Every payload is a Zod schema in `packages/contracts`,** never a shape written by hand in a
-  controller, a test or the harness; unknown fields are refused; OpenAPI is generated from them.
-- **Every endpoint, in the same task that adds it:** who may call it (role and grant, read from
-  the database on that request), tested as each kind of caller, the refusals included; its rate
-  limit; its request id stated to `db.$write`; the security event it writes, if any; nothing
-  secret or personal in its logs or its errors (a test reads them).
-- **A schema task** follows Phase 1's brief unchanged (the model in its `.prisma` file → Prisma's
-  migration → a one-line guard migration → the installer → the exact lists in the grant and
-  catalog tests → a row-level-security decision → each new guard's removal shown caught). **A
-  column that holds a secret's hash or an authenticator's secret is named on its audit trigger**,
-  so the audit log says it changed and never what to (C21).
-- **Every dependency gets an ADR first** (exact version, at least seven days old, licence,
-  maintenance; `pnpm licences` and `pnpm security` after, and the clean-copy check). Phase 2 brings
-  the first big ones: the web framework, the job queue, the object store's client, whatever signs
-  tokens and checks authenticator codes. Prefer what Node 24 and Postgres already give.
-- **A secret never appears** in a log, an error, a test's output, a fixture committed to git or
-  this conversation. Dev-only seeded accounts and authenticator secrets live in the dev stack only
-  (ADR-170) and are named in the secrets scan's allow-list with a reason.
-- **Tests are the API layer of ARCHITECTURE §15**, named by scenario ID, run from the terminal
-  against the local stack over HTTPS; the harness's stories move onto the real endpoints in
-  Milestone 2.7, not before.
-- **Not Phase 2's:** any screen, the phone's own store, keys in real secure hardware, printing and
-  scanning (Phase 3); the back office's screens, the dispatch board's screen, exports, the portal's
-  pages, the time clock's tables (Phases 3–4); the demo deploy, TLS to a cloud database, pgAudit,
-  the outside penetration test (Phase 5a; C25, C33, C40 (b)). A read endpoint that only a screen
-  needs comes with that screen. Don't build ahead.
-- **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
-- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
-
+*Moved word for word to `agent_store/ARCHIVE.md`, "Moved 2026-10-18 (ADR-566)", to keep this page under its 80 KB (ADR-532); Milestones 2.8 and 2.9's "the brief above" is that text.*
 
 *Each finished task in one line; its full tick is in `agent_store/ARCHIVE.md`, "Moved 2026-10-15 (ADR-532)", and its ADRs.*
 
@@ -519,9 +482,9 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C41 → 3.1.3, 3.10.2 · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
-- **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Left:* the automated check beside the browser end-to-end tests (3.1.3) and each screen's own check in its task; the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
+- **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Have:* the automated check beside the browser end-to-end tests (3.1.3, ADR-566). *Left:* each screen's own check in its task (automatic once its screen names itself); the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C175.** React 19.3.1 (published 2026-10-14 on every React line at once) and Playwright 1.64.1 (2026-10-14) are read again once seven days old, from 2026-10-21: an advisory against 19.3.0 or 1.64.0 published by then, or what 19.3.1 fixes, decides whether to take them (ADR-563, 564). Whichever task runs then (3.1.3's checker ADR is a good moment).
 - **C176.** The field app's `Permissions-Policy` turns the camera and the phone's place off until a screen needs one (`apps/field/page.ts`, `servedHeaders`; ADR-565): the place opens to `(self)` with the first capture screen that stamps GPS (3.5.1), the camera with the photographs (3.6.1), each in its task, with its scenario (AC-11-68). The microphone, payment and USB stay off.
 - **C66, C67 (c).** What a phone lets a monitor change on an ROE after their shift; "GPS required" asked by the phone; a photo field's capture; the incident screen shows only what the form offers.

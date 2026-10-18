@@ -4755,3 +4755,55 @@ housekeeping, was taken out to keep `NEXT.md` under its 20 KB (ADR-532). As it s
   KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
   line a task (452 → 54 KB), this page trimmed; the text that left each moved word for word to
   `agent_store/ARCHIVE.md`, "Moved 2026-10-15 (ADR-532)". No product rule changed.
+
+## Moved 2026-10-18 (ADR-566)
+
+Task 3.1.3 closed (ADR-566); the brief of a finished phase was taken out to keep `BACKLOG.md` under
+its 80 KB (ADR-532). As it stood at commit `af1d46d`:
+
+### From `agent_store/BACKLOG.md`, Phase 2's "Brief for every Phase 2 task (ADR-377)"
+
+- **One task per response.** Each ends with real observed output (`adms-verify`), the close-out
+  (`adms-close-out`) and the user's git block with named paths. Don't tick a box on "should work".
+- **Don't cut a task ahead of time (the user, 2026-10-14; ADR-516).** Take the whole task and do as
+  much of it as the response holds. Cut only when the work truly can't go on (a question only the
+  user can answer, or the context runs out), and then say what was left in the task's tick line,
+  never in an ADR of its own or a list of defaults to overturn. Never write "cut it when started"
+  into the next pointer, and never cut a piece again.
+- **Read first:** `spec/ARCHITECTURE.md` §6…§9, §13, §16 and the ⚠️ ADR-240 notes in §7 and §9;
+  the task's scenarios (`spec/acceptance/`, the rows that name Phase 2, and file 10 once task
+  2.1.1 has written it); `spec/THREAT-MODEL.md` once written; `spec/DATA-MODEL.md` §2.2 and §4.5
+  for every model and field name; the task's carried items in the register below; the owning
+  skill (`adms-field-app` for a phone's side, `adms-exceptions` for quarantine and a phone out of
+  service).
+- **No new rule.** An endpoint calls one service of `apps/api/src/<part>/`, which calls
+  `packages/domain`. If a task finds it needs a rule nothing records, that is an ADR (agent
+  default, or a question under ADR-230), written into `packages/domain`, never into a controller.
+- **Every payload is a Zod schema in `packages/contracts`,** never a shape written by hand in a
+  controller, a test or the harness; unknown fields are refused; OpenAPI is generated from them.
+- **Every endpoint, in the same task that adds it:** who may call it (role and grant, read from
+  the database on that request), tested as each kind of caller, the refusals included; its rate
+  limit; its request id stated to `db.$write`; the security event it writes, if any; nothing
+  secret or personal in its logs or its errors (a test reads them).
+- **A schema task** follows Phase 1's brief unchanged (the model in its `.prisma` file → Prisma's
+  migration → a one-line guard migration → the installer → the exact lists in the grant and
+  catalog tests → a row-level-security decision → each new guard's removal shown caught). **A
+  column that holds a secret's hash or an authenticator's secret is named on its audit trigger**,
+  so the audit log says it changed and never what to (C21).
+- **Every dependency gets an ADR first** (exact version, at least seven days old, licence,
+  maintenance; `pnpm licences` and `pnpm security` after, and the clean-copy check). Phase 2 brings
+  the first big ones: the web framework, the job queue, the object store's client, whatever signs
+  tokens and checks authenticator codes. Prefer what Node 24 and Postgres already give.
+- **A secret never appears** in a log, an error, a test's output, a fixture committed to git or
+  this conversation. Dev-only seeded accounts and authenticator secrets live in the dev stack only
+  (ADR-170) and are named in the secrets scan's allow-list with a reason.
+- **Tests are the API layer of ARCHITECTURE §15**, named by scenario ID, run from the terminal
+  against the local stack over HTTPS; the harness's stories move onto the real endpoints in
+  Milestone 2.7, not before.
+- **Not Phase 2's:** any screen, the phone's own store, keys in real secure hardware, printing and
+  scanning (Phase 3); the back office's screens, the dispatch board's screen, exports, the portal's
+  pages, the time clock's tables (Phases 3–4); the demo deploy, TLS to a cloud database, pgAudit,
+  the outside penetration test (Phase 5a; C25, C33, C40 (b)). A read endpoint that only a screen
+  needs comes with that screen. Don't build ahead.
+- **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
+- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
