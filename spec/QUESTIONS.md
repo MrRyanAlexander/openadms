@@ -5232,3 +5232,65 @@ most three at once, each with the agent's recommended answer. Anything else is d
 default** (an ADR the user can overturn later), never guessed silently. The agent readings still
 waiting (ADR-205 (2), 208, 209, 214, 215, 218) stand as agent defaults.
 
+
+## AO. Raised 2026-10-18 — the field app's four open designs, with the clickable prototype (ADR-561, 569)
+
+Four designs from your Build 1 field-app board were left open for Phase 3 (`adms-field-app` §4A.7).
+They are put to you now with **the clickable prototype** (task 3.1.4): the field app's key screens
+built from its real components, with each design below as a switch you can flip and try:
+**https://claude.ai/artifact/6LF95TjGATDpL2VLGAHyVb** (private to you; it is also
+`apps/field/dist/prototype/prototype.html` after `pnpm e2e`). Nothing below is built into the app
+until you answer. Each has the agent's recommendation; the other choice is yours to keep. Answer
+under each one, as you do.
+
+### ❓ Q-215 — A confirmation after each value the monitor enters?
+Your board showed "You have selected 55%. Is that correct?" after every pick. Here is a load at the
+tower, Kim Nguyen at Marsh Road TDSR, ticket 101001:
+
+| Step | With a confirmation after each value | Without (recommended) |
+|---|---|---|
+| Debris type: C&D | tap C&D, then "Yes, that's right" | tap C&D |
+| Load call: 80% | type 80, Next, then "Yes, that's right" | type 80, Next |
+| Before the number | the review screen shows it all | the review screen shows it all, once |
+
+**The question:** should the phone ask "Is that right?" after each value, or only show everything
+once on the review screen before the number? **Recommended: only the review screen.** Each
+confirmation is one more tap per value, on many trucks an hour, and the review screen already does
+that work. *(Prototype switch 1. ADR-561 (7), ADR-569 (1); `FROM-BUILD-1.md` §15.)*
+
+### ❓ Q-216 — A monitor scorecard on the phone?
+Your board mentioned a monitor scorecard. The prototype shows the agent's suggestion on home:
+"Today: 6 tickets made on this phone", the monitor's own count, nothing ranked or compared with
+other monitors.
+
+**The question:** what should a monitor see of their own day on the phone: **their own count of
+today's tickets on home (recommended)**, nothing, or something more (say what a scorecard showed)?
+Reports on monitors, compared and ranked, would be the back office's (Phase 4). *(Prototype switch 2.
+ADR-561 (7), ADR-569 (2).)*
+
+### ❓ Q-217 — The bottom menu
+Your board had a bottom menu of Time, Map, Work, Chats and Settings. No phase's requirements put a
+map or chats on the phone.
+
+**The question:** which menu? **Recommended: Work, Time (only where the project has the time clock
+on), Sync and Settings.** The other choices on the prototype: your board's five, or no menu (home
+and the status strip only). *(Prototype switch 3. ADR-561 (7), ADR-569 (3).)*
+
+### ❓ Q-218 — When is the ticket number typed again by hand?
+Today the monitor types the number again after a scan, and after a number the phone makes (your
+answer in round 22: "We'd want manual re-entry still on generated to confirm the logged it down
+correct", ADR-209). The accessibility standard you chose, WCAG 2.2 AA, has a rule against asking for
+the same thing twice in one task (3.3.7, Redundant Entry), **unless typing it again is essential**:
+when filling it in for the person would defeat the check, as in a memory test.
+
+| Ticket | How the number came | Typed again today | Typed again, recommended | WCAG 3.3.7 |
+|---|---|---|---|---|
+| Collection 101001, Ana Brooks | the phone made it; Ana notes it | yes | **yes** | essential: it checks Ana's copy |
+| Disposal 101001, Kim Nguyen | scanned off the driver's ticket | yes | **no** | not essential: nobody copied it, so it fails 3.3.7 |
+| Disposal 101060, Kim Nguyen | typed: the barcode was damaged | yes | **yes** | essential: it checks what Kim typed (101060 was a mistype in the golden mission) |
+
+**The question:** type the number again **only when a person copied it** (a number the phone made,
+or one typed because the barcode won't read), **recommended**, or **always**, after a scan too, as
+today? Either way the typed-again number must match before the ticket is submitted. If you keep
+"always", the field app's accessibility conformance report says 3.3.7 is partly supported, and why.
+*(Prototype switch 4. ADR-209, 559, 561 (7), ADR-569 (4); file 11, left 2.)*

@@ -4,7 +4,7 @@
 // server to talk to, by one module (AC-11-01). Read from its source and its dependencies, as the
 // chain runs it; the native builds' own libraries are read again at 3.8.1 and 3.9.1.
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as domain from '@open-adms/domain';
@@ -82,7 +82,7 @@ function shipped(name: string, from: string, found = new Map<string, string>()) 
 }
 
 describe('the field app holds', () => {
-  it('AC-11-69: no outside SDK: what it ships is React, the two workspaces of the rules and the payloads, and what they bring', () => {
+  it('AC-11-69: no outside SDK: what it ships is React, React Aria, the two workspaces of the rules and the payloads, and what they bring', () => {
     const manifest = JSON.parse(readFileSync(join(field, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
@@ -90,29 +90,58 @@ describe('the field app holds', () => {
       '@open-adms/contracts',
       '@open-adms/domain',
       'react',
+      'react-aria-components',
       'react-dom',
     ]);
     const all = new Map<string, string>();
     for (const name of Object.keys(manifest.dependencies)) shipped(name, field, all);
     expect([...all.keys()].sort()).toEqual([
+      '@internationalized/date',
+      '@internationalized/number',
+      '@internationalized/string',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@react-types/shared',
+      '@swc/helpers',
+      'aria-hidden',
+      'client-only',
+      'clsx',
       'geographiclib-geodesic',
       'react',
+      'react-aria',
+      'react-aria-components',
       'react-dom',
+      'react-stately',
       'scheduler',
+      'tslib',
+      'use-sync-external-store',
       'zod',
     ]);
   });
 
-  it('AC-11-06: no rule of its own: it imports only React, the rules and the payloads, and declares no name the rules use', () => {
-    const allowed = ['react', 'react-dom/client', '@open-adms/contracts', '@open-adms/domain'];
+  it('AC-11-06: no rule of its own: it imports only React, React Aria, the rules, the payloads and its own files, and declares no name the rules use', () => {
+    const allowed = [
+      'react',
+      'react-dom/client',
+      'react-aria-components',
+      '@open-adms/contracts',
+      '@open-adms/domain',
+    ];
     const rules = new Set(Object.keys(domain));
     expect(rules.size).toBeGreaterThan(100);
     for (const { path, file } of modules) {
       const { imported, declared } = namesIn(file);
       expect(
-        imported.filter((from) => !from.startsWith('./') && !allowed.includes(from)),
+        imported.filter((from) => !from.startsWith('.') && !allowed.includes(from)),
+        path,
+      ).toEqual([]);
+      // Its own files are its source's: nothing of the prototype, or of anything else, is in it.
+      expect(
+        imported
+          .filter((from) => from.startsWith('.'))
+          .filter((from) =>
+            relative(source, resolve(source, dirname(path), from)).startsWith('..'),
+          ),
         path,
       ).toEqual([]);
       expect(
@@ -191,7 +220,15 @@ describe('the field app holds', () => {
   it('is read from the app’s own source, every module of it at any depth', () => {
     expect(relative(field, source)).toBe('src');
     expect(modules.map(({ path }) => path)).toEqual(
-      expect.arrayContaining(['main.tsx', 'server.ts', 'shell.tsx', 'words.ts']),
+      expect.arrayContaining([
+        'main.tsx',
+        'server.ts',
+        'shell.tsx',
+        'home.tsx',
+        'words.ts',
+        'look/index.ts',
+        'look/keypad.tsx',
+      ]),
     );
   });
 });

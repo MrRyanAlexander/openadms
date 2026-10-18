@@ -2,17 +2,18 @@
   "name": "@open-adms/field",
   "version": "0.0.0",
   "private": true,
-  "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE §7–§12).",
+  "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE \u00a77\u2013\u00a712).",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "build": "tsc --build && vite build",
-    "e2e": "tsc --build && vite build && playwright install --only-shell chromium && playwright test"
+    "e2e": "tsc --build && vite build && vite build --config prototype/vite.config.ts && playwright install --only-shell chromium && playwright test"
   },
   "dependencies": {
     "@open-adms/contracts": "workspace:*",
     "@open-adms/domain": "workspace:*",
     "react": "19.3.0",
+    "react-aria-components": "1.22.1",
     "react-dom": "19.3.0"
   },
   "devDependencies": {

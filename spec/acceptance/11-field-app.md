@@ -142,12 +142,12 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-11-51 | **Given** every screen of the field app, **then** the browser end-to-end run checks it against WCAG 2.2's automatable A and AA rules and finds no violation; a screen the run doesn't reach fails the chain | ADR-559; ARCHITECTURE §15; C41 · REQ-324 | WCAG 2.2 A, AA | browser (3.1.3, then each screen's task) | ✅ 3.1.3 (ADR-566): `apps/field/e2e/accessible.ts` on every browser test, `e2e/screens.ts` failing an unreached screen, `apps/field/test/screens.test.ts` (each screen added later is checked in the test that reaches it) |
-| AC-11-52 | **Given** any control a monitor taps, **then** its target is at least 24 by 24 CSS pixels, or spaced as WCAG allows | ADR-559 · REQ-324 | WCAG 2.5.8 | browser (each screen's task) | |
+| AC-11-51 | **Given** every screen of the field app, **then** the browser end-to-end run checks it against WCAG 2.2's automatable A and AA rules and finds no violation; a screen the run doesn't reach fails the chain | ADR-559; ARCHITECTURE §15; C41 · REQ-324 | WCAG 2.2 A, AA | browser (3.1.3, then each screen's task) | ✅ 3.1.3 (ADR-566): `apps/field/e2e/accessible.ts` on every browser test, `e2e/screens.ts` failing an unreached screen, `apps/field/test/screens.test.ts` (each screen added later is checked in the test that reaches it); 3.1.4 (ADR-568): seven screens, the app's and its prototype's, light and dark |
+| AC-11-52 | **Given** any control a monitor taps, **then** its target is at least 24 by 24 CSS pixels, or spaced as WCAG allows | ADR-559 · REQ-324 | WCAG 2.5.8 | browser (each screen's task) |  🟡 the look and the components, 3.1.4 (ADR-568): `apps/field/test/look.test.ts` (the main button, a row and a key 56 px and more), axe-core's `target-size` on every component in `e2e/prototype.e2e.ts`; each screen in its task |
 | AC-11-53 | **Given** any action, **then** a single tap does it; nothing needs a drag | ADR-559 · REQ-324 | WCAG 2.5.7 | browser (each screen's task) | |
 | AC-11-54 | **Given** a sign-in or the master passcode, **then** the field takes a paste, and no step asks a puzzle or a memory test | ADR-559 · REQ-324 | WCAG 3.3.8 · MASVS-AUTH-1 | browser (3.2.3, 3.2.4, 3.3.1) | |
-| AC-11-55 | **Given** any screen, **then** its text meets 4.5:1 contrast (3:1 for large text), and each control's edges, state and focus 3:1 | ADR-559 · REQ-324 | WCAG 1.4.3, 1.4.11 | browser (each screen's task); hand review (3.10.2) | |
-| AC-11-56 | **Given** any screen, **then** it works with text at 200% and at the phone's largest text setting, upright or on its side, 320 CSS pixels wide without scrolling sideways | ADR-559 · REQ-324 | WCAG 1.4.4, 1.4.10, 1.3.4 | browser (each screen's task); iPhone (3.8.4); Android (3.9.2) | |
+| AC-11-55 | **Given** any screen, **then** its text meets 4.5:1 contrast (3:1 for large text), and each control's edges, state and focus 3:1 | ADR-559 · REQ-324 | WCAG 1.4.3, 1.4.11 | browser (each screen's task); hand review (3.10.2) |  🟡 the look and the components, 3.1.4 (ADR-568): every colour pair in both themes, `test/look.test.ts`; axe-core's `color-contrast` on every component, light and dark, `e2e/prototype.e2e.ts`; each screen in its task, the hand review 3.10.2 |
+| AC-11-56 | **Given** any screen, **then** it works with text at 200% and at the phone's largest text setting, upright or on its side, 320 CSS pixels wide without scrolling sideways | ADR-559 · REQ-324 | WCAG 1.4.4, 1.4.10, 1.3.4 | browser (each screen's task); iPhone (3.8.4); Android (3.9.2) |  🟡 the components, 3.1.4 (ADR-568): every kind of prototype screen at 320 CSS px and 200% text with no sideways scroll, `e2e/prototype.e2e.ts`; each screen in its task, the phones 3.8.4, 3.9.2 |
 | AC-11-57 | **Given** VoiceOver or TalkBack, **then** every control says its name, role and state, and "Saved", "Not saved" and "Syncing" are announced as they change | ADR-559 · REQ-324 | WCAG 4.1.2, 4.1.3 | hand review (3.10.2); iPhone (3.8.4); Android (3.9.2) | |
 | AC-11-58 | **Given** the keyboard or a bar is open, **then** the control with focus is never hidden behind it | ADR-559 · REQ-324 | WCAG 2.4.11 | browser (each screen's task); hand review (3.10.2) | |
 | AC-11-59 | **At** Phase 3's end, **then** every screen has been reviewed by hand against WCAG 2.2 AA, the review recorded, and the field app's Accessibility Conformance Report (VPAT format) is written from the checks and that review | ADR-559 (user) · REQ-324 | WCAG 2.2 AA | hand review (3.10.2) | |
@@ -210,9 +210,9 @@ the layer its own row names; the field app's part by the task below, under a tes
 
 | | Scenarios | Passing |
 |---|---|---|
-| Sections A…K, new | 73 (AC-11-61…73 by task 3.1.1, ADR-562) | 4 whole (AC-11-01, 02, 04, 06), 4 in part (AC-11-03, 61, 69, 72) (task 3.1.2, ADR-565) |
+| Sections A…K, new | 73 (AC-11-61…73 by task 3.1.1, ADR-562) | 5 whole (AC-11-01, 02, 04, 06, task 3.1.2, ADR-565; AC-11-51, task 3.1.3, ADR-566), 7 in part (AC-11-03, 61, 69, 72, task 3.1.2; AC-11-52, 55, 56, task 3.1.4, ADR-568) |
 | Section L, a field app part of files 02…10 | 50 | 0 (each still passes at the layers it already does) |
-| **Phase 3's** | **123** | **4, and 4 in part** |
+| **Phase 3's** | **123** | **5, and 7 in part** |
 
 ## Left to the task that builds it
 
@@ -220,7 +220,7 @@ the layer its own row names; the field app's part by the task below, under a tes
    MASVS v2.1.0, profile MAS-L2 + MAS-P with MAS-R not taken, the numbers in the Answers column;
    certificate pinning and the app-switcher cover proposed (`spec/CHECKLIST-FIELD.md` §1, §4;
    AC-11-61…73), for the user.
-2. **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (3.1.4, put to the user with the prototype, ADR-561; built by 3.5.1). The number scanned
+2. 🟡 **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (3.1.4, put to the user with the prototype, ADR-561; built by 3.5.1). **Read by task 3.1.4 (ADR-569 (4)):** essential where a person copied the number (one the phone made, one typed because the barcode won't read), not after a scan; the choice is put to the user as **Q-218**, the agent recommending re-entry only where a person copied it. The number scanned
    or shown and then typed again by hand (ADR-209, an agent default) asks for information already
    given in the same process. WCAG lets that stand where entering it again is essential. The task
    says whether this case is essential and, if it isn't, puts the choice to the user. The user
@@ -236,6 +236,6 @@ the layer its own row names; the field app's part by the task below, under a tes
    approval (3.7.1; ADR-241): each its ADR, the scenarios of file 02 restated there.
 7. **Where the receipt content model lives** (3.6.2): it renders on the phone and, for the
    receipt batch (REQ-414), in the back office, so it is shared; which package is its ADR.
-8. **The Build 1 board's open designs** (`adms-field-app` §4A.7): a confirmation after each
+8. 🟡 **Put to the user by task 3.1.4 (ADR-569) as Q-215, Q-216, Q-217, with the prototype.** **The Build 1 board's open designs** (`adms-field-app` §4A.7): a confirmation after each
    captured value, a monitor scorecard, a bottom menu. All are put to the user with 3.1.4's
    prototype, each with ADR-561 (7)'s recommendation, and none is built without the user's word.

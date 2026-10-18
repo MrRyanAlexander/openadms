@@ -11,5 +11,64 @@
       "answers": "The server answers.",
       "unreachable": "Can’t reach the server right now."
     }
+  },
+  "look": {
+    "strip": {
+      "nobody": "Nobody signed in",
+      "waiting": {
+        "none": "Nothing waiting to send",
+        "one": "1 record waiting to send",
+        "other": "{count} records waiting to send"
+      },
+      "sending": "Sending…",
+      "sent": {
+        "never": "Never sent",
+        "today": "Sent {time}",
+        "earlier": "Sent {day} {time}"
+      },
+      "clock": {
+        "in": "Clocked in",
+        "break": "On a break",
+        "out": "Not clocked in"
+      }
+    },
+    "back": "Back",
+    "step": "Step {step} of {steps}",
+    "scan": "Scan",
+    "search": "Search the list",
+    "nothingFound": "Nothing in the list matches.",
+    "keypad": {
+      "empty": "Nothing typed yet",
+      "clear": "Clear",
+      "delete": "Delete the last digit",
+      "point": "Decimal point"
+    },
+    "photos": {
+      "count": {
+        "none": "No photos yet (at most {max})",
+        "one": "1 photo of at most {max}",
+        "other": "{count} photos of at most {max}"
+      },
+      "photo": "Photo {number}",
+      "take": "Take a photo",
+      "full": "That’s the most photos a ticket takes."
+    }
+  },
+  "home": {
+    "title": "Today’s work",
+    "project": "Project",
+    "site": "Site",
+    "start": {
+      "collection": "New collection",
+      "disposal": "New disposal",
+      "haulOutCollection": "New haul-out collection",
+      "haulOutDisposal": "New haul-out disposal",
+      "unitRate": "New unit rate ticket",
+      "certification": "New certification",
+      "incident": "New incident",
+      "dropOff": "New drop-off log",
+      "survey": "New survey",
+      "roe": "New ROE"
+    }
   }
 }

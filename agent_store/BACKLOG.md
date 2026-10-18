@@ -105,7 +105,7 @@ time clock → iPhone → Android → prove it.
   12 of 12 caught by the unit tests, 7 of 8 by the browser tests; the eighth (a test's own check
   weakened) needs a fault beside it, and with one the reporter failed the run (seen). C41's part done. AC-11-51 proven. What it leaves: each screen's own check (automatic
   when it names itself), C175 from 2026-10-21.
-- [ ] **3.1.4 The look, the components and the prototype** (REQ-301, 324 in part; ADR-561;
+- [x] **3.1.4 The look, the components and the prototype** (REQ-301, 324 in part; ADR-561;
   file 11, left 2 and 8): React Aria by ADR; the look as tokens (the light theme first, the dark
   theme, type, spacing, the main button's height); the components ADR-561 (6) lists, each through
   3.1.3's check; the status strip and the home screen built on them, the shell's first screen put
@@ -114,6 +114,14 @@ time clock → iPhone → Android → prove it.
   (7)'s recommendation: a confirmation after each value, a monitor scorecard, the bottom menu, the
   number typed again by hand. Their answers are ADRs and scenarios in file 11; none is built
   before them.
+  ✅ done 2026-10-18 (ADR-567…569): React Aria Components 1.22.1 by ADR; the tokens (light, dark,
+  type, spacing, 56 px main buttons; every colour pair AA in both themes); the components on React
+  Aria in `apps/field/src/look/`; home and the status strip; the shell in the look; the prototype
+  (home, a collection, the tower, unit rate, sync) built on them outside the app, every step
+  checked by axe-core in both themes and at 320 px and 200% text; the four open designs put to the
+  user as **Q-215…Q-218** with the prototype published. AC-11-52, 55, 56 in part. What it leaves:
+  **the user's answers to Q-215…Q-218** (read by 3.5.1…3.5.3 before they build); the prototype
+  removed when the capture screens are built; C175 from 2026-10-21.
 
 ### Milestone 3.2 — The phone's store, identity and sign-in (ARCHITECTURE §7.1, §7.2, §7.4, §8)
 - [ ] **3.2.1 The encrypted store** (REQ-302's browser half; AC-02-19, AC-11-07, 08, 10): one store
@@ -482,13 +490,14 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C177 → 3.5.1…3.5.3 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
 - **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Have:* the automated check beside the browser end-to-end tests (3.1.3, ADR-566). *Left:* each screen's own check in its task (automatic once its screen names itself); the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C175.** React 19.3.1 (published 2026-10-14 on every React line at once) and Playwright 1.64.1 (2026-10-14) are read again once seven days old, from 2026-10-21: an advisory against 19.3.0 or 1.64.0 published by then, or what 19.3.1 fixes, decides whether to take them (ADR-563, 564). Whichever task runs then (3.1.3's checker ADR is a good moment).
+- **C177.** The user's answers to **Q-215…Q-218** (ADR-569: a confirmation after each value, a monitor scorecard, the bottom menu, the number typed again) are read by the capture tasks before they build, each answer an ADR and its scenarios in file 11; until then capture follows ADR-209. **The prototype** (`apps/field/prototype/`, ADR-568) goes when the capture screens it shows are built (3.5.3 at the latest), its screens leaving `e2e/screens.ts`'s list and its test with it.
 - **C176.** The field app's `Permissions-Policy` turns the camera and the phone's place off until a screen needs one (`apps/field/page.ts`, `servedHeaders`; ADR-565): the place opens to `(self)` with the first capture screen that stamps GPS (3.5.1), the camera with the photographs (3.6.1), each in its task, with its scenario (AC-11-68). The microphone, payment and USB stay off.
 - **C66, C67 (c).** What a phone lets a monitor change on an ROE after their shift; "GPS required" asked by the phone; a photo field's capture; the incident screen shows only what the form offers.
-- **C68.** The phone's screens, its own duplicate check, what a cancelled field event shows, whether a typed number is entered twice, whether hand re-entry stays (ADR-209).
+- **C68.** The phone's screens, its own duplicate check, what a cancelled field event shows, whether a typed number is entered twice, whether hand re-entry stays (ADR-209; put to the user as Q-218, ADR-569: C177).
 - **C69.** The phone shows a record "not saved"; a reset phone's blocks reclaimed (`NumberAllocator.reclaim`); the phone's form definitions (the harness's phone holds none).
 - **C83.** The tower asks for the number of **tickets** the load carries (the user, ADR-370), as the worker compares.
 - **C96.** A number at New the phone's list of certifications doesn't hold: warn, refresh the lists where connected, else key the truck in by hand (the user, ADR-421; REQ-317).

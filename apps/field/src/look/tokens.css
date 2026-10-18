@@ -1,0 +1,117 @@
+/* The field app's look as tokens (ADR-561 (3); task 3.1.4): for a monitor outdoors, in sun or rain,
+   gloved, one-handed. A high-contrast light theme by default (sunlight), a dark theme for dawn and
+   night, large type in the phone's own fonts, main buttons 56 px tall, little colour, and a state
+   always an icon and a word, never colour alone. One look on iPhone and Android. Every colour pair
+   a screen uses is held to WCAG 2.2 AA in test/look.test.ts (text 4.5:1, a control's edge, state
+   and focus 3:1); the back office may take these tokens as they are.
+
+   The theme follows the phone's setting; `data-theme` on the root element overrides it either way. */
+
+:root {
+  color-scheme: light;
+
+  /* Colour: the page, a raised surface, words, quieter words, a control's edge. */
+  --colour-page: #ffffff;
+  --colour-surface: #eef1f5;
+  --colour-words: #101317;
+  --colour-words-quiet: #3f4650;
+  --colour-edge: #646c78;
+
+  /* The main action, and words on it. */
+  --colour-main: #0b4ea2;
+  --colour-main-pressed: #083c7d;
+  --colour-on-main: #ffffff;
+
+  /* Focus: a ring of the words' colour, set off from the page. */
+  --colour-focus: #101317;
+
+  /* A picked row. */
+  --colour-picked: #dce8f8;
+  --colour-picked-edge: #0b4ea2;
+
+  /* States: each with its own icon and word too. */
+  --colour-good: #17652e;
+  --colour-good-surface: #e5f3e9;
+  --colour-notice: #7a4300;
+  --colour-notice-surface: #fdf1dc;
+  --colour-problem: #a01d17;
+  --colour-problem-surface: #fbe9e7;
+  --colour-info: #0b4ea2;
+  --colour-info-surface: #e6eefa;
+
+  /* Type: the phone's own fonts, a large base that follows the phone's text size (rem). */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-number: ui-monospace, 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+  --type-small: 1rem;
+  --type-base: 1.125rem;
+  --type-title: 1.375rem;
+  --type-heading: 1.75rem;
+  --type-number: 2.5rem;
+  --line-height: 1.4;
+  --weight-strong: 650;
+
+  /* Spacing on a 4 px step. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Sizes: the main button's height, a row's, a key's; the thinnest edge; the focus ring. */
+  --height-main: 3.5rem;
+  --height-row: 3.5rem;
+  --height-key: 4rem;
+  --edge: 0.125rem;
+  --focus-ring: 0.1875rem;
+  --radius: 0.5rem;
+  --width-screen: 32rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --colour-page: #0e1116;
+    --colour-surface: #1b2029;
+    --colour-words: #f3f5f8;
+    --colour-words-quiet: #c4cad3;
+    --colour-edge: #8b94a1;
+    --colour-main: #8ebcff;
+    --colour-main-pressed: #b5d3ff;
+    --colour-on-main: #06111f;
+    --colour-focus: #ffffff;
+    --colour-picked: #1d3354;
+    --colour-picked-edge: #8ebcff;
+    --colour-good: #7fd69b;
+    --colour-good-surface: #11291a;
+    --colour-notice: #ffc46b;
+    --colour-notice-surface: #2e2210;
+    --colour-problem: #ff9c93;
+    --colour-problem-surface: #341614;
+    --colour-info: #8ebcff;
+    --colour-info-surface: #10223f;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --colour-page: #0e1116;
+  --colour-surface: #1b2029;
+  --colour-words: #f3f5f8;
+  --colour-words-quiet: #c4cad3;
+  --colour-edge: #8b94a1;
+  --colour-main: #8ebcff;
+  --colour-main-pressed: #b5d3ff;
+  --colour-on-main: #06111f;
+  --colour-focus: #ffffff;
+  --colour-picked: #1d3354;
+  --colour-picked-edge: #8ebcff;
+  --colour-good: #7fd69b;
+  --colour-good-surface: #11291a;
+  --colour-notice: #ffc46b;
+  --colour-notice-surface: #2e2210;
+  --colour-problem: #ff9c93;
+  --colour-problem-surface: #341614;
+  --colour-info: #8ebcff;
+  --colour-info-surface: #10223f;
+}

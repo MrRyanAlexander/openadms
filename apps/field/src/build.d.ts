@@ -6,3 +6,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// A stylesheet the build bundles beside the script (src/look/): imported for its rules alone.
+declare module '*.css';

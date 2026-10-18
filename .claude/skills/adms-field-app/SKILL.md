@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge first and number last, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569) -->
 
 > **This page states today's rules** (last changed by ADR-295, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -313,7 +313,13 @@ decided** (`NEXT.md` lists them as later-phase): a confirmation after each captu
 selected 55%. Is that correct?"); a monitor scorecard; a bottom menu of Time, Map, Work, Chats,
 Settings; whether to keep hand re-entry of the number (ADR-209) once the app is built. **All four
 are put to the user with task 3.1.4's prototype, each with a recommendation (ADR-561); the field
-app's look is ADR-561's.**
+app's look is ADR-561's.** ⚠️ **Put to the user 2026-10-18 (ADR-569): Q-215 (a confirmation after
+each value; recommended no), Q-216 (the scorecard; recommended the monitor's own count of today's
+tickets on home), Q-217 (the bottom menu; recommended Work, Time where the clock is on, Sync,
+Settings), Q-218 (typing the number again: WCAG 3.3.7 read as essential only where a person copied
+the number; recommended re-entry for a phone-made or typed number, not after a scan).** Until the
+answers, capture follows ADR-209 and none of the four is built. The components and tokens every
+screen is built from are `apps/field/src/look/` (ADR-567, 568).
 
 ---
 

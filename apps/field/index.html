@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta http-equiv="Content-Security-Policy" content="__ADMS_PAGE_POLICY__" />
     <meta name="referrer" content="no-referrer" />
+    <!-- React Aria adds this rule as an inline style unless an element of this id is here; the
+         page's policy allows no inline style, so the rule is in src/look/components.css. -->
+    <meta id="react-aria-pressable-style" name="react-aria-pressable-style" content="look" />
     <title>__ADMS_TITLE__</title>
   </head>
   <body>

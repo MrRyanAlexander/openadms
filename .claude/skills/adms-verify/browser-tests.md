@@ -25,6 +25,21 @@ found, a screen the app lacks. **A run of some tests alone** (`-g`) sets `ADMS_E
 fails for the screens it skipped. A loosening of a screen proves the check: a button with no name,
 faint text, a target under 24 px and a role that isn't one are each caught (task 3.1.3).
 
+## The prototype and the components (ADR-567, 568)
+
+`pnpm e2e` also builds the prototype (`vite build --config prototype/vite.config.ts` into
+`apps/field/dist/prototype/`); `e2e/prototype.e2e.ts` serves that folder from this machine's
+loopback (`servedFolder` in `e2e/stack.ts`) **under the app's own policy with no server to reach**
+(`page.ts`'s `prototypePolicy`) and walks every screen in the light and the dark theme
+(`test.use({ colorScheme })`), calling `checkScreen` at each step, then holds every kind of screen
+at 320 CSS px with text at 200% (no sideways scroll). A screen may name itself in `src` or
+`prototype/`. Every console error or warning fails these tests too: React Aria writes an inline
+`<style>` unless `index.html` holds `<meta id="react-aria-pressable-style">` (its rule is in
+`src/look/components.css`), and its spin button and modals write HTML or styles the policy refuses:
+none is used. A radio is clicked by its words (`getByText`), React Aria hiding its input. Only the
+prototype's tests: `cd apps/field && ADMS_E2E_SOME=1 node_modules/.bin/playwright test
+e2e/prototype.e2e.ts` after a prototype build.
+
 ## What earlier tasks learned
 
 - **The stack's root is trusted by checked keys, never by "take any certificate".** The config

@@ -12,8 +12,16 @@ import { rules, wcagLevels } from '../e2e/wcag.ts';
 const tsx = (path: string, text: string) => ({ path, text });
 
 describe('AC-11-51: the screens of the field app', () => {
-  it('AC-11-51: are read from its source, each named once by a literal', () => {
-    expect(screensIn()).toEqual(['shell']);
+  it('AC-11-51: are read from its source and its prototype’s, each named once by a literal', () => {
+    expect(screensIn()).toEqual([
+      'home',
+      'shell',
+      'prototype-collection',
+      'prototype-stop',
+      'prototype-sync',
+      'prototype-tower',
+      'prototype-unit-rate',
+    ]);
     expect(
       screensIn([
         tsx('a.tsx', 'export const A = () => <main data-screen="home"><p data-x="1" /></main>;'),
@@ -86,8 +94,8 @@ describe('AC-11-51: the run', () => {
   };
 
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
-    expect(await ran(['shell', 'shell'])).toBeUndefined();
-    expect(lines.join('\n')).toBe('\nAccessibility: 1 of 1 screens checked, in 2 checks; 0 found.');
+    expect(await ran([...screensIn(), 'shell'])).toBeUndefined();
+    expect(lines.join('\n')).toBe('\nAccessibility: 7 of 7 screens checked, in 8 checks; 0 found.');
   });
 
   it('AC-11-51: fails when a screen was reached by no browser test, a check names a screen the app lacks, or a check found anything', async () => {

@@ -6,8 +6,10 @@
 // takes those and nothing else.
 import { createHash, X509Certificate } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import { extname, join, resolve, sep } from 'node:path';
 import { connect, type DetailedPeerCertificate } from 'node:tls';
 
 export const fieldOrigin = 'https://field.adms.localhost';
@@ -111,6 +113,52 @@ export async function anotherOrigin(): Promise<{ origin: string; close: () => Pr
         server.close((error) => {
           if (error === undefined) resolve();
           else reject(error);
+        });
+      }),
+  };
+}
+
+// A built folder served from this machine's loopback, with the headers given, for a page the stack
+// doesn't serve (the prototype, built into dist/prototype): plain HTTP on `127.0.0.1`, a made-up
+// port; a path naming no file is "not found", and nothing outside the folder is served.
+export async function servedFolder(
+  folder: string,
+  headers: Readonly<Record<string, string>>,
+): Promise<{ origin: string; close: () => Promise<void> }> {
+  const types: Readonly<Record<string, string>> = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+  };
+  const root = resolve(folder);
+  const server = createServer((asked, answer) => {
+    const path = new URL(asked.url ?? '/', 'http://127.0.0.1').pathname;
+    const file = resolve(join(root, path === '/' ? 'index.html' : path));
+    const type = types[extname(file)];
+    if (!file.startsWith(`${root}${sep}`) || type === undefined) {
+      answer.writeHead(404).end();
+      return;
+    }
+    readFile(file).then(
+      (body) => {
+        answer.writeHead(200, { 'content-type': type, 'cache-control': 'no-store', ...headers });
+        answer.end(body);
+      },
+      () => {
+        answer.writeHead(404).end();
+      },
+    );
+  });
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('No port.');
+  return {
+    origin: `http://127.0.0.1:${String(address.port)}`,
+    close: () =>
+      new Promise<void>((done, failed) => {
+        server.close((error) => {
+          if (error === undefined) done();
+          else failed(error);
         });
       }),
   };
