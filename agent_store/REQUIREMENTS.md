@@ -27,6 +27,9 @@ code present *and* covered by a passing test.
 > **2026-10-17 (ADR-552): Phase 2 is reopened a second time at the user's word**, after a
 > diagnostic found a phone's lists hold none of what a certification picks. ADR-537's exit is
 > withdrawn; REQ-218 is new (23 in all), named by task 2.9.1.
+>
+> **2026-10-17 (ADR-555): Phase 2's exit is met a third time** (22 of 23 ticked, REQ-006 moved to
+> Phase 3). **Phase 3 is the user's to open**; its REQs stay in `REQUIREMENTS-LATER.md` until then.
 
 ---
 ## Phase 0 — Foundation and security ✅ done 2026-10-01 *(ADR-093…103, `spec/ARCHITECTURE.md`)*
@@ -208,7 +211,7 @@ code present *and* covered by a passing test.
 **Phase 1's count (ADR-371): 98 REQs, 93 ticked from runs that were seen, 5 moved to the phase that finishes them; none open.**
 
 ---
-## Phase 2 — API and sync 🔄 **reopened 2026-10-14 (ADR-519), and again 2026-10-17 (ADR-552)** *(opened by the user 2026-10-06, ADR-376; moved here word for word from `REQUIREMENTS-LATER.md`; its exits of ADR-518 and ADR-537…540 withdrawn)*
+## Phase 2 — API and sync ✅ **exit met a third time 2026-10-17 (ADR-555)**; reopened 2026-10-14 (ADR-519) and 2026-10-17 (ADR-552) *(opened by the user 2026-10-06, ADR-376; moved here word for word from `REQUIREMENTS-LATER.md`; its exits of ADR-518 and ADR-537…540 withdrawn)*
 
 > **2026-10-06 (ADR-377): each of the 14 REQs below is named by the `BACKLOG.md` task that ticks
 > it** (the list is at the end of BACKLOG's Phase 2 plan). Railway is the demo deploy's host
@@ -260,6 +263,6 @@ code present *and* covered by a passing test.
 
 | REQ | Now in | What Phase 2 delivered for it |
 |---|---|---|
-| REQ-006 (every service over HTTPS, one command) | Phase 3 | the API (ADR-385) and the worker (ADR-419) joined `pnpm local:up` (nine containers); nothing is published but Caddy's HTTPS (and its port 80, which answers a page's name with a redirect and the API's name with nothing), and Postgres and the mail catcher on the host's own loopback, each taking TLS alone; the API reached only at `https://api.adms.localhost` and plain HTTP there refused unanswered (ADR-511; AC-10-01…03); every hop inside the stack over TLS, Postgres `verify-full` and SMTP after STARTTLS included (ADR-517; AC-10-67, 68; KD-78 closed). Left: each web app joins through Caddy on a hostname of its own (the field app's browser build, Phase 3; the back office and the portal, re-checked in Phase 4), and ~~the object store's own servers stop listening in plain HTTP on the stack's network (C162 (a))~~ back to Phase 2 as REQ-211 (ADR-519) |
+| REQ-006 (every service over HTTPS, one command) | Phase 3 | the API (ADR-385) and the worker (ADR-419) joined `pnpm local:up`: ten containers (Postgres, the object store and `objectstore-tls`, the mail catcher, routing and `routing-tls`, addresses, Caddy, the API, the worker; ADR-525; read again at task 2.9.3, ADR-555); nothing is published but Caddy's HTTPS (and its port 80, which answers a page's name with a redirect and the API's name with nothing), and Postgres and the mail catcher on the host's own loopback, each taking TLS alone; the API reached only at `https://api.adms.localhost` and plain HTTP there refused unanswered (ADR-511; AC-10-01…03); every hop inside the stack over TLS, Postgres `verify-full` and SMTP after STARTTLS included (ADR-517; AC-10-67, 68; KD-78 closed). Left: each web app joins through Caddy on a hostname of its own (the field app's browser build, Phase 3; the back office and the portal, re-checked in Phase 4), and ~~the object store's own servers stop listening in plain HTTP on the stack's network (C162 (a))~~ back to Phase 2 as REQ-211 (ADR-519) |
 
-**Phase 2's count (ADR-519, 524…527, 530, 534, 535, 552): 23 REQs: 22 ticked from runs that were seen (REQ-210 by ADR-524, REQ-211 by ADR-525, REQ-212 by ADR-526, REQ-213 by ADR-527, REQ-214 and 215 by ADR-530, REQ-216 by ADR-534, REQ-217 by ADR-535, REQ-218 by ADR-553), 1 moved to the phase that finishes it (REQ-006; its object store part was REQ-211).** *Read again whole at task 2.8.9 (2026-10-16, ADR-537), after the chain and three full runs of the stories: unchanged; REQ-218 added by ADR-552.*
+**Phase 2's count (ADR-519, 524…527, 530, 534, 535, 552): 23 REQs: 22 ticked from runs that were seen (REQ-210 by ADR-524, REQ-211 by ADR-525, REQ-212 by ADR-526, REQ-213 by ADR-527, REQ-214 and 215 by ADR-530, REQ-216 by ADR-534, REQ-217 by ADR-535, REQ-218 by ADR-553), 1 moved to the phase that finishes it (REQ-006; its object store part was REQ-211).** *Read again whole at task 2.9.3 (2026-10-17, ADR-555), after the chain and three full runs of the stories: 22 ticked, 1 moved, none open.*

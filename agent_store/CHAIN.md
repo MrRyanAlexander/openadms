@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-17, task 2.9.2 (ADR-554), on the user's Mac, the installation at head: `pnpm chain` 9 of 9 in 10 min 24 s; every count below as seen (what moved: the API's four tests of AC-10-121, 122, in `database-refusal.test.ts`, `corrections.test.ts` and `review-reads.test.ts`).
+**Seen whole:** 2026-10-17, task 2.9.3 (ADR-555), on the user's Mac, the installation at head: `pnpm chain` 9 of 9 in 12 min 13 s, then `pnpm scenarios` three full runs in a row; every count below as seen, none moved (two of `first-admin`'s check names changed, not their number).
 
 ## `pnpm ready`
 

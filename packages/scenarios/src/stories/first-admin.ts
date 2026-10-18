@@ -156,7 +156,7 @@ export const firstAdmin: Story = {
     );
     const made = await command([danasEmail, 'Dana Reyes', first, first]);
     story.check(
-      'the command makes her the firm’s first admin',
+      'AC-02-84 the command makes her the firm’s first admin',
       [made.exit, made.said],
       [
         0,
@@ -306,7 +306,7 @@ export const firstAdmin: Story = {
     );
     const back = await command([`  ${danasEmail.toUpperCase()} `, 'y', second, second]);
     story.check(
-      'the command lets her back in',
+      'AC-02-84 the command lets her back in',
       [back.exit, back.said],
       [
         0,

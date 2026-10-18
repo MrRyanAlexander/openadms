@@ -6,13 +6,12 @@
 > about 20 KB** (the session hook warns past it; ADR-532): where things stand in a few lines,
 > never a task-by-task record (that is each task's ADR and its BACKLOG tick).
 
-## Active Phase — **Phase 2 (API and sync), reopened a second time 2026-10-17 at the user's word** *(ADR-552; Milestone 2.9)*
+## Active Phase — **Phase 2 (API and sync): its exit met a third time 2026-10-17 (ADR-555); Phase 3 is the user's to open**
 
-Reopened once for Milestone 2.8 (2026-10-14, ADR-519; its exit met 2026-10-17, ADR-537…540).
-**A diagnostic the same day found a phone's lists hold none of what a certification picks**, and
-three smaller faults; the user: "this should be a task in phase 2 clearly". ADR-537's exit is
-withdrawn; **Milestone 2.9 (`BACKLOG.md`), three tasks, is the work, begun at the user's word.**
-Phase 3 is the user's to open once Phase 2's exit is met again.
+Reopened twice at the user's word: for Milestone 2.8 (2026-10-14, ADR-519) and for Milestone 2.9
+(2026-10-17, ADR-552, after a diagnostic found a phone's lists hold none of what a certification
+picks). **Both are done; all ten criteria below met again (ADR-555).** No task is next until the
+user opens Phase 3.
 
 **What Phase 2 is.** The server in front of what Phase 1 built: the API as a running process over
 HTTPS, sign-in and permissions, a phone's enrolment and its proof of itself, the sync endpoints,
@@ -36,9 +35,8 @@ before any task.
 
 ## Exit criteria for Phase 2 *(ADR-376, and 8…10 by ADR-519; agent default, the user may change them)*
 
-The seven were met once (2026-10-14, ADR-518: how each was met is that ADR); all ten were met
-(task 2.8.9, 2026-10-16…17, ADR-537…540), 9 by the user's answers to `spec/DEFAULTS-REVIEW.md`;
-**withdrawn at the second reopening (ADR-552): checked again by task 2.9.3.**
+The seven were met once (2026-10-14, ADR-518); all ten at task 2.8.9 (ADR-537…540), withdrawn by
+ADR-552; **all ten met again at task 2.9.3 (ADR-555): how each was met is that ADR.**
 
 1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
    the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
@@ -72,15 +70,11 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-17, through ADR-554)
-- **Phase 2 is reopened a second time (ADR-552)** after a diagnostic before Phase 3 (the chain
-  green, every count as `CHAIN.md`'s): a phone's lists hold none of what a certification picks
-  (vehicle types and features, crew types, primes and their subs, helpers) nor a site's place, and
-  every story passed only because the harness's phone was handed those ids from the database.
-  **Milestone 2.9:** 2.9.1 the lists ✅ (ADR-553: the truck lists, the helpers, each site's
-  place; the harness's phone certifies by name and sends no id it wasn't sent), 2.9.2 three faults
-  ✅ (ADR-554: a lock race told in words, review reads two queries a page, no control socket),
-  2.9.3 the exit and the records. Begun at the user's word ("work on the next task").
+### Where things stand (2026-10-17, through ADR-555)
+- **Phase 2's exit is met a third time (ADR-555)**: the chain green, three full story runs in a
+  row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved. **Milestone 2.9**
+  (ADR-552: a phone's lists for certifying and disposal, three faults, the exit) is done
+  (ADR-553…555). **Phase 3 waits on the user's word.**
 - **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole**
   (ADR-541…550), its three questions by the user (ADR-551).
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
@@ -89,7 +83,7 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
   §3a–§3b and `DECISIONS.md`.
 - **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**, withdrawn by ADR-552; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Milestone 2.9 (ADR-552):** 2.9.1, 2.9.2 done (ADR-553, 554); 2.9.3 to do. What each task left is `BACKLOG.md`'s
+  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**, withdrawn by ADR-552; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Milestone 2.9 (ADR-552):** done (ADR-553…555). What each task left is `BACKLOG.md`'s
   carry-forward register (live items only since ADR-532).
 - **What runs.** The API (NestJS on Fastify) is the local stack's own service, reached only at
   `https://api.adms.localhost` through Caddy; the worker drains the job queue. **Every endpoint is
@@ -103,7 +97,7 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
 - **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
-- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks;
+- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** opening Phase 3;
   every agent default on `spec/DEFAULTS-REVIEW.md` is answered (ADR-538), `SUMMARY.md` §4 lists what stays open.
 - **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
   in security is suggested, say what the standard asks before building it.**
@@ -143,8 +137,8 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 |---|---|---|
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
-| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | 🔄 reopened 2026-10-17 (ADR-552): Milestone 2.9; its exit of ADR-537…540 withdrawn; the audit's F1…F11 answered (ADR-541…550) |
-| 3 Field app | browser, then iPhone, then Android | 🔒 the user opens it |
+| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met a third time 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
+| 3 Field app | browser, then iPhone, then Android | 🔒 the user opens it (next) |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -229,14 +223,11 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 2.9.3, Phase 2's exit a third time, and the records put right (ADR-552 (5)).** Read its
-line in `BACKLOG.md` (Milestone 2.9): the ten exit criteria above, each checked again and said how
-it was met; **three full `pnpm scenarios` runs in a row**, `burst` with no 500 in its API's log;
-the 23 REQs; every scenario naming its test, the scenarios recounted whole; and the stale lines the
-diagnostic named: `REQUIREMENTS.md`'s REQ-006 row (ten containers), `SUMMARY.md`'s "Phases and
-their exits" topic split under its 15 KB, `.nvmrc` pinned whole (`24.21.0`). Then Phase 2's exit
-is offered to the user; Phase 3 stays gated until they open it, its first question the
-accessibility standard (REQ-324, C41).
+**None until the user opens Phase 3 (the field app).** Phase 2's exit is met (ADR-555); an agent
+never opens a phase. When they do, Phase 3's first task (C163) writes its plan from
+`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map (as ADR-377 did), moves its REQs into
+`REQUIREMENTS.md`, writes the phone's acceptance scenarios, and **asks first the accessibility
+standard and level** (REQ-324, C41).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

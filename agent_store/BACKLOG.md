@@ -3,15 +3,15 @@
 > Milestone detail for the active phase. Read when picking up new work; the single active task
 > is in `agent_store/NEXT.md`. Tick boxes as you complete them.
 
-## Active — Phase 2, reopened a second time 2026-10-17 at the user's word (ADR-552): Milestone 2.9
+## Active — Phase 2, its exit met a third time 2026-10-17 (ADR-555): Phase 3 waits on the user's word
 
-A diagnostic before Phase 3 found a phone can't certify by picking (its lists hold none of what a
-certification picks), and three smaller faults; the user: "this should be a task in phase 2
-clearly". ADR-537's exit is withdrawn. **Milestone 2.9 below is the active work**, one task a
-response, from 2.9.1, **begun at the user's word** ("we can start on that task when i say go").
-Phase 3's plan is written only when the user opens it, after Phase 2's exit is met again.
+Reopened a second time at the user's word (ADR-552) after a diagnostic found a phone couldn't
+certify by picking, and three smaller faults; **Milestone 2.9 is done** (ADR-553…555) and Phase 2's
+exit is met again. **Phase 3's plan is written only when the user opens it** (its first task,
+C163: the plan from `REQUIREMENTS-LATER.md`'s Phase 3 and the register's map, asking first the
+accessibility standard, C41).
 
-## Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8; its exit of 2026-10-17, ADR-537…540, withdrawn: reopened the same day, ADR-552, Milestone 2.9)*
+## Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8; its exit of 2026-10-17, ADR-537…540, withdrawn: reopened the same day, ADR-552, Milestone 2.9; exit met a third time 2026-10-17, ADR-555)*
 
 **What Phase 2 is.** Phase 1 built everything a request will call, with no HTTP. Phase 2 puts the
 server in front of it: the API as a running process over HTTPS, sign-in and permissions, a phone's
@@ -192,7 +192,7 @@ every task here**, with ADR-519's rule at each close: no "no task yet" of the se
     connection at once. `pg` stays on 8 until a run shows no deprecation warning.
   - **The address server's gunicorn** started with `--no-control-socket` (`infra/local/compose.yaml`
     and `compose.test.ts` together); its start-up log read again for the error gone.
-- [ ] **2.9.3 Phase 2's exit, a third time, and the records put right.** The ten criteria (`NEXT.md`),
+- [x] **2.9.3 Phase 2's exit, a third time, and the records put right.** ✅ done 2026-10-17 (ADR-555): every criterion checked again from runs that were seen (the chain green, three full story runs in a row, 184 of 184 scenarios recounted whole, AC-02-84's story checks named, 23 REQs); REQ-006's row ten containers, `.nvmrc` 24.21.0, SUMMARY's topics all under budget. **Phase 2's exit is met; offered to the user.** What it leaves: nothing (Phase 3's own lines stand below). The ten criteria (`NEXT.md`),
   three full `pnpm scenarios` runs in a row, the 23 REQs; and the stale lines the diagnostic named:
   `REQUIREMENTS.md`'s REQ-006 row (ten containers), `SUMMARY.md`'s "Phases and their exits" topic
   split under its 15 KB, `.nvmrc` pinned whole (`24.21.0`, as the engines and the containers).
