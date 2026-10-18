@@ -39,7 +39,7 @@ one task per response (ADR-558); read its brief before any task.
    approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
    every story still passing.
 2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
-   (`spec/acceptance/11-field-app.md`: 110).
+   (`spec/acceptance/11-field-app.md`: 123).
 3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
 4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
    control by control; the threat model's phone rows read again; `pnpm security` passing.
@@ -67,11 +67,13 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-17, through ADR-560)
+### Where things stand (2026-10-18, through ADR-562)
 - **Phase 3 is open (ADR-557)**; task 3.0.1 done: its plan (ADR-558), its REQs moved, the phone's
   scenarios written (`spec/acceptance/11-field-app.md`, ADR-560, for the user's approval), the
   accessibility standard answered (WCAG 2.2 AA; a conformance report per app at its phase's end,
-  ADR-559). **Next: task 3.1.1.**
+  ADR-559). **Task 3.1.1 done (ADR-562):** the field app's security checklist,
+  `spec/CHECKLIST-FIELD.md` (OWASP MASVS v2.1.0 at MAS-L2 + MAS-P, MAS-R not taken; pinning and the
+  app-switcher cover proposed to the user; AC-11-61…73 added, 123 scenarios). **Next: task 3.1.2.**
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -224,12 +226,15 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.1.1, the field app's security checklist** (`BACKLOG.md`, Milestone 3.1; REQ-323 in part;
-C156): write `spec/CHECKLIST-FIELD.md`, OWASP MASVS control by control. **Say what the standard
-asks before choosing** its version and profile (ADR-401's word); answer each control by a named
-scenario of `spec/acceptance/11-field-app.md` or a test, or the phase that owns it; give file 11's
-Answers column each control's number; read the threat model's phone rows (§4.1, §6) again; propose
-certificate pinning and the app-switcher snapshot (file 11, "Left to the task", 1). Docs only.
+**Task 3.1.2, the shell, its door and the browser end-to-end layer** (`BACKLOG.md`, Milestone 3.1;
+REQ-006, REQ-301 in part; C24, C86, C31, C112 in part; AC-11-01…04, 06, 61, 69, 72, AC-10-08):
+`apps/field` as React + Vite and the browser end-to-end tool, **each by ADR first** (exact version,
+seven days old, licence, maintenance), the tool a step of `pnpm chain` with its counts in
+`CHAIN.md`; the browser build at `https://field.adms.localhost` through Caddy; its origin and the
+native origins on `ADMS_CORS_ORIGINS`; the page's headers and content security policy (AC-11-61);
+`Authorization` across origins; the translation file; the UUIDv7 maker moved to `packages/domain`;
+the checks that `apps/field` holds no rule, no payload shape and no outside SDK (AC-11-06, 69), and
+the secrets scan over the built bundle (AC-11-72). Read `spec/CHECKLIST-FIELD.md` first.
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

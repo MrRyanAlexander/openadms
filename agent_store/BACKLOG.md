@@ -15,7 +15,7 @@ iPhone, then Android (ADR-099), one codebase (`apps/field`, React + Vite + Capac
 ADR-519's rule: a phase's own server work never moves to a later phase by agent default). **Done
 when** the golden mission's field events are captured through the field app's screens and come out
 with the numbers the user approved, every scenario with a Phase 3 part passes at its layer
-(`spec/acceptance/11-field-app.md`: 110), and its 33 REQs are ticked from runs that were seen. Exit
+(`spec/acceptance/11-field-app.md`: 123), and its 33 REQs are ticked from runs that were seen. Exit
 criteria: `NEXT.md`.
 
 **The order** (ADR-558): the answer and the foundation → the phone's store, identity and sign-in →
@@ -68,13 +68,18 @@ time clock → iPhone → Android → prove it.
   its phase's end). C163 done; C41's question answered.
 
 ### Milestone 3.1 — The answer and the foundation (ARCHITECTURE §3, §15, §16, §18)
-- [ ] **3.1.1 The field app's security checklist** (REQ-323 in part; C156): `spec/CHECKLIST-FIELD.md`,
+- [x] **3.1.1 The field app's security checklist** (REQ-323 in part; C156): `spec/CHECKLIST-FIELD.md`,
   OWASP MASVS control by control, its version and profile said with what the standard asks before
   choosing (ADR-401), each control answered by a named scenario or test or the phase that owns it;
   file 11's Answers column given each control's number; the threat model's phone rows (§4.1, §6)
   read again; certificate pinning and the app-switcher snapshot proposed (file 11, left 1).
+  ✅ done 2026-10-18 (ADR-562): MASVS v2.1.0's 24 controls and MASWE v1.0.0's 78 weaknesses
+  answered; MAS-L2 + MAS-P proposed, MAS-R not taken; pinning and the app-switcher cover proposed
+  to the user; AC-11-61…73 added and put on their tasks' lines below; T-08, T-09 added. C156's
+  checklist part done. What it leaves: the page answered whole at 3.10.2; the user's word on §1.3,
+  §4.1, §4.2.
 - [ ] **3.1.2 The shell, its door and the browser end-to-end layer** (REQ-006, REQ-301 in part;
-  C24, C86, C31, C112 in part; AC-11-01…04, 06, AC-10-08): `apps/field` as React + Vite and the
+  C24, C86, C31, C112 in part; AC-11-01…04, 06, 61, 69, 72, AC-10-08): `apps/field` as React + Vite and the
   browser end-to-end tool (ARCHITECTURE §15 names Playwright as an example), each by ADR, the tool
   a step of `pnpm chain` with its counts in `CHAIN.md`; the browser build served
   over HTTPS through Caddy at `https://field.adms.localhost`; its origin and the native origins on
@@ -104,21 +109,21 @@ time clock → iPhone → Android → prove it.
   AC-02-07, 18, AC-11-11…13): the device key (ECDSA P-256, DER), enrolment under the master passcode,
   the token in secure storage, proving again on `PHONE_NOT_PROVEN`; "Create monitor".
 - [ ] **3.2.3 Online sign-in and the assignment** (REQ-311, 308b, 125c; C114, C115, C117, C133;
-  AC-02-35, 36, AC-07-91, AC-11-14…18, 54): the monitor's token beside the phone's; `noAssignment`'s
+  AC-02-35, 36, AC-07-91, AC-11-14…18, 54, 63): the monitor's token beside the phone's; `noAssignment`'s
   words; the lists and the menu from the assignment; how stale the lists are; read again when the
   setup version differs.
 - [ ] **3.2.4 The login list and signing in offline** (REQ-311; C120, C141 in part, C143, C151;
-  AC-02-39…41, AC-11-19…21): the login list asked and kept; the two-step check (an Argon2 that
+  AC-02-39…41, AC-11-19…21, 63, 64): the login list asked and kept; the two-step check (an Argon2 that
   takes raw bytes in the browser build, by ADR); tries backed off after 5, locked after 10 until
   the passcode; the inactivity lock and its warning; an offline sign-in reported first; a story of
   signing in offline.
 
 ### Milestone 3.3 — The master passcode on the phone (ARCHITECTURE §7.3, §7.5)
-- [ ] **3.3.1 Setup with no assignment** (REQ-311; C122, C125; AC-02-38, AC-11-23…25): the passcode in
+- [ ] **3.3.1 Setup with no assignment** (REQ-311; C122, C125; AC-02-38, AC-11-23…25, 63): the passcode in
   memory only; the project, then the work, site and monitor, paged; offline only on the project
   whose lists it holds; the unplanned assignment's report kept until saved and sent first.
 - [ ] **3.3.2 Switching, moving and passcode sessions** (REQ-312; C123, C124, C126, C171; AC-02-42,
-  46, 47, AC-11-26, 27): a switch (the earlier monitor's unsynced work archived, hidden, synced in
+  46, 47, AC-11-26, 27, 64): a switch (the earlier monitor's unsynced work archived, hidden, synced in
   the background) and a move, offline if need be; sessions as the phone's monitor and temporary,
   marked, ended at the project's midnight; `masterPasscodeSession` on every field event; each use
   logged; what ten wrong tries offline does, proposed by ADR (file 11, left 3).
@@ -141,7 +146,7 @@ time clock → iPhone → Android → prove it.
 ### Milestone 3.5 — Capture (`adms-field-app` §4A; `adms-ticket-workflows`)
 - [ ] **3.5.1 The collection, and what every capture shares** (REQ-303, 308a, 309, 317 in part, 318,
   319; C68, C96, C121, C135; AC-02-44, 45, AC-04-08, 11, 24, 91, 92, 95, 96, 98, AC-08-06,
-  AC-11-05, 36…39): badge first, number last; a badge not in the lists warned, refreshed or keyed by
+  AC-11-05, 36…39, 68): badge first, number last; a badge not in the lists warned, refreshed or keyed by
   hand; the debris type and field tag by name; GPS and waypoints; the address looked up or typed;
   normal or split, and the split chain; the number scanned or shown and entered again, a typed one
   with its reason; the phone's own duplicate check; cancel; sealed at submit. The number entered
@@ -166,7 +171,7 @@ time clock → iPhone → Android → prove it.
   sent; a hand-keyed truck's typed capacity, every detail not recorded `null`.
 
 ### Milestone 3.6 — Photographs, printing and scanning, in the browser build (ARCHITECTURE §11, §12)
-- [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44): from the camera only, at
+- [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44, 68): from the camera only, at
   most 8 per ticket and a certification's five views; SHA-256 at capture; the native shrink's
   interface (the browser build keeps the original).
 - [ ] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
@@ -188,10 +193,15 @@ time clock → iPhone → Android → prove it.
 
 ### Milestone 3.8 — iPhone (ARCHITECTURE §3, §8, §11, §12, §15)
 - [ ] **3.8.1 The iOS build, its store and its key** (REQ-301, 302; C110, C111, C156; AC-10-44,
-  AC-11-03, 07, 09, 11, 13): Capacitor by ADR; the SQLCipher store, its data key in the Keychain
+  AC-11-03, 07, 09, 11, 13, 61, 62, 65…67, 69…73): Capacitor by ADR; the SQLCipher store, its data key in the Keychain
   this-device-only; left out of backups; the device key in the Secure Enclave (the 65-byte point
-  under its fixed header), DER signatures; tokens in secure storage.
-- [ ] **3.8.2 The native camera and scanning** (REQ-316, 315; C137; AC-11-44, 45, 49): full
+  under its fixed header), DER signatures; tokens in secure storage. From the checklist
+  (`spec/CHECKLIST-FIELD.md`, ADR-562): the key's accessibility class; HTTPS only and the pins as
+  the user answers §4.1; the app-switcher cover (§4.2); other makers' keyboards refused; no link,
+  scheme or extension; release builds without debugging; the minimum iOS and the newest SDK; the
+  oldest app version's server half (§4.5, by the endpoint recipe); the native libraries audited;
+  the screen-lock notice.
+- [ ] **3.8.2 The native camera and scanning** (REQ-316, 315; C137; AC-11-44, 45, 49, 68): full
   resolution; the shrink at the original resolution keeping location, time and depth (or depth
   linked); both hashes; sizes measured on a real iPhone into configuration; the camera scanner.
 - [ ] **3.8.3 Printing to a Zebra ZQ** (REQ-314, 315; AC-11-47, 50): the native plugin on Zebra's
@@ -202,8 +212,11 @@ time clock → iPhone → Android → prove it.
 
 ### Milestone 3.9 — Android
 - [ ] **3.9.1 The Android build** (REQ-301, 302, 314…316; C110; AC-10-44, AC-11-03, 07, 09, 11, 13,
-  44, 45, 47, 49, 50): the Keystore key (SubjectPublicKeyInfo); backups off and the data-extraction
-  rules; the SQLCipher store; the camera and shrink; the Zebra plugin; the scanner.
+  44, 45, 47, 49, 50, 61, 62, 65…70, 72, 73): the Keystore key (SubjectPublicKeyInfo); backups off and the data-extraction
+  rules; the SQLCipher store; the camera and shrink; the Zebra plugin; the scanner. From the
+  checklist (ADR-562): as 3.8.1's list for Android, no component exported but the launcher, and
+  the submit and passcode controls ignoring touches under another app's overlay where the minimum
+  Android doesn't stop it (MASWE-0039).
 - [ ] **3.9.2 On a real Android phone** (AC-11-05, 10, 34, 56, 57): as 3.8.4, TalkBack in place of
   VoiceOver; run with the user.
 
@@ -498,7 +511,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C24, C86 → 3.1.2 · C31 → 3.1.2 · C41 → 3.1.3, 3.10.2 · C156 → 3.1.1, 3.8.1 · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins, 3.1.2) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C24, C86 → 3.1.2 · C31 → 3.1.2 · C41 → 3.1.3, 3.10.2 · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins, 3.1.2) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
 - **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Left:* the automated check beside the browser end-to-end tests (3.1.3) and each screen's own check in its task; the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C24, C86.** The object store's CORS allow-list widens when the web apps arrive (the API's S3 identity never holds bucket-delete); the API and web apps get their own `*.adms.localhost` names; each web app's origin and the field app's native origins (`capacitor://localhost`, `https://localhost`) join `ADMS_CORS_ORIGINS`; the page headers are the web apps'.
@@ -518,7 +531,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **C133, C135, C137, C138, C139, C168.** It says what it holds in every sync, takes a check in, reads its lists when the setup version answered isn't its lists'; **a record sealed at submit** (no reopen, edit or undo, never resent changed; an unsubmitted one stays the monitor's across sign-outs and days; a cancelled one stays on the phone); a photograph's record sent in the sync carrying its record or later (`OWNER_NOT_SAVED` kept and resent once the record is saved; `depthSha256` only where a depth file will go); parts no larger than `MEDIA_PART_BYTES_AT_MOST`, smaller on a poor signal; `photoFileEndpoint` asked after a restart; image kinds and sizes measured on real phones; a photograph whose record is held is answered saved and its files go, the record still shown not saved.
 - **C141, C170.** The suite's turn-in checks; held things named by the SHA-256 of `sentCanonical`; on `wipe: true` its store's data key erased (NIST SP 800-88) and its device key; a refused proof right after a turn-in ask means it was turned in; a supervisor shown the server's words and what's missing; `MASTER_PASSCODE_NEEDED` at its proof: ask whoever holds the passcode, send it beside the signature, then sync and turn in (`keyRevoked` says nothing else is open); **it syncs only while somebody is signed in** (ADR-531); reaching signal it reports its offline sign-in first (`POST /phones/current/offline-sign-ins`, the proof an HMAC keyed by the first slow hash, kept never, dropped at sign-out); the master user syncs by typing the passcode beside the proof; a refused offline sign-in asks for an online one.
 - **C143, C151.** A story of signing in offline (the login list) comes with the field app.
-- **C156.** A phone's private key never leaves its secure hardware; the field app's own checklist (OWASP MASVS, REQ-323).
+- **C156.** A phone's private key never leaves its secure hardware (3.8.1). *The field app's own checklist (OWASP MASVS, REQ-323) is written: `spec/CHECKLIST-FIELD.md`, task 3.1.1, ADR-562.*
 
 #### For Phase 4 (the back office's and the portal's screens, exports)
 - **Accessibility** (C41; ADR-559): every web app screen meets WCAG 2.2 AA, checked automatically beside its browser end-to-end tests as the field app's are (3.1.3's checker), reviewed by hand; the back office's and the portal's conformance reports (VPAT format) at Phase 4's end.

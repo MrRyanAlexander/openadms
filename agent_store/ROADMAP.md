@@ -9,7 +9,7 @@
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-18 (**You approved the field app's design direction (ADR-561):** one clear look on iPhone and Android, built for sunlight, gloves and one hand; big buttons and type; a status strip on every screen; capture one question at a time; our own components on React Aria. A new task, 3.1.4, sets the look and then shows you the key screens as a clickable prototype before any capture screen is built, with the four open designs put to you there (a confirmation after each value, a monitor scorecard, the bottom menu, typing the number again). Phase 3 is now 33 tasks. **Next: task 3.1.1, the field app's security checklist.**)
+> **Last updated:** 2026-10-18 (**Task 3.1.1, the phone's security checklist, is written (ADR-562):** `spec/CHECKLIST-FIELD.md` holds the phone to OWASP's mobile standard (MASVS v2.1.0), every control answered. Three things are put to you: the level (MAS-L2 + privacy, without the anti-tampering profile, because the server already checks everything a phone sends); pinning the server's certificate authorities in the iPhone and Android apps; and covering the screen in the app switcher while leaving screenshots allowed. 13 new phone scenarios (123 in all); two threats added to the threat model. **Next: task 3.1.2, the field app's shell and its browser tests.**)
 >
 > *This line holds the latest session alone (ADR-516); what each session did is its ADR and `DECISIONS.md`'s session log.*
 
@@ -22,7 +22,7 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 3, the field app: open since 2026-10-17 (ADR-557)**; task 3.0.1 done (the plan, the requirements moved, the phone's scenarios, your accessibility answer). Behind it, **Phase 2, API and sync: exit met 2026-10-17 (ADR-555)**, after reopenings for Milestones 2.8 and 2.9. Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request (what the back office *sees* granted too, ADR-539), enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
+| **Now** | **Phase 3, the field app: open since 2026-10-17 (ADR-557)**; tasks 3.0.1 (the plan, the requirements moved, the phone's scenarios, your accessibility answer) and 3.1.1 (the phone's security checklist) done. Behind it, **Phase 2, API and sync: exit met 2026-10-17 (ADR-555)**, after reopenings for Milestones 2.8 and 2.9. Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request (what the back office *sees* granted too, ADR-539), enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
 | **Next task** | **3.1.1, the field app's security checklist** (OWASP MASVS, control by control, before the first screen) |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
 | **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
@@ -38,7 +38,7 @@
 | — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 9 of 9 files (review and corrections' 65 and invoicing and closeout's 31 written 2026-10-06, ADR-362; pricing, the ledger and audit's 114 written 2026-10-05, ADR-353; reconciliation's 162 written 2026-10-05, ADR-339; the counts before it: setup 82, people and devices 74, certifications 60, capture 98, sync 56; the passing counts are in `spec/acceptance/README.md`); beside them the server's file 10 (ADR-379) and **the phone's file 11, 60 new and 50 listed, written 2026-10-17 for Phase 3 (ADR-560)** |
 | **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 93 of 98 ticked; the other 5 moved to Phases 3 and 4 with what Phase 1 built for each (ADR-371) | ✅ exit met 2026-10-06 (ADR-371, 372), 49 of 49 tasks; open since 2026-10-01 (ADR-299) |
 | **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 22 of 23 ticked; REQ-006 (every service over HTTPS) moved to Phase 3 with what Phase 2 built for it (ADR-518); REQ-210…217 new (ADR-519), all ticked; REQ-218 new (ADR-552), ticked (ADR-553) | ✅ exit met a third time 2026-10-17 (ADR-555), 44 of 44 tasks (2.6.3 withdrawn); open since 2026-10-06 (ADR-376), reopened 2026-10-14 (ADR-519) and 2026-10-17 (ADR-552) |
-| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 33 (four carried from Phase 1, ADR-371; one from Phase 2 and three new, ADR-518) | 🟡 open since 2026-10-17 (ADR-557), 1 of 33 tasks |
+| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 0 of 33 (four carried from Phase 1, ADR-371; one from Phase 2 and three new, ADR-518) | 🟡 open since 2026-10-17 (ADR-557), 2 of 33 tasks |
 | **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 19 (one carried from Phase 1, ADR-371) | 🔒 |
 | **5a** | **Deploy and go-live checks** | Run it in a real cloud (the shipped demo: Railway + Netlify), passing the scenario suite and load tests, with an outside security test done | 0 of 1 (REQ-517), plus carried-forward items C25, C33, C38…C40, C48, C49 | 🔒 |
 | 🏁 | **Finish line** | **A firm can install it and people use it on a real mission** | | |
@@ -64,7 +64,7 @@ printer). Sync comes before the capture screens, so every screen is proven throu
 | Milestone | What it is | When it's done, you can… | Tasks | Status |
 |---|---|---|---|---|
 | 3.0 | Open the phase | Read every Phase 3 task with the requirements each one meets, and the scenarios the phone must pass | 1 of 1 | ✅ 2026-10-17 (ADR-557…560) |
-| 3.1 | The answer and the foundation | Read the phone's security checklist; open the field app's browser build over HTTPS on your machine; see every screen checked for accessibility on every run; see the field app's look and click through the key screens as a prototype, and answer the open designs | 0 of 4 | ⬜ next |
+| 3.1 | The answer and the foundation | Read the phone's security checklist; open the field app's browser build over HTTPS on your machine; see every screen checked for accessibility on every run; see the field app's look and click through the key screens as a prototype, and answer the open designs | 1 of 4 | 🟡 3.1.1 done 2026-10-18 (ADR-562); next 3.1.2 |
 | 3.2 | The phone's store, identity and sign-in | Enrol a phone, sign a monitor in online and take the day's assignment, sign in offline from the login list; its data encrypted | 0 of 4 | ⬜ |
 | 3.3 | The master passcode on the phone | Set a phone up when its monitor has no assignment; switch monitors and move sites offline | 0 of 2 | ⬜ |
 | 3.4 | Sync from the phone | Sync a phone's records and photographs whenever it has signal; turn it in and watch it wipe only once the server has everything | 0 of 3 | ⬜ |
@@ -82,7 +82,7 @@ WCAG 2.2 AA with its report written; every new table guarded; the chain green wi
 tests in it; rules and shapes in one place; the on-device runs on a real iPhone and Android phone
 with you; three clean full runs.
 
-**Scenarios with a Phase 3 part:** 110 (`spec/acceptance/11-field-app.md`, ADR-560): 60 new, and
+**Scenarios with a Phase 3 part:** 123 (`spec/acceptance/11-field-app.md`, ADR-560, 562): 73 new, and
 50 earlier ones whose field app part is still to come. 0 passing.
 
 ---

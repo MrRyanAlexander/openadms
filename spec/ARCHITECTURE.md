@@ -1145,6 +1145,7 @@ Security checks run with the tests: a dependency audit, a secrets scan, and the 
 ✅ **Approved** — the checklists we test against:
 - **OWASP ASVS** (current release), **Level 2**, for the API and web apps.
 - **OWASP MASVS** for the field app (storage, crypto, authentication, network, platform).
+  ⚠️ *ADR-562 (task 3.1.1, agent default, for the user's approval): MASVS v2.1.0, all eight groups, at the profile MAS-L2 + MAS-P with MAS-R not taken: `spec/CHECKLIST-FIELD.md`.*
 - **OWASP API Security Top 10.**
 - **NIST SP 800-63B** for passwords and authenticators.
 - **CIS PostgreSQL Benchmark** for database configuration.
