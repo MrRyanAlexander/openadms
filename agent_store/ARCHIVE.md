@@ -4807,3 +4807,40 @@ its 80 KB (ADR-532). As it stood at commit `af1d46d`:
   needs comes with that screen. Don't build ahead.
 - **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
 - Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
+
+## Moved 2026-10-18 (ADR-570)
+
+From `BACKLOG.md`, "Done — Phase 1: Data core and engine, rebuilt", word for word, to keep that page under its 80 KB (ADR-532):
+
+| Milestone | Tasks (ADR) |
+|---|---|
+| 1.0 Open the phase | 1.0.1 (299, 300) |
+| 1.1 Setup records (Part 1) | 1.1.1 scenarios (300) · 1.1.2 the firm's lists (302) · 1.1.3 client, declaration event, project (303) · 1.1.4 contractors and contracts (305, 306) · 1.1.5 forms (308) · 1.1.6 pay items (309) · 1.1.7 sites and the map (310, 311) · 1.1.8 rules (313) · 1.1.9 people's scenarios (314) · 1.1.10 permissions and viewers (315) · 1.1.11 the setup services (316) |
+| 1.2 Certifications and capacity (Part 3) | 1.2.1 scenarios (317) · 1.2.2 `Capacity` (320) · 1.2.3 the records and services (321) |
+| 1.3 Tickets and numbers (Part 4) | 1.3.1 scenarios (322) · 1.3.2 numbering (323) · 1.3.3 a field event's shared columns (324) · 1.3.4 each kind's columns (325) · 1.3.5 scale receipts and photographs (326) · 1.3.6 ROEs and forms (327) · 1.3.7 the harness's phones and `SizeBands.payItemFor` (332) |
+| 1.4 Sync intake with quarantine (Part 5) | 1.4.1 scenarios (333) · 1.4.2 `Intake` and quarantine (338) |
+| 1.5 Reconciliation (Part 6) | 1.5.1 scenarios (339) · 1.5.2 derived records (340) · 1.5.3 grouping and status (341) · 1.5.4 quantities (343) · 1.5.5 flags and the first checks (344, 345) · 1.5.6 place (346) · 1.5.7 quantity, unit rate, ROE checks (347, 348) · 1.5.8 mileage (349, 350) · 1.5.8a the example world on the map extract (351) · 1.5.9 the worker's run (352) |
+| 1.6 The rule engine (Part 7) | 1.6.1 scenarios (353) · 1.6.2 which rules run (354) · 1.6.3 what they write (355) · 1.6.4 the setup check and quantity lookup (357) |
+| 1.7 The ledger and audit (Part 7) | 1.7.1 `Transaction` (358) · 1.7.2 the worker prices (359, 360) · 1.7.3 a contractor user's tickets (361) |
+| 1.8 Review, QC, invoice lock and batches (Parts 8, 9) | 1.8.1 scenarios (362) · 1.8.2 people's marks (363) · 1.8.3 corrections and renumbers (364) · 1.8.4 void, unvoid, accept (365, 366) · 1.8.5 QC, the lock, batches (367) |
+| 1.9 Prove it: the golden mission | 1.9.1 `golden-mission` (368) · 1.9.2 `p1-left-out` (369, 370) · 1.9.3 the exit (371, 372) |
+
+From `NEXT.md`, the Handoff's "Where things stand (2026-10-18, through ADR-569)", its Phase 3 bullet, word for word, to keep that page under its 20 KB (ADR-532):
+
+- **Phase 3 is open (ADR-557)**; task 3.0.1 done: its plan (ADR-558), its REQs moved, the phone's
+  scenarios written (`spec/acceptance/11-field-app.md`, ADR-560, for the user's approval), the
+  accessibility standard answered (WCAG 2.2 AA; a conformance report per app at its phase's end,
+  ADR-559). **Task 3.1.1 done (ADR-562):** the field app's security checklist,
+  `spec/CHECKLIST-FIELD.md` (OWASP MASVS v2.1.0 at MAS-L2 + MAS-P, MAS-R not taken; pinning and the
+  app-switcher cover proposed to the user; AC-11-61…73 added, 123 scenarios). **Task 3.1.2 done
+  (ADR-563…565):** `apps/field` is React 19.3.0 on the pinned Vite; its shell's first screen is
+  served at `https://field.adms.localhost` through Caddy with its policy and headers; Playwright
+  1.64.0's browser tests are `pnpm e2e`, a step of `pnpm chain`; the CORS list is the field app's
+  three origins; the UUIDv7 maker is `packages/domain`'s. **Task 3.1.3 done (ADR-566):** axe-core
+  4.14.0's WCAG 2.0–2.2 A and AA rules check every screen a browser test reaches; a screen names
+  itself by `data-screen` and one no browser test reaches fails the chain. **Task 3.1.4 done
+  (ADR-567…569):** React Aria Components 1.22.1; the look as tokens and our components on it
+  (`apps/field/src/look/`), home and the status strip, the shell in the look; a clickable
+  prototype of the key screens outside the app (`apps/field/prototype/`), published to the user;
+  **the four open designs put to the user as Q-215…Q-218** (C177: the capture tasks read the
+  answers first). **Next: task 3.2.1.**

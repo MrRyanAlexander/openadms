@@ -124,10 +124,17 @@ time clock → iPhone → Android → prove it.
   removed when the capture screens are built; C175 from 2026-10-21.
 
 ### Milestone 3.2 — The phone's store, identity and sign-in (ARCHITECTURE §7.1, §7.2, §7.4, §8)
-- [ ] **3.2.1 The encrypted store** (REQ-302's browser half; AC-02-19, AC-11-07, 08, 10): one store
+- [x] **3.2.1 The encrypted store** (REQ-302's browser half; AC-02-19, AC-11-07, 08, 10): one store
   for records, the photographs waiting, the lists, the login list, archived queues and kept answers;
   the browser build's IndexedDB under a WebCrypto key that can't be exported, made from no password;
   the interface the native SQLCipher store implements in 3.8.1 and 3.9.1.
+  ✅ done 2026-10-18 (ADR-570): `PhoneStore` (six shelves, changes together or not at all, an erase
+  that takes the keys first) in `apps/field/src/store/`; the browser build's in IndexedDB under an
+  AES-256-GCM key and an HMAC-SHA-256 key made non-exportable from nothing typed, no value or id in
+  the clear; proven on Node's WebCrypto and in Chromium in the app's own page; the app's source held
+  to no web-layer storage, no key from a secret, no console. AC-02-19, AC-11-07, 08, 10 and 34's
+  store part, each in part. What it leaves: the first thing kept is 3.2.2's (and where the browser
+  build keeps the phone's token); the native stores, C178.
 - [ ] **3.2.2 Enrolment and the phone's proof** (REQ-311 in part, REQ-311a; C110, C111, C112, C113;
   AC-02-07, 18, AC-11-11…13): the device key (ECDSA P-256, DER), enrolment under the master passcode,
   the token in secure storage, proving again on `PHONE_NOT_PROVEN`; "Create monitor".
@@ -418,18 +425,7 @@ every task here**, with ADR-519's rule at each close: no "no task yet" of the se
 
 The whole product without a screen or an endpoint, proven by the golden mission run from a terminal with the figures the user signed off. One line a milestone; each task's full tick, and the phase's brief, are in `agent_store/ARCHIVE.md`, "Moved 2026-10-15 (ADR-532)"; grep the task's number there or read its ADR.
 
-| Milestone | Tasks (ADR) |
-|---|---|
-| 1.0 Open the phase | 1.0.1 (299, 300) |
-| 1.1 Setup records (Part 1) | 1.1.1 scenarios (300) · 1.1.2 the firm's lists (302) · 1.1.3 client, declaration event, project (303) · 1.1.4 contractors and contracts (305, 306) · 1.1.5 forms (308) · 1.1.6 pay items (309) · 1.1.7 sites and the map (310, 311) · 1.1.8 rules (313) · 1.1.9 people's scenarios (314) · 1.1.10 permissions and viewers (315) · 1.1.11 the setup services (316) |
-| 1.2 Certifications and capacity (Part 3) | 1.2.1 scenarios (317) · 1.2.2 `Capacity` (320) · 1.2.3 the records and services (321) |
-| 1.3 Tickets and numbers (Part 4) | 1.3.1 scenarios (322) · 1.3.2 numbering (323) · 1.3.3 a field event's shared columns (324) · 1.3.4 each kind's columns (325) · 1.3.5 scale receipts and photographs (326) · 1.3.6 ROEs and forms (327) · 1.3.7 the harness's phones and `SizeBands.payItemFor` (332) |
-| 1.4 Sync intake with quarantine (Part 5) | 1.4.1 scenarios (333) · 1.4.2 `Intake` and quarantine (338) |
-| 1.5 Reconciliation (Part 6) | 1.5.1 scenarios (339) · 1.5.2 derived records (340) · 1.5.3 grouping and status (341) · 1.5.4 quantities (343) · 1.5.5 flags and the first checks (344, 345) · 1.5.6 place (346) · 1.5.7 quantity, unit rate, ROE checks (347, 348) · 1.5.8 mileage (349, 350) · 1.5.8a the example world on the map extract (351) · 1.5.9 the worker's run (352) |
-| 1.6 The rule engine (Part 7) | 1.6.1 scenarios (353) · 1.6.2 which rules run (354) · 1.6.3 what they write (355) · 1.6.4 the setup check and quantity lookup (357) |
-| 1.7 The ledger and audit (Part 7) | 1.7.1 `Transaction` (358) · 1.7.2 the worker prices (359, 360) · 1.7.3 a contractor user's tickets (361) |
-| 1.8 Review, QC, invoice lock and batches (Parts 8, 9) | 1.8.1 scenarios (362) · 1.8.2 people's marks (363) · 1.8.3 corrections and renumbers (364) · 1.8.4 void, unvoid, accept (365, 366) · 1.8.5 QC, the lock, batches (367) |
-| 1.9 Prove it: the golden mission | 1.9.1 `golden-mission` (368) · 1.9.2 `p1-left-out` (369, 370) · 1.9.3 the exit (371, 372) |
+*Its milestone table, one line a milestone, moved word for word to `agent_store/ARCHIVE.md`, "Moved 2026-10-18 (ADR-570)", to keep this page under its 80 KB (ADR-532).*
 
 ## Done — Phase 0: Foundation *(ADR-103; closed 2026-10-01, ADR-281…288)*
 
@@ -449,7 +445,7 @@ The historical Phase 1 closeout on `database/` (H1.x, struck 2026-10-06 by ADR-3
 ### 📌 Carry-forward register: known later concerns (ADR-274; rewritten live-only by ADR-532)
 
 What a task's ADRs leave for later, filed under the task or phase that picks it up, each line named
-by its C-number (the numbers never change and are never reused; the next is **C177**). **Rule for
+by its C-number (the numbers never change and are never reused; the next is **C179**). **Rule for
 every agent:** at a task's start, read the standing rules below and the items under its heading,
 and do each or say in the task's ADR why it waits and move it. At close-out, a new "later" in an
 ADR gets a line here in the same response, under the task or phase that takes it (**a server
@@ -490,7 +486,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C177 → 3.5.1…3.5.3 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.5.1, 3.6.1 · C177 → 3.5.1…3.5.3 · C178 → 3.8.1, 3.9.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins done by 3.1.2, ADR-565) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
 - **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Have:* the automated check beside the browser end-to-end tests (3.1.3, ADR-566). *Left:* each screen's own check in its task (automatic once its screen names itself); the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C175.** React 19.3.1 (published 2026-10-14 on every React line at once) and Playwright 1.64.1 (2026-10-14) are read again once seven days old, from 2026-10-21: an advisory against 19.3.0 or 1.64.0 published by then, or what 19.3.1 fixes, decides whether to take them (ADR-563, 564). Whichever task runs then (3.1.3's checker ADR is a good moment).
@@ -511,6 +507,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **C133, C135, C137, C138, C139, C168.** It says what it holds in every sync, takes a check in, reads its lists when the setup version answered isn't its lists'; **a record sealed at submit** (no reopen, edit or undo, never resent changed; an unsubmitted one stays the monitor's across sign-outs and days; a cancelled one stays on the phone); a photograph's record sent in the sync carrying its record or later (`OWNER_NOT_SAVED` kept and resent once the record is saved; `depthSha256` only where a depth file will go); parts no larger than `MEDIA_PART_BYTES_AT_MOST`, smaller on a poor signal; `photoFileEndpoint` asked after a restart; image kinds and sizes measured on real phones; a photograph whose record is held is answered saved and its files go, the record still shown not saved.
 - **C141, C170.** The suite's turn-in checks; held things named by the SHA-256 of `sentCanonical`; on `wipe: true` its store's data key erased (NIST SP 800-88) and its device key; a refused proof right after a turn-in ask means it was turned in; a supervisor shown the server's words and what's missing; `MASTER_PASSCODE_NEEDED` at its proof: ask whoever holds the passcode, send it beside the signature, then sync and turn in (`keyRevoked` says nothing else is open); **it syncs only while somebody is signed in** (ADR-531); reaching signal it reports its offline sign-in first (`POST /phones/current/offline-sign-ins`, the proof an HMAC keyed by the first slow hash, kept never, dropped at sign-out); the master user syncs by typing the passcode beside the proof; a refused offline sign-in asks for an online one.
 - **C143, C151.** A story of signing in offline (the login list) comes with the field app.
+- **C178.** The native stores implement `PhoneStore` (`apps/field/src/store/phone-store.ts`, ADR-570): SQLCipher's whole-database encryption under a random key in the Keychain or Keystore, this device only (no AES layer of the browser build's); ids may stay plain inside it; changes together or not at all, answered once on disk; the erase takes the key first; `e2e/store.e2e.ts`'s checks run against it on the phone (3.8.1, 3.9.1).
 - **C156.** A phone's private key never leaves its secure hardware (3.8.1). *The field app's own checklist (OWASP MASVS, REQ-323) is written: `spec/CHECKLIST-FIELD.md`, task 3.1.1, ADR-562.*
 
 #### For Phase 4 (the back office's and the portal's screens, exports)

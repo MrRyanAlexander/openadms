@@ -217,6 +217,44 @@ describe('the field app holds', () => {
     }
   });
 
+  it('AC-11-07: nothing kept in the web layer’s storage: no localStorage, sessionStorage, cookie or cache, and IndexedDB only by the store', () => {
+    const webStorage = ['localStorage', 'sessionStorage', 'cookie', 'cookieStore', 'caches'];
+    for (const { path, file } of modules) {
+      const { used } = namesIn(file);
+      expect(
+        used.filter((name) => webStorage.includes(name)),
+        path,
+      ).toEqual([]);
+      if (path !== 'store/browser-store.ts') {
+        expect(
+          used.filter((name) => name === 'indexedDB' || name === 'IDBKeyRange'),
+          path,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it('AC-11-08: no key made from anything typed or brought: the store’s keys are generated, never imported, derived or unwrapped', () => {
+    const made = ['importKey', 'deriveKey', 'deriveBits', 'unwrapKey', 'exportKey', 'wrapKey'];
+    for (const { path, file } of modules) {
+      expect(
+        namesIn(file).used.filter((name) => made.includes(name)),
+        path,
+      ).toEqual([]);
+    }
+    const sealing = modules.find(({ path }) => path === 'store/sealing.ts');
+    expect(sealing?.file.text).toMatch(/generateKey\(\{ name: 'AES-GCM', length: 256 \}, false,/);
+  });
+
+  it('AC-11-10: nothing written to the console, so nothing secret reaches the phone’s logs from it', () => {
+    for (const { path, file } of modules) {
+      expect(
+        namesIn(file).used.filter((name) => name === 'console'),
+        path,
+      ).toEqual([]);
+    }
+  });
+
   it('is read from the app’s own source, every module of it at any depth', () => {
     expect(relative(field, source)).toBe('src');
     expect(modules.map(({ path }) => path)).toEqual(
@@ -228,6 +266,9 @@ describe('the field app holds', () => {
         'words.ts',
         'look/index.ts',
         'look/keypad.tsx',
+        'store/phone-store.ts',
+        'store/sealing.ts',
+        'store/browser-store.ts',
       ]),
     );
   });

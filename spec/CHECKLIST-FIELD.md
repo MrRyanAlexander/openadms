@@ -83,25 +83,25 @@ Every weakness the published catalogue maps to a control, in its first group; on
 
 | Weakness | Profile | Controls | Title | Answer |
 |---|---|---|---|---|
-| MASWE-0001 | L2 | STORAGE-1, 2, CRYPTO-2 | Sensitive data stored unencrypted in private storage | AC-11-07: one encrypted store, its random key in secure storage, this device only (3.2.1; SQLCipher 3.8.1, 3.9.1) |
+| MASWE-0001 | L2 | STORAGE-1, 2, CRYPTO-2 | Sensitive data stored unencrypted in private storage | AC-11-07: one encrypted store, its random key in secure storage, this device only (3.2.1; SQLCipher 3.8.1, 3.9.1): **built** for the browser build (ADR-570: `apps/field/src/store/`, every value sealed and every id hidden; `e2e/store.e2e.ts`) |
 | MASWE-0002 | L1, L2 | STORAGE-1, 2 | Sensitive data stored unencrypted outside of private storage | AC-11-07 (nothing in a plain file); AC-11-68 (a photograph never in the phone's shared library). The browser build's PDF receipt is a test build's (AC-11-03) |
 | MASWE-0003 | L1, L2 | STORAGE-1, CRYPTO-2 | Cryptographic keys stored outside of platform keystore | AC-11-07 (the data key), AC-11-11 (the device key, made in the Secure Enclave or the Keystore), AC-11-12, 14 (the tokens in secure storage) |
 | MASWE-0004 | L1, L2 | STORAGE-1 | Sensitive data hardcoded in the app package | AC-11-72: the app ships no secret; the secrets scan reads the built app: **built** for the browser build (ADR-565: `pnpm security` reads `apps/field/dist/web/`), the native packages at 3.8.1, 3.9.1. The master passcode's check reaches a phone as a list, never in the package (ADR-454) |
-| MASWE-0005 | L1, L2 | STORAGE-2 | Insertion of sensitive data into logs | AC-11-10 (3.2.1, 3.8.4, 3.9.2) |
+| MASWE-0005 | L1, L2 | STORAGE-2 | Insertion of sensitive data into logs | AC-11-10 (3.2.1, 3.8.4, 3.9.2): **built** for the browser build's source (ADR-570: the app writes nothing to the console, `test/what-it-holds.test.ts`; the store's refusals name only the shelf) |
 | MASWE-0006 | L1, L2 | STORAGE-2 | Sensitive data not excluded from backup | AC-11-09 (3.8.1, 3.9.1) |
 
 ### CRYPTO
 
 | Weakness | Profile | Controls | Title | Answer |
 |---|---|---|---|---|
-| MASWE-0007 | L1, L2 | CRYPTO-1, 2 | Improper encryption | AC-11-07: the browser build's AES-GCM by WebCrypto (3.2.1), the native store's SQLCipher (3.8.1, 3.9.1), each cipher named by its task's ADR from `CHECKLIST-API.md` V11's table or the store's own |
+| MASWE-0007 | L1, L2 | CRYPTO-1, 2 | Improper encryption | AC-11-07: the browser build's AES-GCM by WebCrypto (3.2.1), the native store's SQLCipher (3.8.1, 3.9.1), each cipher named by its task's ADR from `CHECKLIST-API.md` V11's table or the store's own: **the browser build's built** (ADR-570: AES-256-GCM, a random 96-bit nonce each seal, bound to its shelf and name; HMAC-SHA-256 names) |
 | MASWE-0008 | L1, L2 | CRYPTO-1 | Improper hashing | AC-11-44 (SHA-256 of a photograph's original, 3.6.1); AC-11-19 (Argon2id, 3.2.4) |
 | MASWE-0009 | L1, L2 | CRYPTO-1, 2 | Improper use of message authentication code | AC-11-21: the offline sign-in's proof, an HMAC keyed by the first slow hash, kept only until sign-out (3.2.4; the server's half ✅ AC-10-90) |
 | MASWE-0010 | L1, L2 | CRYPTO-1, 2 | Improper generation of cryptographic signatures | AC-11-11: ECDSA P-256 by the platform, DER (3.2.2, 3.8.1, 3.9.1); the server's half ✅ AC-10-44, 45 |
 | MASWE-0011 | L1, L2 | CRYPTO-1 | Improper verification of cryptographic signature | not used: the phone checks no signature of its own; the server's identity is TLS's (NETWORK-1) |
 | MASWE-0012 | L1, L2 | CRYPTO-1 | Improper random number generation | AC-11-07 (the data key, random), AC-11-11 (keys made by the platform); the UUIDv7 maker draws from the platform's cryptographic source: **built** (ADR-565: `packages/domain/src/ids.ts`, Web Crypto's `getRandomValues`; `packages/domain/test/ids.test.ts`) |
 | MASWE-0013 | L1, L2 | CRYPTO-2 | Improper cryptographic key generation | AC-11-07, 11 |
-| MASWE-0014 | L1, L2 | CRYPTO-2 | Improper cryptographic key derivation | AC-11-19 (Argon2id under the entry's salt); AC-11-08 (the data key comes from no password) |
+| MASWE-0014 | L1, L2 | CRYPTO-2 | Improper cryptographic key derivation | AC-11-19 (Argon2id under the entry's salt); AC-11-08 (the data key comes from no password: **built** for the browser build, ADR-570: generated, never imported or derived, `test/what-it-holds.test.ts`) |
 | MASWE-0015 | L2 | CRYPTO-2 | Cryptographic key rotation not implemented | **proposed** (§4.4): a key lives one enrolment: the store's key and the device key are erased at the wipe (AC-11-34) and the server revokes the device key at turn-in or after the firm's time (✅ ADR-488, 520); a phone enrolled again makes new ones |
 | MASWE-0016 | L2 | CRYPTO-2, AUTH-2, 3 | Cryptographic key access not restricted | AC-11-07, 11 (this device only, usable by the app alone); how soon after the phone starts the key opens is 3.8.1's and 3.9.1's ADR (proposed: after the phone's first unlock, so a background sync can run) |
 | MASWE-0017 | L2 | CRYPTO-2 | Device secure lock not enforced | AC-11-73: told, never refused (3.8.1, 3.9.1). ARCHITECTURE §7.2 (5) recommends a screen lock and leaves it to the firm's device management; the app says so, it doesn't stop work |

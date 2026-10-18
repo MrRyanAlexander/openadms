@@ -893,6 +893,10 @@ So the protection can't rest on the password. It rests on these:
   syncing: they stay on the device until it is set up again (ADR-056).
 - **Browser test build:** IndexedDB, encrypted with a WebCrypto key that can't be exported. It's
   good enough for testing, but it isn't device-grade, so real work never uses it.
+  ⚠️ *ADR-570 (agent default), as built: one interface, `PhoneStore` (`apps/field/src/store/`), that
+  every build's store implements; the browser build's seals each value with AES-256-GCM and names
+  it with HMAC-SHA-256, two keys WebCrypto makes non-exportable from nothing typed, so no value or
+  id is in the clear; an erase takes the keys first.*
 - **Device management software** (MDM) is the firm's choice. We recommend it (a passcode on the
   phone, remote wipe), but Open ADMS doesn't require it.
 

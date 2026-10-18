@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-18, task 3.1.4 (ADR-567…569), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 12 min 02 s; every count below as seen.
+**Seen whole:** 2026-10-18, task 3.2.1 (ADR-570), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 10 min 20 s; every count below as seen.
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 193 passed (193)`, `Tests 3324 passed (3324)`.**
+**`Test Files 194 passed (194)`, `Tests 3331 passed (3331)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 51 | 5 | nothing (what the field app holds 7, its words 23 (each screen of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+| `apps/field` | 58 | 6 | nothing (what the field app holds 10, ADR-565, 570: no web-layer storage, no key from a secret, no console; the store's sealing 4, ADR-570; its words 23 (each screen of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -68,7 +68,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**16 browser tests**, `16 passed (14.8s)`: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565) and the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text). The field app built first (`dist/web/assets/index-….js` about 516 kB, its stylesheet about 9 kB), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 7 of 7 screens checked, in 60 checks; 0 found.`, **7 screens**: the app's `home` and `shell`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
+**20 browser tests**, `20 passed (15.2s)`: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text) and the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570). The field app built first (`dist/web/assets/index-….js` about 516 kB, its stylesheet about 9 kB), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 7 of 7 screens checked, in 64 checks; 0 found.`, **7 screens of the app**, its prototype's among them: the app's `home` and `shell`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
 
 ## `pnpm security`
 
@@ -88,7 +88,7 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm chain`, the whole chain, 12 min 02 s (seen 2026-10-18; `pnpm test` 4 min 12 s of it, `pnpm scenarios` 4 min 58 s, `pnpm e2e` 18 s).
+`pnpm chain`, the whole chain, 10 min 20 s (seen 2026-10-18; `pnpm test` 4 min 16 s of it, `pnpm scenarios` 3 min 19 s, `pnpm e2e` 17 s).
 `pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

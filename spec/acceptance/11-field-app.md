@@ -58,10 +58,10 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 
 | ID | Scenario | From | Answers | Proven at | Passing |
 |---|---|---|---|---|---|
-| AC-11-07 | **Given** `P1-COL-1` holds three days of Ana's tickets, her photographs waiting to go, its lists, its login list and an archived queue of Sam's, **then** all of it is in one encrypted store whose random data key is held in the phone's secure storage, this-device-only; none of it is in a plain file, the web layer's storage (`localStorage`, cookies) or a cache | ARCHITECTURE §8, §17; ADR-096; AC-02-19 · REQ-302 | MASVS-STORAGE-1 · MASVS-CRYPTO-1, 2 | browser (3.2.1: IndexedDB, a WebCrypto key that can't be exported); iPhone (3.8.1); Android (3.9.1) | |
-| AC-11-08 | **Given** that store, **then** its key is made from neither a monitor's password nor the master passcode: with Ana gone home, a supervisor syncs and turns in her phone, and every record of hers arrives | ARCHITECTURE §8; ADR-096; AC-02-19 · REQ-302, 313 | MASVS-STORAGE-1 · MASVS-CRYPTO-2 | browser (3.2.1, 3.4.3) | |
+| AC-11-07 | **Given** `P1-COL-1` holds three days of Ana's tickets, her photographs waiting to go, its lists, its login list and an archived queue of Sam's, **then** all of it is in one encrypted store whose random data key is held in the phone's secure storage, this-device-only; none of it is in a plain file, the web layer's storage (`localStorage`, cookies) or a cache | ARCHITECTURE §8, §17; ADR-096; AC-02-19 · REQ-302 | MASVS-STORAGE-1 · MASVS-CRYPTO-1, 2 | browser (3.2.1: IndexedDB, a WebCrypto key that can't be exported); iPhone (3.8.1); Android (3.9.1) | 🟡 the browser part, 3.2.1 (ADR-570): `apps/field/e2e/store.e2e.ts`, `test/sealing.test.ts`, `test/what-it-holds.test.ts` (no web-layer storage); iPhone 3.8.1, Android 3.9.1 |
+| AC-11-08 | **Given** that store, **then** its key is made from neither a monitor's password nor the master passcode: with Ana gone home, a supervisor syncs and turns in her phone, and every record of hers arrives | ARCHITECTURE §8; ADR-096; AC-02-19 · REQ-302, 313 | MASVS-STORAGE-1 · MASVS-CRYPTO-2 | browser (3.2.1, 3.4.3) | 🟡 its key from nothing typed, 3.2.1 (ADR-570): `apps/field/e2e/store.e2e.ts`, `test/sealing.test.ts`, `test/what-it-holds.test.ts`; the supervisor's sync and turn-in, 3.4.3 |
 | AC-11-09 | **Given** an iPhone or an Android phone, **then** the app's data is left out of iCloud and Google backups and out of a move to a new phone (the iOS "exclude from backup" flag and this-device-only Keychain items; Android's backups off and its data-extraction rules); a phone restored from a backup holds none of it | ARCHITECTURE §8; ADR-096 · REQ-302 | MASVS-STORAGE-2 | iPhone (3.8.1); Android (3.9.1) | |
-| AC-11-10 | **Given** any failure, **then** nothing secret reaches the phone's logs or a crash report: no password, master passcode, token, key or login-list entry | ARCHITECTURE §16; non-negotiable "never log a secret" · REQ-323 | MASVS-STORAGE-2 | browser (3.2.1); iPhone (3.8.4); Android (3.9.2) | |
+| AC-11-10 | **Given** any failure, **then** nothing secret reaches the phone's logs or a crash report: no password, master passcode, token, key or login-list entry | ARCHITECTURE §16; non-negotiable "never log a secret" · REQ-323 | MASVS-STORAGE-2 | browser (3.2.1); iPhone (3.8.4); Android (3.9.2) | 🟡 the browser part, 3.2.1 (ADR-570): nothing in the app writes to the console (`test/what-it-holds.test.ts`), the store's refusals name only the shelf (`test/sealing.test.ts`, `e2e/store.e2e.ts`); iPhone 3.8.4, Android 3.9.2 |
 
 ## C. The phone's identity
 
@@ -105,7 +105,7 @@ phone **warns and never blocks** (ADR-052): no scenario here has the phone refus
 | AC-11-31 | **Given** a record answered `NOT_SAVED`, **then** it stays on the phone, shown as not saved with the server's words ("… Held on the server for review."); it is never dropped, and sent again it carries the same fingerprint | ADR-467, 468, 472; C128, C132; AC-05-46 · REQ-308c | — | suite and browser (3.4.1) | |
 | AC-11-32 | **Given** a sync, **then** its records go first and photographs' files after; a photograph answered `OWNER_NOT_SAVED` is kept and sent again once its record is saved | ADR-481…483; C137 · REQ-308, 316 | — | suite (3.4.2) | |
 | AC-11-33 | **Given** a photograph's file, **then** it goes in parts no larger than `MEDIA_PART_BYTES_AT_MOST` (smaller on a poor signal); **when** the app restarts mid-file, **then** it asks the server where the file stands and goes on from there | ADR-479…483; C137, C138 · REQ-316 | — | suite (3.4.2) | |
-| AC-11-34 | **When** a supervisor turns in `P1-COL-1` and the server answers `wipe: false`, **then** the phone shows the server's words and what it still lacks, and wipes nothing; **when** it answers `wipe: true`, **then** the phone erases its store's data key and its device key, so nothing it held can be read (a cryptographic erase, NIST SP 800-88), and opens at enrolment | ARCHITECTURE §8; ADR-488…490; C141, C170; AC-02-58 · REQ-313 | MASVS-STORAGE-1 · MASVS-CRYPTO-2 | browser (3.4.3); iPhone (3.8.4); Android (3.9.2) | |
+| AC-11-34 | **When** a supervisor turns in `P1-COL-1` and the server answers `wipe: false`, **then** the phone shows the server's words and what it still lacks, and wipes nothing; **when** it answers `wipe: true`, **then** the phone erases its store's data key and its device key, so nothing it held can be read (a cryptographic erase, NIST SP 800-88), and opens at enrolment | ARCHITECTURE §8; ADR-488…490; C141, C170; AC-02-58 · REQ-313 | MASVS-STORAGE-1 · MASVS-CRYPTO-2 | browser (3.4.3); iPhone (3.8.4); Android (3.9.2) | 🟡 the store's erase, keys first, 3.2.1 (ADR-570): `apps/field/e2e/store.e2e.ts`; the turn-in's wipe, 3.4.3 |
 | AC-11-35 | **Given** `P1-TWR-LF` was marked lost and its key's time has run, **when** its proof is answered `MASTER_PASSCODE_NEEDED`, **then** the phone asks whoever holds the passcode, sends it beside its signature, and then syncs and turns in | ADR-530; C141 · REQ-313, 124c | MASVS-AUTH-3 | browser (3.4.3) | |
 
 ## G. What every capture shares
@@ -210,9 +210,9 @@ the layer its own row names; the field app's part by the task below, under a tes
 
 | | Scenarios | Passing |
 |---|---|---|
-| Sections A…K, new | 73 (AC-11-61…73 by task 3.1.1, ADR-562) | 5 whole (AC-11-01, 02, 04, 06, task 3.1.2, ADR-565; AC-11-51, task 3.1.3, ADR-566), 7 in part (AC-11-03, 61, 69, 72, task 3.1.2; AC-11-52, 55, 56, task 3.1.4, ADR-568) |
-| Section L, a field app part of files 02…10 | 50 | 0 (each still passes at the layers it already does) |
-| **Phase 3's** | **123** | **5, and 7 in part** |
+| Sections A…K, new | 73 (AC-11-61…73 by task 3.1.1, ADR-562) | 5 whole (AC-11-01, 02, 04, 06, task 3.1.2, ADR-565; AC-11-51, task 3.1.3, ADR-566), 11 in part (AC-11-03, 61, 69, 72, task 3.1.2; AC-11-52, 55, 56, task 3.1.4, ADR-568; AC-11-07, 08, 10, 34, task 3.2.1, ADR-570) |
+| Section L, a field app part of files 02…10 | 50 | 1 in part (AC-02-19's browser build, task 3.2.1, ADR-570); each still passes at the layers it already does |
+| **Phase 3's** | **123** | **5, and 12 in part** |
 
 ## Left to the task that builds it
 
