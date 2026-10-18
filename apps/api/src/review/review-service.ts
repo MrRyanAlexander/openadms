@@ -37,6 +37,7 @@ import {
   type WorkflowName,
 } from '@open-adms/domain';
 
+import { lockedTicketOf } from '../process/database-refusal.ts';
 import { type Outcome, QueueingService, Refused, type Warn } from '../setup/setup-service.ts';
 
 export type Tx = Prisma.TransactionClient;
@@ -177,20 +178,33 @@ export abstract class ReviewService extends QueueingService {
   }
 
   // The same for a mark that asks for no run: a QC status, a lock, a batch.
-  protected mark<T>(
+  //
+  // A lock made by somebody else after the work asked whether its ticket is locked and before it
+  // wrote is held by the database's own guard (ADR-534 (10)), which undoes all of it: that is
+  // answered as the question would have been, in the same words, never as the server's failure
+  // (ADR-554; C174 (a)).
+  protected async mark<T>(
     person: string,
     permission: ReviewPermission,
     note: string | undefined,
     work: (tx: Tx, warn: Warn) => Promise<T>,
   ): Promise<Outcome<T>> {
     const reason = note?.trim() ?? '';
-    return this.writeAs(
-      { actorId: person, source: 'BACK_OFFICE', ...(reason === '' ? {} : { reason }) },
-      async (tx, warn) => {
-        await ReviewService.permitted(tx, person, permission);
-        return work(tx, warn);
-      },
-    );
+    try {
+      return await this.writeAs(
+        { actorId: person, source: 'BACK_OFFICE', ...(reason === '' ? {} : { reason }) },
+        async (tx, warn) => {
+          await ReviewService.permitted(tx, person, permission);
+          return work(tx, warn);
+        },
+      );
+    } catch (error) {
+      const ticketNumber = lockedTicketOf(error);
+      const refusal =
+        ticketNumber === undefined ? null : new LockedTicket([ticketNumber]).refusal();
+      if (refusal === null) throw error;
+      return { saved: false, refusal };
+    }
   }
 
   // Refuses a person who may not do it, before anything is changed.
@@ -262,7 +276,7 @@ export abstract class ReviewService extends QueueingService {
 
   // Refuses, in the domain's words, a change to a ticket while a lock stands on it, asked before
   // anything is written: the database holds a locked ticket's field events and their lines itself
-  // (ADR-534 (10)), so a write there would be refused as the server's failure, never in words.
+  // (ADR-534 (10)), and its guard then answers only a lock made since, told the same (`mark`).
   protected static async refusedIfLocked(
     tx: Tx,
     projectId: string,

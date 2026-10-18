@@ -25,9 +25,10 @@ import {
   type Endpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Corrections } from '../src/review/corrections.ts';
+import { ReviewService, type TicketNamed } from '../src/review/review-service.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { audited, jobsFor, luisHolds, newId, notTaken, p1WithTickets } from './support/review.ts';
@@ -415,6 +416,70 @@ describe('a field event corrected', () => {
       );
     });
   });
+});
+
+describe('a lock made while a correction is under way', () => {
+  // The service's own question, whether the ticket is locked (protected: reached here alone).
+  type Asks = (tx: Tx, projectId: string, tickets: readonly TicketNamed[]) => Promise<void>;
+  const asking = ReviewService as unknown as { refusedIfLocked: Asks };
+
+  // Dana locks the ticket after the service asked and before it wrote: her lock lands between
+  // the two, as when two people act at the same moment (C174 (a)).
+  const lockedBetween = (unitRateTicketId: string, lockedById: string) => {
+    const asked = asking.refusedIfLocked.bind(ReviewService);
+    return vi.spyOn(asking, 'refusedIfLocked').mockImplementationOnce(async (tx, ...rest) => {
+      await asked(tx, ...rest);
+      const { projectId } = await tx.fieldEvent.findUniqueOrThrow({
+        where: { id: unitRateTicketId },
+      });
+      await tx.invoiceLock.create({
+        data: {
+          projectId,
+          fieldEventId: unitRateTicketId,
+          fieldEventKind: 'UNIT_RATE',
+          lockedById,
+        },
+      });
+    });
+  };
+
+  for (const [what, endpoint] of [
+    ['its field event', correctFieldEventEndpoint],
+    ['an item line', correctItemLineEndpoint],
+  ] as const) {
+    it(`AC-10-121 Luis corrects ${what} of unit rate ticket 301001 as Dana locks it as invoiced: the database's guard holds the ticket, and he is told in the service's own words that it is locked, never as the server's failure; nothing of his is kept`, async () => {
+      await world(async (served, tx, who, within) => {
+        const p = await p1WithTickets(served, tx, within, who);
+        const dryer = await tx.itemName.findFirstOrThrow({ where: { name: 'Dryer' } });
+        const luis = await luisHolds(served, tx, who.luis, 'CORRECT');
+        const race = lockedBetween(p.unitRate.id, who.dana);
+        try {
+          // The database's guard ends the test's piece of work: this is its last request.
+          const answer =
+            endpoint === correctFieldEventEndpoint
+              ? await ask(served, luis, endpoint, {
+                  ids: { fieldEventId: p.unitRate.id },
+                  payload: { changes: { notes: 'Two dryers on the photograph' } },
+                })
+              : await ask(served, luis, endpoint, {
+                  ids: { fieldEventId: p.unitRate.id, itemNameId: dryer.id },
+                  payload: { quantity: 2 },
+                });
+          expect(race).toHaveBeenCalledTimes(1);
+          expect(told(answer)).toEqual([422, 'NOT_SAVED']);
+          expect(notSaved(answer)).toEqual([
+            'LOCKED_AS_INVOICED',
+            'Ticket 301001 is locked as invoiced: unlock it first. Nothing was changed.',
+          ]);
+          const logged = served.lines.join('');
+          expect(logged).not.toContain('INTERNAL_ERROR');
+          expect(logged).not.toContain('A request failed inside the server.');
+        } finally {
+          race.mockRestore();
+        }
+      });
+    });
+  }
 });
 
 describe('a renumber', () => {

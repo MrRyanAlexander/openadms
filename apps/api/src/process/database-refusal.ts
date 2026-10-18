@@ -304,6 +304,21 @@ export function databaseRefusalOf(thrown: unknown): DatabaseRefusal | undefined 
   };
 }
 
+// The ticket a lock as invoiced held still, where the database's own guard on a locked ticket's
+// field events and their lines refused a write (ADR-534 (10)); undefined for anything else. A
+// review service asks first and refuses in words, so the guard answers only a lock made by
+// somebody else between that question and the write; the service tells it in the same words
+// (review-service.ts; ADR-552 (4), 554; C174 (a)). The guard is a trigger, which the driver hands
+// on with no constraint's name: it is known by its own words, which never leave the server.
+export function lockedTicketOf(thrown: unknown): string | undefined {
+  if (typeof thrown !== 'object' || thrown === null) return undefined;
+  if ((thrown as { name?: unknown }).name !== 'PrismaClientKnownRequestError') return undefined;
+  const cause = causeOf(thrown);
+  const message = cause?.originalMessage;
+  if (cause?.originalCode !== '23001' || typeof message !== 'string') return undefined;
+  return /^Ticket (\S+) is locked as invoiced: its field events don't change\./.exec(message)?.[1];
+}
+
 // The closed project's guard (ADR-529 (b)) is a trigger, which the driver hands on with no
 // constraint's name: it is known by its own words, which never leave the server, as the last
 // admin's guard is (people.ts).

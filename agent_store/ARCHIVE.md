@@ -4742,3 +4742,16 @@ at commit `1cf915f`:
   read, a phone's held budget, sign-in by one indexed equality, map files read in a thread, an
   untrusted proxy logged; the threat model read again whole. The user answered its three
   questions (ADR-551): the new flags kept, no second thing to enrol, the firm's own passcode.
+
+## Moved 2026-10-17 (ADR-554)
+
+Task 2.9.2 closed (ADR-554); this bullet of the Handoff's "Where things stand", a finished piece of
+housekeeping, was taken out to keep `NEXT.md` under its 20 KB (ADR-532). As it stood at commit
+`e7a5b74`:
+
+### From `agent_store/NEXT.md`, the Handoff's "Where things stand"
+
+- **Housekeeping, 2026-10-15 (ADR-532), at the user's word:** `SUMMARY.md` cut by topic (432 → 202
+  KB, every rule kept with its ADRs), `BACKLOG.md`'s register live-only and its done phases one
+  line a task (452 → 54 KB), this page trimmed; the text that left each moved word for word to
+  `agent_store/ARCHIVE.md`, "Moved 2026-10-15 (ADR-532)". No product rule changed.

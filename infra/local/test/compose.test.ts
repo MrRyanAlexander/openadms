@@ -189,9 +189,9 @@ describe('AC-10-67 every hop over TLS (ASVS 5.0 12.3.3; KD-78)', () => {
     });
   });
 
-  it('the address server serves TLS with its own certificate', () => {
+  it('the address server serves TLS with its own certificate, and opens no control socket', () => {
     expect(environment('addresses')['GUNICORN_CMD_ARGS']).toBe(
-      '--certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key',
+      '--certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key --no-control-socket',
     );
   });
 

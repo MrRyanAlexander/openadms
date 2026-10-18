@@ -309,8 +309,10 @@ services:
       POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
       POSTGRES_MAX_WAL_SIZE: 128MB
       # Nominatim's server (gunicorn) takes TLS alone, with the stack's certificate for
-      # `addresses` (KD-78): the image's start script hands its environment through to it.
-      GUNICORN_CMD_ARGS: --certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key
+      # `addresses` (KD-78): the image's start script hands its environment through to it. No
+      # control socket: gunicorn 26 makes one under its user's home, which the `nominatim` user
+      # it runs as can't write, and nothing here uses it (ADR-552 (4), 554).
+      GUNICORN_CMD_ARGS: --certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key --no-control-socket
     shm_size: 512mb
     volumes:
       - ./addresses/start.sh:/opt/open-adms/start.sh:ro

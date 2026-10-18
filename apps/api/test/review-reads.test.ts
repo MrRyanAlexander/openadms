@@ -77,12 +77,12 @@ import { QcMarks } from '../src/review/qc-marks.ts';
 import { ReviewReads } from '../src/review/review-reads.ts';
 import { SetupReads } from '../src/setup/setup-reads.ts';
 import { Voids } from '../src/review/voids.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { jpeg, kimsPhone, Kept } from './support/kims-phone.ts';
 import { passcode } from './support/phones.ts';
 import { p1Boundary, p1Zones } from './support/map-files.ts';
 import { shippedPolicy } from './support/process.ts';
-import { luisHolds, p1WithTickets, reasonNamed } from './support/review.ts';
+import { luisHolds, newId, p1WithTickets, reasonNamed } from './support/review.ts';
 import { danasEmail, long, worldOn, type Served } from './support/served.ts';
 import { ask, p1Priced, saved, told, viewerSignsIn, type Browser } from './support/setup.ts';
 
@@ -527,6 +527,190 @@ describe('a field event, a scale receipt and the records beside a ticket', () =>
       expect(
         logs.dropOffLogs.map((each) => [each.dropOffLog.siteId, each.dropOffLog.residentName]),
       ).toEqual([[landfill.id, 'Carl Jensen']]);
+    });
+  });
+});
+
+// A read's piece of work that keeps every query our code asks of a model, in order, and the
+// most it ever had under way at once on the read's one connection.
+function counted(tx: Tx) {
+  const asked: string[] = [];
+  let running = 0;
+  let mostAtOnce = 0;
+  const models = new Proxy(tx, {
+    get(target, model, receiver) {
+      const delegate: unknown = Reflect.get(target, model, receiver);
+      if (typeof model !== 'string' || model.startsWith('$')) return delegate;
+      if (typeof delegate !== 'object' || delegate === null) return delegate;
+      return new Proxy(delegate, {
+        get(of, method) {
+          const call: unknown = Reflect.get(of, method);
+          if (typeof call !== 'function') return call;
+          return async (...args: unknown[]) => {
+            asked.push(`${model}.${String(method)}`);
+            running += 1;
+            mostAtOnce = Math.max(mostAtOnce, running);
+            try {
+              return await (call as (...a: unknown[]) => Promise<unknown>).apply(of, args);
+            } finally {
+              running -= 1;
+            }
+          };
+        },
+      });
+    },
+  });
+  const within = { $read: <T>(inner: (read: Tx) => Promise<T>) => inner(models) };
+  return {
+    reads: new ReviewReads(within as unknown as Database),
+    asked,
+    mostAtOnce: () => mostAtOnce,
+  };
+}
+
+describe('a page of forms, read in two queries beside it', () => {
+  it('AC-10-122 a page of ROEs, surveys, incidents and drop-off logs takes all its photographs in one query and all its QC marks in another, one after the other: never two a row, never two at once on the read’s one connection; each record is shown its own', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const entered = (endpoint: Parameters<typeof ask>[2], payload: object) =>
+        ask(served, p.dana, endpoint, { ids: p.ids, payload });
+      const roes = [];
+      for (const [roeNumber, parcelId, address] of [
+        ['R-0011', 'APN 14-0321-011', '420 Cedar Ct'],
+        ['R-0012', 'APN 14-0321-012', '14 Heron St'],
+        ['R-0013', 'APN 14-0321-013', '9 Bayline Ave'],
+      ]) {
+        roes.push(
+          saved(
+            createRoeEndpoint,
+            await entered(createRoeEndpoint, {
+              roeNumber,
+              parcelId,
+              address,
+              ownerName: 'Rosa Delgado',
+              signed: true,
+              signedDate: '2026-10-13',
+              fix: { latitude: '39.0891', longitude: '-75.6012' },
+              madeAt: null,
+              notes: null,
+              answers: { answers: {} },
+            }),
+          ).record,
+        );
+      }
+      const shared = {
+        monitorId: who.kim,
+        madeAt: '2026-10-14T13:30:00Z',
+        deviceUtcOffsetMinutes: -240,
+        fix: null,
+        notes: null,
+        answers: { answers: {} },
+        reasonId: await reasonNamed(tx, 'Device failed'),
+      };
+      const preWork = await tx.surveyWorkType.findUniqueOrThrow({ where: { key: 'PRE_WORK' } });
+      const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
+      const siteType = await tx.siteType.findUniqueOrThrow({ where: { key: 'FINAL_DISPOSAL' } });
+      const landfill = saved(
+        createSiteEndpoint,
+        await entered(createSiteEndpoint, {
+          name: 'Bayline County Landfill',
+          shortCode: 'BCL',
+          siteTypeId: siteType.id,
+          takesLoads: true,
+          haulOutsLeaveHere: false,
+          chargesTippingFee: false,
+          ineligibleSite: false,
+          permitNumber: null,
+          latitude: '39.12',
+          longitude: '-75.7',
+          activationDate: '2026-10-12',
+        }),
+      ).record;
+      for (const roe of roes.slice(0, 2)) {
+        saved(
+          createSurveyEndpoint,
+          await entered(createSurveyEndpoint, {
+            ...shared,
+            workTypeId: preWork.id,
+            surveyNumber: null,
+            roeNumber: roe.roeNumber,
+          }),
+        );
+        saved(
+          createIncidentEndpoint,
+          await entered(createIncidentEndpoint, {
+            ...shared,
+            incidentTypeId: damage.id,
+            incidentSubTypeId: null,
+            description: `Mailbox clipped at ${roe.address ?? ''}`,
+            parties: null,
+            address: roe.address,
+            contractorId: null,
+            certNumber: null,
+            roeNumber: null,
+          }),
+        );
+        saved(
+          createDropOffLogEndpoint,
+          await entered(createDropOffLogEndpoint, {
+            ...shared,
+            siteId: landfill.id,
+            residentName: 'Carl Jensen',
+            originAddress: roe.address,
+          }),
+        );
+      }
+      // A photograph of the first ROE, and a QC mark on the second.
+      const [first, second, third] = roes.map((roe) => roe.id);
+      const fingerprint = 'a'.repeat(64);
+      const photo = await tx.photo.create({
+        data: {
+          id: await newId(tx),
+          projectId: p.project.id,
+          roeId: first ?? '',
+          capturedAt: new Date('2026-10-13T15:00:00Z'),
+          deviceUtcOffsetMinutes: -240,
+          originalSha256: fingerprint,
+          uploadedSha256: fingerprint,
+          objectKey: `photographs/${first ?? ''}/signed`,
+        },
+      });
+      const qc = await new QcMarks(within, served.clock, shippedPolicy).set(
+        who.dana,
+        { roeId: second ?? '' },
+        'QC_APPROVED',
+      );
+      expect(qc.saved).toBe(true);
+
+      const asked = { limit: 50 };
+      const reads = [
+        ['roes', 3, (r: ReviewReads) => r.roes(who.luis, p.project.id, asked)],
+        ['surveys', 2, (r: ReviewReads) => r.surveys(who.luis, p.project.id, asked)],
+        ['incidents', 2, (r: ReviewReads) => r.incidents(who.luis, p.project.id, asked)],
+        ['dropOffLogs', 2, (r: ReviewReads) => r.dropOffLogs(who.luis, p.project.id, asked)],
+      ] as const;
+      for (const [name, rows, readOf] of reads) {
+        const reading = counted(tx);
+        const answer = (await readOf(reading.reads)) as unknown as Record<string, unknown[]>;
+        expect(answer[name]?.length, name).toBe(rows);
+        expect(
+          reading.asked.filter((one) => /^(photo|qcMark)\./.test(one)),
+          name,
+        ).toEqual(['photo.findMany', 'qcMark.findMany']);
+        expect(reading.mostAtOnce(), name).toBe(1);
+      }
+      const shown = await new ReviewReads(within).roes(who.luis, p.project.id, asked);
+      expect(
+        shown.roes.map((each) => [
+          each.roe.id,
+          each.photographs.map((one) => one.id),
+          each.qcMark?.status ?? null,
+        ]),
+      ).toEqual([
+        [first, [photo.id], null],
+        [second, [], 'QC_APPROVED'],
+        [third, [], null],
+      ]);
     });
   });
 });

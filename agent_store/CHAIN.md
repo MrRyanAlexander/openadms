@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-17, task 2.9.1 (ADR-553), on the user's Mac, the installation at head: `pnpm chain` 9 of 9 in 12 min 21 s; every count below as seen (what moved: the API's two tests of AC-10-117…119, the sync suite's check 19 in `packages/contracts` and `packages/scenarios`, a check in `certification`).
+**Seen whole:** 2026-10-17, task 2.9.2 (ADR-554), on the user's Mac, the installation at head: `pnpm chain` 9 of 9 in 10 min 24 s; every count below as seen (what moved: the API's four tests of AC-10-121, 122, in `database-refusal.test.ts`, `corrections.test.ts` and `review-reads.test.ts`).
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 187 passed (187)`, `Tests 3257 passed (3257)`.**
+**`Test Files 187 passed (187)`, `Tests 3261 passed (3261)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
 | `packages/domain` | 859 | 45 | nothing |
 | `packages/contracts` | 92 | 9 | nothing |
-| `apps/api` | 752 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 756 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1090 | 49 | `pnpm ready` |
 | `packages/scenarios` | 160 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (26), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |

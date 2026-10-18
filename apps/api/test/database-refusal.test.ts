@@ -3,7 +3,7 @@
 // refusals through the real endpoints, on the real database, are setup-endpoints.test.ts's.
 import { describe, expect, it } from 'vitest';
 
-import { databaseRefusalOf } from '../src/process/database-refusal.ts';
+import { databaseRefusalOf, lockedTicketOf } from '../src/process/database-refusal.ts';
 
 // What Prisma throws, as seen on the installation's database (2026-10-08).
 const thrown = (code: string, cause?: object) => ({
@@ -84,6 +84,43 @@ describe('a refusal by the database’s own constraints', () => {
     expect(databaseRefusalOf(new Error('violates unique constraint "x"'))).toBeUndefined();
     expect(databaseRefusalOf({ code: 'P2002' })).toBeUndefined();
     expect(databaseRefusalOf(undefined)).toBeUndefined();
+  });
+
+  it('AC-10-121 the guard on a locked ticket’s field events and their lines is known by its own words, and names the ticket it held; no other restriction is', () => {
+    const held = (message: string) => lockedTicketOf(postgres('23001', message));
+    expect(
+      held("Ticket 301001 is locked as invoiced: its field events don't change. Unlock it first"),
+    ).toBe('301001');
+    // Still the server's own failure as the filter tells it: the review services answer it.
+    expect(
+      databaseRefusalOf(
+        postgres(
+          '23001',
+          "Ticket 301001 is locked as invoiced: its field events don't change. Unlock it first",
+        ),
+      ),
+    ).toBeUndefined();
+    for (const message of [
+      "A transaction can't be written: its ticket is locked as invoiced. Unlock it first",
+      'audit_record is append-only',
+      'Ticket 301001 is locked as invoiced',
+    ]) {
+      expect(held(message), message).toBeUndefined();
+    }
+    expect(
+      lockedTicketOf(
+        postgres(
+          '23514',
+          "Ticket 301001 is locked as invoiced: its field events don't change. Unlock it first",
+        ),
+      ),
+    ).toBeUndefined();
+    expect(
+      lockedTicketOf(
+        new Error("Ticket 301001 is locked as invoiced: its field events don't change."),
+      ),
+    ).toBeUndefined();
+    expect(lockedTicketOf(undefined)).toBeUndefined();
   });
 
   it('AC-10-33 nothing told to the caller names a constraint, a table or a file', () => {

@@ -188,6 +188,9 @@ type PhotoOwner =
   | 'incidentId'
   | 'dropOffLogId';
 
+// Those of a record that also takes a QC mark of its own.
+type MarkOwner = Exclude<PhotoOwner, 'fieldEventId' | 'scaleReceiptId'>;
+
 export const flagRead = (flag: Flag & { readonly acceptances: FlagAcceptance[] }): FlagRecord => ({
   id: flag.id,
   projectId: flag.projectId,
@@ -601,16 +604,15 @@ export class ReviewReads {
         include: { scopeItems: { orderBy: { id: 'asc' } } },
         ...page,
       });
-      return Promise.all(
-        rows.map(async ({ scopeItems, ...roe }) => ({
-          id: roe.id,
-          shown: {
-            roe: roeRecord(roe),
-            scope: scopeItems.map(roeScopeItemRecord),
-            ...(await ReviewReads.marked(tx, 'roeId', roe.id)),
-          },
-        })),
-      );
+      const marked = await ReviewReads.markedEach(tx, 'roeId', rows);
+      return rows.map(({ scopeItems, ...roe }) => ({
+        id: roe.id,
+        shown: {
+          roe: roeRecord(roe),
+          scope: scopeItems.map(roeScopeItemRecord),
+          ...marked(roe.id),
+        },
+      }));
     }).then(({ rows, next }) => ({ roes: rows, next }));
   }
 
@@ -622,16 +624,15 @@ export class ReviewReads {
         include: { flags: { orderBy: { raisedAt: 'asc' }, include: withAcceptances } },
         ...page,
       });
-      return Promise.all(
-        rows.map(async ({ flags, ...survey }) => ({
-          id: survey.id,
-          shown: {
-            survey: surveyRecord(survey),
-            flags: flags.map(flagRead),
-            ...(await ReviewReads.marked(tx, 'surveyId', survey.id)),
-          },
-        })),
-      );
+      const marked = await ReviewReads.markedEach(tx, 'surveyId', rows);
+      return rows.map(({ flags, ...survey }) => ({
+        id: survey.id,
+        shown: {
+          survey: surveyRecord(survey),
+          flags: flags.map(flagRead),
+          ...marked(survey.id),
+        },
+      }));
     }).then(({ rows, next }) => ({ surveys: rows, next }));
   }
 
@@ -642,15 +643,11 @@ export class ReviewReads {
         orderBy: { id: 'asc' },
         ...page,
       });
-      return Promise.all(
-        rows.map(async (incident) => ({
-          id: incident.id,
-          shown: {
-            incident: incidentRecord(incident),
-            ...(await ReviewReads.marked(tx, 'incidentId', incident.id)),
-          },
-        })),
-      );
+      const marked = await ReviewReads.markedEach(tx, 'incidentId', rows);
+      return rows.map((incident) => ({
+        id: incident.id,
+        shown: { incident: incidentRecord(incident), ...marked(incident.id) },
+      }));
     }).then(({ rows, next }) => ({ incidents: rows, next }));
   }
 
@@ -661,15 +658,11 @@ export class ReviewReads {
         orderBy: { id: 'asc' },
         ...page,
       });
-      return Promise.all(
-        rows.map(async (log) => ({
-          id: log.id,
-          shown: {
-            dropOffLog: dropOffLogRecord(log),
-            ...(await ReviewReads.marked(tx, 'dropOffLogId', log.id)),
-          },
-        })),
-      );
+      const marked = await ReviewReads.markedEach(tx, 'dropOffLogId', rows);
+      return rows.map((log) => ({
+        id: log.id,
+        shown: { dropOffLog: dropOffLogRecord(log), ...marked(log.id) },
+      }));
     }).then(({ rows, next }) => ({ dropOffLogs: rows, next }));
   }
 
@@ -780,15 +773,30 @@ export class ReviewReads {
   }
 
   // A record's photographs' records, in the order they were taken, and its QC mark.
-  private static async marked(
+  private static async marked(tx: Tx, owner: MarkOwner, id: string) {
+    return (await ReviewReads.markedEach(tx, owner, [{ id }]))(id);
+  }
+
+  // The same for each record of a page: one query for all their photographs, then one for all
+  // their QC marks, never two a row nor two at once on the read's one connection (ADR-552 (4),
+  // 554). What each record is shown is then found by its id.
+  private static async markedEach(
     tx: Tx,
-    owner: Exclude<PhotoOwner, 'fieldEventId' | 'scaleReceiptId'>,
-    id: string,
+    owner: MarkOwner,
+    records: readonly { readonly id: string }[],
   ) {
-    const qcMark = await tx.qcMark.findFirst({ where: { [owner]: id } });
-    return {
-      photographs: await ReviewReads.photographs(tx, owner, id),
-      qcMark: qcMark === null ? null : qcMarkRecord(qcMark),
+    const ids = records.map((record) => record.id);
+    const photos = await tx.photo.findMany({
+      where: { [owner]: { in: ids } },
+      orderBy: [{ capturedAt: 'asc' }, { id: 'asc' }],
+    });
+    const qcMarks = await tx.qcMark.findMany({ where: { [owner]: { in: ids } } });
+    return (id: string) => {
+      const qcMark = qcMarks.find((mark) => mark[owner] === id);
+      return {
+        photographs: photos.filter((photo) => photo[owner] === id).map(photographRecord),
+        qcMark: qcMark === undefined ? null : qcMarkRecord(qcMark),
+      };
     };
   }
 
