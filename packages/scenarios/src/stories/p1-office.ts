@@ -29,7 +29,7 @@ import {
   type SyncReceived,
 } from '@open-adms/contracts';
 import type { JobTicket } from '@open-adms/db';
-import { certificationViews, workflows, type PermissionName } from '@open-adms/domain';
+import { certificationViews, workflows, type PermissionName, uuidv7 } from '@open-adms/domain';
 import {
   JobLoop,
   WorkerLog,
@@ -50,7 +50,6 @@ import {
   type PhoneRecord,
   type RecordedPhoto,
 } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import type { OfficeBrowser } from '../office-browser.ts';
 import type { StoryContext } from '../runner.ts';
 import { p1FieldDays } from './p1-field-days.ts';

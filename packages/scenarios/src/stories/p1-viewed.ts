@@ -42,11 +42,11 @@ import {
   type Endpoint,
   type ViewerTicketAnswer,
 } from '@open-adms/contracts';
+import { uuidv7 } from '@open-adms/domain';
 import { MapServers, Mileages, Reconciliation } from '@open-adms/worker';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { OfficeBrowser, OfficePerson } from '../office-browser.ts';
 import { answered, codeOf, type AskedWith } from '../over-https.ts';

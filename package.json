@@ -16,7 +16,7 @@
     "lint": "pnpm generate && NODE_OPTIONS=--max-old-space-size=4096 eslint --max-warnings 0 apps packages infra tools eslint.config.js vitest.config.js && prettier --check apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
     "format": "prettier --write apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
     "licences": "pnpm licenses list --json | node tools/licences/src/index.ts",
-    "security": "pnpm generate && tsc --build && node tools/security/src/index.ts",
+    "security": "pnpm generate && tsc --build && pnpm --filter @open-adms/field build && node tools/security/src/index.ts",
     "chain": "node tools/chain/src/index.ts",
     "local:up": "node infra/local/src/index.ts up",
     "local:down": "node infra/local/src/index.ts down",
@@ -30,6 +30,7 @@
     "installer:admin": "pnpm --silent generate && tsc --build && node apps/api/dist/admin.js",
     "openapi": "pnpm generate && tsc --build && node apps/api/src/openapi.ts && prettier --write apps/api/openapi.json",
     "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
+    "e2e": "pnpm --filter @open-adms/field e2e",
     "clean": "tsc --build --clean"
   },
   "devDependencies": {

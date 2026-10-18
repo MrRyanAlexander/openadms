@@ -10,9 +10,8 @@
 // Not here: the sync that carries a top-up (Phase 2), the phone giving a number to a field event
 // (BACKLOG 1.3.7), an ROE made with its number (1.3.6).
 import { NumberAllocator, type Outcome, ProjectSetup } from '@open-adms/api';
-import { NumberSeriesRules, PhoneNumbers } from '@open-adms/domain';
+import { NumberSeriesRules, PhoneNumbers, uuidv7 } from '@open-adms/domain';
 
-import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
 

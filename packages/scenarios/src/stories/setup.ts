@@ -25,9 +25,8 @@ import {
   RuleSetup,
   SiteSetup,
 } from '@open-adms/api';
-import { IncidentOffers, RuleCriteria } from '@open-adms/domain';
+import { IncidentOffers, RuleCriteria, uuidv7 } from '@open-adms/domain';
 
-import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 
 // A search as the setup screen asks it: what was typed, those in service, the first page.

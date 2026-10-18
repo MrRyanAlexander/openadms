@@ -20,9 +20,9 @@
 import { PhotographFiles } from '@open-adms/api';
 import type { FilePartSent } from '@open-adms/contracts';
 import { deviceKeyActorId } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 
 import { made, NoSignal, type PhoneServer } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';

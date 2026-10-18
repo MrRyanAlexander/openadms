@@ -202,21 +202,53 @@ describe('what every answer carries, and which pages may read one, through the d
     expect(answer.body).not.toContain(sent);
   });
 
-  it('AC-10-05, AC-10-08: a page at the origin the configuration lists is allowed, by name', async () => {
-    const answer = await ask('/health', { headers: { origin: 'https://adms.localhost' } });
+  // The local stack's list (infra/local/compose.yaml): the field app's browser build and its
+  // native builds' origins (AC-11-02; ADR-565).
+  const fieldOrigin = 'https://field.adms.localhost';
+
+  it('AC-10-05, AC-10-08, AC-11-02: a page at the origin the configuration lists is allowed, by name', async () => {
+    const answer = await ask('/health', { headers: { origin: fieldOrigin } });
     expect(answer.status).toBe(200);
-    expect(answer.headers['access-control-allow-origin']).toBe('https://adms.localhost');
+    expect(answer.headers['access-control-allow-origin']).toBe(fieldOrigin);
     const asked = await ask('/health', {
       method: 'OPTIONS',
-      headers: { origin: 'https://adms.localhost', 'access-control-request-method': 'GET' },
+      headers: { origin: fieldOrigin, 'access-control-request-method': 'GET' },
     });
     expect(asked.status).toBe(204);
-    expect(asked.headers['access-control-allow-origin']).toBe('https://adms.localhost');
+    expect(asked.headers['access-control-allow-origin']).toBe(fieldOrigin);
     expect(asked.headers['access-control-allow-methods']).toBe('GET, POST, PUT, PATCH');
     // Its page may send the session's cookies and the CSRF header with a call (ADR-408).
     expect(asked.headers['access-control-allow-credentials']).toBe('true');
     expect(asked.headers['access-control-allow-headers']).toBe(
       'content-type, x-adms-csrf, authorization, x-adms-monitor-session',
+    );
+  });
+
+  it.each(['capacitor://localhost', 'https://localhost'])(
+    'AC-11-02: the native field app’s origin %s is allowed, by name, to send a phone’s token as Authorization',
+    async (origin) => {
+      const asked = await ask('/phones/current', {
+        method: 'OPTIONS',
+        headers: {
+          origin,
+          'access-control-request-method': 'GET',
+          'access-control-request-headers': 'authorization',
+        },
+      });
+      expect(asked.status).toBe(204);
+      expect(asked.headers['access-control-allow-origin']).toBe(origin);
+      expect(asked.headers['access-control-allow-headers']).toContain('authorization');
+      const refused = await ask('/phones/current', {
+        headers: { origin, authorization: 'Bearer not-a-phone-token' },
+      });
+      expect(refused.status).toBe(401);
+      expect(refused.headers['access-control-allow-origin']).toBe(origin);
+    },
+  );
+
+  it('AC-10-08: the stack’s own page, which calls nothing, is no longer listed', async () => {
+    expect(cors(await ask('/health', { headers: { origin: 'https://adms.localhost' } }))).toEqual(
+      [],
     );
   });
 
@@ -233,13 +265,18 @@ describe('what every answer carries, and which pages may read one, through the d
   });
 
   it.each([
-    'https://adms.localhost.evil.example',
-    'http://adms.localhost',
+    'https://field.adms.localhost.evil.example',
+    'http://field.adms.localhost',
     'https://api.adms.localhost',
-    'https://adms.localhost:8443',
-  ])('AC-10-07: the look-alike %s is treated as any origin off the list', async (origin) => {
-    expect(cors(await ask('/health', { headers: { origin } }))).toEqual([]);
-  });
+    'https://field.adms.localhost:8443',
+    'capacitor://localhost.evil.example',
+    'http://localhost',
+  ])(
+    'AC-10-07, AC-11-02: the look-alike %s is treated as any origin off the list',
+    async (origin) => {
+      expect(cors(await ask('/health', { headers: { origin } }))).toEqual([]);
+    },
+  );
 });
 
 describe('the API’s container and the database', () => {

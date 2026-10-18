@@ -10,10 +10,10 @@
 // worker's own on its login.
 import { NumberAllocator, Phones } from '@open-adms/api';
 import { deviceKeyActorId, masterPasscodeActorId, systemActorId } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 import { PhoneKeyBackstop, WorkerLog } from '@open-adms/worker';
 
 import { projectTime } from '../clock.ts';
-import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 import { p1TimeZone as timeZone, setUpP1 } from './p1.ts';
 

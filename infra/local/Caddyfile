@@ -47,11 +47,37 @@
 	}
 }
 
-# The stack's own health page. The web apps get their own hostnames when they arrive.
+# The stack's own health page. Each web app has a hostname of its own (the field app's below).
 adms.localhost {
 	import headers
 	respond /health "ok" 200
 	respond 404
+}
+
+# The field app's browser build (ARCHITECTURE §3, §15; AC-11-01, AC-11-61; ADR-565): the files
+# `vite build` wrote into apps/field/dist/web/, mounted read-only, served as they are; a path that
+# names no file is "not found", and no folder is listed. The page's policy is apps/field/page.ts's,
+# word for word (apps/field/test/page.test.ts): no script but its own, no HTML made from a string,
+# nothing loaded from another origin, one server to talk to, the API, and nothing may frame it.
+# Plain HTTP here is redirected, as at any page's name; it is never answered with the app.
+field.adms.localhost {
+	import headers
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.adms.localhost; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		X-Frame-Options "DENY"
+	}
+	# The page is read again each time; a bundle's name changes with what it holds, so it is kept.
+	@bundle path /assets/*
+	header @bundle Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+	root * /srv/field
+	file_server {
+		hide .*
+	}
 }
 
 # The API (ARCHITECTURE §6; ADR-385): its container publishes no port, so this is the only way in.

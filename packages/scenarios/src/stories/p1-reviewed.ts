@@ -47,14 +47,13 @@ import {
   type Endpoint,
 } from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
-import { NewProjectSettings } from '@open-adms/domain';
+import { NewProjectSettings, uuidv7 } from '@open-adms/domain';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { createHash } from 'node:crypto';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { OfficeBrowser } from '../office-browser.ts';
 import { refusalOf, type AskedWith } from '../over-https.ts';

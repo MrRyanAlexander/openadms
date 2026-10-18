@@ -31,11 +31,11 @@ import {
   type Outcome,
 } from '@open-adms/api';
 import { correctFieldEventEndpoint, revokeCertificationEndpoint } from '@open-adms/contracts';
+import { uuidv7 } from '@open-adms/domain';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import type { PhoneRecord } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import {

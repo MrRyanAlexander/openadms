@@ -14,6 +14,7 @@ import {
   type SyncAnswered,
   type SyncReceived,
 } from '@open-adms/contracts';
+import { uuidv7Time } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from '../src/clock.ts';
@@ -30,7 +31,6 @@ import {
   type PhoneServer,
   type RecordedEvent,
 } from '../src/device.ts';
-import { uuidv7, uuidv7Time } from '../src/ids.ts';
 
 // A phone that picks nothing and makes no number still holds lists: they say its setup version.
 const nothingToPick: PhoneLists = {
@@ -195,22 +195,6 @@ describe('the story clock', () => {
     expect(utcOffsetMinutes('America/New_York', new Date('2026-12-01T12:00:00Z'))).toBe(-300);
     expect(utcOffsetMinutes('UTC', new Date('2026-10-12T12:00:00Z'))).toBe(0);
     expect(utcOffsetMinutes('Asia/Kolkata', new Date('2026-10-12T12:00:00Z'))).toBe(330);
-  });
-});
-
-describe('a phone-made id', () => {
-  it('is a UUIDv7 holding the time it was made', () => {
-    const at = new Date('2026-10-12T12:15:00.123Z');
-    const id = uuidv7(at);
-    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    expect(uuidv7Time(id).toISOString()).toBe('2026-10-12T12:15:00.123Z');
-    expect(uuidv7(at)).not.toBe(id);
-  });
-
-  it('sorts by the time it was made', () => {
-    const earlier = uuidv7(new Date('2026-10-12T12:15:00Z'));
-    const later = uuidv7(new Date('2026-10-12T12:15:00.001Z'));
-    expect([later, earlier].sort()).toEqual([earlier, later]);
   });
 });
 

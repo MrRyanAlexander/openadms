@@ -17,9 +17,9 @@ import {
   type TurnInSent,
 } from '@open-adms/contracts';
 import { systemActorId } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { uuidv7 } from '../src/ids.ts';
 import { pathOf, storiesHostname } from '../src/over-https.ts';
 import { Runner, type Story, type StoryContext } from '../src/runner.ts';
 import { assigned, firstBlocks, synced } from '../src/stories/board.ts';

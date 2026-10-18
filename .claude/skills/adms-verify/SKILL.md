@@ -3,7 +3,7 @@ name: adms-verify
 description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, `pnpm chain` (the whole chain in one command, one summary held against CHAIN.md), the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
 ---
 
-<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448; the whole chain in one command, `pnpm chain`, ADR-533) -->
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448; the whole chain in one command, `pnpm chain`, ADR-533; the field app's browser tests a step of it, `browser-tests.md`, ADR-564, 565) -->
 
 > **This page is the chain: what to run, what each command proves, what a pass looks like.** The
 > rule never changes: **report real observed output, never "should pass".** **Today's counts are in
@@ -22,6 +22,7 @@ is tried on). **Read the one you need before you write a test or a migration the
 | `packages/db` or its tests; a throw-away copy of `adms`; a guard's loosening | `database-tests.md` |
 | `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` (its first section, then the one for your area) |
 | `apps/worker`, the job queue, what queues work | `worker-tests.md` |
+| `apps/field`, its browser end-to-end tests, the field app's page and its headers | `browser-tests.md` (ADR-564, 565) |
 
 # PART 1 — THE CHAIN
 
@@ -41,7 +42,7 @@ is unexpectedly nil` or `ECONNRESET`, `pnpm local:down` and `pnpm ready` once mo
 
 **The whole chain is one command: `pnpm chain`** (ADR-533; `tools/chain`). It runs the steps below
 in this order (`local:up` and `installer:check`, which are `pnpm ready`; the frozen install;
-typecheck; test; scenarios; security; lint; licences), keeps each one's whole output in
+typecheck; test; scenarios; e2e, the field app's browser tests, ADR-564; security; lint; licences), keeps each one's whole output in
 `.cache/adms/chain/NN-<step>.log` (emptied at each run, a run of some steps too), and prints one summary: each step's ✓ or ✗ and its time, its key
 lines, what failed **by name** (a test from Vitest's report, a story's check, a security ✗, an ESLint
 problem by file and place, a licence refused), then **the counts held against `agent_store/CHAIN.md`**
@@ -68,6 +69,7 @@ pnpm openapi                     # after a changed endpoint: writes apps/api/ope
 pnpm local:accounts --show       # the dev stack's accounts, to sign in by hand; without --show it writes them (ADR-412)
 pnpm installer:admin             # on a firm's server: its first admin, or an admin's way back in (asks; ADR-415). Never run it against `adms` to try it: what it writes can't be deleted (its proof is the story `first-admin`)
 pnpm scenarios                   # every story, each on its own database (§1.4)
+pnpm e2e                         # the field app built, then its browser tests through Caddy (browser-tests.md)
 pnpm security                    # audit, secrets scan, env files, grant tests (§1.5); after pnpm test
 ```
 
@@ -79,7 +81,8 @@ pnpm security                    # audit, secrets scan, env files, grant tests (
 | `pnpm lint` | ESLint's type-checked rules (floating promises, `any`, unsafe access…) on all code and tests; Prettier formatting (ADR-257) | `All matched files use Prettier code style!`, exit 0 |
 | `pnpm licences` | No licence refused or undecided (ADR-258, 260) | `N packages: N allowed, 0 refused, 0 undecided.` The package count moves with dependencies (and is one less on Linux: the lockfile's Mac-only packages aren't installed there); **0 refused, 0 undecided** doesn't |
 | `pnpm scenarios` | Every story passes on its own database, which is dropped afterwards (ADR-275; needs the local stack and the installation). **A run of several stories migrates and seeds once**, into a template each story's database is a copy of (ADR-447); the template is dropped at the end | `This run’s template, adms_story_template_…: N migrations applied; seed: …`, per story `passed: N checks, N passed, 0 failed` (each story's count is CHAIN.md's), then `Stories: N passed, 0 failed.`, exit 0 |
-| `pnpm security` | The dependency audit, the secrets scan, the env files, who reaches Postgres (REQ-205, ADR-508) and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, a whole slow hash, an authenticator's secret or a private key as a JWK `0 found`, env files `✓ every one ignored by git and untracked`, four `✓` under "Who reaches Postgres", the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: 12 passed, 0 failed.`**, exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
+| `pnpm e2e` | The field app's browser build, built now, served at `https://field.adms.localhost` through Caddy and driven in Chromium as a phone: its door, its page's policy and headers, the API across origins, its words (ADR-564, 565; `browser-tests.md`; needs `pnpm ready`) | `N passed (…s)`, no `✘`, exit 0 (N is CHAIN.md's) |
+| `pnpm security` | The dependency audit, the secrets scan (of what git would commit, and of the field app as built, AC-11-72), the env files, who reaches Postgres (REQ-205, ADR-508) and the grant tests, with real counts; never prints a secret (§1.5; needs the registry, the local stack and the installation) | `✓ 0 open advisories` (3 accepted by id), secretlint `0 found`, the installation's own secrets `0 found`, a password-like setting `0 found`, a whole slow hash, an authenticator's secret or a private key as a JWK `0 found`, env files `✓ every one ignored by git and untracked`, the built field app's three scans `0 found` (it builds the field app first), four `✓` under "Who reaches Postgres", the grant tests `N files, N tests: N passed, 0 failed` followed by where they were run (§1.5), ending **`Security checks: N passed, 0 failed.`** (N is CHAIN.md's), exit 0. `source-map-js` is forced to 1.2.2 by an override (ADR-356, 372); nothing is let past the seven-day rule (ADR-385). Any ✗ is a finding, never accepted to get green |
 
 **The counts live in `agent_store/CHAIN.md`, and nowhere else** (ADR-445). A task that adds or
 removes tests, a story's checks, a migration or a package replaces the numbers there in the same
@@ -368,7 +371,7 @@ ARCHITECTURE §15's layers arrive with their milestones; each adds its command h
 |---|---|
 | ~~The **golden mission** as a story (REQ-017)~~ | ✅ in the chain since ADR-368: `pnpm scenarios golden-mission` (its count is CHAIN.md's; reconciled by the worker's own job loop alone since ADR-494; its expected figures are `spec/golden/MISSION.md`'s and change only at the user's word) |
 | **Unit** tests of real rules (the capacity math is in, ADR-320; number blocks, ADR-323; volume and apportionment, ADR-343; the checks between field events, on the certification and on time, ADR-344; the checks on place, ADR-346; the checks on quantity, the pay item's settings, unit rate work and ROEs, ADR-347) | Phase 1 |
-| API (begun: `apps/api/test`, ADR-385, §1.3b), browser end-to-end, on device | Phases 2–4 |
+| ~~API~~ (in: `apps/api/test`, ADR-385, §1.3b); ~~browser end-to-end~~ (in: `pnpm e2e`, ADR-564; the back office's in Phase 4); on device | Phases 3 (iPhone, Android: 3.8, 3.9) and 4 |
 
 ## 1.7 Definition of done
 

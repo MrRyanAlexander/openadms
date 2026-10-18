@@ -1,5 +1,8 @@
 // The Zod schemas for every API and sync payload; depends on `domain` only (ARCHITECTURE §18).
 // The wiring probe (BACKLOG 0.2.2) proves Zod runs and `domain` resolves.
+// First, before any schema is made: on a page, Zod makes no code from a string (on-a-page.ts).
+import './on-a-page.ts';
+
 import { workspace as domainWorkspace } from '@open-adms/domain';
 import { z } from 'zod';
 

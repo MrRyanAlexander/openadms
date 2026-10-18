@@ -30,7 +30,7 @@ import {
 } from '@open-adms/api';
 import type { RecordAnswer } from '@open-adms/contracts';
 import type { FieldEventKind, FormDocumentType, NumberSeries } from '@open-adms/db';
-import { NewProjectSettings } from '@open-adms/domain';
+import { NewProjectSettings, uuidv7 } from '@open-adms/domain';
 
 import { projectTime, utcOffsetMinutes } from '../clock.ts';
 import {
@@ -45,7 +45,6 @@ import {
   scanned,
   type SimulatedDevice,
 } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import type { EnrolledPhone } from '../software-key.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { storyMasterPasscode } from '../story-database.ts';

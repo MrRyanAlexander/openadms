@@ -197,6 +197,27 @@ function scenarios(output: string): Reading {
   return { lines: shown, counts, problems };
 }
 
+// Playwright's list reporter (ADR-564): `  ✘  3 e2e/door.e2e.ts:77:1 › AC-11-61: … (205ms)` for a
+// test that failed, then its totals, `  1 failed`, `  6 passed (2.4s)`, and any flaky, skipped
+// or not run. Every test it ran is counted, whatever became of it.
+function browser(output: string): Reading {
+  const lines = plainLines(output).map(tidy);
+  const totals = lines.flatMap((line) => {
+    const found = /^(\d+) (passed|failed|flaky|skipped|did not run)\b/.exec(line);
+    return found?.[1] === undefined ? [] : [{ line, value: Number(found[1]) }];
+  });
+  return {
+    lines: totals.map(({ line }) => line),
+    counts:
+      totals.length === 0
+        ? []
+        : [{ key: 'browser tests', value: totals.reduce((sum, { value }) => sum + value, 0) }],
+    problems: lines
+      .filter((line) => /^[✘x]\s+\d+ /.test(line))
+      .map((line) => line.replace(/^[✘x]\s+\d+ /, '').replace(/ \(\d+(\.\d+)?m?s\)$/, '')),
+  };
+}
+
 function security(output: string): Reading {
   const lines = plainLines(output).map(tidy);
   const counts: Count[] = [];
@@ -253,7 +274,8 @@ function licences(output: string): Reading {
 }
 
 // The chain in the skill's order: `pnpm ready` (the stack up, then the installation re-checked),
-// the frozen install, typecheck, the tests, the stories, the security checks (after the tests, so
+// the frozen install, typecheck, the tests, the stories, the field app's browser tests (ADR-564),
+// the security checks (after the tests, so
 // it reports their grant tests rather than run them again, ADR-446), lint, licences.
 export function chainSteps(options: { readonly fresh: boolean }): readonly Step[] {
   return [
@@ -273,6 +295,7 @@ export function chainSteps(options: { readonly fresh: boolean }): readonly Step[
     { name: 'typecheck', command: ['pnpm', 'typecheck'], stopsTheRun: true, read: typecheck },
     { name: 'test', command: ['pnpm', 'test'], stopsTheRun: false, read: test },
     { name: 'scenarios', command: ['pnpm', 'scenarios'], stopsTheRun: false, read: scenarios },
+    { name: 'e2e', command: ['pnpm', 'e2e'], stopsTheRun: false, read: browser },
     {
       name: 'security',
       command: ['pnpm', 'security', ...(options.fresh ? ['--fresh'] : [])],

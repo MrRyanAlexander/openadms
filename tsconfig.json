@@ -20,6 +20,9 @@
       "path": "apps/field"
     },
     {
+      "path": "apps/field/test"
+    },
+    {
       "path": "packages/db"
     },
     {

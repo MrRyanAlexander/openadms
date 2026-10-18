@@ -9,13 +9,13 @@
 // phone's at the phone's time with its offset, each written as "Master passcode" on that phone;
 // a wrong try on the phone moves no count on the server; and nothing is kept twice.
 import { masterPasscodeActorId } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 
 import { projectTime } from '../clock.ts';
 import type { Story } from '../runner.ts';
 import { storyMasterPasscode } from '../story-database.ts';
 import { assigned, loggedUse, unplanned } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
-import { uuidv7 } from '../ids.ts';
 
 const at = (time: string): string => `2026-10-12T${time}:00-04:00`;
 const when = (time: string): Date => new Date(at(time));

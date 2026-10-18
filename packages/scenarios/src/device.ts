@@ -1,7 +1,7 @@
 // A simulated phone (ARCHITECTURE §7–§10, §15): enrolled, holding the assignment its monitor took at
 // sign-in (so one project) and the numbered version of its lists, and offline. What its monitor records stays on it, in the order recorded, until it finds signal
 // and syncs. It stamps times from its own clock (the story's, plus any error the story gives it)
-// and makes each record's id itself (ids.ts).
+// and makes each record's id itself (`uuidv7`, `packages/domain`'s, as the field app does).
 //
 // **It is a client of the sync contract** (packages/contracts; BACKLOG 2.6.1 part 4; ADR-470): it
 // sends `SyncSent`, its records as JSON and never which phone it is, reads what comes back with
@@ -95,10 +95,10 @@ import {
   PhoneNumbers,
   SizeBands,
   type TreeMeasurement,
+  uuidv7,
 } from '@open-adms/domain';
 
 import { utcOffsetMinutes, type StoryClock } from './clock.ts';
-import { uuidv7 } from './ids.ts';
 import { builtInPolicy } from './policy.ts';
 
 // What a phone sends at a sync is the API's to say (apps/api, src/sync/sent.ts): the harness's

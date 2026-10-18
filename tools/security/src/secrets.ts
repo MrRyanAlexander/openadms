@@ -1,10 +1,12 @@
 // The secrets scan (ARCHITECTURE §15, §16; ADR-276): the files git would commit, looked at three
 // ways, and the env files, which must never be committed. It never prints a secret: a finding is
 // its file, line and rule only. secretlint's own report carries every file's whole content, so it
-// is read here in memory and never passed on.
+// is read here in memory and never passed on. The field app's built bundle is read the same ways
+// (AC-11-72; ADR-565): what a phone is handed is the build, not the source, so a secret a build
+// step wrote into it would be missed by the source's scan alone.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { parseEnv } from 'node:util';
 
 import type { Outcome, Repository } from './repository.ts';
@@ -106,6 +108,23 @@ export class SecretsScan {
   run(): Outcome[] {
     const files = this.repository.committable();
     const title = `Secrets scan (${String(files.length)} files git would commit)`;
+    return [...this.over(title, files), this.exceptions(title, files)];
+  }
+
+  // A build's output, every file under its folder: it must be there, so a scan of nothing
+  // never passes. `pnpm security` builds the field app before it reads it.
+  built(folder: string): Outcome[] {
+    const files = builtFiles(join(this.repository.root, folder)).map((path) =>
+      relative(this.repository.root, path),
+    );
+    const title = `Secrets scan of the built field app (${String(files.length)} files in ${folder})`;
+    if (files.length === 0) {
+      return [{ title, lines: [`✗ nothing built in ${folder}`], ok: false }];
+    }
+    return this.over(title, files);
+  }
+
+  private over(title: string, files: string[]): Outcome[] {
     const found = {
       secretlint: this.secretlint(files),
       ownSecrets: this.ownSecrets(files),
@@ -126,7 +145,6 @@ export class SecretsScan {
         "a whole slow hash, an authenticator's secret or a private key as a JWK",
         found.ofAKind,
       ),
-      this.exceptions(title, files),
     ];
   }
 
@@ -237,6 +255,15 @@ export class SecretsScan {
     }
     return findings;
   }
+}
+
+// Every file under a folder, at any depth; none when the folder isn't there.
+export function builtFiles(folder: string): string[] {
+  if (!existsSync(folder)) return [];
+  return readdirSync(folder, { withFileTypes: true, recursive: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
 }
 
 // Every env file on disk is ignored by git and untracked, so none can be committed.

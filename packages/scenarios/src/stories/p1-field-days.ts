@@ -29,6 +29,7 @@ import {
   type NewAssignment,
 } from '@open-adms/api';
 import type { FieldEventKind, FormDocumentType } from '@open-adms/db';
+import { uuidv7, uuidv7Time } from '@open-adms/domain';
 
 import { projectTime } from '../clock.ts';
 import {
@@ -41,7 +42,6 @@ import {
   type SimulatedDevice,
   typed,
 } from '../device.ts';
-import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
 import { assigned, firstBlocks, taken } from './board.ts';
 import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';

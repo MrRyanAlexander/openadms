@@ -28,6 +28,9 @@ export default defineConfig({
       'tools/security',
       // The chain's one command (ADR-533): how it reads each step and CHAIN.md, needing nothing.
       'tools/chain',
+      // The field app's source and dependencies, read (ADR-565): its tests need nothing. Its
+      // browser tests are Playwright's (`pnpm e2e`, e2e/), never Vitest's.
+      { test: { name: '@open-adms/field', root: 'apps/field', include: ['test/**/*.test.ts'] } },
       // The local stack's map servers (ADR-282): they need the stack up, like the database tests.
       'infra/local',
       // The API as a process (ADR-385): its settings and its error filter need nothing; the door

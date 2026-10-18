@@ -118,6 +118,8 @@ one implementation. With two languages, every rule is written twice and can drif
 | Geodesic math | One TypeScript module using Karney's algorithm (e.g. `geographiclib-geodesic`, the method geopy uses) | ADR-005: geodesic only, one home | PostGIS geography (reconsider when maps arrive) |
 | Tests | A TypeScript test runner, the scenario harness (§15) and a browser end-to-end tool (e.g. Playwright) | Local first | — |
 
+⚠️ *As built (Phase 3, task 3.1.2): the web apps' React is 19.3.0, built by the workspace's Vite with no plugin (ADR-563); the browser end-to-end tool is Playwright 1.64.0 on Chromium's headless shell (ADR-564); the field app's browser build is served by Caddy at `https://field.adms.localhost` (ADR-565).*
+
 | Road routing and addresses | ✅ **Valhalla** (road mileage) and **Nominatim** (address lookup), each its own self-hosted server with OpenStreetMap data for the project's region (ADR-119) | Mileage on every load is the road route, not a straight line (ADR-110) | OSRM (faster, but fastest-by-time and hand-built truck rules) |
 
 ### Road distance and addresses

@@ -24,6 +24,7 @@ describe('the steps', () => {
       ['typecheck', 'pnpm typecheck', true],
       ['test', 'pnpm test', false],
       ['scenarios', 'pnpm scenarios', false],
+      ['e2e', 'pnpm e2e', false],
       ['security', 'pnpm security', false],
       ['lint', 'pnpm lint', false],
       ['licences', 'pnpm licences', false],
@@ -45,7 +46,7 @@ describe('the steps', () => {
       'security',
     ]);
     expect(() => chosenSteps(steps, ['tests', 'lint'])).toThrow(
-      'No step named tests. The steps: ready, local:up, installer:check, install, typecheck, test, scenarios, security, lint, licences.',
+      'No step named tests. The steps: ready, local:up, installer:check, install, typecheck, test, scenarios, e2e, security, lint, licences.',
     );
   });
 });
@@ -235,6 +236,27 @@ describe('each step’s reading', () => {
     ]);
   });
 
+  it('e2e: every browser test counted, whatever became of it, each that failed by name', () => {
+    const output = [
+      'Running 7 tests using 1 worker',
+      '  ✓  1 e2e/door.e2e.ts:33:1 › AC-11-01, AC-11-03: the browser build is served over HTTPS (456ms)',
+      '  ✘  3 e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy (205ms)',
+      '  1) e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy ',
+      '    Error: expect(received).toEqual(expected) // deep equality',
+      '  1 failed',
+      '    e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy ',
+      '  1 skipped',
+      '  5 passed (2.4s)',
+    ].join('\n');
+    const reading = read('e2e', output);
+    expect(reading.counts).toEqual([{ key: 'browser tests', value: 7 }]);
+    expect(reading.lines).toEqual(['1 failed', '1 skipped', '5 passed (2.4s)']);
+    expect(reading.problems).toEqual([
+      'e2e/door.e2e.ts:77:1 › AC-11-61: the page is served with its policy',
+    ]);
+    expect(read('e2e', 'Error: browserType.launch: Executable doesn’t exist').counts).toEqual([]);
+  });
+
   it('licences: the packages counted, each refused or undecided named', () => {
     const output =
       'allowed   MIT                    a@1.0.0\nrefused   SSPL-1.0               b@2.0.0\n' +
@@ -275,6 +297,10 @@ failed.\`**
 |---|---|---|---|---|
 | \`ticket-101001\` | 16 | | \`p1-priced\` | 28 |
 
+## \`pnpm e2e\`
+
+**7 browser tests**, \`7 passed (1.9s)\`
+
 ## \`pnpm security\`
 
 the grant tests **\`48 files, 1083
@@ -296,6 +322,7 @@ describe('CHAIN.md', () => {
       ['scenarios', 'stories', 23],
       ['scenarios', 'checks in ticket-101001', 16],
       ['scenarios', 'checks in p1-priced', 28],
+      ['e2e', 'browser tests', 7],
       ['security', 'grant test files', 48],
       ['security', 'grant tests', 1083],
       ['security', 'security checks', 12],

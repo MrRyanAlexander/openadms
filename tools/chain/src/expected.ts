@@ -44,6 +44,9 @@ export function writtenCounts(page: string): Written[] {
     add('scenarios', `checks in ${cell[1] ?? ''}`, Number(cell[2]));
   }
 
+  const browserTests = section(page, '`pnpm e2e`');
+  add('e2e', 'browser tests', first(browserTests, /\*\*(\d+) browser tests\*\*/));
+
   const checks = section(page, '`pnpm security`');
   const grants = /(\d+) files, (\d+)\s+tests: \d+ passed/.exec(checks);
   if (grants?.[1] !== undefined && grants[2] !== undefined) {

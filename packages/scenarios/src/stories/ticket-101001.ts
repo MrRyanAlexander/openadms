@@ -6,9 +6,10 @@
 // harness: its own database, the story's clock, offline phones, out-of-order sync, the audit trail.
 // Each phone holds its monitor's assignment for the day (ADR-240); the day's dispatch itself is the
 // next story's (dispatch-monday).
+import { uuidv7, uuidv7Time } from '@open-adms/domain';
+
 import { projectTime } from '../clock.ts';
 import { made, scanned } from '../device.ts';
-import { uuidv7, uuidv7Time } from '../ids.ts';
 import type { Story } from '../runner.ts';
 import { assigned, firstBlocks, taken } from './board.ts';
 import { p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';

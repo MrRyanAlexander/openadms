@@ -29,10 +29,9 @@ import {
   revokeCertificationEndpoint,
   setPermissionsEndpoint,
 } from '@open-adms/contracts';
-import { NewProjectSettings, SubNames } from '@open-adms/domain';
+import { NewProjectSettings, SubNames, uuidv7 } from '@open-adms/domain';
 
 import { utcOffsetMinutes } from '../clock.ts';
-import { uuidv7 } from '../ids.ts';
 import { refusalOf } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import { assigned, taken } from './board.ts';

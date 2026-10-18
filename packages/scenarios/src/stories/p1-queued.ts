@@ -33,6 +33,7 @@ import {
   type SyncSent,
 } from '@open-adms/contracts';
 import { ReconciliationJobs, systemActorId, type ReconciliationTrigger } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 import {
   JobLoop,
   MapServers,
@@ -46,7 +47,6 @@ import {
 
 import { onTheWire } from '../device.ts';
 import { refusalOf } from '../over-https.ts';
-import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import {

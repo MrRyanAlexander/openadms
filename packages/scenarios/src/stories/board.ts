@@ -25,10 +25,10 @@ import {
   type SyncSent,
 } from '@open-adms/contracts';
 import type { Database, NumberSeries } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 
 import { utcOffsetMinutes } from '../clock.ts';
 import { onTheWire, type HeldRecord, type RecordedPhoto } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import type { StoryContext, StoryMonitor } from '../runner.ts';
 
 // The assignment's id, once the person who dispatches has written it; a refusal stops the story.

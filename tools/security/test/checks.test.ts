@@ -1,16 +1,23 @@
 // The security checks' own rules (ADR-276): what counts as a password-like setting, which values
 // are the installation's secrets, which audit advisories are accepted, and when an env file could
 // be committed. The scans themselves run in `pnpm security`.
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { acceptedAdvisories } from '../src/audit.ts';
 import { LastTestRun, type VitestReport } from '../src/grants.ts';
+import { Repository } from '../src/repository.ts';
 import {
+  builtFiles,
   configFile,
   EnvFilesCheck,
   exceptedBy,
   passwordLikeSetting,
   secretKindIn,
+  SecretsScan,
   secretsIn,
 } from '../src/secrets.ts';
 
@@ -129,6 +136,35 @@ describe('a secret of a kind Phase 2 brought', () => {
     expect(exceptedBy(`      ${marked}`)).toBe(false);
     expect(exceptedBy(`      ${marked} --   `)).toBe(false);
     expect(exceptedBy('      // a made-up hash')).toBe(false);
+  });
+});
+
+describe('AC-11-72 the field app as built, read by the secrets scan', () => {
+  it('is every file under the build’s folder, at any depth', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'adms-built-'));
+    try {
+      mkdirSync(join(folder, 'assets'));
+      writeFileSync(join(folder, 'index.html'), '<!doctype html>');
+      writeFileSync(join(folder, 'assets', 'index-4f2a.js'), 'export {};');
+      expect(builtFiles(folder)).toEqual([
+        join(folder, 'assets', 'index-4f2a.js'),
+        join(folder, 'index.html'),
+      ]);
+    } finally {
+      rmSync(folder, { recursive: true });
+    }
+  });
+
+  it('fails when nothing is built there: a scan of nothing never passes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'adms-root-'));
+    try {
+      expect(builtFiles(join(root, 'apps/field/dist/web'))).toEqual([]);
+      const [outcome] = new SecretsScan(new Repository(root)).built('apps/field/dist/web');
+      expect(outcome?.ok).toBe(false);
+      expect(outcome?.lines).toEqual(['✗ nothing built in apps/field/dist/web']);
+    } finally {
+      rmSync(root, { recursive: true });
+    }
   });
 });
 

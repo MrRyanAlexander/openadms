@@ -5,5 +5,22 @@
   "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE §7–§12).",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "exports": "./dist/index.js"
+  "scripts": {
+    "build": "tsc --build && vite build",
+    "e2e": "tsc --build && vite build && playwright install --only-shell chromium && playwright test"
+  },
+  "dependencies": {
+    "@open-adms/contracts": "workspace:*",
+    "@open-adms/domain": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.0"
+  }
 }

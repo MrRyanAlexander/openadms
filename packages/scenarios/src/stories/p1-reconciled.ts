@@ -23,6 +23,7 @@ import { ProjectSetup, SiteSetup } from '@open-adms/api';
 import { correctFieldEventEndpoint, renumberFieldEventEndpoint } from '@open-adms/contracts';
 import type { Database, Prisma } from '@open-adms/db';
 import type { MileageEnds } from '@open-adms/domain';
+import { uuidv7 } from '@open-adms/domain';
 import {
   MapServers,
   Mileages,
@@ -33,7 +34,6 @@ import {
 } from '@open-adms/worker';
 
 import { projectTime } from '../clock.ts';
-import { uuidv7 } from '../ids.ts';
 import { localMapServers } from '../map-servers.ts';
 import type { Story } from '../runner.ts';
 import { sentAlone } from './board.ts';

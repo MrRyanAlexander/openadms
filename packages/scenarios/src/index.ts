@@ -22,7 +22,6 @@ export {
   type PhoneSetup,
   type RecordedEvent,
 } from './device.ts';
-export { uuidv7, uuidv7Time } from './ids.ts';
 export { localMapServers } from './map-servers.ts';
 export { builtInPolicy } from './policy.ts';
 export {

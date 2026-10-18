@@ -1,10 +1,10 @@
 // The local stack's helper (ARCHITECTURE §4; BACKLOG 0.2.3; ADR-263). Run from the root:
 //   pnpm local:up      generate the dev passwords if missing, fetch the map extract if missing and
 //                      check it against its pinned SHA-256, make the stack's root and each
-//                      service's certificate where one is missing or ending (ADR-517), start every
-//                      service, wait until all are healthy, make the object store's media bucket
-//                      if it isn't there and see that it keeps versions (ADR-480), check each page
-//                      over HTTPS;
+//                      service's certificate where one is missing or ending (ADR-517), build the
+//                      field app's browser build (ADR-565), start every service, wait until all
+//                      are healthy, make the object store's media bucket if it isn't there and
+//                      see that it keeps versions (ADR-480), check each page over HTTPS;
 //                      then, once `pnpm installer` has made the API's settings, build the API,
 //                      start its container afresh and check its health answer over HTTPS (ADR-385),
 //                      and the same for the worker, whose health answer is asked inside its own
@@ -167,6 +167,7 @@ class LocalStack {
     const made = this.ensureCertificates();
     this.writeStoreIdentities();
     this.writeDatabasePassword();
+    this.fieldApp();
     // A first run builds the road tiles and imports the addresses before either server answers.
     const timeout = this.setting('ADMS_UP_TIMEOUT_S') ?? '1800';
     this.compose(['up', '--detach', '--wait', '--wait-timeout', timeout]);
@@ -174,6 +175,7 @@ class LocalStack {
     this.ensureStoreIdentities();
     this.ensureMediaBucket();
     await this.checkPage('adms.localhost', '/health');
+    await this.checkPage('field.adms.localhost', '/');
     await this.checkPage('routing.adms.localhost', '/status');
     await this.checkPage('addresses.adms.localhost', '/status');
     await this.api();
@@ -194,6 +196,14 @@ class LocalStack {
 
   status(): void {
     this.compose([...withServices, 'ps', '--all']);
+  }
+
+  // The field app's browser build (ADR-565), which Caddy serves from the folder it mounts
+  // read-only: built before Caddy starts, so that folder is this checkout's and never one Docker
+  // makes. It needs no settings: the API it talks to is the stack's own.
+  fieldApp(): void {
+    console.log('Building the field app (tsc --build, vite build in apps/field) …');
+    this.build('pnpm', ['--filter', '@open-adms/field', 'build']);
   }
 
   // `pnpm installer` asks for this alone once it has written the API's settings (the stack is up).
@@ -617,7 +627,11 @@ class LocalStack {
         req.end();
       },
     );
-    console.log(`${url} → ${String(status)} ${body.length > 60 ? `${body.slice(0, 60)}…` : body}`);
+    // A page's answer is HTML over several lines: shown on one.
+    const shown = body.replace(/\s+/g, ' ').trim();
+    console.log(
+      `${url} → ${String(status)} ${shown.length > 60 ? `${shown.slice(0, 60)}…` : shown}`,
+    );
     if (status !== 200) process.exitCode = 1;
   }
 

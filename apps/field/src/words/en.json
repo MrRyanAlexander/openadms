@@ -1,0 +1,15 @@
+{
+  "language": "en",
+  "app": {
+    "name": "Open ADMS Field"
+  },
+  "shell": {
+    "testBuild": "Test build: for trying the app out. Real work never goes on this build.",
+    "notSetUp": "This phone isn’t set up yet.",
+    "server": {
+      "checking": "Looking for the server…",
+      "answers": "The server answers.",
+      "unreachable": "Can’t reach the server right now."
+    }
+  }
+}

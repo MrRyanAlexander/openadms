@@ -67,13 +67,17 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-562)
+### Where things stand (2026-10-18, through ADR-565)
 - **Phase 3 is open (ADR-557)**; task 3.0.1 done: its plan (ADR-558), its REQs moved, the phone's
   scenarios written (`spec/acceptance/11-field-app.md`, ADR-560, for the user's approval), the
   accessibility standard answered (WCAG 2.2 AA; a conformance report per app at its phase's end,
   ADR-559). **Task 3.1.1 done (ADR-562):** the field app's security checklist,
   `spec/CHECKLIST-FIELD.md` (OWASP MASVS v2.1.0 at MAS-L2 + MAS-P, MAS-R not taken; pinning and the
-  app-switcher cover proposed to the user; AC-11-61…73 added, 123 scenarios). **Next: task 3.1.2.**
+  app-switcher cover proposed to the user; AC-11-61…73 added, 123 scenarios). **Task 3.1.2 done
+  (ADR-563…565):** `apps/field` is React 19.3.0 on the pinned Vite; its shell's first screen is
+  served at `https://field.adms.localhost` through Caddy with its policy and headers; Playwright
+  1.64.0's browser tests are `pnpm e2e`, a step of `pnpm chain`; the CORS list is the field app's
+  three origins; the UUIDv7 maker is `packages/domain`'s. **Next: task 3.1.3.**
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -140,7 +144,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 1 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 3 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -226,15 +230,12 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.1.2, the shell, its door and the browser end-to-end layer** (`BACKLOG.md`, Milestone 3.1;
-REQ-006, REQ-301 in part; C24, C86, C31, C112 in part; AC-11-01…04, 06, 61, 69, 72, AC-10-08):
-`apps/field` as React + Vite and the browser end-to-end tool, **each by ADR first** (exact version,
-seven days old, licence, maintenance), the tool a step of `pnpm chain` with its counts in
-`CHAIN.md`; the browser build at `https://field.adms.localhost` through Caddy; its origin and the
-native origins on `ADMS_CORS_ORIGINS`; the page's headers and content security policy (AC-11-61);
-`Authorization` across origins; the translation file; the UUIDv7 maker moved to `packages/domain`;
-the checks that `apps/field` holds no rule, no payload shape and no outside SDK (AC-11-06, 69), and
-the secrets scan over the built bundle (AC-11-72). Read `spec/CHECKLIST-FIELD.md` first.
+**Task 3.1.3, the accessibility check** (`BACKLOG.md`, Milestone 3.1; REQ-324 in part; C41;
+AC-11-51): an automated WCAG 2.2 A/AA checker **by ADR first** (exact version, seven days old,
+licence, maintenance), run on every screen the browser end-to-end tests reach (`pnpm e2e`,
+`apps/field/e2e/`), against the local stack; a screen they don't reach fails the chain; counts in
+`CHAIN.md`. Read `adms-verify`'s `browser-tests.md` first. **From 2026-10-21, C175** (React 19.3.1
+and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

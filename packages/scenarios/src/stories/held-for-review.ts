@@ -27,9 +27,9 @@ import {
   type RecordAnswer,
 } from '@open-adms/contracts';
 import { deviceKeyActorId, deviceKeyActorName } from '@open-adms/db';
+import { uuidv7 } from '@open-adms/domain';
 
 import { made, onTheWire, type SimulatedDevice } from '../device.ts';
-import { uuidv7 } from '../ids.ts';
 import type { Story } from '../runner.ts';
 import { assigned, firstBlocks, synced, taken } from './board.ts';
 import { danasEmail, p1TimeZone as timeZone, setUpP1 } from './p1.ts';
