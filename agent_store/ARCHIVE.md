@@ -4726,3 +4726,19 @@ ADR-540). Each table below is as it stood in `agent_store/SUMMARY.md` §4 at com
 | 323…327 (1.3) | `R-0007`; 100 ROE numbers a phone; control ranges never share a number; a cert series only once seeded; a typed number with no reason received; a typed capacity only on a hand-keyed truck; half a GPS fix refused; no detail of a field event required; a disposal with both a load call and a count received; suffix letters; carried tickets as written; a receipt's weights as written; no database limit of 8 photographs; viewers see a photograph's record, never its place; an ROE carries no setup version; no definition, empty answers; a photograph field's answer its id |
 | 214, 215, 205, 208, 209, 227…229, 236, 239, 241, 243…245, 247, 255, 262, 263, 266, 268, 273, 275, 276, 278, 280…286, 296…298, 301…303, 305, 306, 308…311 | the older defaults and readings (each ADR's own list; ADR-240's reopenable field event is overturned by ADR-477) |
 | 234 | `spec/CONVENTIONS.md`'s names are agent defaults; overturn any |
+
+## Moved 2026-10-17 (ADR-552)
+
+Phase 2 reopened a second time (ADR-552); the Handoff's "Where things stand" took its new first
+bullet, and this one was cut to a line to keep `NEXT.md` under its 20 KB (ADR-532). As it stood
+at commit `1cf915f`:
+
+### From `agent_store/NEXT.md`, the Handoff's "Where things stand"
+
+- **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole** at
+  the user's word "resolve all of these" (ADR-541…550): the passcode can't be held shut by a
+  stranger, bursts are counted try by try, one key a purpose with the passcode's own sealed seed, a
+  record naming somebody who didn't hold the phone flagged, the audit log and the jobs set aside
+  read, a phone's held budget, sign-in by one indexed equality, map files read in a thread, an
+  untrusted proxy logged; the threat model read again whole. The user answered its three
+  questions (ADR-551): the new flags kept, no second thing to enrol, the firm's own passcode.

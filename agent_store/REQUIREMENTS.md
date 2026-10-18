@@ -23,6 +23,10 @@ code present *and* covered by a passing test.
 > server work moved on or left "no task yet". ADR-518's exit is withdrawn; REQ-210…217 are new
 > (22 in all), each named by its Milestone 2.8 task. Phase 3 stays gated until Phase 2's exit is
 > met again.
+>
+> **2026-10-17 (ADR-552): Phase 2 is reopened a second time at the user's word**, after a
+> diagnostic found a phone's lists hold none of what a certification picks. ADR-537's exit is
+> withdrawn; REQ-218 is new (23 in all), named by task 2.9.1.
 
 ---
 ## Phase 0 — Foundation and security ✅ done 2026-10-01 *(ADR-093…103, `spec/ARCHITECTURE.md`)*
@@ -204,7 +208,7 @@ code present *and* covered by a passing test.
 **Phase 1's count (ADR-371): 98 REQs, 93 ticked from runs that were seen, 5 moved to the phase that finishes them; none open.**
 
 ---
-## Phase 2 — API and sync 🔄 **reopened 2026-10-14 (ADR-519)** *(opened by the user 2026-10-06, ADR-376; moved here word for word from `REQUIREMENTS-LATER.md`; its exit of ADR-518 withdrawn)*
+## Phase 2 — API and sync 🔄 **reopened 2026-10-14 (ADR-519), and again 2026-10-17 (ADR-552)** *(opened by the user 2026-10-06, ADR-376; moved here word for word from `REQUIREMENTS-LATER.md`; its exits of ADR-518 and ADR-537…540 withdrawn)*
 
 > **2026-10-06 (ADR-377): each of the 14 REQs below is named by the `BACKLOG.md` task that ticks
 > it** (the list is at the end of BACKLOG's Phase 2 plan). Railway is the demo deploy's host
@@ -249,10 +253,13 @@ code present *and* covered by a passing test.
 - [x] **REQ-216** ✅ *(2026-10-15, task 2.8.7, ADR-534: every item below at the API, each under a test named by its scenario, AC-03-61…65, AC-08-68…73, AC-10-92; an acceptance taken back also as the story `p1-voided`)* **Every captured field is correctable by permission, and the back office makes what a phone couldn't**: an ROE's number (its records re-pointed), the answers to a form's own fields, a certification's driver, tag, vehicle type, prime and subs, a box's shape, sign and feature, a box added or taken off; un-revoking a certification; an acceptance taken back; an ROE, a survey, an incident and a drop-off log created in the back office; a certification created (or replaced) in the back office from the paper sheet when the phone failed (the user, ADR-521). REQ-105g's API half. *(ADR-051, 156, 166, 433; C79, C80, C106, C107; task 2.8.7)*
 - [x] **REQ-217** **The back office's reads and bulk acts the register names**, each tested as every kind of caller: the review queue, a ticket with its flags and marks, a field event with its lines, carried tickets and photographs, a scale receipt, certifications with their boxes, a project's sites and map versions, invoice batches and what each holds, ROEs, surveys, incidents and drop-off logs, the board searched; QC and a lock for many tickets in one request; and whatever else task 2.8.1's sweep files here. *(The user, ADR-519 (3); C98…C107, C148; task 2.8.8)* ✅ **2026-10-16 (ADR-535):** 44 endpoints and three widened (`GET /people`, `GET /phones`, a viewer's ticket and ROEs); AC-10-93…105, seen in `apps/api/test/review-reads.test.ts`, `map-files.test.ts`, `viewer-reads.test.ts` and the stories `golden-mission` and `p1-viewed`. What a run decided for a ticket, read too (C172, ADR-536; AC-10-106: `review-reads.test.ts`, `p1-voided`, `p1-priced`).
 
+**New at the second reopening** *(2026-10-17, ADR-552; the user: "this should be a task in phase 2 clearly because how in the world would we be able to make things work wihtout these?", "both roles need the trucks list")*
+- [ ] **REQ-218** **A phone is sent everything it picks from**: to a phone whose assignment certifies or takes disposals, the truck lists (the firm's vehicle types and vehicle features, its crew types, the project's primes with the subs under each; a sub still typed by name, the prime's offered); to a certifying one, who may be picked as a helper (the people assigned on the same project that day, by id and name); to every phone, each site's GPS and area as it stands, for an advisory never a refusal; the firm's lists sent are part of the setup version. **No story's phone sends an id it wasn't sent**: the harness's phone certifies by name from its lists, as it does every other record. *(C118; ADR-108, 294, 453, 552; task 2.9.1)*
+
 **Moved to the phase whose work finishes it** *(2026-10-14, the phase exit, ADR-518, as ADR-287 and 371 did; id and text kept, in `REQUIREMENTS-LATER.md`)*
 
 | REQ | Now in | What Phase 2 delivered for it |
 |---|---|---|
 | REQ-006 (every service over HTTPS, one command) | Phase 3 | the API (ADR-385) and the worker (ADR-419) joined `pnpm local:up` (nine containers); nothing is published but Caddy's HTTPS (and its port 80, which answers a page's name with a redirect and the API's name with nothing), and Postgres and the mail catcher on the host's own loopback, each taking TLS alone; the API reached only at `https://api.adms.localhost` and plain HTTP there refused unanswered (ADR-511; AC-10-01…03); every hop inside the stack over TLS, Postgres `verify-full` and SMTP after STARTTLS included (ADR-517; AC-10-67, 68; KD-78 closed). Left: each web app joins through Caddy on a hostname of its own (the field app's browser build, Phase 3; the back office and the portal, re-checked in Phase 4), and ~~the object store's own servers stop listening in plain HTTP on the stack's network (C162 (a))~~ back to Phase 2 as REQ-211 (ADR-519) |
 
-**Phase 2's count (ADR-519, 524…527, 530, 534, 535): 22 REQs: 21 ticked from runs that were seen (REQ-210 by ADR-524, REQ-211 by ADR-525, REQ-212 by ADR-526, REQ-213 by ADR-527, REQ-214 and 215 by ADR-530, REQ-216 by ADR-534, REQ-217 by ADR-535), 1 moved to the phase that finishes it (REQ-006; its object store part was REQ-211), none open.** *Read again whole at task 2.8.9 (2026-10-16, ADR-537), after the chain and three full runs of the stories: unchanged.*
+**Phase 2's count (ADR-519, 524…527, 530, 534, 535, 552): 23 REQs: 21 ticked from runs that were seen (REQ-210 by ADR-524, REQ-211 by ADR-525, REQ-212 by ADR-526, REQ-213 by ADR-527, REQ-214 and 215 by ADR-530, REQ-216 by ADR-534, REQ-217 by ADR-535), 1 moved to the phase that finishes it (REQ-006; its object store part was REQ-211), 1 open (REQ-218, task 2.9.1).** *Read again whole at task 2.8.9 (2026-10-16, ADR-537), after the chain and three full runs of the stories: unchanged; REQ-218 added by ADR-552.*

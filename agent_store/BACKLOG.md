@@ -3,14 +3,15 @@
 > Milestone detail for the active phase. Read when picking up new work; the single active task
 > is in `agent_store/NEXT.md`. Tick boxes as you complete them.
 
-## Active — Phase 2, reopened 2026-10-14 at the user's word (ADR-519): Milestone 2.8
+## Active — Phase 2, reopened a second time 2026-10-17 at the user's word (ADR-552): Milestone 2.9
 
-An audit of Phase 2 found its own server work moved to later phases or left "no task yet"; the
-user: "all 3 of these are part of phase 2", "these should be part of phase 2". ADR-518's exit is
-withdrawn. **Milestone 2.8 below is the active work**, one task a response, from 2.8.1. Phase 3's
-plan is written only when the user opens it, after Phase 2's exit is met again.
+A diagnostic before Phase 3 found a phone can't certify by picking (its lists hold none of what a
+certification picks), and three smaller faults; the user: "this should be a task in phase 2
+clearly". ADR-537's exit is withdrawn. **Milestone 2.9 below is the active work**, one task a
+response, from 2.9.1, **begun at the user's word** ("we can start on that task when i say go").
+Phase 3's plan is written only when the user opens it, after Phase 2's exit is met again.
 
-## Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8)*
+## Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8; its exit of 2026-10-17, ADR-537…540, withdrawn: reopened the same day, ADR-552, Milestone 2.9)*
 
 **What Phase 2 is.** Phase 1 built everything a request will call, with no HTTP. Phase 2 puts the
 server in front of it: the API as a running process over HTTPS, sign-in and permissions, a phone's
@@ -159,11 +160,48 @@ REQ in the same response (ADR-519's lesson).
   ✅ **done 2026-10-17 (ADR-541…550):** AC-10-108…116 written and passing; the threat model read
   again whole; the user's three answers recorded (ADR-551).
 
-**Every one of Phase 2's 22 REQs is named by a task:** 004 → 2.1.3, 2.6.1 · 006 → 2.1.2, 2.7.4 ·
+### Milestone 2.9 — What the diagnostic found, closed *(reopened by the user 2026-10-17, ADR-552)*
+
+**Why.** The diagnostic of 2026-10-17 (ADR-552 (1)) found the phone's lists missing everything a
+certification picks, so a phone could certify only by typing or by ids it was never sent; every
+story passed because the harness's phone was handed those ids from the database. The user: "this
+should be a task in phase 2 clearly", and every recommendation taken. **The brief above holds for
+every task here**, with ADR-519's rule at each close: no "no task yet" of the server's left standing.
+
+- [ ] **2.9.1 What a phone needs to pick, sent with its lists** (REQ-218; C118; ADR-552 (3)).
+  - **The truck lists** to a phone whose assignment certifies or takes disposals (`DIS`, `HOD`):
+    the firm's vehicle types and vehicle features, its crew types, and the project's primes, each
+    with the subs under it (`ProjectContractor.primeId`); by id and name, never a rate or a code.
+    A sub stays typed by name (ADR-108): the prime's subs are offered, any other typed.
+  - **Who may be picked as a helper:** the people with an assignment on the same project that day,
+    by id and name alone (ADR-294), with a certifying assignment.
+  - **Each site's place:** its GPS and its area as it stands (`siteCircleMeters` round the GPS, or
+    its newest `SiteAreaVersion`), for the phone's advisory "not at this site", never blocking.
+  - **The setup version** takes in the firm's lists the phones are sent: a change to one makes a
+    new version (ADR-453 widened).
+  - **The harness's phone certifies by name from its lists**, as it does every other record (the
+    stories that certify fail before the lists and pass after); a check that every id a story's
+    phone sends is one it was sent; `syncClientSuite` and the `certification` story widened.
+  - Its acceptance scenarios in file 10 first; `pnpm openapi`; ARCHITECTURE §7.1's lists note,
+    `adms-field-app` §4A.2a and `SUMMARY.md`'s lists bullet brought to what is built.
+- [ ] **2.9.2 Three faults put right** (ADR-552 (4); C174).
+  - **A lock between a review service's check and its write** is answered as a refusal in words
+    (the services' own "locked as invoiced"), never a 500; a test that makes the race.
+  - **The four review reads** (ROEs, surveys, incidents, drop-off logs) take a page's QC marks and
+    photographs in one query each, never two a row; none of our code puts two queries on one
+    connection at once. `pg` stays on 8 until a run shows no deprecation warning.
+  - **The address server's gunicorn** started with `--no-control-socket` (`infra/local/compose.yaml`
+    and `compose.test.ts` together); its start-up log read again for the error gone.
+- [ ] **2.9.3 Phase 2's exit, a third time, and the records put right.** The ten criteria (`NEXT.md`),
+  three full `pnpm scenarios` runs in a row, the 23 REQs; and the stale lines the diagnostic named:
+  `REQUIREMENTS.md`'s REQ-006 row (ten containers), `SUMMARY.md`'s "Phases and their exits" topic
+  split under its 15 KB, `.nvmrc` pinned whole (`24.21.0`, as the engines and the containers).
+
+**Every one of Phase 2's 23 REQs is named by a task:** 004 → 2.1.3, 2.6.1 · 006 → 2.1.2, 2.7.4 ·
 016 → 2.6.2 · 201 → 2.4.2…2.4.5 · 202 → 2.2.3…2.2.5 · 202a → 2.5.1, 2.6.5 · 202b → 2.2.3, 2.5.4, 2.6.5 ·
 203 → 2.5.3, 2.6.1…2.6.5 · 204 → 2.1.3, 2.2.6, 2.6.5, 2.7.3 · 205 → 2.7.3 · 206 → 2.3.1…2.3.3 ·
 207 → 2.4.1, 2.6.4 · 208 → 2.1.4 · 209 → 2.5.1, 2.6.5 · 210 → 2.8.2 · 211 → 2.8.3 · 212 → 2.8.4 ·
-213 → 2.8.5 · 214, 215 → 2.8.6 · 216 → 2.8.7 · 217 → 2.8.8.
+213 → 2.8.5 · 214, 215 → 2.8.6 · 216 → 2.8.7 · 217 → 2.8.8 · 218 → 2.9.1.
 
 ---
 
@@ -202,7 +240,7 @@ The historical Phase 1 closeout on `database/` (H1.x, struck 2026-10-06 by ADR-3
 ### 📌 Carry-forward register: known later concerns (ADR-274; rewritten live-only by ADR-532)
 
 What a task's ADRs leave for later, filed under the task or phase that picks it up, each line named
-by its C-number (the numbers never change and are never reused; the next is **C174**). **Rule for
+by its C-number (the numbers never change and are never reused; the next is **C175**). **Rule for
 every agent:** at a task's start, read the standing rules below and the items under its heading,
 and do each or say in the task's ADR why it waits and move it. At close-out, a new "later" in an
 ADR gets a line here in the same response, under the task or phase that takes it (**a server
@@ -239,6 +277,10 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **Stories assert the audit log's order, never its times** (the database stamps its own clock). The server apps' indexes export only what `packages/scenarios` and `infra/local` read (`app-exports.test.ts`): a story that stops calling a service takes it out; kept in process on purpose: `Corrections` (AC-10-50), `first-admin`'s sign-in parts, the setup services, `Certifications`, `NumberAllocator`, `Assignments`, `Phones`. A test of the object store tidies up as the stack's administrator (`tidied`). (C29, C136, C151)
 - **Every later Prisma upgrade:** `views` is a preview feature (fallback: `$queryRaw` inside `$viewed`, in `packages/db` only); run `pnpm audit` and drop each accepted advisory the upgrade fixes (C32), saying so in its ADR; look at the `pg` deprecation warnings from the adapter (`client.query()` while executing; pg 9 removes the call). (C32, C98, C109)
 
+#### For Milestone 2.9 (Phase 2, reopened 2026-10-17, ADR-552)
+- **C118 (the server's part) → 2.9.1.** A phone's lists hold none of what a certification picks: the firm's vehicle types and vehicle features, its crew types, the project's primes and the subs under each (their `contractors` are the incident form's alone); its assignment names nobody to pick as a helper; its sites carry no GPS or area. The harness's phone is handed those ids from the database (ADR-552 (1)). The ROEs' `preWorkSurveyDone` is sent already (ADR-451).
+- **C174 (a) → 2.9.2.** The database's guard on a locked ticket's field events answers a race (a lock made between a review service's own question and its write) as the server's failure, since a `restrict_violation` raised by a trigger is no refusal `database-refusal.ts` tells; the services ask first, in words.
+
 #### For Phase 3 (the field app)
 *Mapped to its REQs (task 2.8.1, ADR-522):* C24, C86 → REQ-006 · C110, C112, C114, C115, C117, C120, C122, C125, C133, C143, C151 → REQ-311 · C113 → REQ-311a · C123, C124, C126 → REQ-312 · C141 → REQ-313 · C69, C141 → REQ-124c · C74, C97, C100 → REQ-124f · C127, C128, C130, C133, C139, C152, C153, C166 → REQ-308 · C69, C128, C132, C137 → REQ-308c · C68 → REQ-308a, REQ-319 · C68, C83, C135 → REQ-303, 304 (C135: every flow, REQ-303…306) · C66, C67, C69, C118 → REQ-307 · C137, C138 → REQ-316 · C121 → REQ-318 · C96, C127 → REQ-317 · C118, C129 → REQ-322 · C156 → REQ-323 · C41 → REQ-324; and since: C168, C170 → REQ-311, 308 · C171 → REQ-312.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
@@ -253,7 +295,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **C96.** A number at New the phone's list of certifications doesn't hold: warn, refresh the lists where connected, else key the truck in by hand (the user, ADR-421; REQ-317).
 - **C110, C111, C112.** The device key in real secure hardware (the Secure Enclave's 65-byte point needs the fixed 26-byte header; Android's Keystore gives SubjectPublicKeyInfo); both sign DER; the browser test build's WebCrypto must write DER; attestation stays declined (ADR-240); the token kept in secure storage, proving again on `PHONE_NOT_PROVEN`; the browser build sends `Authorization` across origins.
 - **C113, C114, C115, C117.** "Create monitor" proves the phone first, then sends the passcode, and shows the Monitor ID answered; the monitor's token kept in secure storage beside the phone's, both sent, signing in again on `NOT_SIGNED_IN`, its own lock after inactivity (AC-02-40); "no assignment today" or "more than one assignment today: ask your supervisor" from `noAssignment`, offering the passcode's setup; keeping what it holds on `noAssignment`, showing how stale its lists are (AC-02-44), asking again whenever connected.
-- **C118.** Certifying on a phone: its pick lists (primes and the subs under each, vehicle types and features, crew types, the helpers assigned with the monitor) are in no list yet; a site carries no GPS or area for an advisory "not at this site"; a post-work survey picks from ROEs where `preWorkSurveyDone`.
+- **C118 (the phone's part; the server's is 2.9.1, ADR-552).** Certifying on a phone picks the prime, a vehicle type or crew type, each box's feature and any helper from its lists (a sub typed, the prime's offered), and a tower monitor finds a truck from the same truck lists; the advisory "not at this site" from the site's place in the lists; a post-work survey picks from ROEs where `preWorkSurveyDone`.
 - **C120.** A typed password checked as Argon2id in NFC under `first`'s salt (no key), then Argon2id of those bytes against `check`; each entry kept with its mark, the marks sent, anyone not named dropped, asked again while `more`; the 5 and 10 wrong tries the phone's own (AC-02-40); the browser build needs an Argon2 that takes raw bytes.
 - **C121.** "Look up address" sends GPS as two decimal strings of at most eight places; on `NOT_ANSWERED` it may ask once more, then the monitor types; `LOOKED_UP` or `TYPED`.
 - **C122, C123, C124, C125, C126.** After setup under the passcode the report is kept until `SAVED`/`ALREADY_SAVED` and sent before the records made under it; a move and a switch done under the passcode, offline if need be, each making the new assignment's id (a switch to a monitor the phone holds an assignment for makes none; the earlier monitor's unsynced work hidden, AC-02-46); the monitor's id sent from the lists, never typed; a session shown as the passcode's, ended at the project's midnight offline; the typed passcode kept in memory only for the setup, asked with `projectId: null` then the project, paged by `moreMonitorsAfter`, offline only on the project whose lists it holds (AC-02-38); each passcode use logged with its own id, clock and offset, never the passcode; what it does after ten wrong tries offline (63B §3.2.10) is its to propose; the passcode opening a locked sign-in is one more logged use.
@@ -285,5 +327,5 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **C32.** The accepted audit advisories, all in the Prisma CLI: `GHSA-ggr8-5vv4-36mx` (`deepmerge-ts` 7.1.5), `GHSA-3f6p-5ww8-9rcr` and `GHSA-rgwj-5xj2-c3m3` (`mysql2` 3.15.3); secretlint's seven dev-tool licences allowed by exact version (an upgrade makes them undecided).
 - **C116.** `pnpm security` can't see a change made to the database by hand within thirty minutes of `pnpm test` (`--fresh`; `pnpm chain --fresh` passes it on). (The one command and its summary: `pnpm chain`, ADR-533.)
 - **C135.** Open, not asked: whether a field event that stood open for days should ever be flagged (nothing flags it; `OVERLAPPING_LOADS` may catch a long-open collection).
-- **C171 (seen, left as it is):** the database's guard on a locked ticket's field events answers a race (a lock made between a review service's own question and its write) as the server's failure, since a `restrict_violation` raised by a trigger is no refusal `database-refusal.ts` tells; the services ask first, in words. A certification entered from its sheet is reconciled by the same path as one a phone made after its load (`certifiedIn`; `p1-left-out`'s `730499`): the API test proves the link and the job, and no story runs one from paper. The un-revoke's own admin check is doubled by the door's (`adminOnly`), as the revocation's is.
+- **C174 (b), (c) (seen, left as they are; numbered C171 until ADR-552, which C171 already was; its (a), the lock race, is Milestone 2.9's):** (b) a certification entered from its sheet is reconciled by the same path as one a phone made after its load (`certifiedIn`; `p1-left-out`'s `730499`): the API test proves the link and the job, and no story runs one from paper. (c) The un-revoke's own admin check is doubled by the door's (`adminOnly`), as the revocation's is.
 - **C140, C142, C153, C154, C162, C163, C167, C169, C170 (seen, left as they are):** a malformed `.shp` with a negative record length throws (reporting the libraries' faults upstream is the user's call); on a Linux host a process on the host's loopback can't be reached from a container (`host-gateway`; the stories' API must listen where the stack's network reaches it, never `0.0.0.0` on a shared machine); not measured: photographs at real size, a network's time, a first working's own time (about 7.5 s a run of 200 for its map server asks), a burst where neighbours are found; Docker Desktop's forward to Caddy once reset connections from the host after a crash loop (`docker restart open-adms-local-caddy-1`); acceptance files 01…09 carry each task's history in their cells; SeaweedFS logs that it loaded no IAM configuration for STS (none used); an Esri layer's address is held by a pattern (OpenAPI says the pattern); archiving a site label value leaves sites carrying it; `contractor.merged_into_id` kept as history; `project_open_guard()`'s refusal is recognised by its message; two applied guard migrations' comments cite AC-10-81…84 and AC-10-11, 81 (read AC-10-83…86 and AC-10-11, 83); `NumberAllocator.retire` is called by nothing (a later task's to remove or use).
