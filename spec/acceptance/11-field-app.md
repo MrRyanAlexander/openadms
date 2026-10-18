@@ -202,7 +202,7 @@ the layer its own row names; the field app's part by the task below, under a tes
    asks before choosing (the user's word on security, ADR-401); whether the app pins the API's
    certificate (MASVS-NETWORK) and hides its screen in the app switcher (MASVS-PLATFORM) are that
    task's to propose.
-2. **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (3.5.1). The number scanned
+2. **The ticket number entered twice and WCAG 3.3.7, Redundant Entry** (3.1.4, put to the user with the prototype, ADR-561; built by 3.5.1). The number scanned
    or shown and then typed again by hand (ADR-209, an agent default) asks for information already
    given in the same process. WCAG lets that stand where entering it again is essential. The task
    says whether this case is essential and, if it isn't, puts the choice to the user. The user
@@ -219,5 +219,5 @@ the layer its own row names; the field app's part by the task below, under a tes
 7. **Where the receipt content model lives** (3.6.2): it renders on the phone and, for the
    receipt batch (REQ-414), in the back office, so it is shared; which package is its ADR.
 8. **The Build 1 board's open designs** (`adms-field-app` §4A.7): a confirmation after each
-   captured value, a monitor scorecard, a bottom menu. Each is raised with its screen's task, and
-   none is built without the user's word.
+   captured value, a monitor scorecard, a bottom menu. All are put to the user with 3.1.4's
+   prototype, each with ADR-561 (7)'s recommendation, and none is built without the user's word.

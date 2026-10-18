@@ -43,11 +43,12 @@ time clock → iPhone → Android → prove it.
   endpoint recipe (the register's standing rules), never a workaround.
 - **Every screen, in the task that adds it:** its words from the translation file (ADR-172); a
   browser end-to-end test named by its scenario IDs, against the local stack over HTTPS; **the
-  WCAG 2.2 AA automated check with no violation** (ADR-559); it works with the network off.
+  WCAG 2.2 AA automated check with no violation** (ADR-559); it works with the network off; **it
+  is built from 3.1.4's components and tokens, in ADR-561's direction**.
 - **Every dependency gets an ADR first** (exact version, at least seven days old, licence
   compatible with AGPL-3.0, maintenance; `pnpm licences` and `pnpm security` after, the clean-copy
   check). Phase 3 brings React, Vite, the browser end-to-end tool, the accessibility checker,
-  Capacitor and its plugins (SQLCipher storage, secure storage, camera, the Zebra printer); Zebra's
+  React Aria (ADR-561), Capacitor and its plugins (SQLCipher storage, secure storage, camera, the Zebra printer); Zebra's
   SDK licence is read before it is taken.
 - **A secret never appears** in a log, a crash report, the web layer's storage, a test's output or
   this conversation; the master passcode is held in memory only for the act it opens.
@@ -84,6 +85,15 @@ time clock → iPhone → Android → prove it.
 - [ ] **3.1.3 The accessibility check** (REQ-324 in part; C41; AC-11-51): an automated WCAG 2.2
   A/AA checker by ADR, run on every screen the browser end-to-end tests reach, against the local
   stack; a screen they don't reach fails the chain; counts in `CHAIN.md`.
+- [ ] **3.1.4 The look, the components and the prototype** (REQ-301, 324 in part; ADR-561;
+  file 11, left 2 and 8): React Aria by ADR; the look as tokens (the light theme first, the dark
+  theme, type, spacing, the main button's height); the components ADR-561 (6) lists, each through
+  3.1.3's check; the status strip and the home screen built on them, the shell's first screen put
+  in the look. **Then the key screens shown to the user as a clickable prototype** (home, a
+  collection, the tower, unit rate, sync), with the open designs put to them, each with ADR-561
+  (7)'s recommendation: a confirmation after each value, a monitor scorecard, the bottom menu, the
+  number typed again by hand. Their answers are ADRs and scenarios in file 11; none is built
+  before them.
 
 ### Milestone 3.2 — The phone's store, identity and sign-in (ARCHITECTURE §7.1, §7.2, §7.4, §8)
 - [ ] **3.2.1 The encrypted store** (REQ-302's browser half; AC-02-19, AC-11-07, 08, 10): one store
@@ -134,8 +144,8 @@ time clock → iPhone → Android → prove it.
   AC-11-05, 36…39): badge first, number last; a badge not in the lists warned, refreshed or keyed by
   hand; the debris type and field tag by name; GPS and waypoints; the address looked up or typed;
   normal or split, and the split chain; the number scanned or shown and entered again, a typed one
-  with its reason; the phone's own duplicate check; cancel; sealed at submit. WCAG 3.3.7 and the
-  number entered twice weighed (file 11, left 2).
+  with its reason; the phone's own duplicate check; cancel; sealed at submit. The number entered
+  twice as the user answered it at 3.1.4's prototype (WCAG 3.3.7; file 11, left 2).
 - [ ] **3.5.2 The tower and the haul-out** (REQ-304, 305, 124f, 321; C74, C83, C97, C100; AC-04-38,
   44, AC-11-40, 41): the site from the assignment; the debris type picked on its own; one quantity
   from the site's lookup (the load call typed 0–100, the scale weight and receipt, or the count of

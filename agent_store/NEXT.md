@@ -138,7 +138,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 1 of 32 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 1 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -147,9 +147,9 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 - **Agent defaults the user may overturn:** `SUMMARY.md` §4 (never copied here, ADR-516).
 - **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
   settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
-  candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209;
-  task 3.5.1 weighs it against WCAG 3.3.7 first, ADR-559); the Build 1 board's open designs
-  (`adms-field-app` §4A.7), each with its screen's task.
+  candidate; `RULES.md` §7 "Is valid"; hand re-entry of the ticket number (ADR-209, WCAG 3.3.7) and
+  the Build 1 board's open designs (`adms-field-app` §4A.7), all put to the user with task 3.1.4's
+  prototype (ADR-561).
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
