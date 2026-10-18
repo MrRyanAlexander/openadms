@@ -6,60 +6,57 @@
 > about 20 KB** (the session hook warns past it; ADR-532): where things stand in a few lines,
 > never a task-by-task record (that is each task's ADR and its BACKLOG tick).
 
-## Active Phase — **Phase 2 (API and sync): its exit met a third time 2026-10-17 (ADR-555); Phase 3 is the user's to open**
+## Active Phase — **Phase 3 (the field app): opened by the user 2026-10-17 (ADR-557)**
 
-Reopened twice at the user's word: for Milestone 2.8 (2026-10-14, ADR-519) and for Milestone 2.9
-(2026-10-17, ADR-552, after a diagnostic found a phone's lists hold none of what a certification
-picks). **Both are done; all ten criteria below met again (ADR-555).** No task is next until the
-user opens Phase 3.
+**User, 2026-10-17:** "phase 2 is complete and phase 3 is approved to start working... Mark the
+fiels ready and begin opening phase 3". Task 3.0.1 opened it (ADR-557…560): the plan, the 33 REQs
+moved, the phone's scenarios, and the accessibility standard asked first (WCAG 2.2 AA, ADR-559).
 
-**What Phase 2 is.** The server in front of what Phase 1 built: the API as a running process over
-HTTPS, sign-in and permissions, a phone's enrolment and its proof of itself, the sync endpoints,
-and reconciliation as queued jobs drained by the worker's own process. **It adds no rule: it wraps,
-signs in, queues and hardens.** Opened by the user 2026-10-06 ("phase 2 is open, begin working on
-the next task", ADR-376); its plan is `BACKLOG.md`, one task per response (ADR-377); read its brief
-before any task.
+**What Phase 3 is.** The phone, built against the contract Phase 2 serves (enrolment and proof,
+sign-in and the assignment, the lists, the login list, the passcode's check, the address lookup,
+sync and photographs, turn-in, `syncClientSuite`). **It adds no rule.** One codebase, `apps/field`
+(React + Vite + Capacitor): the browser build first and whole, then the iPhone, then Android
+(ADR-099). Its one server half is the time clock's records (REQ-310). Its plan is `BACKLOG.md`,
+one task per response (ADR-558); read its brief before any task.
 
 **Scope boundary.**
-- **In:** `apps/api` (the process, endpoints, sign-in), `apps/worker` (the process, the queue),
-  `packages/contracts` (every payload), `packages/db` (sign-in's, the queue's and sync's records,
-  their guards and tests), `packages/domain` (any rule a task's ADR records), `packages/scenarios`,
-  `infra/local`, `tools/` (the installer, the security checks), `spec/acceptance/`,
-  `spec/THREAT-MODEL.md`, `spec/CHECKLIST-API.md`.
-- **Not Phase 2's:** any screen, the phone's own store, real secure hardware, printing and scanning
-  (Phase 3); the back office's and the portal's pages, exports, the time clock's tables (Phases
-  3–4); the demo deploy, cloud TLS, pgAudit, the outside penetration test (Phase 5a). Say which
-  phase and ask; never widen silently. **But a phase's own server work never moves to a later
-  phase by agent default** (ADR-519).
+- **In:** `apps/field`; `packages/domain` (a rule a task's ADR records, the UUIDv7 maker),
+  `packages/contracts` (the time clock's kind of record, a payload a phone needs), `packages/db`
+  and `apps/api` for the time clock's records and any call a phone needs that the API doesn't
+  serve (the endpoint recipe), `packages/scenarios`, `infra/local` (the browser build's name and
+  origins), `tools/`, `spec/acceptance/11-field-app.md`, `spec/CHECKLIST-FIELD.md`,
+  `spec/THREAT-MODEL.md`.
+- **Not Phase 3's:** the back office's and portal's screens, the time clock's approval screen and
+  export, the receipt batch (Phase 4); the demo deploy and the app stores (Phase 5a). Say which
+  phase and ask; never widen silently. **A phase's own server work never moves to a later phase
+  by agent default** (ADR-519).
 - `development/` stays read-only reference.
 
-## Exit criteria for Phase 2 *(ADR-376, and 8…10 by ADR-519; agent default, the user may change them)*
+## Exit criteria for Phase 3 *(ADR-557; agent default, the user may change them)*
 
-The seven were met once (2026-10-14, ADR-518); all ten at task 2.8.9 (ADR-537…540), withdrawn by
-ADR-552; **all ten met again at task 2.9.3 (ADR-555): how each was met is that ADR.**
+1. **The golden mission's field events captured through the field app's browser build** by its
+   end-to-end tests, synced through the real endpoints, reconciled by queued jobs, with the
+   approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
+   every story still passing.
+2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
+   (`spec/acceptance/11-field-app.md`: 110).
+3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
+4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
+   control by control; the threat model's phone rows read again; `pnpm security` passing.
+5. **Every screen meets WCAG 2.2 AA**: the automated check with no violation, a hand review
+   recorded, and the field app's conformance report (VPAT format) written (ADR-559).
+6. **The database still enforces the rules:** every new table guarded, every grant and refusal
+   tested, `guard_gaps()` empty.
+7. **The chain is green** with real counts, the browser end-to-end layer in it, and the browser
+   build reached only over HTTPS through Caddy.
+8. **Rules and shapes live once:** no rule in `apps/field`, no payload shape outside
+   `packages/contracts`, the phone reaching the server only through the API.
+9. **On device:** the on-device layer (airplane mode, printing, scanning, camera, encryption,
+   turn-in) run on a real iPhone and a real Android phone with the user, what was seen recorded.
+10. **No "no task yet" of the field app's in the register**, and three full runs in a row of the
+    browser end-to-end tests and `pnpm scenarios` after a green chain.
 
-1. **The golden mission syncs through the real endpoints and is reconciled by queued jobs**, with
-   the exact statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows
-   the user approved; every other story still passes.
-2. **Every acceptance scenario with a Phase 2 part passes at the API**, reported as N of M.
-3. **All of Phase 2's REQs** (23 since ADR-552) ticked from runs that were seen, or re-filed with an ADR.
-4. **The security checklist for this layer** (ARCHITECTURE §16: OWASP ASVS Level 2, API Security
-   Top 10, NIST SP 800-63B): each item answered by a named test or by the phase that owns it; the
-   threat model written; `pnpm security` passing.
-5. **The database still enforces the rules:** every new table guarded, every grant and refusal
-   tested, `guard_gaps()` empty, each service login under a statement timeout.
-6. **The chain is green** with real counts (typecheck, lint, licences, tests, stories), and the
-   API is reached only over HTTPS through Caddy.
-7. **Rules and shapes live once:** no rule outside `packages/domain`, no payload shape outside
-   `packages/contracts`, only `packages/db` and the two server apps reaching Postgres.
-8. **No "no task yet" of the server's stands in the register**, and every line aimed at a Phase 2
-   task is done with its ADR or re-filed (ADR-519; held at every task's close).
-9. **`SUMMARY.md` §4's agent defaults put to the user on one page**, each confirmed or overturned
-   (the user's #3, ADR-519).
-10. **Three full runs of `pnpm scenarios` in a row**, `burst` passing with no 500 in its API's log
-    (REQ-210).
-
-Only then is **Phase 3 (the field app)** offered to the user to open.
+Only then is **Phase 4 (the back office and portal)** offered to the user to open.
 
 ---
 
@@ -70,21 +67,23 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-17, through ADR-555)
-- **Phase 2's exit is met a third time (ADR-555)**: the chain green, three full story runs in a
-  row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved. **Milestone 2.9**
-  (ADR-552: a phone's lists for certifying and disposal, three faults, the exit) is done
-  (ADR-553…555). **Phase 3 waits on the user's word.**
-- **The independent check of Phases 0–2** (`AUDIT-2026-10-17-PHASE-2.md`) **is answered whole**
-  (ADR-541…550), its three questions by the user (ADR-551).
+### Where things stand (2026-10-17, through ADR-560)
+- **Phase 3 is open (ADR-557)**; task 3.0.1 done: its plan (ADR-558), its REQs moved, the phone's
+  scenarios written (`spec/acceptance/11-field-app.md`, ADR-560, for the user's approval), the
+  accessibility standard answered (WCAG 2.2 AA; a conformance report per app at its phase's end,
+  ADR-559). **Next: task 3.1.1.**
+- **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
+  row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
+  independent check of Phases 0–2 is answered whole (ADR-541…551); its file
+  (`AUDIT-2026-10-17-PHASE-2.md`) is no longer in the working folder (a missing file is intentional; never restored).
 - **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
   met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
   part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
   numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
-  §3a–§3b and `DECISIONS.md`.
-- **Phase 2:** 32 tasks of Milestones 2.0…2.7 closed (ADR-376…518); **Milestone 2.8, from the
-  audit:** 2.8.1…2.8.8 done (ADR-522…531, 534, 535), what 2.8.8 left (C172) done (ADR-536); **2.8.9 done: Phase 2's exit met (ADR-537…540)**, withdrawn by ADR-552; the user's answers to the defaults page confirmed all but D1, built as the back office's view permissions (ADR-539). **Milestone 2.9 (ADR-552):** done (ADR-553…555). What each task left is `BACKLOG.md`'s
-  carry-forward register (live items only since ADR-532).
+  §3a–§3c and `DECISIONS.md`.
+- **Phase 2:** 44 tasks over Milestones 2.0…2.9 (ADR-376…555); the user's answers to the
+  defaults page confirmed all but D1 (ADR-538, 539). What each task left is `BACKLOG.md`'s
+  carry-forward register (live items only since ADR-532), mapped to Phase 3's tasks (ADR-558).
 - **What runs.** The API (NestJS on Fastify) is the local stack's own service, reached only at
   `https://api.adms.localhost` through Caddy; the worker drains the job queue. **Every endpoint is
   defined in `packages/contracts` and served through `@Serves`; `Admission` asks who may call it
@@ -97,8 +96,9 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
 - **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
-- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** opening Phase 3;
-  every agent default on `spec/DEFAULTS-REVIEW.md` is answered (ADR-538), `SUMMARY.md` §4 lists what stays open.
+- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks; for the
+  on-device milestones (3.8, 3.9) a real iPhone and Android phone, a Zebra ZQ printer, Xcode and an
+  Apple developer account (`ROADMAP.md` §6); `SUMMARY.md` §4 lists the defaults open to them.
 - **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
   in security is suggested, say what the standard asks before building it.**
 
@@ -137,8 +137,8 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 |---|---|---|
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
-| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met a third time 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🔒 the user opens it (next) |
+| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 1 of 32 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -147,8 +147,9 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 - **Agent defaults the user may overturn:** `SUMMARY.md` §4 (never copied here, ADR-516).
 - **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
   settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
-  candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209);
-  Phase 3's first question, the accessibility standard (REQ-324).
+  candidate; `RULES.md` §7 "Is valid"; whether to keep hand re-entry of the ticket number (ADR-209;
+  task 3.5.1 weighs it against WCAG 3.3.7 first, ADR-559); the Build 1 board's open designs
+  (`adms-field-app` §4A.7), each with its screen's task.
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -223,11 +224,12 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**None until the user opens Phase 3 (the field app).** Phase 2's exit is met (ADR-555); an agent
-never opens a phase. When they do, Phase 3's first task (C163) writes its plan from
-`REQUIREMENTS-LATER.md`'s Phase 3 and the register's map (as ADR-377 did), moves its REQs into
-`REQUIREMENTS.md`, writes the phone's acceptance scenarios, and **asks first the accessibility
-standard and level** (REQ-324, C41).
+**Task 3.1.1, the field app's security checklist** (`BACKLOG.md`, Milestone 3.1; REQ-323 in part;
+C156): write `spec/CHECKLIST-FIELD.md`, OWASP MASVS control by control. **Say what the standard
+asks before choosing** its version and profile (ADR-401's word); answer each control by a named
+scenario of `spec/acceptance/11-field-app.md` or a test, or the phase that owns it; give file 11's
+Answers column each control's number; read the threat model's phone rows (§4.1, §6) again; propose
+certificate pinning and the app-switcher snapshot (file 11, "Left to the task", 1). Docs only.
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

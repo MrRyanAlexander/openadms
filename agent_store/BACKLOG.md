@@ -3,15 +3,222 @@
 > Milestone detail for the active phase. Read when picking up new work; the single active task
 > is in `agent_store/NEXT.md`. Tick boxes as you complete them.
 
-## Active — Phase 2, its exit met a third time 2026-10-17 (ADR-555): Phase 3 waits on the user's word
+## Active — Phase 3: Field app *(opened by the user 2026-10-17, ADR-557; this plan is ADR-558)*
 
-Reopened a second time at the user's word (ADR-552) after a diagnostic found a phone couldn't
-certify by picking, and three smaller faults; **Milestone 2.9 is done** (ADR-553…555) and Phase 2's
-exit is met again. **Phase 3's plan is written only when the user opens it** (its first task,
-C163: the plan from `REQUIREMENTS-LATER.md`'s Phase 3 and the register's map, asking first the
-accessibility standard, C41).
+**What Phase 3 is.** Phase 2 built the server every phone screen calls: enrolment and a phone's
+proof, a monitor's sign-in and the assignment it takes, the lists, the login list, the master
+passcode's check, the address lookup, the sync (records, then photographs by a resumable upload),
+turn-in, and **the sync contract's suite any client must pass** (`syncClientSuite`). **Phase 3
+builds the phone against that contract and adds no rule**: the browser build first, then the
+iPhone, then Android (ADR-099), one codebase (`apps/field`, React + Vite + Capacitor, ARCHITECTURE
+§3, §18). The one server half that is Phase 3's own is the time clock's records (REQ-310;
+ADR-519's rule: a phase's own server work never moves to a later phase by agent default). **Done
+when** the golden mission's field events are captured through the field app's screens and come out
+with the numbers the user approved, every scenario with a Phase 3 part passes at its layer
+(`spec/acceptance/11-field-app.md`: 110), and its 33 REQs are ticked from runs that were seen. Exit
+criteria: `NEXT.md`.
 
-## Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8; its exit of 2026-10-17, ADR-537…540, withdrawn: reopened the same day, ADR-552, Milestone 2.9; exit met a third time 2026-10-17, ADR-555)*
+**The order** (ADR-558): the answer and the foundation → the phone's store, identity and sign-in →
+the master passcode on the phone → **sync from the phone, before any capture screen**, so every
+screen is proven through to the server and nothing against a stand-in (as Phase 2 built jobs before
+the endpoints that queue them, ADR-377 (2)) → capture → photographs, printing and scanning → the
+time clock → iPhone → Android → prove it.
+
+### Brief for every Phase 3 task (ADR-558)
+
+- **One task per response**, whole (ADR-516). Each ends with real observed output (`adms-verify`),
+  the close-out (`adms-close-out`) and the user's git block with named paths. Don't tick a box on
+  "should work".
+- **Read first:** `spec/acceptance/11-field-app.md` (the task's rows, and section L's); ARCHITECTURE
+  §7…§12, §15, §16 and the ⚠️ notes in them; `adms-field-app` §4A (every capture rule); the
+  owning skill for the workflow (`adms-ticket-workflows`, `adms-certifications`, `adms-exceptions`);
+  `spec/CHECKLIST-FIELD.md` once 3.1.1 has written it; the task's carried items in the register.
+- **No new rule.** The phone works out a capacity, a split's share, a pay item from its bands, a
+  number from its block with `packages/domain`, and speaks only the payloads of
+  `packages/contracts`. A rule nothing records is an ADR (agent default, or a question under
+  ADR-230), written into `packages/domain`, never into a screen. **The phone warns and never
+  blocks** (ADR-052); it holds no rate, rule or load's pay item (invariant 20).
+- **The phone reaches the server only through the API**, over HTTPS, as `PROVEN_PHONE` or
+  `MONITOR_ON_PHONE`; a call it needs that the API doesn't serve is a Phase 3 server task with the
+  endpoint recipe (the register's standing rules), never a workaround.
+- **Every screen, in the task that adds it:** its words from the translation file (ADR-172); a
+  browser end-to-end test named by its scenario IDs, against the local stack over HTTPS; **the
+  WCAG 2.2 AA automated check with no violation** (ADR-559); it works with the network off.
+- **Every dependency gets an ADR first** (exact version, at least seven days old, licence
+  compatible with AGPL-3.0, maintenance; `pnpm licences` and `pnpm security` after, the clean-copy
+  check). Phase 3 brings React, Vite, the browser end-to-end tool, the accessibility checker,
+  Capacitor and its plugins (SQLCipher storage, secure storage, camera, the Zebra printer); Zebra's
+  SDK licence is read before it is taken.
+- **A secret never appears** in a log, a crash report, the web layer's storage, a test's output or
+  this conversation; the master passcode is held in memory only for the act it opens.
+- **On-device runs need the user** (a real iPhone and Android phone, a Zebra ZQ printer, Xcode and an
+  Apple developer account): the task says what it needs before it starts, runs it with the user,
+  and records what was seen. Never tick an on-device row from a simulator alone.
+- **Not Phase 3's:** the back office's and the portal's screens, the time clock's approval screen
+  and export, the receipt batch (Phase 4); the demo deploy and the app stores (Phase 5a). Don't
+  build ahead.
+- **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
+- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
+
+### Milestone 3.0 — Open the phase
+- [x] **3.0.1 Open the phase** ✅ done 2026-10-17 (ADR-557…560): the plan; the 33 REQs moved; the
+  phone's scenarios written (`spec/acceptance/11-field-app.md`, 60 new and 50 listed); the
+  accessibility standard asked first and answered (WCAG 2.2 AA; a conformance report per app at
+  its phase's end). C163 done; C41's question answered.
+
+### Milestone 3.1 — The answer and the foundation (ARCHITECTURE §3, §15, §16, §18)
+- [ ] **3.1.1 The field app's security checklist** (REQ-323 in part; C156): `spec/CHECKLIST-FIELD.md`,
+  OWASP MASVS control by control, its version and profile said with what the standard asks before
+  choosing (ADR-401), each control answered by a named scenario or test or the phase that owns it;
+  file 11's Answers column given each control's number; the threat model's phone rows (§4.1, §6)
+  read again; certificate pinning and the app-switcher snapshot proposed (file 11, left 1).
+- [ ] **3.1.2 The shell, its door and the browser end-to-end layer** (REQ-006, REQ-301 in part;
+  C24, C86, C31, C112 in part; AC-11-01…04, 06, AC-10-08): `apps/field` as React + Vite and the
+  browser end-to-end tool (ARCHITECTURE §15 names Playwright as an example), each by ADR, the tool
+  a step of `pnpm chain` with its counts in `CHAIN.md`; the browser build served
+  over HTTPS through Caddy at `https://field.adms.localhost`; its origin and the native origins on
+  `ADMS_CORS_ORIGINS`, the object store's CORS list widened as C24 says; the page's headers; the API
+  called with `Authorization` across origins; the translation file from the first screen; the
+  UUIDv7 maker moved to `packages/domain`; a check that `apps/field` holds no rule and no payload
+  shape.
+- [ ] **3.1.3 The accessibility check** (REQ-324 in part; C41; AC-11-51): an automated WCAG 2.2
+  A/AA checker by ADR, run on every screen the browser end-to-end tests reach, against the local
+  stack; a screen they don't reach fails the chain; counts in `CHAIN.md`.
+
+### Milestone 3.2 — The phone's store, identity and sign-in (ARCHITECTURE §7.1, §7.2, §7.4, §8)
+- [ ] **3.2.1 The encrypted store** (REQ-302's browser half; AC-02-19, AC-11-07, 08, 10): one store
+  for records, the photographs waiting, the lists, the login list, archived queues and kept answers;
+  the browser build's IndexedDB under a WebCrypto key that can't be exported, made from no password;
+  the interface the native SQLCipher store implements in 3.8.1 and 3.9.1.
+- [ ] **3.2.2 Enrolment and the phone's proof** (REQ-311 in part, REQ-311a; C110, C111, C112, C113;
+  AC-02-07, 18, AC-11-11…13): the device key (ECDSA P-256, DER), enrolment under the master passcode,
+  the token in secure storage, proving again on `PHONE_NOT_PROVEN`; "Create monitor".
+- [ ] **3.2.3 Online sign-in and the assignment** (REQ-311, 308b, 125c; C114, C115, C117, C133;
+  AC-02-35, 36, AC-07-91, AC-11-14…18, 54): the monitor's token beside the phone's; `noAssignment`'s
+  words; the lists and the menu from the assignment; how stale the lists are; read again when the
+  setup version differs.
+- [ ] **3.2.4 The login list and signing in offline** (REQ-311; C120, C141 in part, C143, C151;
+  AC-02-39…41, AC-11-19…21): the login list asked and kept; the two-step check (an Argon2 that
+  takes raw bytes in the browser build, by ADR); tries backed off after 5, locked after 10 until
+  the passcode; the inactivity lock and its warning; an offline sign-in reported first; a story of
+  signing in offline.
+
+### Milestone 3.3 — The master passcode on the phone (ARCHITECTURE §7.3, §7.5)
+- [ ] **3.3.1 Setup with no assignment** (REQ-311; C122, C125; AC-02-38, AC-11-23…25): the passcode in
+  memory only; the project, then the work, site and monitor, paged; offline only on the project
+  whose lists it holds; the unplanned assignment's report kept until saved and sent first.
+- [ ] **3.3.2 Switching, moving and passcode sessions** (REQ-312; C123, C124, C126, C171; AC-02-42,
+  46, 47, AC-11-26, 27): a switch (the earlier monitor's unsynced work archived, hidden, synced in
+  the background) and a move, offline if need be; sessions as the phone's monitor and temporary,
+  marked, ended at the project's midnight; `masterPasscodeSession` on every field event; each use
+  logged; what ten wrong tries offline does, proposed by ADR (file 11, left 3).
+
+### Milestone 3.4 — Sync from the phone (ARCHITECTURE §8, §9, §11)
+- [ ] **3.4.1 The phone's `SyncClient`** (REQ-308, 308c; C127, C128, C130, C132, C133, C139, C152,
+  C153, C166, C168; AC-05-01, 06, 07, 08, 20, 46, AC-11-22, 28…31): `syncClientSuite` passed against
+  the app's own store; splits by weight and count; waits waited out; `NOT_SAVED` shown and kept, a
+  kept record resent with its fingerprint (when: by ADR, ADR-470 (3)); syncs only while somebody is
+  signed in; what it holds said in every sync.
+- [ ] **3.4.2 Photographs' files** (REQ-316's sync half; C137, C138; AC-11-32, 33): parts no larger
+  than `MEDIA_PART_BYTES_AT_MOST`, smaller on a poor signal; `photoFileEndpoint` after a restart;
+  `OWNER_NOT_SAVED` kept and resent; a held record's photographs.
+- [ ] **3.4.3 Sync and turn in, and the wipe** (REQ-313, 124c; C69, C141, C170; AC-02-58, AC-05-56,
+  AC-11-08, 34, 35): turn-in under the passcode, the server's words and what's missing shown; the
+  wipe only on `wipe: true` (the data key and the device key erased, NIST SP 800-88);
+  `MASTER_PASSCODE_NEEDED` at a proof; held things named by `sentCanonical`'s SHA-256; a reset
+  phone's blocks reclaimed.
+
+### Milestone 3.5 — Capture (`adms-field-app` §4A; `adms-ticket-workflows`)
+- [ ] **3.5.1 The collection, and what every capture shares** (REQ-303, 308a, 309, 317 in part, 318,
+  319; C68, C96, C121, C135; AC-02-44, 45, AC-04-08, 11, 24, 91, 92, 95, 96, 98, AC-08-06,
+  AC-11-05, 36…39): badge first, number last; a badge not in the lists warned, refreshed or keyed by
+  hand; the debris type and field tag by name; GPS and waypoints; the address looked up or typed;
+  normal or split, and the split chain; the number scanned or shown and entered again, a typed one
+  with its reason; the phone's own duplicate check; cancel; sealed at submit. WCAG 3.3.7 and the
+  number entered twice weighed (file 11, left 2).
+- [ ] **3.5.2 The tower and the haul-out** (REQ-304, 305, 124f, 321; C74, C83, C97, C100; AC-04-38,
+  44, AC-11-40, 41): the site from the assignment; the debris type picked on its own; one quantity
+  from the site's lookup (the load call typed 0–100, the scale weight and receipt, or the count of
+  tickets carried); no ticket list; the haul-out's call at its loading end, split piles; a
+  handwritten disposal receipt on a control-ticket project; a load turned away gets nothing.
+- [ ] **3.5.3 Unit rate** (REQ-306, 320, 112b; AC-04-70, AC-11-43): the crew badge kept and
+  confirmed; the crew photo; the payable type by name; each kind of work's screen (a count, a
+  measurement, a stump, items, items with hours); the pay item from the domain's bands; ineligible
+  where the pay item allows; one GPS point; the number generated and entered again.
+- [ ] **3.5.4 Forms** (REQ-307; C66, C67, C69, C118's last part; AC-04-101): the ROE (a number from
+  the block or typed), pre- and post-work surveys (the post-work picks from ROEs whose pre-work
+  survey is done), the incident (type, sub-type, what its form offers), the citizen drop-off log,
+  the firm's own fields, "GPS required", photo fields.
+- [ ] **3.5.5 Certifying on a phone, and the truck keyed in by hand** (REQ-322, 317; C118, C127,
+  C129; AC-03-09, 14, 36, AC-11-42): the prime, the vehicle or crew type, each box's feature and the
+  helpers picked from the lists, a sub typed with suggestions; the capacity from `Capacity`, shown
+  and never typed; five views; the cert number from the block or the pre-printed sheet; the boxes
+  sent; a hand-keyed truck's typed capacity, every detail not recorded `null`.
+
+### Milestone 3.6 — Photographs, printing and scanning, in the browser build (ARCHITECTURE §11, §12)
+- [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44): from the camera only, at
+  most 8 per ticket and a certification's five views; SHA-256 at capture; the native shrink's
+  interface (the browser build keeps the original).
+- [ ] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
+  receipt content model (its package by ADR: the back office's receipt batch reads it too), to PDF
+  and ZPL; Code 128 of the bare number; every project prints; reprinted at any time, never
+  recorded; the printable control-ticket test set.
+- [ ] **3.6.3 Scanning** (REQ-315's browser half; AC-11-49): a keyboard-style scanner and the camera
+  where the browser allows; anything printed scans back and an existing ticket says so; a scan
+  outside the control ranges questioned.
+
+### Milestone 3.7 — The time clock (REQ-310; ADR-241)
+- [ ] **3.7.1 The time clock's records** (REQ-310's server half; AC-02-54, 55): the clock's records
+  (in, breaks, out, activity lines, the day approved and unlocked), their guards and audit, the
+  sync's kind that carries them (a contract change), a manager's approve and unlock by the endpoint
+  recipe, the read its export needs; a viewer never sees hours; never related to crew time.
+- [ ] **3.7.2 The phone's clock** (REQ-310; AC-02-50…52): clock in, breaks and out by hand on the
+  assignment; the two nudges; activity lines pre-filled from the day's field events, extra lines
+  from the firm's list, approved by the worker. *The approval screen and the export: Phase 4.*
+
+### Milestone 3.8 — iPhone (ARCHITECTURE §3, §8, §11, §12, §15)
+- [ ] **3.8.1 The iOS build, its store and its key** (REQ-301, 302; C110, C111, C156; AC-10-44,
+  AC-11-03, 07, 09, 11, 13): Capacitor by ADR; the SQLCipher store, its data key in the Keychain
+  this-device-only; left out of backups; the device key in the Secure Enclave (the 65-byte point
+  under its fixed header), DER signatures; tokens in secure storage.
+- [ ] **3.8.2 The native camera and scanning** (REQ-316, 315; C137; AC-11-44, 45, 49): full
+  resolution; the shrink at the original resolution keeping location, time and depth (or depth
+  linked); both hashes; sizes measured on a real iPhone into configuration; the camera scanner.
+- [ ] **3.8.3 Printing to a Zebra ZQ** (REQ-314, 315; AC-11-47, 50): the native plugin on Zebra's
+  SDK, ZPL over Bluetooth; the test set scanned off paper.
+- [ ] **3.8.4 On a real iPhone** (ARCHITECTURE §15; AC-11-05, 10, 34, 56, 57): airplane mode through
+  a day, printing, scanning, the camera, encryption, turn-in, VoiceOver and the largest text; run
+  with the user, what was seen recorded.
+
+### Milestone 3.9 — Android
+- [ ] **3.9.1 The Android build** (REQ-301, 302, 314…316; C110; AC-10-44, AC-11-03, 07, 09, 11, 13,
+  44, 45, 47, 49, 50): the Keystore key (SubjectPublicKeyInfo); backups off and the data-extraction
+  rules; the SQLCipher store; the camera and shrink; the Zebra plugin; the scanner.
+- [ ] **3.9.2 On a real Android phone** (AC-11-05, 10, 34, 56, 57): as 3.8.4, TalkBack in place of
+  VoiceOver; run with the user.
+
+### Milestone 3.10 — Prove it
+- [ ] **3.10.1 The golden mission through the field app**: the browser end-to-end tests capture every
+  field event of the mission's phones through the screens and sync it through the real endpoints;
+  the approved statuses, review queue and ledger (P1 $5,548.25 on 19 lines; P2 $324.00).
+- [ ] **3.10.2 The checklist and accessibility, whole** (REQ-323, 324; AC-11-55, 57…60): MASVS
+  answered whole; every screen reviewed by hand against WCAG 2.2 AA and the review recorded; the
+  field app's Accessibility Conformance Report (VPAT format) written (ADR-559).
+- [ ] **3.10.3 The phase exit**: the chain green; three full runs in a row of the browser end-to-end
+  tests and `pnpm scenarios`; every Phase 3 scenario counted N of M; the REQs ticked or moved; the
+  register swept (no "no task yet" of the field app's).
+
+**Every one of Phase 3's 33 REQs is named by a task:** 006 → 3.1.2 · 112b → 3.5.3 · 124c → 3.4.3 ·
+124f → 3.5.2 · 125c → 3.2.3 · 301 → 3.1.2, 3.8.1, 3.9.1 · 302 → 3.2.1, 3.8.1, 3.9.1 · 303 → 3.5.1 ·
+304, 305 → 3.5.2 · 306 → 3.5.3 · 307 → 3.5.4 · 308, 308c → 3.4.1 · 308a → 3.5.1 · 308b → 3.2.3 ·
+309 → 3.5.1…3.5.5 · 310 → 3.7.1, 3.7.2 · 311 → 3.2.2…3.2.4, 3.3.1 · 311a → 3.2.2 · 312 → 3.3.2 ·
+313 → 3.4.3 · 314 → 3.6.2, 3.8.3, 3.9.1 · 315 → 3.6.2, 3.6.3, 3.8.2, 3.8.3, 3.9.1 · 316 → 3.4.2,
+3.6.1, 3.8.2, 3.9.1 · 317 → 3.5.1, 3.5.5 · 318, 319 → 3.5.1 · 320 → 3.5.3 · 321 → 3.5.2, 3.6.2 ·
+322 → 3.5.5 · 323 → 3.1.1, 3.10.2 · 324 → 3.1.3, 3.10.2.
+
+---
+
+## Done — Phase 2: API and sync *(opened by the user 2026-10-06, ADR-376; this plan is ADR-377; its exit of 2026-10-14, ADR-518, withdrawn: reopened the same day, ADR-519, Milestone 2.8; its exit of 2026-10-17, ADR-537…540, withdrawn: reopened the same day, ADR-552, Milestone 2.9; exit met a third time 2026-10-17, ADR-555; Phase 3 opened, ADR-557)*
 
 **What Phase 2 is.** Phase 1 built everything a request will call, with no HTTP. Phase 2 puts the
 server in front of it: the API as a running process over HTTPS, sign-in and permissions, a phone's
@@ -281,10 +488,9 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to its REQs (task 2.8.1, ADR-522):* C24, C86 → REQ-006 · C110, C112, C114, C115, C117, C120, C122, C125, C133, C143, C151 → REQ-311 · C113 → REQ-311a · C123, C124, C126 → REQ-312 · C141 → REQ-313 · C69, C141 → REQ-124c · C74, C97, C100 → REQ-124f · C127, C128, C130, C133, C139, C152, C153, C166 → REQ-308 · C69, C128, C132, C137 → REQ-308c · C68 → REQ-308a, REQ-319 · C68, C83, C135 → REQ-303, 304 (C135: every flow, REQ-303…306) · C66, C67, C69, C118 → REQ-307 · C137, C138 → REQ-316 · C121 → REQ-318 · C96, C127 → REQ-317 · C118, C129 → REQ-322 · C156 → REQ-323 · C41 → REQ-324; and since: C168, C170 → REQ-311, 308 · C171 → REQ-312.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C24, C86 → 3.1.2 · C31 → 3.1.2 · C41 → 3.1.3, 3.10.2 · C156 → 3.1.1, 3.8.1 · C110 → 3.2.2, 3.8.1, 3.9.1 · C111, C112 → 3.2.2 (C112's `Authorization` across origins, 3.1.2) · C113 → 3.2.2 · C114, C115, C117, C133 → 3.2.3 · C120, C143, C151 → 3.2.4 · C122, C125 → 3.3.1 · C123, C124, C126, C171 → 3.3.2 · C127, C128, C130, C132, C139, C152, C153, C166, C168 → 3.4.1 · C137, C138 → 3.4.2, 3.8.2 · C69, C141, C170 → 3.4.3 (C141's offline sign-in report, 3.2.4) · C68, C96, C121, C135 → 3.5.1 · C74, C83, C97, C100 → 3.5.2 · C66, C67 → 3.5.4 · C118 → 3.5.5 (its post-work survey, 3.5.4) · C127, C129 → 3.5.5.
 - **C171.** The phone sends `masterPasscodeSession` (`AS_MONITOR`, `TEMPORARY` or `null`) on every field event, in place of `temporarySession` (ADR-534 (11); REQ-312).
-- **C163.** Phase 3's first task writes its plan from `REQUIREMENTS-LATER.md`'s Phase 3 and this map (as ADR-377 did), and its acceptance scenarios for the phone (file 10's section M rows with a later part); it asks first the accessibility standard (C41).
-- **C41. Accessibility** (ADR-279). *Have:* every screen translatable (ADR-172). *Missing:* a named standard and level for the web apps and the field app, how it is checked (automated checks beside the browser end-to-end tests, ARCHITECTURE §15), and whether a conformance statement ships (public clients ask in procurement). *Raise:* before the first screen is designed; the standard is the user's to pick.
+- **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Left:* the automated check beside the browser end-to-end tests (3.1.3) and each screen's own check in its task; the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C24, C86.** The object store's CORS allow-list widens when the web apps arrive (the API's S3 identity never holds bucket-delete); the API and web apps get their own `*.adms.localhost` names; each web app's origin and the field app's native origins (`capacitor://localhost`, `https://localhost`) join `ADMS_CORS_ORIGINS`; the page headers are the web apps'.
 - **C31.** The UUIDv7 maker (`packages/scenarios/src/ids.ts`) moves to `packages/domain` when the field app needs it.
 - **C66, C67 (c).** What a phone lets a monitor change on an ROE after their shift; "GPS required" asked by the phone; a photo field's capture; the incident screen shows only what the form offers.
@@ -305,6 +511,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **C156.** A phone's private key never leaves its secure hardware; the field app's own checklist (OWASP MASVS, REQ-323).
 
 #### For Phase 4 (the back office's and the portal's screens, exports)
+- **Accessibility** (C41; ADR-559): every web app screen meets WCAG 2.2 AA, checked automatically beside its browser end-to-end tests as the field app's are (3.1.3's checker), reviewed by hand; the back office's and the portal's conformance reports (VPAT format) at Phase 4's end.
 - **Setup screens:** the check's page (open to reviewers) and the lookup on the site's page (C74, C97, C100); the screens read `reason`/`message` beside the field and `queued` ("N tickets queued, M locked as invoiced left as they are", ADR-422) (C96, C98, C99, C104, C105, C169); the pay item screen shows a rate only from a read taking Setup, the rule builder reads `valid` and `reasons`, *Show matches*' counts, "what it would change" (C75, C99); the map screen: a preview of a file's or an Esri layer's contents before a load, the zones' name field from `fields`, a drawn shape as GeoJSON, the ring pairs' refusal in its words, the Esri token asked at each fetch and never remembered (C140, C166, C169; REQ-124b); a setup version's page and field events whose version the project never had (C119); the close screen reads the closing check and asks to confirm, a reopening asks its reason (C81, C169); setup suggests a cert-number seed that doesn't look made up (C64, Q-96); where a firm's Monitor ID series starts if not `M000001` (C43); the crew-day pay item's day length defaulting from `CREW_DAY_HOURS` (C60). A save shown beside its preview, from the five preview requests: "N tickets would be queued, M locked as invoiced passed by" (C172).
 - **Review screens:** the review queue shows a held record (`viewer_held_record` for a viewer), one whose `sentId` was since saved, held photographs beside their records, files set aside beside their photographs, quarantined records' `resolution`, `DEVICE_CLOCK_OFF` with its difference (the firm may want the limit per project), a ticket queued because a neighbour changed, an accepted flag as accepted with a void ticket's cleared flags left out, a line taken off as taken off, a record held for its weight and why; saving a held record as corrected starts from `sent`; bulk accept; for many tickets, those that can't be locked and why (AC-09-08); the report by a batch's name (also a contractor's, from `viewer_invoice_batch`/`viewer_invoice_lock`); "reprocess" calls `reprocessTickets`; a page of waiting and set-aside jobs; the back office's correction is the only way a submitted record changes; a photograph shown by fetching its file with the session's cookies (never opened as a page), one not arrived says so; the removal of a photograph and what a viewer's screen and the exports do with a removed one (C67 (e), C78…C81, C94, C96, C128, C131…C133, C135, C137…C139, C146, C147, C152, C168). The queue's screen reads `GET /projects/:projectId/review-queue` a workflow at a time with its cause counts, and `?cause=` for one; **bulk accept and bulk fix are the screen's loop over the single acts** (only QC and a lock take many in one request, ADR-535 (4)); a ticket's run decisions shown from `GET …/tickets/:workflow/:ticketNumber/decisions` (ADR-536); a batch's report read by its name (C172).
 - **Records made in the back office, and corrections** (C171; ADR-534): the sheet's entry screen (boxes measured with capacity shown as the server answers it, helpers picked, the reason picked), its five views sent one by one through `POST /photographs`; the forms' entry screens and a form's answers edited against the version they answer, `ANSWERS_DO_NOT_FIT`'s words beside the fields; an ROE's number corrected shows what it found and what it let go; an acceptance taken back from the flag's line; a revocation taken back on the certification's page (an admin's); a field event shows "authorised by the master passcode, for M004127" and which way.
