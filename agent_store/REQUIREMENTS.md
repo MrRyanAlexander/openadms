@@ -76,7 +76,7 @@ code present *and* covered by a passing test.
 | REQ-015 (reconciliation of a group is one database transaction) | Phase 1, below | `db.$write`: one database transaction per call, the actor stated first (ADR-273) |
 | REQ-017 (the golden mission as the scenario harness's story) | Phase 1, below | The harness, `pnpm scenarios`, and two stories (ADR-275, 281); ✅ the golden mission itself, 2026-10-06 (ADR-368) |
 | REQ-004 (a Zod schema for every API and sync payload) | Phase 2, `REQUIREMENTS-LATER.md` | The contracts package, depending on `domain` only (ADR-261) |
-| REQ-006 (every service over HTTPS, one command) | Phase 2, `REQUIREMENTS-LATER.md` | Met for the six services that exist: Postgres, object store, mail catcher, routing, addresses, Caddy (ADR-263, 282) |
+| REQ-006 (every service over HTTPS, one command) | Phase 2, `REQUIREMENTS-LATER.md` | Met for the six services that exist: Postgres, object store, mail catcher, routing, addresses, Caddy (ADR-263, 282). *Where it stands now (ADR-556): in Phase 3, ten containers, Phase 2's moved table below* |
 | REQ-016 (the server's idempotency ledger) | Phase 2, `REQUIREMENTS-LATER.md` | Every field event's id is made on the phone (ADR-268); the harness's phones keep it across a retry (ADR-275) |
 
 ---
