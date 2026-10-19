@@ -4,7 +4,9 @@
 // takes now, which the monitor's session keeps. **Told there is none, the phone keeps what it
 // holds** (an assignment never stops work, ADR-240) and says how stale it is (AC-11-16). The lists
 // say which setup version they are; told of another (a sync's answer, task 3.4.1), the phone reads
-// them again (AC-11-17). What the store keeps is read back by the contracts' own schema, with the
+// them again (AC-11-17). A sync's answer also brings the blocks of numbers the phone holds of each
+// series it reported, topped up (ADR-065, 505): they take the place of that series' blocks held
+// (`toppedUp`), and the last number used of each series is reported from them (`lastUsed`). What the store keeps is read back by the contracts' own schema, with the
 // monitor they were read for: the phone's monitor, the one whose work it holds, who alone signs in
 // on it with no connection (ADR-120, 575).
 //
@@ -15,8 +17,10 @@
 import {
   phoneListsAnswerSchema,
   phoneListsEndpoint,
+  type LastUsedReport,
   type PhoneAssignmentAnswer,
   type PhoneListsRecord,
+  type SeriesHeld,
 } from '@open-adms/contracts';
 import type { NoAssignmentReason } from '@open-adms/domain';
 
@@ -145,6 +149,53 @@ export class PhoneLists {
   // now; the lists held are kept as they are.
   async handedTo(monitorId: string): Promise<void> {
     await this.store.change([{ shelf: listsShelf, id: handedToId, value: { monitorId } }]);
+  }
+
+  // The blocks a sync answered, each series topped up taking the place of that series' blocks
+  // held; a series not topped up, or another project's, leaves what is held as it is. Nothing where
+  // the phone holds no lists.
+  async toppedUp(numbers: readonly SeriesHeld[]): Promise<void> {
+    const kept = await this.store.read(listsShelf, listsId);
+    const held = await this.held();
+    if (held === undefined || typeof kept !== 'object' || kept === null) return;
+    if (Array.isArray(kept) || kept instanceof Uint8Array) return;
+    const record = kept as Readonly<Record<string, Json>>;
+    const project = held.assignment.project.id;
+    const taken = numbers.filter(({ toppedUp, projectId }) => toppedUp && projectId === project);
+    if (taken.length === 0) return;
+    const series = new Set(taken.map((each) => each.series));
+    const blocks = [
+      ...held.lists.blocks.filter((block) => !series.has(block.series)),
+      ...taken.flatMap((each) =>
+        each.blocks.map((block) => ({ ...block, series: each.series, status: 'ISSUED' as const })),
+      ),
+    ];
+    await this.store.change([
+      {
+        shelf: listsShelf,
+        id: listsId,
+        value: { ...record, lists: { ...held.lists, blocks } } as unknown as Json,
+      },
+    ]);
+  }
+
+  // The last number used of each series the phone holds blocks of, as its blocks say: what a sync
+  // reports (ADR-065), so the server tops each up. None where it holds no lists.
+  async lastUsed(): Promise<LastUsedReport[]> {
+    const held = await this.held();
+    if (held === undefined) return [];
+    const series = [...new Set(held.lists.blocks.map((block) => block.series))];
+    return series.map((one) => {
+      const used = held.lists.blocks
+        .filter((block) => block.series === one)
+        .map((block) => block.lastUsedNumber)
+        .filter((number) => number !== null);
+      return {
+        projectId: held.assignment.project.id,
+        series: one,
+        lastUsedNumber: used.length === 0 ? null : Math.max(...used),
+      };
+    });
   }
 
   // Read again where the setup version the server named isn't the one the lists held are, or

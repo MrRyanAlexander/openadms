@@ -167,6 +167,12 @@ gets tracked on a spreadsheet."
     record by record (saved, already saved, not saved); topped up with numbers and fresh lists; any
     phone with a connection may refresh its lists at any time (ADR-151, 240; ARCHITECTURE §9).
     **A phone needn't be handed in for its work to arrive.**
+    ⚠️ *ADR-578 (task 3.4.1, agent default), as built in the field app: it syncs on signing in, on
+    finding a connection, on coming back to the front and on "Sync now", the sync before the lists;
+    what the server didn't take stays on the phone, listed on Sync in the server's words, and **goes
+    again by itself once each time the phone syncs** (ADR-470 (3)), so it leaves the list once the
+    back office has sorted it out; the reports go in the sync; told to wait, it waits and sends the
+    same again.*
     ⚠️ **User, 2026-10-15 (ADR-531):** "a phone that is not signed in should not be trying to
     sync … When NO user is signed in at all, the app should not try to sync. In addition the
     server should be smart enough to know that the user is not signed in". **The app syncs only

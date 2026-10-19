@@ -12,11 +12,13 @@ import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
 import { LoginList } from './phone/login-list.ts';
 import { MonitorOnPhone } from './phone/monitor.ts';
+import { PhoneOutbox } from './phone/outbox.ts';
 import { PasscodeSessions } from './phone/passcode-sessions.ts';
 import { PasscodeOnPhone } from './phone/passcode.ts';
 import { PhoneReports } from './phone/reports.ts';
 import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
+import { PhoneSync } from './phone/sync.ts';
 import { Server } from './server.ts';
 import { Shell } from './shell.tsx';
 import { BrowserKeyring } from './store/browser-keyring.ts';
@@ -27,7 +29,7 @@ if (place === null) throw new Error('index.html has no element for the app.');
 
 const server = new Server(import.meta.env.ADMS_API_ORIGIN);
 const policy = Policy.from(import.meta.env.ADMS_POLICY);
-const phone = BrowserStore.opened().then((store) => {
+const phone = BrowserStore.opened().then(async (store) => {
   const keyring = new BrowserKeyring();
   const identity = new PhoneIdentity(store, keyring, server);
   const reports = new PhoneReports(store);
@@ -36,11 +38,36 @@ const phone = BrowserStore.opened().then((store) => {
   const loginList = new LoginList(store, SignInTries.onPhone(policy));
   const passcode = new PasscodeOnPhone(identity, monitor, loginList, reports);
   const setup = new PhoneSetup(store, identity, monitor, lists, loginList, passcode, reports);
+  const outbox = await PhoneOutbox.opened(store, {
+    // What a sync says the phone holds: its passcode's check and its lists, and their numbers.
+    holding: async () => {
+      const [check, held, lastUsed] = await Promise.all([
+        loginList.passcode(),
+        lists.held(),
+        lists.lastUsed(),
+      ]);
+      return {
+        holds: {
+          masterPasscodeVersion: check?.version ?? null,
+          listsProjectId: held?.assignment.project.id ?? null,
+        },
+        lastUsed,
+      };
+    },
+    filePartBytesAtMost: policy.mediaPartBytesAtMost,
+    // The keyring first, then the store (NIST SP 800-88; task 3.4.3's turn-in).
+    wipe: async () => {
+      await keyring.erase();
+      await store.erase();
+    },
+  });
   return {
     identity,
     monitor,
     lists,
     loginList,
+    outbox,
+    sync: new PhoneSync({ store, outbox, monitor, lists, loginList }),
     signingIn: new SigningIn(monitor, lists, loginList, passcode, reports, policy),
     setup,
     passcode,

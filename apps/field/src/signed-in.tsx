@@ -4,15 +4,18 @@
 // (its project, its one site, a button for each work it allows, AC-11-18), or the words for why
 // there is none, offering the master passcode's setup for the monitor signed in (AC-11-15, 24;
 // task 3.3.1, ADR-576): set up, the lists are read again and home is the assignment made.
-// **Sync** says how stale the lists are and refreshes them; **Settings** says who is signed in on
-// which phone and signs them out. The lists are read on signing in, and again whenever the phone
-// finds a connection or comes back to the front (AC-11-16); told there is no assignment, the
-// phone keeps the lists it holds. A request answered `NOT_SIGNED_IN` sends the monitor back to
-// sign in, keeping everything the phone holds (AC-11-14). Time joins the menu with the time
+// **Sync** says when the phone last synced, what of its own the server didn't take, in the server's
+// words (AC-05-46, AC-11-31), and how stale the lists are, and syncs on asking; **Settings** says
+// who is signed in on which phone and signs them out. **The phone syncs** (task 3.4.1, ADR-578) on
+// signing in, whenever it finds a connection or comes back to the front, and on asking, then reads
+// the lists (AC-11-16; coming back to the front, only where the sync says they moved); told there
+// is no assignment, the phone keeps the lists it holds. A request answered `NOT_SIGNED_IN` sends
+// the monitor back to sign in, keeping everything the phone holds (AC-11-14). Every screen's strip
+// says how much waits to go and when the phone last synced. Time joins the menu with the time
 // clock's task (3.7.1), which tells the phone whether the project has it on.
 //
 // With every read of the lists the login list is read too (AC-02-41; task 3.2.4, ADR-575), and a
-// sign-in made with no connection is reported before either (AC-11-21): refused, the monitor is
+// sign-in made with no connection is reported before the sync (AC-11-21): refused, the monitor is
 // sent back to sign in online. **Left alone for the policy's minutes, the phone signs them out**
 // (AC-02-40, AC-11-20, 64), warning the policy's seconds before so one tap keeps the session
 // (WCAG 2.2.1); nothing on the phone not yet submitted is touched.
@@ -30,14 +33,16 @@ import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/i
 import { Move } from './move.tsx';
 import type { Ended, SetUpFor } from './phone.tsx';
 import type { Enrolment } from './phone/identity.ts';
-import type { HeldLists, ListsRead, PhoneLists } from './phone/lists.ts';
-import type { LoginList } from './phone/login-list.ts';
+import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
+import type { NotSavedShown, PhoneOutbox } from './phone/outbox.ts';
 import type { PhoneSetup } from './phone/setup.ts';
+import type { ListsAfter, PhoneSync, SyncRun } from './phone/sync.ts';
 import { worksOf } from './phone/works.ts';
+import type { NotAnswered } from './server.ts';
 import { refusalWords } from './refusals.ts';
 import { Setup } from './setup.tsx';
-import { counted, lastSynced, say, words } from './words.ts';
+import { counted, lastSynced, listsRead, say, words } from './words.ts';
 
 // How long the phone may be left alone, in minutes, and how long before the end it warns, in
 // seconds (the policy's).
@@ -48,11 +53,42 @@ export interface Inactivity {
 
 const menu: readonly MenuItem[] = ['work', 'sync', 'settings'];
 
+// What a run came to that the screen says: nothing, where it synced and its lists were read or
+// were the same; otherwise the request it stopped at.
+function stoppedAt(run: SyncRun | null): NotAnswered | null {
+  if (run === null || run.kind === 'nobodySignedIn') return null;
+  if (run.kind !== 'synced') return run;
+  const { lists } = run;
+  return lists === 'same' || lists.kind === 'taken' || lists.kind === 'none' ? null : lists;
+}
+
+// What one thing not saved is, in the screen's words.
+function whatNotSaved(shown: NotSavedShown): string {
+  const what = words.sync.what;
+  if (shown.kind !== 'record') return what[shown.kind];
+  const { record } = shown;
+  switch (record.record) {
+    case 'FIELD_EVENT': {
+      const { ticketNumber, splitSuffix } = record.fieldEvent;
+      return `${say(what.FIELD_EVENT, { number: `${ticketNumber}${splitSuffix}` })}, ${words.sync.fieldEvent[record.fieldEvent.kind]}`;
+    }
+    case 'SCALE_RECEIPT':
+      return say(what.SCALE_RECEIPT, { number: record.scaleReceipt.receiptNumber });
+    case 'ROE':
+      return say(what.ROE, { number: record.roe.roeNumber });
+    case 'CERTIFICATION':
+      return say(what.CERTIFICATION, { number: record.certification.certNumber });
+    default:
+      return what[record.record];
+  }
+}
+
 export function SignedInPhone({
   enrolment,
   monitor,
   lists,
-  loginList,
+  sync,
+  outbox,
   inactivity,
   setup,
   signedIn: first,
@@ -62,7 +98,8 @@ export function SignedInPhone({
   readonly enrolment: Enrolment;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
-  readonly loginList: LoginList;
+  readonly sync: PhoneSync;
+  readonly outbox: PhoneOutbox;
   readonly inactivity: Inactivity;
   readonly setup: PhoneSetup;
   readonly signedIn: SignedIn;
@@ -75,7 +112,10 @@ export function SignedInPhone({
   const [held, setHeld] = useState<HeldLists | undefined>(undefined);
   const [place, setPlace] = useState<MenuItem>('work');
   const [reading, setReading] = useState(false);
-  const [lastRead, setLastRead] = useState<ListsRead | null>(null);
+  const [lastRun, setLastRun] = useState<SyncRun | null>(null);
+  const [lastSync, setLastSync] = useState<Date | undefined>(undefined);
+  const [waiting, setWaiting] = useState(() => outbox.waiting());
+  const [notSaved, setNotSaved] = useState<readonly NotSavedShown[]>(() => outbox.notSaved());
   const [signingOut, setSigningOut] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [warned, setWarned] = useState(false);
@@ -86,39 +126,49 @@ export function SignedInPhone({
   // after the lock, says nothing.
   const theirs = useRef(true);
 
-  // The lists read now, then the login list: what the server answered is kept, and the screen
-  // shows it.
-  const read = useCallback(async () => {
-    setReading(true);
-    const answered = await lists.read();
-    if (answered.kind === 'taken' || answered.kind === 'none') await loginList.read(monitor);
-    // A sign-in the server no longer took was dropped by the read: the monitor signs in again.
-    const [session, kept] = await Promise.all([monitor.signedIn(), lists.held()]);
-    if (!theirs.current) return;
-    if (session === undefined) {
-      theirs.current = false;
-      const refused = answered.kind === 'refused' && answered.code === 'SIGN_IN_REFUSED';
-      onSignedOut({ why: refused ? 'offlineRefused' : 'ended' });
-      return;
-    }
-    setSignedIn(session);
-    setHeld(kept);
-    setLastRead(answered);
-    setNow(new Date());
-    setReading(false);
-  }, [lists, loginList, monitor, onSignedOut]);
+  // The phone syncs now, then reads the lists and the login list: what the server answered is
+  // kept, and the screen shows it.
+  const read = useCallback(
+    async (after: ListsAfter = 'read') => {
+      setReading(true);
+      const ran = await sync.run(after);
+      // A sign-in the server no longer took was dropped by the run: the monitor signs in again.
+      const [session, kept, synced] = await Promise.all([
+        monitor.signedIn(),
+        lists.held(),
+        sync.lastSynced(),
+      ]);
+      if (!theirs.current) return;
+      if (session === undefined) {
+        theirs.current = false;
+        const refused = ran.kind === 'refused' && ran.code === 'SIGN_IN_REFUSED';
+        onSignedOut({ why: refused ? 'offlineRefused' : 'ended' });
+        return;
+      }
+      setSignedIn(session);
+      setHeld(kept);
+      setLastRun(ran);
+      setLastSync(synced);
+      setWaiting(outbox.waiting());
+      setNotSaved(outbox.notSaved());
+      setNow(new Date());
+      setReading(false);
+    },
+    [lists, monitor, onSignedOut, outbox, sync],
+  );
 
   // On signing in, and again whenever the phone finds a connection or comes back to the front.
   useEffect(() => {
     void read();
-    const again = () => {
-      if (document.visibilityState === 'visible') void read();
+    const online = () => void read();
+    const front = () => {
+      if (document.visibilityState === 'visible') void read('unlessMoved');
     };
-    window.addEventListener('online', again);
-    document.addEventListener('visibilitychange', again);
+    window.addEventListener('online', online);
+    document.addEventListener('visibilitychange', front);
     return () => {
-      window.removeEventListener('online', again);
-      document.removeEventListener('visibilitychange', again);
+      window.removeEventListener('online', online);
+      document.removeEventListener('visibilitychange', front);
     };
   }, [read]);
   useEffect(() => {
@@ -180,16 +230,16 @@ export function SignedInPhone({
       marked === null
         ? signedIn.name
         : say(words.look.strip.underPasscode[marked], { name: signedIn.name }),
-    waiting: 0,
-    lastSent: null,
+    waiting,
+    sending: reading,
+    lastSent: lastSync ?? null,
     now,
     ...(signedIn.assignment === null ? {} : { timeZone: signedIn.assignment.project.timeZone }),
   };
-  const synced = lastSynced(held?.readAt, now);
-  const unread =
-    lastRead !== null && lastRead.kind !== 'taken' && lastRead.kind !== 'none'
-      ? refusalWords(lastRead)
-      : null;
+  const synced = lastSynced(lastSync, now);
+  const stale = listsRead(held?.readAt, now);
+  const stopped = stoppedAt(lastRun);
+  const unread = stopped === null ? null : refusalWords(stopped);
   const warning = warned ? (
     <div className="screen-warning">
       <Banner tone="notice" announced>
@@ -314,7 +364,8 @@ export function SignedInPhone({
           {held === undefined ? null : (
             <p>{say(said.held, { project: held.assignment.project.name })}</p>
           )}
-          <p role="status">{reading ? said.checking : synced}</p>
+          <p role="status">{reading ? said.checking : stale}</p>
+          <p>{synced}</p>
           {unread === null ? null : <p>{unread}</p>}
         </div>
         <div className="screen-actions">
@@ -343,6 +394,22 @@ export function SignedInPhone({
         <StatusStrip standing={standing} />
         <div className="screen-body">
           <h1>{said.title}</h1>
+          <p role="status">{reading ? said.syncing : (unread ?? synced)}</p>
+          {waiting === 0 && notSaved.length === 0 ? <p>{said.nothingWaits}</p> : null}
+          {notSaved.length === 0 ? null : (
+            <section aria-labelledby="not-saved">
+              <h2 id="not-saved">{said.notSaved.title}</h2>
+              <p>{said.notSaved.intro}</p>
+              <ul>
+                {notSaved.map((one) => (
+                  <li key={one.id}>
+                    <strong>{whatNotSaved(one)}</strong>
+                    <p>{one.message ?? said.notSaved.report}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           <p>
             {held === undefined
               ? said.noLists
@@ -351,11 +418,11 @@ export function SignedInPhone({
                   version: held.lists.setupVersion,
                 })}
           </p>
-          <p role="status">{reading ? said.refreshing : (unread ?? synced)}</p>
+          <p>{stale}</p>
         </div>
         <div className="screen-actions">
           <Button main wide isDisabled={reading} onPress={() => void read()}>
-            {reading ? said.refreshing : said.refresh}
+            {reading ? said.syncing : said.syncNow}
           </Button>
         </div>
         {bottom}

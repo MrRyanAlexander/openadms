@@ -24,6 +24,11 @@ find it, some carrying days of work; a phone needn't be handed in for its work t
    hands (ADR-095). **It never sends a change to a record it already sent**: what a monitor
    submitted is sealed for them, and a record sent again is answered "already saved" as it was
    stored (ADR-477). Cancelled field events stay on the phone.
+   ⚠️ *ADR-578 (task 3.4.1, agent default): a record the server didn't store (quarantined, or not
+   saved and held for a person) stays on the phone, shown to the monitor in the server's words, and
+   the phone sends it again by itself once each time it syncs, the same, so it learns when a person
+   resolved it ("already saved"); a report not saved is never sent again. The phone's unplanned
+   assignments and logged uses of the master passcode go in the sync, ahead of its records.*
    Photos follow: first each photograph's **record**, in the same sync as its record or a later
    one, with the hash taken at capture and the hash of the file it will upload, **never where the
    file goes** (the server makes that place, and holds a photograph whose record it doesn't have

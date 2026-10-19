@@ -20,8 +20,15 @@ import {
   reportUnplannedAssignmentEndpoint,
   signInOnPhoneEndpoint,
   signOutOnPhoneEndpoint,
+  syncedRecordId,
+  syncPhoneEndpoint,
   takeOfflineSignInOnPhoneEndpoint,
   type Endpoint,
+  type ErrorCode,
+  type RecordAnswer,
+  type SeriesHeld,
+  type SyncedRecord,
+  type SyncSent,
   type OfflineSignInReport,
   type PhoneAssignmentAnswer,
   type PhoneListsRecord,
@@ -34,11 +41,13 @@ import { PhoneIdentity } from '../src/phone/identity.ts';
 import { PhoneLists } from '../src/phone/lists.ts';
 import { LoginList } from '../src/phone/login-list.ts';
 import { MonitorOnPhone } from '../src/phone/monitor.ts';
+import { PhoneOutbox } from '../src/phone/outbox.ts';
 import { PasscodeSessions } from '../src/phone/passcode-sessions.ts';
 import { PasscodeOnPhone } from '../src/phone/passcode.ts';
 import { PhoneReports } from '../src/phone/reports.ts';
 import { PhoneSetup, type SetupPicked } from '../src/phone/setup.ts';
 import { SigningIn } from '../src/phone/signing-in.ts';
+import { PhoneSync } from '../src/phone/sync.ts';
 import { Server, type Asking, type Reply } from '../src/server.ts';
 import { checkOf, noLists } from './checks.ts';
 import { HeldKeyring, HeldStore } from './held.ts';
@@ -156,6 +165,14 @@ export class TestServer extends Server {
   monitors = [ana, kim, jo];
   // The sign-ins made offline it has taken, as reported.
   readonly offlineSignIns: OfflineSignInReport[] = [];
+  // Each sync sent, as it went; how each record is answered (saved where it says nothing); the
+  // waits it tells first, each a code and seconds; the numbers it answers; the setup version of
+  // P1 it brings.
+  readonly syncs: SyncSent[] = [];
+  recordAnswer: (record: SyncedRecord) => RecordAnswer | undefined = () => undefined;
+  readonly waits: { readonly code: ErrorCode; readonly seconds: number }[] = [];
+  numbers: (sync: SyncSent) => SeriesHeld[] = () => [];
+  setupVersion = towerLists.setupVersion;
 
   constructor() {
     super('https://api.adms.localhost');
@@ -275,6 +292,10 @@ export class TestServer extends Server {
             : { assignmentId: id, answer, reason: reason as null },
       };
     }
+    if (served === syncPhoneEndpoint) {
+      if (!inUse) return { kind: 'refused', code: 'NOT_SIGNED_IN' };
+      return this.synced(json as unknown as SyncSent);
+    }
     if (asking.session === undefined) return { kind: 'refused', code: 'NOT_SIGNED_IN' };
     if (served === phoneListsEndpoint) {
       return {
@@ -311,6 +332,47 @@ export class TestServer extends Server {
       return { kind: 'answered', answer: { status: 'signed-out' } };
     }
     throw new Error(`The test's server doesn't serve ${served.name}.`);
+  }
+
+  // A sync answered as the API answers one (ADR-472, 473): each report as its own endpoint answers
+  // it, each record as the test says, the numbers, the passcode's check where the phone holds
+  // another, and P1's setup version where its lists are P1's. A wait first, where one is left.
+  private synced(sync: SyncSent): Reply<Endpoint> {
+    this.syncs.push(JSON.parse(JSON.stringify(sync)) as SyncSent);
+    const wait = this.waits.shift();
+    if (wait !== undefined) {
+      return { kind: 'refused', code: wait.code, waitSeconds: wait.seconds };
+    }
+    const reported = (id: string) => {
+      const reason = this.notSaved;
+      const answer = reason !== null ? 'NOT_SAVED' : this.saved.has(id) ? 'ALREADY_SAVED' : 'SAVED';
+      if (reason === null) this.saved.add(id);
+      return { answer, reason };
+    };
+    return {
+      kind: 'answered',
+      answer: {
+        unplannedAssignments: sync.unplannedAssignments.map(({ id }) => ({
+          assignmentId: id,
+          ...reported(id),
+        })),
+        passcodeUses: sync.passcodeUses.map(({ id }) => ({ useId: id, ...reported(id) })),
+        records: sync.records.map((record) => {
+          const id = syncedRecordId(record);
+          return this.recordAnswer(record) ?? { answer: 'SAVED' as const, id, notes: [] };
+        }),
+        photos: sync.photos.map(({ id }) => ({ answer: 'SAVED' as const, id, notes: [] })),
+        numbers: this.numbers(sync),
+        masterPasscode: {
+          version: 1,
+          check: sync.holds.masterPasscodeVersion === 1 ? null : this.passcodeCheck.check,
+        },
+        setupVersion:
+          sync.holds.listsProjectId === p1.id
+            ? { projectId: p1.id, version: this.setupVersion }
+            : null,
+      },
+    };
   }
 
   // Two monitors a page, in the order the server holds them; a picked project's sites and pay
@@ -369,6 +431,38 @@ export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
     reports,
     policy,
   );
+  const outbox = await PhoneOutbox.opened(store, {
+    holding: async () => {
+      const [check, held, lastUsed] = await Promise.all([
+        loginList.passcode(),
+        lists.held(),
+        lists.lastUsed(),
+      ]);
+      return {
+        holds: {
+          masterPasscodeVersion: check?.version ?? null,
+          listsProjectId: held?.assignment.project.id ?? null,
+        },
+        lastUsed,
+      };
+    },
+    filePartBytesAtMost: 65_536,
+    wipe: () => store.erase(),
+    now,
+  });
+  // How long the phone was told to wait each time, as it waited.
+  const slept: number[] = [];
+  const sync = new PhoneSync(
+    { store, outbox, monitor, lists, loginList },
+    {
+      now,
+      sleep: (milliseconds) => {
+        slept.push(milliseconds);
+        return Promise.resolve();
+      },
+      random: () => 0.5,
+    },
+  );
   server.sent.length = 0;
   return {
     clock,
@@ -379,6 +473,9 @@ export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
     monitor,
     lists,
     loginList,
+    outbox,
+    sync,
+    slept,
     passcodeOnPhone,
     signingIn,
     setup,

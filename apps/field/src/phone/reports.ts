@@ -27,14 +27,14 @@ import {
 import { uuidv7, type LoggedPasscodeUse } from '@open-adms/domain';
 
 import type { NotAnswered, Sender } from '../server.ts';
-import type { Json, PhoneStore } from '../store/phone-store.ts';
+import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
 
 const shelf = 'keptAnswers';
 const unplannedPrefix = 'unplannedAssignment:';
 const usePrefix = 'passcodeUse:';
 
 // A report held, and the server's reason where it answered it not saved.
-interface Held<R> {
+export interface HeldReport<R> {
   readonly report: R;
   readonly notSaved: string | null;
 }
@@ -58,7 +58,7 @@ export class PhoneReports {
   }
 
   async keepUnplanned(report: UnplannedAssignmentReport): Promise<void> {
-    const held: Held<UnplannedAssignmentReport> = { report, notSaved: null };
+    const held: HeldReport<UnplannedAssignmentReport> = { report, notSaved: null };
     await this.store.change([
       { shelf, id: `${unplannedPrefix}${report.id}`, value: held as unknown as Json },
     ]);
@@ -75,14 +75,46 @@ export class PhoneReports {
       loggedAt: loggedAt.toISOString(),
       deviceUtcOffsetMinutes: offsetOf(loggedAt),
     };
-    const held: Held<PasscodeUseReport> = { report, notSaved: null };
+    const held: HeldReport<PasscodeUseReport> = { report, notSaved: null };
     await this.store.change([
       { shelf, id: `${usePrefix}${report.id}`, value: held as unknown as Json },
     ]);
     return report;
   }
 
-  // Everything held, each by when it was made: what a sync sends.
+  // A use already logged, kept as it was (a phone's record handed in whole, as the sync contract's
+  // suite hands one).
+  async keepUseReport(report: PasscodeUseReport): Promise<void> {
+    const held: HeldReport<PasscodeUseReport> = { report, notSaved: null };
+    await this.store.change([
+      { shelf, id: `${usePrefix}${report.id}`, value: held as unknown as Json },
+    ]);
+  }
+
+  // Everything held, each with where it stands, oldest first: what the sync carries (those not
+  // yet answered) and shows (those answered not saved).
+  async kept(): Promise<{
+    readonly unplannedAssignments: HeldReport<UnplannedAssignmentReport>[];
+    readonly passcodeUses: HeldReport<PasscodeUseReport>[];
+  }> {
+    const [unplannedAssignments, passcodeUses] = await Promise.all([this.unplanned(), this.uses()]);
+    return { unplannedAssignments, passcodeUses };
+  }
+
+  // What keeping a report's answer changes in the store: "saved" or "already saved" drops it, "not
+  // saved" keeps it with the reason.
+  static answeredChange(
+    report: UnplannedAssignmentReport | PasscodeUseReport,
+    kind: 'unplannedAssignment' | 'passcodeUse',
+    answer: { readonly answer: string; readonly reason: string | null },
+  ): Change {
+    const id = `${kind === 'unplannedAssignment' ? unplannedPrefix : usePrefix}${report.id}`;
+    if (answer.answer !== 'NOT_SAVED') return { shelf, id, dropped: true };
+    const held = { report, notSaved: answer.reason ?? 'NOT_SAVED' };
+    return { shelf, id, value: held as unknown as Json };
+  }
+
+  // Everything held, each by when it was made.
   async held(): Promise<{
     readonly unplannedAssignments: UnplannedAssignmentReport[];
     readonly passcodeUses: PasscodeUseReport[];
@@ -117,37 +149,26 @@ export class PhoneReports {
       if (notSaved !== null) continue;
       const reply = await send(reportUnplannedAssignmentEndpoint, { json: report });
       if (reply.kind !== 'answered') return reply;
-      await this.answered(`${unplannedPrefix}${report.id}`, report, reply.answer);
+      await this.store.change([
+        PhoneReports.answeredChange(report, 'unplannedAssignment', reply.answer),
+      ]);
     }
     for (const { report, notSaved } of await this.uses()) {
       if (notSaved !== null) continue;
       const reply = await send(reportPasscodeUseEndpoint, { json: report });
       if (reply.kind !== 'answered') return reply;
-      await this.answered(`${usePrefix}${report.id}`, report, reply.answer);
+      await this.store.change([PhoneReports.answeredChange(report, 'passcodeUse', reply.answer)]);
     }
     return undefined;
   }
 
-  private async answered(
-    id: string,
-    report: UnplannedAssignmentReport | PasscodeUseReport,
-    answer: { readonly answer: string; readonly reason: string | null },
-  ): Promise<void> {
-    if (answer.answer === 'NOT_SAVED') {
-      const held = { report, notSaved: answer.reason ?? 'NOT_SAVED' };
-      await this.store.change([{ shelf, id, value: held as unknown as Json }]);
-    } else {
-      await this.store.change([{ shelf, id, dropped: true }]);
-    }
-  }
-
-  private unplanned(): Promise<Held<UnplannedAssignmentReport>[]> {
+  private unplanned(): Promise<HeldReport<UnplannedAssignmentReport>[]> {
     return this.read(unplannedPrefix, (report) =>
       unplannedAssignmentReportSchema.safeParse(report),
     );
   }
 
-  private uses(): Promise<Held<PasscodeUseReport>[]> {
+  private uses(): Promise<HeldReport<PasscodeUseReport>[]> {
     return this.read(usePrefix, (report) => passcodeUseReportSchema.safeParse(report));
   }
 
@@ -157,7 +178,7 @@ export class PhoneReports {
   private async read<R extends { readonly id: string }>(
     prefix: string,
     parse: (report: unknown) => { success: true; data: R } | { success: false },
-  ): Promise<Held<R>[]> {
+  ): Promise<HeldReport<R>[]> {
     const kept = await this.store.readAll(shelf);
     return kept
       .flatMap(({ id, value }) => {

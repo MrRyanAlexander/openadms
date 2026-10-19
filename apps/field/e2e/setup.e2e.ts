@@ -285,26 +285,23 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38, AC-11-27: with no signal, P1-COL-2
     .filter(({ path }) => !/\/(challenges|proofs)$/.test(path));
   expect(after.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
     'POST /phones/current/offline-sign-ins 200',
-    'POST /phones/current/unplanned-assignments 200',
-    'POST /phones/current/passcode-uses 200',
+    'POST /phones/current/syncs 200',
     'GET /phones/current/lists 200',
     'POST /phones/current/login-list 200',
   ]);
-  const [signIn, report, use, lists] = after;
+  // The reports go in the sync (task 3.4.1, ADR-578), ahead of the lists that take the setup.
+  const [signIn, sync, lists] = after;
   const { token } = signIn?.answer as { token: string };
-  expect([report?.session, use?.session, lists?.session]).toEqual([token, token, token]);
-  expect(report?.answer).toMatchObject({ answer: 'SAVED' });
-  expect(report?.body).toMatchObject({
-    fieldEventKinds: ['COLLECTION'],
-    occasion: 'MONITOR_SWITCH',
+  expect([sync?.session, lists?.session]).toEqual([token, token]);
+  const sent = sync?.body as { unplannedAssignments: { id: string }[]; passcodeUses: unknown[] };
+  const [report] = sent.unplannedAssignments;
+  expect(report).toMatchObject({ fieldEventKinds: ['COLLECTION'], occasion: 'MONITOR_SWITCH' });
+  expect(sent.passcodeUses).toMatchObject([{ use: 'WRONG_TRY', personId: null }]);
+  expect(sync?.answer).toMatchObject({
+    unplannedAssignments: [{ answer: 'SAVED' }],
+    passcodeUses: [{ answer: 'SAVED' }],
   });
-  expect(use?.body).toMatchObject({ use: 'WRONG_TRY', personId: null });
-  expect(use?.answer).toMatchObject({ answer: 'SAVED' });
-  for (const one of [report, use]) {
-    expect(JSON.stringify(one?.body)).not.toContain(worldPasscode());
-    expect(JSON.stringify(one?.body)).not.toContain('not-the-firms-passcode');
-  }
-  expect((lists?.answer as { assignment: { id: string } }).assignment.id).toBe(
-    (report?.body as { id: string }).id,
-  );
+  expect(JSON.stringify(sent)).not.toContain(worldPasscode());
+  expect(JSON.stringify(sent)).not.toContain('not-the-firms-passcode');
+  expect((lists?.answer as { assignment: { id: string } }).assignment.id).toBe(report?.id);
 });

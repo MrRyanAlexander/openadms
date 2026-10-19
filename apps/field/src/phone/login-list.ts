@@ -151,6 +151,16 @@ export class LoginList {
     return (await this.entries()).find((entry) => entry.monitorNumber === typed);
   }
 
+  // The master passcode's check a sync brought, kept in place of the one held (ADR-473): a sync
+  // brings one only where the phone holds another version, or none.
+  async keepPasscode(brought: {
+    readonly version: number;
+    readonly check: OfflineCheckRecord | null;
+  }): Promise<void> {
+    if (brought.check === null) return;
+    await this.store.change([{ shelf, id: passcodeId, value: brought as unknown as Json }]);
+  }
+
   async passcode(): Promise<PasscodeCheck | undefined> {
     const read = answered.masterPasscode.safeParse(await this.store.read(shelf, passcodeId));
     return read.success && read.data.check !== null

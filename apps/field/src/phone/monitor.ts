@@ -17,7 +17,8 @@
 // **What the phone reports besides its records goes next** (BACKLOG 3.3.1, C122; ADR-576): an
 // unplanned assignment set up on it and the uses of the master passcode it logged, sent with the
 // monitor's session ahead of the request asked for (reports.ts), so the lists the server answers
-// take an assignment set up with no connection (AC-11-25).
+// take an assignment set up with no connection (AC-11-25). **Not ahead of a sync**, which carries
+// them itself (C181; task 3.4.1, ADR-578).
 //
 // **A session under the master passcode** (ARCHITECTURE §7.2, §7.3; BACKLOG 3.3.2, C124, C171;
 // ADR-462, 531, 577): opened as the phone's monitor, the passcode in place of their password, or
@@ -343,11 +344,13 @@ export class MonitorOnPhone {
   // With nobody signed in nothing is sent; answered `NOT_SIGNED_IN`, the session is dropped and
   // the answer is the caller's to show. A sign-in made offline is reported first (AC-11-21):
   // refused, it is dropped and the answer is `SIGN_IN_REFUSED`; not answered, it stays as it is.
-  // Then the phone's held reports (AC-11-25): with no signal for them, nothing more is asked; a
-  // report the server refused is the sync's to carry, and the request goes on.
+  // Then the phone's held reports (AC-11-25), but where the request carries them itself (the
+  // sync): with no signal for them, nothing more is asked; a report the server answered not saved
+  // stays held and shown, and the request goes on.
   async ask<E extends Endpoint>(
     served: E,
     asking: Omit<Asking, 'token' | 'session'> = {},
+    { carriesReports = false }: { readonly carriesReports?: boolean } = {},
   ): Promise<Reply<E>> {
     let held = await this.held();
     if (held === undefined) {
@@ -361,9 +364,11 @@ export class MonitorOnPhone {
       held = taken;
     }
     const session = held.answer.token;
-    const unsent = await this.reports.sent((sent, more = {}) =>
-      this.identity.asPhone(sent, { ...more, session }),
-    );
+    const unsent = carriesReports
+      ? undefined
+      : await this.reports.sent((sent, more = {}) =>
+          this.identity.asPhone(sent, { ...more, session }),
+        );
     const notSignedIn = unsent?.kind === 'refused' && unsent.code === 'NOT_SIGNED_IN';
     const reply =
       unsent?.kind === 'unreachable' || notSignedIn

@@ -22,20 +22,25 @@ import type { PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { PasscodeSessions } from './phone/passcode-sessions.ts';
+import type { PhoneOutbox } from './phone/outbox.ts';
 import type { PasscodeOnPhone } from './phone/passcode.ts';
 import type { PhoneSetup, SetupMonitor } from './phone/setup.ts';
 import type { SigningIn } from './phone/signing-in.ts';
+import type { PhoneSync } from './phone/sync.ts';
 import type { Server } from './server.ts';
 import { Setup } from './setup.tsx';
 import { SignedInPhone, type Inactivity } from './signed-in.tsx';
 
 // The phone as the build opens it: who it is to the server, the monitor signed in on it, the
-// lists and the login list it holds, how a sign-in goes, and how long it may be left alone.
+// lists and the login list it holds, what it holds to send and how it syncs, how a sign-in goes,
+// and how long it may be left alone.
 export interface OpenedPhone {
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
   readonly loginList: LoginList;
+  readonly outbox: PhoneOutbox;
+  readonly sync: PhoneSync;
   readonly signingIn: SigningIn;
   readonly setup: PhoneSetup;
   readonly passcode: PasscodeOnPhone;
@@ -200,7 +205,8 @@ export function Shell({
           enrolment={seen.enrolment}
           monitor={opened.monitor}
           lists={opened.lists}
-          loginList={opened.loginList}
+          sync={opened.sync}
+          outbox={opened.outbox}
           inactivity={opened.inactivity}
           setup={opened.setup}
           signedIn={seen.signedIn}

@@ -111,14 +111,18 @@ test('AC-02-46, AC-11-27, AC-11-64: with no signal, Ana hands P1-COL-3 to Kim, w
   const after = since(asked, before);
   expect(after.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
     'POST /phones/current/offline-sign-ins 200',
-    'POST /phones/current/passcode-uses 200',
+    'POST /phones/current/syncs 200',
     'GET /phones/current/lists 200',
     'POST /phones/current/login-list 200',
   ]);
-  const [signIn, use] = after;
+  // The use goes in the sync (task 3.4.1, ADR-578).
+  const [signIn, sync] = after;
   expect((signIn?.body as { kind: string }).kind).toBe('OWN_PASSWORD');
-  expect(use?.body).toMatchObject({ use: 'MONITOR_SWITCH' });
-  expect(use?.answer).toMatchObject({ answer: 'SAVED' });
+  expect(sync?.body).toMatchObject({
+    unplannedAssignments: [],
+    passcodeUses: [{ use: 'MONITOR_SWITCH' }],
+  });
+  expect(sync?.answer).toMatchObject({ passcodeUses: [{ answer: 'SAVED' }] });
   expect(at(asked, '/phones/current/unplanned-assignments')).toEqual([]);
   await expect(page.getByText(marshRoad)).toBeVisible();
   await expect(page.locator('.screen-actions').getByRole('button')).toHaveText([
@@ -210,32 +214,31 @@ test('AC-02-47, AC-11-27, AC-11-26, AC-02-42: Lee, with two assignments today, h
   const after = since(asked, before);
   expect(after.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
     'POST /phones/current/offline-sign-ins 200',
-    'POST /phones/current/unplanned-assignments 200',
-    'POST /phones/current/passcode-uses 200',
-    'POST /phones/current/passcode-uses 200',
+    'POST /phones/current/syncs 200',
     'GET /phones/current/lists 200',
     'POST /phones/current/login-list 200',
   ]);
-  const [signIn, move, wrong, session, lists] = after;
+  // The move and the two uses go in the sync (task 3.4.1, ADR-578), ahead of the lists.
+  const [signIn, sync, lists] = after;
   expect(signIn?.body).toMatchObject({ kind: 'AS_MONITOR', masterPasscodeVersion: 1 });
   expect(signIn?.answer).toMatchObject({ masterPasscodeSession: 'AS_MONITOR' });
-  expect(move?.body).toMatchObject({ fieldEventKinds: ['DISPOSAL'], occasion: 'SETUP' });
-  expect(move?.answer).toMatchObject({ answer: 'SAVED' });
-  expect(wrong?.body).toMatchObject({ use: 'WRONG_TRY', personId: null });
-  expect(session?.body).toMatchObject({ use: 'SESSION_AS_MONITOR' });
-  for (const one of [move, wrong, session]) {
-    expect(JSON.stringify(one?.body)).not.toContain(worldPasscode());
-  }
-  const { token } = signIn?.answer as { token: string };
-  expect([move?.session, wrong?.session, session?.session, lists?.session]).toEqual([
-    token,
-    token,
-    token,
-    token,
+  const sent = sync?.body as { unplannedAssignments: { id: string }[]; passcodeUses: unknown[] };
+  const [move] = sent.unplannedAssignments;
+  expect(sent.unplannedAssignments).toMatchObject([
+    { fieldEventKinds: ['DISPOSAL'], occasion: 'SETUP' },
   ]);
-  expect((lists?.answer as { assignment: { id: string } }).assignment.id).toBe(
-    (move?.body as { id: string }).id,
-  );
+  expect(sent.passcodeUses).toMatchObject([
+    { use: 'WRONG_TRY', personId: null },
+    { use: 'SESSION_AS_MONITOR' },
+  ]);
+  expect(sync?.answer).toMatchObject({
+    unplannedAssignments: [{ answer: 'SAVED' }],
+    passcodeUses: [{ answer: 'SAVED' }, { answer: 'SAVED' }],
+  });
+  expect(JSON.stringify(sent)).not.toContain(worldPasscode());
+  const { token } = signIn?.answer as { token: string };
+  expect([sync?.session, lists?.session]).toEqual([token, token]);
+  expect((lists?.answer as { assignment: { id: string } }).assignment.id).toBe(move?.id);
   await expect(page.getByText(marked)).toBeVisible();
 });
 

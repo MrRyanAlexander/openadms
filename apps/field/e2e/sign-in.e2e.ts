@@ -59,16 +59,17 @@ test('AC-11-14, AC-02-35, AC-11-18, AC-11-81, AC-11-54, AC-11-63: Kim signs in o
   ]);
   await checkScreen(page);
 
-  // The sign-in went as the phone's; the lists and the login list (task 3.2.4) as the phone's
-  // with her session beside it.
-  await expect.poll(() => toApi(asked).slice(from).length).toBe(3);
+  // The sign-in went as the phone's; the sync (task 3.4.1), the lists and the login list (task
+  // 3.2.4) as the phone's with her session beside it.
+  await expect.poll(() => toApi(asked).slice(from).length).toBe(4);
   const after = toApi(asked).slice(from);
   expect(after.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
     'POST /phones/current/sign-ins 200',
+    'POST /phones/current/syncs 200',
     'GET /phones/current/lists 200',
     'POST /phones/current/login-list 200',
   ]);
-  const [signIn, lists, loginList] = after;
+  const [signIn, sync, lists, loginList] = after;
   expect(signIn?.body).toEqual({ monitorNumber: kim.monitorNumber, password: kim.password });
   expect(signIn?.authorization).toMatch(/^Bearer /);
   expect(signIn?.session).toBeUndefined();
@@ -78,26 +79,27 @@ test('AC-11-14, AC-02-35, AC-11-18, AC-11-81, AC-11-54, AC-11-63: Kim signs in o
   };
   expect(assignment.site.name).toBe('Marsh Road TDSR');
   expect(lists?.authorization).toBe(signIn?.authorization);
-  expect(lists?.session).toBe(token);
+  expect([sync?.session, lists?.session]).toEqual([token, token]);
   expect(loginList?.session).toBe(token);
 
   // Written down nowhere: not the store, the keyring or the web layer. Kept: the enrolment, the
   // lists, the login list's three entries (Kim, Ana and Lee have assignments on P1), the master
-  // passcode's check and how long a sign-in lasts.
+  // passcode's check, how long a sign-in lasts and when the phone last synced.
   const held = await rawlyHeld(page, [token, kim.password]);
   expect(held.foundInStore).toEqual([]);
-  expect(held.storeRows).toBe(7);
+  expect(held.storeRows).toBe(8);
   expect(held.webStorage).toEqual([0, 0, '']);
 
-  // Sync: the lists held and how stale they are; refreshed on asking.
+  // Sync: the lists held and how stale they are; synced and read again on asking.
   await page.getByRole('button', { name: english.menu.sync }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.sync.title);
   const version = (lists?.answer as { lists: { setupVersion: number } }).lists.setupVersion;
   await expect(
     page.getByText(filled(english.sync.lists, { project: p1, version: String(version) })),
   ).toBeVisible();
+  await expect(page.getByText(english.work.listsRead.now)).toBeVisible();
   await checkScreen(page);
-  await page.getByRole('button', { name: english.sync.refresh }).click();
+  await page.getByRole('button', { name: english.sync.syncNow }).click();
   await expect.poll(() => listsRead(asked).length).toBe(2);
   await expect(page.getByRole('status')).toHaveText(english.work.synced.now);
 
@@ -130,8 +132,8 @@ test('AC-11-14: a sign-in the server no longer takes sends Ana back to sign in, 
     english.home.start.collection,
     english.home.start.incident,
   ]);
-  // The enrolment, the lists and the login list, kept.
-  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(7);
+  // The enrolment, the lists, the login list and when the phone last synced, kept.
+  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(8);
 
   // The server stops taking her session (as one ended elsewhere): the next request of hers is
   // refused, and the phone asks her to sign in again.
@@ -141,11 +143,11 @@ test('AC-11-14: a sign-in the server no longer takes sends Ana back to sign in, 
     });
   });
   await page.getByRole('button', { name: english.menu.sync }).click();
-  await page.getByRole('button', { name: english.sync.refresh }).click();
+  await page.getByRole('button', { name: english.sync.syncNow }).click();
   await expect(page.getByText(english.phone.ended)).toBeVisible();
   await expect.poll(() => listsRead(asked).at(-1)?.answer).toMatchObject({ code: 'NOT_SIGNED_IN' });
   await checkScreen(page);
-  expect((await rawlyHeld(page, [])).storeRows).toBe(7);
+  expect((await rawlyHeld(page, [])).storeRows).toBe(8);
   await page.unroute(`${worldApiOrigin}/phones/current/lists`);
 
   // Signed in again, then the page opened again: her session was in memory alone.
@@ -182,8 +184,10 @@ test('AC-11-15, AC-11-16, AC-02-36: Tariq has no assignment and Lee has two: eac
   await expect(page.getByText(english.work.noAssignment.NONE_THAT_DAY)).toBeVisible();
   await expect(page.getByText(filled(english.work.held, { project: p1 }))).toBeVisible();
   await expect(page.getByRole('status')).toHaveText(
-    filled(english.work.synced.days.other, { count: '2' }),
+    filled(english.work.listsRead.days.other, { count: '2' }),
   );
+  // It synced as she signed in.
+  await expect(page.getByText(english.work.synced.now)).toBeVisible();
   await checkScreen(page);
   const signIn = toApi(asked).findLast(({ path }) => path === '/phones/current/sign-ins');
   expect(signIn?.answer).toMatchObject({ assignment: null, noAssignment: 'NONE_THAT_DAY' });

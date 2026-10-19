@@ -35,7 +35,9 @@ async function anasPhone(page: Page): Promise<CastMonitor> {
   await enrolled(page, 'P1-COL-1');
   await signedIn(page, ana);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
-  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBeGreaterThan(2);
+  // Kept: the enrolment, when it last synced and the passcode's check the sync brought, then the
+  // lists, how long a sign-in lasts and the login list's three entries.
+  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(8);
   await signedOut(page);
   return ana;
 }
@@ -56,11 +58,12 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   await expect(page.getByText(p1)).toBeVisible();
 
   // The login list read beside the lists, as hers: Ana, Kim and Lee have assignments on P1; each
-  // entry is kept sealed in the store, nobody's name or Monitor ID in the clear.
+  // entry is kept sealed in the store, nobody's name or Monitor ID in the clear. The master
+  // passcode's check came with the sync before it (task 3.4.1), so the phone says it holds it.
   await expect.poll(() => at(asked, '/phones/current/login-list')[0]?.answer).toBeDefined();
   const read = at(asked, '/phones/current/login-list')[0];
   expect(read?.status).toBe(200);
-  expect(read?.body).toEqual({ masterPasscodeVersion: null, entries: [] });
+  expect(read?.body).toEqual({ masterPasscodeVersion: 1, entries: [] });
   const list = read?.answer as {
     masterPasscode: { check: unknown };
     loginList: { monitors: { monitorId: string; name: string; check: unknown }[] };
@@ -68,7 +71,11 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   expect(list.loginList.monitors.map(({ name }) => name).sort()).toEqual(
     [ana.name, kim.name, lee.name].sort(),
   );
-  expect(list.masterPasscode.check).not.toBeNull();
+  const [first] = at(asked, '/phones/current/syncs');
+  expect(
+    (first?.answer as { masterPasscode: { check: unknown } }).masterPasscode.check,
+  ).not.toBeNull();
+  expect(list.masterPasscode.check).toBeNull();
   const sealed = await rawlyHeld(page, [ana.name, kim.monitorNumber, ana.password]);
   expect(sealed.foundInStore).toEqual([]);
   expect(sealed.webStorage).toEqual([0, 0, '']);
@@ -108,10 +115,11 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   const done = after.filter(({ path }) => !/\/(challenges|proofs)$/.test(path));
   expect(done.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
     'POST /phones/current/offline-sign-ins 200',
+    'POST /phones/current/syncs 200',
     'GET /phones/current/lists 200',
     'POST /phones/current/login-list 200',
   ]);
-  const [report, lists] = done;
+  const [report, sync, lists] = done;
   expect(report?.session).toBeUndefined();
   expect(report?.body).toMatchObject({
     kind: 'OWN_PASSWORD',
@@ -121,7 +129,7 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   });
   expect(JSON.stringify(report?.body)).not.toContain(ana.password);
   const { token } = report?.answer as { token: string };
-  expect(lists?.session).toBe(token);
+  expect([sync?.session, lists?.session]).toEqual([token, token]);
 });
 
 test('AC-11-21, AC-11-64: the server refuses Ana’s sign-in made with no signal: the phone drops it and asks her to sign in online, nothing it holds lost', async ({
@@ -215,29 +223,31 @@ test('AC-02-40, ADR-120, AC-11-23: with no signal, wrong tries against the login
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
 
   // AC-11-23, ADR-576: each try at the passcode the phone checked itself was kept, and goes at
-  // signal with Ana's session, after her sign-in and before her lists; never the passcode.
+  // signal in the sync with Ana's session (task 3.4.1, ADR-578), after her sign-in and before her
+  // lists; never the passcode.
   await context.setOffline(false);
-  await expect
-    .poll(() => at(asked, '/phones/current/passcode-uses').filter(({ status }) => status === 200))
-    .toHaveLength(2);
-  const uses = at(asked, '/phones/current/passcode-uses');
-  expect(uses.map(({ body }) => (body as { use: string }).use).sort()).toEqual([
-    'SIGN_IN_UNLOCK',
-    'WRONG_TRY',
-  ]);
-  expect(uses.map(({ body }) => (body as { personId: unknown }).personId)).toEqual([null, null]);
-  expect(uses.map(({ answer }) => (answer as { answer: string }).answer)).toEqual([
-    'SAVED',
-    'SAVED',
-  ]);
-  expect(JSON.stringify(uses.map(({ body }) => body))).not.toContain(worldPasscode());
+  const carrying = () =>
+    at(asked, '/phones/current/syncs').filter(
+      ({ status, body }) =>
+        status === 200 && (body as { passcodeUses: unknown[] }).passcodeUses.length > 0,
+    );
+  await expect.poll(() => carrying()).toHaveLength(1);
+  const [carried] = carrying();
+  const uses = (carried?.body as { passcodeUses: { use: string; personId: unknown }[] })
+    .passcodeUses;
+  expect(uses.map(({ use }) => use).sort()).toEqual(['SIGN_IN_UNLOCK', 'WRONG_TRY']);
+  expect(uses.map(({ personId }) => personId)).toEqual([null, null]);
+  expect(carried?.answer).toMatchObject({
+    passcodeUses: [{ answer: 'SAVED' }, { answer: 'SAVED' }],
+  });
+  expect(JSON.stringify(carried?.body)).not.toContain(worldPasscode());
+  expect(at(asked, '/phones/current/passcode-uses')).toEqual([]);
   const order = toApi(asked)
     .map(({ path }) => path)
-    .filter((path) => /offline-sign-ins|passcode-uses|\/lists$/.test(path));
-  expect(order.slice(-4)).toEqual([
+    .filter((path) => /offline-sign-ins|syncs|\/lists$/.test(path));
+  expect(order.slice(-3)).toEqual([
     '/phones/current/offline-sign-ins',
-    '/phones/current/passcode-uses',
-    '/phones/current/passcode-uses',
+    '/phones/current/syncs',
     '/phones/current/lists',
   ]);
 });

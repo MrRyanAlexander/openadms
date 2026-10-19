@@ -55,14 +55,23 @@ export function sameDay(one: Date, other: Date, timeZone: string): boolean {
   return date.format(one) === date.format(other);
 }
 
-// How stale the phone's lists are (adms-field-app §4A.2; AC-11-16): when they were last read, in
-// the largest whole unit that has passed, minutes, hours or days; never read, it says so.
-export function lastSynced(readAt: Date | undefined, now: Date): string {
-  const synced = english.work.synced;
-  if (readAt === undefined) return synced.never;
-  const minutes = Math.floor((now.getTime() - readAt.getTime()) / 60_000);
-  if (minutes < 1) return synced.now;
-  if (minutes < 60) return counted(synced.minutes, minutes);
+// How long ago something was, in the largest whole unit that has passed, minutes, hours or days;
+// never, it says so.
+function ago(said: typeof english.work.synced, at: Date | undefined, now: Date): string {
+  if (at === undefined) return said.never;
+  const minutes = Math.floor((now.getTime() - at.getTime()) / 60_000);
+  if (minutes < 1) return said.now;
+  if (minutes < 60) return counted(said.minutes, minutes);
   const hours = Math.floor(minutes / 60);
-  return hours < 24 ? counted(synced.hours, hours) : counted(synced.days, Math.floor(hours / 24));
+  return hours < 24 ? counted(said.hours, hours) : counted(said.days, Math.floor(hours / 24));
+}
+
+// When the phone's last sync was answered (task 3.4.1, ADR-578): what every screen says.
+export function lastSynced(answeredAt: Date | undefined, now: Date): string {
+  return ago(english.work.synced, answeredAt, now);
+}
+
+// How stale the phone's lists are (adms-field-app §4A.2; AC-11-16): when they were last read.
+export function listsRead(readAt: Date | undefined, now: Date): string {
+  return ago(english.work.listsRead, readAt, now);
 }

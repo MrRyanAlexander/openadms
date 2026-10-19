@@ -262,6 +262,22 @@
         "other": "Last synced: {count} days ago"
       }
     },
+    "listsRead": {
+      "never": "Lists never read",
+      "now": "Lists read just now",
+      "minutes": {
+        "one": "Lists read 1 minute ago",
+        "other": "Lists read {count} minutes ago"
+      },
+      "hours": {
+        "one": "Lists read 1 hour ago",
+        "other": "Lists read {count} hours ago"
+      },
+      "days": {
+        "one": "Lists read 1 day ago",
+        "other": "Lists read {count} days ago"
+      }
+    },
     "inactivity": {
       "warning": {
         "one": "You’ll be signed out in 1 second with nothing done.",
@@ -282,8 +298,33 @@
     "title": "Sync",
     "lists": "Lists for {project}, as of setup version {version}.",
     "noLists": "This phone holds no lists yet.",
-    "refresh": "Refresh lists",
-    "refreshing": "Refreshing…"
+    "syncNow": "Sync now",
+    "syncing": "Syncing…",
+    "nothingWaits": "Everything made on this phone is on the server.",
+    "notSaved": {
+      "title": "Not saved",
+      "intro": "The server didn’t take these. Each stays on the phone, and the back office is told.",
+      "report": "The server didn’t take it. It stays on the phone, and the back office is told."
+    },
+    "what": {
+      "FIELD_EVENT": "Ticket {number}",
+      "SCALE_RECEIPT": "Scale receipt {number}",
+      "INCIDENT": "An incident",
+      "DROP_OFF_LOG": "A drop-off log",
+      "SURVEY": "A survey",
+      "ROE": "ROE {number}",
+      "CERTIFICATION": "Certification {number}",
+      "photo": "A photograph",
+      "unplannedAssignment": "A setup made on this phone",
+      "passcodeUse": "A use of the master passcode"
+    },
+    "fieldEvent": {
+      "COLLECTION": "collection",
+      "DISPOSAL": "disposal",
+      "HAUL_OUT_COLLECTION": "haul-out collection",
+      "HAUL_OUT_DISPOSAL": "haul-out disposal",
+      "UNIT_RATE": "unit rate"
+    }
   },
   "settings": {
     "title": "Settings",
