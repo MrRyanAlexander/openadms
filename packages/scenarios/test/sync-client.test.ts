@@ -81,6 +81,14 @@ describe('the harness’s phone, held to the suite any client of the sync contra
             client.filePartAnswered(answer);
           },
           holdsFiles: () => client.holdsFiles,
+          asksWhereFileStands: () => client.asksWhereFileStands(),
+          fileStandsAnswered: (answer) => {
+            client.fileStandsAnswered(answer);
+          },
+          reopened() {
+            client.reopened();
+            return this;
+          },
           turnsIn: (passcode) => client.turnsIn(passcode),
           turnInAnswered: (answer) => {
             client.turnInAnswered(answer);

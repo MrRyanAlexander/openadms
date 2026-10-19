@@ -3,9 +3,12 @@
 // before anything of it is used (MASWE-0050). It sends no cookie and follows no redirect. A
 // phone's token goes as `Authorization: Bearer` (ADR-440), and the session of the monitor signed in
 // on it beside it in the contracts' header (ADR-443), neither kept here: the phone's identity and
-// its monitor hand them in with each request (phone/identity.ts, phone/monitor.ts).
+// its monitor hand them in with each request (phone/identity.ts, phone/monitor.ts). A part of a
+// photograph's file goes as bytes, with its offset and length in the query, and is waited for
+// only so long (ADR-579): past it there is no answer, as with no signal.
 import {
   errorAnswerSchema,
+  filePartMediaType,
   healthEndpoint,
   monitorSessionHeader,
   type AnswerOf,
@@ -37,6 +40,12 @@ export interface Asking {
   readonly ids?: Readonly<Record<string, string>>;
   // Its body, sent as JSON.
   readonly json?: unknown;
+  // Its query, by name.
+  readonly query?: Readonly<Record<string, string>>;
+  // Its body as bytes: a part of a photograph's file, the media endpoint's alone.
+  readonly bytes?: Uint8Array;
+  // How long its answer is waited for, at most: past it, no answer.
+  readonly answerMs?: number;
   // A proof's token, sent as `Authorization: Bearer`.
   readonly token?: string;
   // The monitor's session token, sent beside it in the contracts' header.
@@ -63,14 +72,28 @@ export class Server {
     });
     const headers: Record<string, string> = { accept: 'application/json' };
     if (asking.json !== undefined) headers['content-type'] = 'application/json';
+    if (asking.bytes !== undefined) headers['content-type'] = filePartMediaType;
     if (asking.token !== undefined) headers['authorization'] = `Bearer ${asking.token}`;
     if (asking.session !== undefined) headers[monitorSessionHeader] = asking.session;
+    const url = new URL(path, this.origin);
+    for (const [name, value] of Object.entries(asking.query ?? {})) {
+      url.searchParams.set(name, value);
+    }
+    const sent =
+      asking.bytes !== undefined
+        ? { body: asking.bytes as Uint8Array<ArrayBuffer> }
+        : asking.json !== undefined
+          ? { body: JSON.stringify(asking.json) }
+          : {};
+    const waited =
+      asking.answerMs === undefined ? {} : { signal: AbortSignal.timeout(asking.answerMs) };
     let answer: Response;
     try {
-      answer = await fetch(new URL(path, this.origin), {
+      answer = await fetch(url, {
         method: served.method,
         headers,
-        ...(asking.json === undefined ? {} : { body: JSON.stringify(asking.json) }),
+        ...sent,
+        ...waited,
         credentials: 'omit',
         cache: 'no-store',
         redirect: 'error',

@@ -10,6 +10,7 @@ import {
   fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
+  photoFileStandsAt,
   sentCanonical,
   stored,
   syncAnswerRead,
@@ -29,6 +30,8 @@ import {
   type SyncClient,
   type SyncClientHolds,
   type SyncClientMaker,
+  type FileAsked,
+  type SyncedPhoto,
   type SyncedRecord,
   type SyncSent,
 } from '../src/index.ts';
@@ -71,6 +74,8 @@ const faults = [
   'PACKS_BY_COUNT_ONLY',
   'SHOWS_A_WAIT_AS_NOT_SAVED',
   'DROPS_WHAT_ITS_LISTS_LACK',
+  'NEVER_SENDS_A_PHOTO_AGAIN',
+  'GUESSES_WHERE_A_FILE_STANDS',
 ] as const;
 type Fault = (typeof faults)[number];
 
@@ -95,19 +100,32 @@ const phone =
     let uses = [...holds.passcodeUses];
     let waiting = [...holds.records];
     let photos = [...holds.photos];
-    // Its photographs' files still to send: where each goes on from, and whether its
+    // Its photographs' files still to send: where each goes on from (unknown, once it was
+    // opened again, for one it had begun), whether a part of it was sent, and whether its
     // photograph's record was answered saved.
-    const files = new Map<string, { held: HeldPhotoFile; from: number; saved: boolean }>(
+    const files = new Map<
+      string,
+      { held: HeldPhotoFile; from: number | undefined; begun: boolean; saved: boolean }
+    >(
       holds.files.map((held) => [
         `${held.photoId} ${held.file}`,
-        { held, from: 0, saved: !holds.photos.some(({ id }) => id === held.photoId) },
+        {
+          held,
+          from: 0,
+          begun: false,
+          saved: !holds.photos.some(({ id }) => id === held.photoId),
+        },
       ]),
     );
+    // Its photographs answered not saved because their record isn't saved, waiting for it.
+    let ownerWaits: SyncedPhoto[] = [];
+    let asked: FileAsked | undefined;
     let lastPart: FilePartSent | undefined;
     let kept: { id: string; as: 'ASSIGNMENT' | 'USE' | 'RECORD' | 'PHOTO'; print?: string }[] = [];
     let shown: ShownNotSaved[] = [];
     let wiped = false;
     let last: SyncSent | undefined;
+    const savedRecords = new Set<string>();
     const all = fault === 'SENDS_ALL_AT_ONCE';
     const notStored = (
       id: string,
@@ -144,6 +162,10 @@ const phone =
           if (named >= 0) ordered.splice(named, 0, record);
           else ordered.push(record);
         }
+        // A photograph that waited for its record goes again once it is saved.
+        const again = ownerWaits.filter(({ owner }) => savedRecords.has(owner.id));
+        ownerWaits = ownerWaits.filter((one) => !again.includes(one));
+        photos = [...photos, ...again];
         const sync: SyncSent = {
           clockAt: '2026-10-12T21:30:00.000Z',
           deviceUtcOffsetMinutes: -240,
@@ -228,6 +250,7 @@ const phone =
           if (each === undefined) return;
           const id = syncedRecordId(record);
           waiting = waiting.filter((one) => syncedRecordId(one) !== id);
+          if (stored(each)) savedRecords.add(id);
           if ('reason' in each && fault !== 'DROPS_WHAT_WAS_ANSWERED') {
             // One answered under no id is named by its fingerprint when the phone is turned in.
             const print = 'id' in each && each.id === null ? printOf(record) : undefined;
@@ -238,7 +261,19 @@ const phone =
           const each = read.photos[place];
           if (each === undefined) return;
           photos = photos.filter((one) => one.id !== photo.id);
+          // Shown no more once it is saved; one waiting for its record waits again.
+          if (stored(each)) {
+            kept = kept.filter(({ id }) => id !== photo.id);
+            shown = shown.filter(({ id }) => id !== photo.id);
+          }
           if ('reason' in each) notStored(photo.id, each.reason, each.message, 'PHOTO');
+          if (
+            'reason' in each &&
+            each.reason === 'OWNER_NOT_SAVED' &&
+            fault !== 'NEVER_SENDS_A_PHOTO_AGAIN'
+          ) {
+            ownerWaits.push(photo);
+          }
           for (const file of files.values()) {
             if (file.held.photoId !== photo.id) continue;
             file.saved = stored(each) || fault === 'SENDS_FILE_NOT_SAVED';
@@ -249,6 +284,7 @@ const phone =
         const most = fault === 'SENDS_FILE_WHOLE' ? Infinity : holds.filePartBytesAtMost;
         for (const { held, from, saved } of files.values()) {
           if (!saved && fault !== 'SENDS_FILE_AHEAD') continue;
+          if (from === undefined) continue;
           if (held.file === 'depth' && fault === 'LEAVES_THE_DEPTH_FILE') continue;
           const bytes = held.bytes.subarray(from, from + most);
           lastPart = {
@@ -268,6 +304,7 @@ const phone =
         const name = `${part.photoId} ${part.file}`;
         const file = files.get(name);
         if (file === undefined) return;
+        file.begun = true;
         const sentTo = part.offset + part.bytes.byteLength;
         const read =
           fault === 'TAKES_ANY_FILE_ANSWER' && photoFileAnswerRead(answer) === null
@@ -290,6 +327,33 @@ const phone =
         else file.from = from;
       },
       holdsFiles: () => [...files.keys()],
+      asksWhereFileStands() {
+        for (const { held, from } of files.values()) {
+          if (from !== undefined) continue;
+          asked = { photoId: held.photoId, file: held.file };
+          return asked;
+        }
+        return null;
+      },
+      fileStandsAnswered(answer) {
+        if (asked === undefined) throw new Error('Answered before it asked.');
+        const name = `${asked.photoId} ${asked.file}`;
+        asked = undefined;
+        const file = files.get(name);
+        if (file === undefined) return;
+        const at = photoFileStandsAt(photoFileAnswerRead(answer));
+        if (at === null) files.delete(name);
+        else if (at !== undefined) file.from = at;
+      },
+      reopened() {
+        // What it knew of where the server stood with a file it had begun is gone; one it
+        // guesses at, it sends from its first byte again.
+        for (const file of files.values()) {
+          if (!file.begun) continue;
+          file.from = fault === 'GUESSES_WHERE_A_FILE_STANDS' ? 0 : undefined;
+        }
+        return this;
+      },
       holds: () => [
         ...unplanned.map((each) => each.id),
         ...uses.map((each) => each.id),
@@ -334,6 +398,7 @@ const phone =
         uses = [];
         waiting = [];
         photos = [];
+        ownerWaits = [];
         files.clear();
         if (fault === 'KEEPS_WHAT_IT_SHOWS') return;
         kept = [];
@@ -367,26 +432,26 @@ describe('the suite any client of the sync contract must pass', () => {
     const caught: Record<string, number[]> = {};
     for (const fault of faults) caught[fault] = await failed(phone(fault));
     expect(caught).toEqual({
-      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19],
-      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18],
+      LEAVES_OUT_AN_EMPTY_PART: [1, 3, 5, 8, 9, 10, 11, 12, 13, 15, 16, 17, 19, 20, 21],
+      SAYS_WHICH_PHONE: [2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 20],
       TRIMS_A_NUMBER: [2],
       SENDS_AS_RECORDED: [3],
       SENDS_ALL_AT_ONCE: [4, 9, 17],
       DROPS_WHAT_WAS_ANSWERED: [5, 6, 14, 15],
       DROPS_A_REPORT_NOT_SAVED: [6, 14],
-      SHOWS_NO_WORDS: [5, 10],
+      SHOWS_NO_WORDS: [5, 10, 20],
       TAKES_SENT_FOR_SAVED: [7],
       READS_ANSWERS_BY_PLACE: [8, 18],
       TAKES_ANY_ANSWER: [4, 8, 9, 17, 18],
       // A photograph's record and its files (ADR-481…483): each check catches one fault no
       // other does.
       SENDS_PHOTOS_AHEAD: [9],
-      SENDS_FILE_AHEAD: [10],
-      SENDS_FILE_NOT_SAVED: [10],
-      SENDS_FILE_WHOLE: [10, 11, 12, 13],
-      LEAVES_THE_DEPTH_FILE: [11],
+      SENDS_FILE_AHEAD: [10, 20],
+      SENDS_FILE_NOT_SAVED: [10, 20],
+      SENDS_FILE_WHOLE: [10, 11, 12, 13, 20, 21],
+      LEAVES_THE_DEPTH_FILE: [11, 21],
       TAKES_SENT_FOR_RECEIVED: [12],
-      TAKES_ANY_FILE_ANSWER: [12],
+      TAKES_ANY_FILE_ANSWER: [12, 21],
       GOES_ON_FROM_ITS_OWN: [12],
       DROPS_FILE_NOT_MATCHED: [13],
       // Turning the phone in (ADR-488): each check catches one fault no other does.
@@ -400,6 +465,10 @@ describe('the suite any client of the sync contract must pass', () => {
       SHOWS_A_WAIT_AS_NOT_SAVED: [18],
       // Lists taken since a record was made (ADR-552 (3)(f)).
       DROPS_WHAT_ITS_LISTS_LACK: [19],
+      // A photograph that waited for its record, and a file begun before the client was opened
+      // again (ADR-579).
+      NEVER_SENDS_A_PHOTO_AGAIN: [20],
+      GUESSES_WHERE_A_FILE_STANDS: [21],
     });
   });
 
@@ -507,6 +576,18 @@ describe('what a client reads of what it was answered', () => {
     for (const nothing of [undefined, null, 'OK', { upload: 'SAVED' }, { upload: 'KEPT', at: 1 }]) {
       expect(read(nothing)).toBeNull();
       expect(photoFileGoesOnFrom(read(nothing), 1000)).toBe(1000);
+    }
+  });
+
+  it('AC-11-33, ADR-579 asked where a file stands, a client goes on from what the server took, lets a kept file go, and with no answer knows no more than before', () => {
+    const read = (answer: unknown) => photoFileAnswerRead(answer);
+    expect(photoFileStandsAt(read({ upload: 'KEPT' }))).toBeNull();
+    expect(photoFileStandsAt(read({ upload: 'RECEIVING', received: 4096, length: 9000 }))).toBe(
+      4096,
+    );
+    expect(photoFileStandsAt(read({ upload: 'RECEIVING', received: 0, length: null }))).toBe(0);
+    for (const nothing of [undefined, 'OK', { upload: 'RECEIVING', received: -1, length: 9 }]) {
+      expect(photoFileStandsAt(read(nothing))).toBeUndefined();
     }
   });
 

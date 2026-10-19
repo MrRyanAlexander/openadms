@@ -19,6 +19,7 @@ const opened = (store: PhoneStore, holds: SyncClientHolds) =>
         lastUsed: holds.lastUsed,
       }),
     filePartBytesAtMost: holds.filePartBytesAtMost,
+    fileBytesAtMost: 33_554_432,
     wipe: () => store.erase(),
   });
 
@@ -40,15 +41,22 @@ async function keptThenOpened(store: PhoneStore, holds: SyncClientHolds): Promis
     if (refused !== undefined) throw new Error(refused.message);
   }
   for (const { photoId, file, bytes } of holds.files) {
-    if (!holds.photos.some(({ id }) => id === photoId))
-      await keeping.keepFile(photoId, file, bytes);
+    if (holds.photos.some(({ id }) => id === photoId)) continue;
+    const refused = await keeping.keepFile(photoId, file, bytes);
+    if (refused !== undefined) throw new Error(refused.message);
   }
   return opened(store, holds);
 }
 
 // The outbox as the suite drives a client; `afresh`, opened again from its store after each
-// answer to a sync.
-function client(store: PhoneStore, holds: SyncClientHolds, first: PhoneOutbox, afresh: boolean) {
+// answer to a sync. Opened again as after the app stopped, it is an outbox opened afresh from the
+// same store: what it knew in memory alone is gone.
+function client(
+  store: PhoneStore,
+  holds: SyncClientHolds,
+  first: PhoneOutbox,
+  afresh: boolean,
+): SyncClient {
   let outbox = first;
   const driven: SyncClient = {
     sends: () => outbox.sends(),
@@ -63,6 +71,11 @@ function client(store: PhoneStore, holds: SyncClientHolds, first: PhoneOutbox, a
       await outbox.filePartAnswered(answer);
     },
     holdsFiles: () => outbox.holdsFiles(),
+    asksWhereFileStands: () => outbox.asksWhereFileStands(),
+    fileStandsAnswered: async (answer) => {
+      await outbox.fileStandsAnswered(answer);
+    },
+    reopened: async () => client(store, holds, await opened(store, holds), afresh),
     turnsIn: (passcode) => outbox.turnsIn(passcode),
     turnInAnswered: async (answer) => {
       await outbox.turnInAnswered(answer);

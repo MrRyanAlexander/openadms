@@ -185,6 +185,23 @@ export function photoFileGoesOnFrom(answer: PhotoFileAnswer | null, before: numb
   }
 }
 
+// A file a client asks the media endpoint where it stands (`photoFileEndpoint`): the
+// photograph's id and which of its files.
+export interface FileAsked {
+  readonly photoId: string;
+  readonly file: PhotoFileName;
+}
+
+// Where a client goes on from after asking where a file stands (AC-11-33; ADR-482 (2), 579): the
+// offset of its next part, null where the file is kept and nothing more goes, or `undefined`
+// where what came back is no answer, so it knows no more than before and asks again before it
+// sends anything of that file. A client asks where it began a file before it last opened: what
+// it knew of where the server stood was in its memory alone, and a part sent from its first byte
+// would start the file again on the server, losing what was taken.
+export function photoFileStandsAt(answer: PhotoFileAnswer | null): number | null | undefined {
+  return answer === null ? undefined : photoFileGoesOnFrom(answer, 0);
+}
+
 // What a phone turned in reads of its answer (AC-02-58; ADR-096, 488): the answer, or null where
 // what came back is none. **It wipes only where the answer says so** (`wipe: true`); with no
 // answer, with what is none, or answered not turned in, it keeps everything it holds, as it was.

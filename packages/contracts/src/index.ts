@@ -670,6 +670,7 @@ export {
   fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
+  photoFileStandsAt,
   stored,
   storedAnswers,
   syncAnswerRead,
@@ -678,6 +679,7 @@ export {
   syncedRecordId,
   toWipe,
   turnInAnswerRead,
+  type FileAsked,
   type FilePartSent,
 } from './sync-client.ts';
 export {

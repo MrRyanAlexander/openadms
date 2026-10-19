@@ -67,8 +67,8 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-578)
-- **Phase 3 is open (ADR-557)**: 12 of 33 tasks done (ADR-557…578). Milestone 3.1 is done (the plan,
+### Where things stand (2026-10-18, through ADR-579)
+- **Phase 3 is open (ADR-557)**: 13 of 33 tasks done (ADR-557…579). Milestone 3.1 is done (the plan,
   the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
   the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
   the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
@@ -84,8 +84,11 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   as the phone's monitor or temporary, the temporary one ending at the project's midnight.
   **Task 3.4.1 is done** (ADR-578): the phone syncs through its own outbox over its store (the
   sync contract's suite passed, in Chromium too), only with somebody signed in, a kept record sent
-  again by itself once a run, the reports carried by the sync. **Next: task 3.4.2.** What each task
-  did is its ADR and its `BACKLOG.md` tick.
+  again by itself once a run, the reports carried by the sync. **Task 3.4.2 is done** (ADR-579): a
+  photograph's files go after the records and the lists, in parts sized by the signal, one file read
+  at a time, asked after (`photoFileEndpoint`) when the app opens again mid-file; `syncClientSuite`
+  holds every client to it. **Next: task 3.4.3.** What each task did is its ADR and its `BACKLOG.md`
+  tick.
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -153,7 +156,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 12 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 13 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -237,14 +240,14 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.4.2, photographs' files** (`BACKLOG.md`, Milestone 3.4; REQ-316's sync half; C137, C138,
-C139 and C168's file parts; AC-11-32, 33): the files `PhoneOutbox` holds (ADR-578) uploaded to
-`sendPhotoFilePartEndpoint` by `PhoneSync` after the records, a part at a time, no larger than
-`MEDIA_PART_BYTES_AT_MOST` and smaller on a poor signal; where a file stands asked of
-`photoFileEndpoint` after a restart (the outbox keeps it in memory alone today, and reads every
-file's bytes at each read of the store: read one at a time); `OWNER_NOT_SAVED` kept and sent again
-once its record is saved; a held record's photographs. **From 2026-10-21, C175** (React 19.3.1 and
-Playwright 1.64.1 read again).
+**Task 3.4.3, Sync and turn in, and the wipe** (`BACKLOG.md`, Milestone 3.4; REQ-313, 124c; C69,
+C141, C170, C183; AC-02-58, AC-05-56, AC-11-08, 34, 35): "Sync and turn in" under the master
+passcode: the master user syncs the records and sends the files first (`PhoneSync` syncs only for
+a monitor today; the outbox's `turnsIn`/`turnInAnswered` are built), then `turnInPhoneEndpoint`;
+the server's words and what it lacks shown; **the wipe only on `wipe: true`** (the keyring's
+`erase`, then the store's, NIST SP 800-88), never over a record the contract no longer reads
+(C183); `MASTER_PASSCODE_NEEDED` at a proof (AC-11-35); a reset phone's blocks reclaimed. **From
+2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

@@ -14,6 +14,8 @@ export interface Asked {
   readonly authorization: string | undefined;
   // The monitor's session, where one went beside the phone's token (ADR-443).
   readonly session: string | undefined;
+  // How many bytes a part of a file held, where one went (ADR-579).
+  readonly bytes: number | undefined;
   status?: number;
   answer?: unknown;
 }
@@ -24,12 +26,14 @@ export function recorded(page: Page): Asked[] {
   const waiting = new Map<object, Asked>();
   page.on('request', (sent) => {
     const body = sent.postData();
+    const json = sent.headers()['content-type'] === 'application/json';
     const record: Asked = {
       method: sent.method(),
       url: sent.url(),
-      body: body === null ? undefined : (JSON.parse(body) as unknown),
+      body: body === null || !json ? undefined : (JSON.parse(body) as unknown),
       authorization: sent.headers()['authorization'],
       session: sent.headers()['x-adms-monitor-session'],
+      bytes: json ? undefined : sent.postDataBuffer()?.byteLength,
     };
     asked.push(record);
     waiting.set(sent, record);

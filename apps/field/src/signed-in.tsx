@@ -115,6 +115,7 @@ export function SignedInPhone({
   const [lastRun, setLastRun] = useState<SyncRun | null>(null);
   const [lastSync, setLastSync] = useState<Date | undefined>(undefined);
   const [waiting, setWaiting] = useState(() => outbox.waiting());
+  const [files, setFiles] = useState(() => outbox.filesWaiting());
   const [notSaved, setNotSaved] = useState<readonly NotSavedShown[]>(() => outbox.notSaved());
   const [signingOut, setSigningOut] = useState(false);
   const [now, setNow] = useState(() => new Date());
@@ -150,6 +151,7 @@ export function SignedInPhone({
       setLastRun(ran);
       setLastSync(synced);
       setWaiting(outbox.waiting());
+      setFiles(outbox.filesWaiting());
       setNotSaved(outbox.notSaved());
       setNow(new Date());
       setReading(false);
@@ -395,7 +397,10 @@ export function SignedInPhone({
         <div className="screen-body">
           <h1>{said.title}</h1>
           <p role="status">{reading ? said.syncing : (unread ?? synced)}</p>
-          {waiting === 0 && notSaved.length === 0 ? <p>{said.nothingWaits}</p> : null}
+          {waiting === 0 && files === 0 && notSaved.length === 0 ? (
+            <p>{said.nothingWaits}</p>
+          ) : null}
+          {files === 0 ? null : <p>{counted(said.files, files)}</p>}
           {notSaved.length === 0 ? null : (
             <section aria-labelledby="not-saved">
               <h2 id="not-saved">{said.notSaved.title}</h2>

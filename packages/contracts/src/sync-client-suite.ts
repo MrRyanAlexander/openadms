@@ -23,8 +23,11 @@
 // C138; ADR-481…483): no photograph's record goes ahead of the record it is of; a file goes to
 // the media endpoint only once its photograph's record is answered saved, in parts no larger than
 // the server takes, each where the last one ended; it is kept until it is answered kept; an
-// interrupted upload goes on from where the server says it stands; and a file answered not the
-// one fingerprinted goes again from its first byte. The suite plays the media endpoint itself.
+// interrupted upload goes on from where the server says it stands; a file answered not the
+// one fingerprinted goes again from its first byte; a photograph answered not saved because its
+// record isn't saved goes again once its record is answered saved; and a client opened again
+// after it stopped asks where each file it had begun stands before it sends more of it (AC-11-32,
+// 33; ADR-579). The suite plays the media endpoint itself.
 //
 // **And turning the phone in** ("Sync and turn in", ARCHITECTURE §8; AC-02-58; BACKLOG 2.6.5,
 // C139; ADR-096, 468, 488): a turn-in names everything the phone still holds, each once, by the
@@ -41,6 +44,7 @@ import {
   stored,
   syncedRecordAssignment,
   syncedRecordId,
+  type FileAsked,
   type FilePartSent,
 } from './sync-client.ts';
 import { turnInSentSchema, type TurnInAnswer, type TurnInSent } from './turn-in.ts';
@@ -128,6 +132,16 @@ export interface SyncClient {
   filePartAnswered(answer: unknown): void | Promise<void>;
   // Each file it holds that the server has not said it kept: "<photograph's id> <file>".
   holdsFiles(): readonly string[];
+  // The file it asks the media endpoint where it stands now (`photoFileEndpoint`), before it
+  // sends any more of a file it began before it was last opened; null where it asks of none.
+  asksWhereFileStands(): FileAsked | null;
+  // What came back for that question, as it came off the wire; `undefined` where nothing came
+  // back.
+  fileStandsAnswered(answer: unknown): void | Promise<void>;
+  // The client opened again after it stopped (the app closed, the phone turned off): what it
+  // keeps on the phone is there; what it knew only in memory, such as where the server stood with
+  // each file, is gone.
+  reopened(): SyncClient | Promise<SyncClient>;
   // The turn-in it sends now, as it goes on the wire, under the passcode typed on the phone
   // ("Sync and turn in"; ADR-488).
   turnsIn(passcode: string): unknown;
@@ -329,6 +343,23 @@ class FilesTaken {
     this.unmatched = new Set(unmatched);
   }
 
+  // Where a file stands, as the media endpoint answers a client that asks (`photoFileEndpoint`).
+  stands(asked: unknown): PhotoFileAnswer {
+    const file = asked as Partial<FileAsked> | null;
+    const handed = this.holds.files.find(
+      (one) => file !== null && one.photoId === file.photoId && one.file === file.file,
+    );
+    held(handed !== undefined, 'It asked where a file stands that it was never handed.');
+    const name = named(handed);
+    if (this.kept.has(name)) return { upload: 'KEPT' };
+    const so = this.taken.get(name) ?? [];
+    return {
+      upload: 'RECEIVING',
+      received: so.length,
+      length: so.length === 0 ? null : handed.bytes.byteLength,
+    };
+  }
+
   take(sent: unknown): PhotoFileAnswer {
     const part = partOnTheWire(sent, this.holds);
     this.parts.push(part);
@@ -359,10 +390,16 @@ class FilesTaken {
   }
 }
 
-// Every part it sends now, each answered by the endpoint as the suite plays it, until it sends
-// none: no more than so many.
+// Every part it sends now, and every question it asks of where a file stands, each answered by
+// the endpoint as the suite plays it, until it sends none: no more than so many.
 async function sentAll(client: SyncClient, taken: FilesTaken, most = 40): Promise<void> {
   for (let parts = 0; ; parts += 1) {
+    const asked = client.asksWhereFileStands();
+    if (asked !== null) {
+      held(parts < most, `After ${String(most)} parts and questions it is still asking.`);
+      await client.fileStandsAnswered(JSON.parse(JSON.stringify(taken.stands(asked))));
+      continue;
+    }
     const part = client.sendsFilePart();
     if (part === null) return;
     held(parts < most, `After ${String(most)} parts it is still sending.`);
@@ -1176,6 +1213,163 @@ export const syncClientSuite: readonly SyncClientCheck[] = [
       held(
         sync.records.length === 1 && same(sync.records[0], made),
         'The certification was not sent as it was made, once, with the lists it holds now.',
+      );
+    },
+  },
+  {
+    name: 'a photograph answered not saved because its record isn’t saved on the server (OWNER_NOT_SAVED) is kept with its file and shown in the server’s words; once its record is answered saved it goes again, and saved then, it is shown no more and its file goes (AC-11-32; ADR-481 (4), 526 (4), 579; C137)',
+    async run(make) {
+      const record = collected('81');
+      const photo: SyncedPhoto = {
+        ...pilePhoto,
+        id: made('82'),
+        owner: { kind: 'FIELD_EVENT', id: syncedRecordId(record) },
+      };
+      const holds = {
+        ...nothing,
+        records: [record],
+        photos: [photo],
+        files: [{ photoId: photo.id, file: 'photo', bytes: fileOf(1200, 8) }],
+      } satisfies SyncClientHolds;
+      let client = await make(holds);
+      const first = onTheWire(client.sends());
+      held(
+        first.records.length === 1 && first.photos.length === 1,
+        'It did not send the record and its photograph.',
+      );
+      // The record saved, and its photograph not: the server didn't have the record when it read
+      // the photograph (it reads every record first, so a phone's own record here is one a
+      // person since saved on the server, or another of its processes took).
+      const message = 'Not saved: the record this photograph belongs to isn’t saved on the server.';
+      await client.answered(
+        answerTo(first, undefined, (id) =>
+          id === photo.id
+            ? { answer: 'NOT_SAVED', id, reason: 'OWNER_NOT_SAVED', message }
+            : undefined,
+        ),
+      );
+      held(
+        client.holds().includes(photo.id) &&
+          client.holdsFiles().includes(named({ photoId: photo.id, file: 'photo' })) &&
+          client
+            .notSaved()
+            .some(
+              (one) =>
+                one.id === photo.id && one.reason === 'OWNER_NOT_SAVED' && one.message === message,
+            ),
+        'The photograph not saved is not kept with its file and shown in the server’s words.',
+      );
+      held(
+        client.sendsFilePart() === null,
+        'It sent a part of the file of a photograph answered not saved.',
+      );
+      const second = onTheWire(client.sends());
+      held(
+        second.photos.length === 1 && same(second.photos[0], photo) && second.records.length === 0,
+        'Its record answered saved, the photograph did not go again as it was, alone.',
+      );
+      await client.answered(answerTo(second));
+      held(
+        !client.holds().includes(photo.id) && !client.notSaved().some((one) => one.id === photo.id),
+        'The photograph saved the second time is still held, or still shown as not saved.',
+      );
+      const taken = new FilesTaken(holds);
+      await sentAll(client, taken);
+      held(
+        taken.kept.has(named({ photoId: photo.id, file: 'photo' })) &&
+          client.holdsFiles().length === 0,
+        'Saved the second time, its file was not sent whole and kept.',
+      );
+      // Opened again, it holds nothing of it.
+      client = await client.reopened();
+      held(
+        client.holds().length === 0 && client.holdsFiles().length === 0,
+        'Opened again, it holds the photograph or its file once more.',
+      );
+    },
+  },
+  {
+    name: 'opened again after it stopped mid-file, it asks the media endpoint where the file stands before it sends any more of it, and goes on from there: with nothing back it asks again and sends nothing of that file; told the file is kept, it lets it go, sending none of it; a file not begun goes from its first byte, unasked (AC-11-33; ADR-482 (2), 579; C137, C138)',
+    async run(make) {
+      const withDepth = certificationPhotos.find(({ depthSha256 }) => depthSha256 !== null);
+      held(withDepth !== undefined, 'The examples have no photograph with a depth file.');
+      const holds = {
+        ...nothing,
+        photos: [pilePhoto, withDepth],
+        files: [
+          { photoId: pilePhoto.id, file: 'photo', bytes: fileOf(2600, 9) },
+          { photoId: withDepth.id, file: 'photo', bytes: fileOf(1800, 10) },
+          { photoId: withDepth.id, file: 'depth', bytes: fileOf(1300, 11, 'png') },
+        ],
+      } satisfies SyncClientHolds;
+      let client = await make(holds);
+      await client.answered(answerTo(onTheWire(client.sends())));
+      const taken = new FilesTaken(holds);
+      // Before it stopped: the first part of the file it sends first, taken and answered.
+      const first = client.sendsFilePart();
+      held(first !== null && first.offset === 0, 'It sent no first part of a file.');
+      const begun = named(first);
+      await client.filePartAnswered(JSON.parse(JSON.stringify(taken.take(first))));
+      // Asked of where the file stands, nothing back the first time, then where it stands.
+      const asksThenGoesOn = async (lastLost: boolean): Promise<void> => {
+        client = await client.reopened();
+        for (const answered of [false, true]) {
+          const asked = client.asksWhereFileStands();
+          held(
+            asked !== null && named(asked) === begun,
+            `Opened again, it did not ask where ${begun} stands before it sent more of it.`,
+          );
+          held(
+            client.sendsFilePart()?.photoId !== first.photoId ||
+              client.sendsFilePart()?.file !== first.file,
+            `Opened again, it was ready to send a part of ${begun} without asking where it stands.`,
+          );
+          await client.fileStandsAnswered(
+            answered ? JSON.parse(JSON.stringify(taken.stands(asked))) : undefined,
+          );
+        }
+        if (taken.kept.has(begun)) return;
+        // Then on from where the server stood, its last part's answer lost where it is told to.
+        for (let parts = 0; !taken.kept.has(begun); parts += 1) {
+          held(parts < 10, `It never finished ${begun}.`);
+          const part = client.sendsFilePart();
+          held(part !== null && named(part) === begun, `It left ${begun} part way.`);
+          if (parts === 0) {
+            held(
+              part.offset === first.bytes.byteLength,
+              `Opened again, it sent ${begun} from ${String(part.offset)}, not from where the server stood.`,
+            );
+          }
+          const answer = taken.take(part);
+          const lost = lastLost && taken.kept.has(begun);
+          await client.filePartAnswered(lost ? undefined : JSON.parse(JSON.stringify(answer)));
+        }
+      };
+      await asksThenGoesOn(true);
+      // Opened again: told the file it finished is kept, it lets it go, sending none of it.
+      await asksThenGoesOn(false);
+      held(!client.holdsFiles().includes(begun), `Told ${begun} is kept, it still holds it.`);
+      held(
+        client.asksWhereFileStands() === null,
+        'It asked where a file stands that it never began.',
+      );
+      const before = taken.parts.length;
+      await sentAll(client, taken);
+      const after = taken.parts.slice(before);
+      held(
+        after.every((part) => named(part) !== begun),
+        `Told ${begun} is kept, it still sent a part of it.`,
+      );
+      for (const file of holds.files.filter((one) => named(one) !== begun)) {
+        held(
+          after.find((part) => named(part) === named(file))?.offset === 0,
+          `${named(file)}, never begun, did not go from its first byte.`,
+        );
+      }
+      held(
+        sorted([...taken.kept]) === sorted(holds.files.map(named)) &&
+          client.holdsFiles().length === 0,
+        'Not every file was sent whole and kept.',
       );
     },
   },

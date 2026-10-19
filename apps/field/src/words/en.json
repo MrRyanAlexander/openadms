@@ -301,6 +301,10 @@
     "syncNow": "Sync now",
     "syncing": "Syncing…",
     "nothingWaits": "Everything made on this phone is on the server.",
+    "files": {
+      "one": "1 photograph’s file still to send.",
+      "other": "{count} photographs’ files still to send."
+    },
     "notSaved": {
       "title": "Not saved",
       "intro": "The server didn’t take these. Each stays on the phone, and the back office is told.",

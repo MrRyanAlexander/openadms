@@ -36,8 +36,26 @@
 // it by the same id and the same fingerprint and adds nothing. A report answered not saved is not
 // sent again (a person can only close it on the server, ADR-526 (5)).
 //
-// **A photograph's file** goes only once its record is answered saved, a part at a time, each
-// where the server said it stands; the media endpoint and the parts' size are task 3.4.2's.
+// **A photograph answered not saved because its record isn't saved on the server**
+// (`OWNER_NOT_SAVED`, ADR-481 (4)) is kept and shown, and goes again: in the next sync once its
+// record is answered saved, and otherwise once a time the store is read, as a kept record does,
+// so it is saved once a person saved its record on the server. A photograph not saved for any
+// other reason is not sent again (a person can only close it, ADR-526 (4)).
+//
+// **A photograph's files** (BACKLOG 3.4.2; AC-11-32, 33; ADR-482, 579) go only once its record
+// is answered saved (a photograph whose record the server holds for a person is answered saved,
+// ADR-526 (4), and its files go while the record is still shown not saved), after every sync of
+// the run, a part at a time, each where the server said it stands. **The store keeps each
+// file's bytes on a shelf of their own** (`photoFiles`) and a note of it beside its photograph's
+// record (its length, and whether a part of it has gone), so a read of the store reads no file:
+// **one file's bytes are read at a time**, the one going now. **Where the server stands with a
+// file is known in memory alone**: opened again after a part of a file went, the phone asks the
+// media endpoint where the file stands before it sends more of it (`photoFileEndpoint`), never
+// starting it again from its first byte, which would lose what the server took. **A part is
+// never larger than the server takes** (`MEDIA_PART_BYTES_AT_MOST`) **and smaller on a poor
+// signal**: each is sized to go in about ten seconds at the speed the last one went, never under
+// 64 KiB, and one with no answer halves the next. A file answered not the one fingerprinted goes
+// again from its first byte, and rests until the next run where it is answered so twice.
 // **Turned in** ("Sync and turn in", task 3.4.3), it names everything it still holds, and wipes
 // only on `wipe: true`.
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -45,6 +63,7 @@ import {
   fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
+  photoFileStandsAt,
   photoRead,
   recordRead,
   sentCanonical,
@@ -58,6 +77,7 @@ import {
   syncUnplannedAssignmentsAtMost,
   toWipe,
   turnInAnswerRead,
+  type FileAsked,
   type FilePartSent,
   type LastUsedReport,
   type PasscodeUseReport,
@@ -71,7 +91,7 @@ import {
   type TurnInSent,
   type UnplannedAssignmentReport,
 } from '@open-adms/contracts';
-import type { NotSavedNotice } from '@open-adms/domain';
+import { NotSaved, type NotSavedNotice } from '@open-adms/domain';
 
 import type { Change, Json, PhoneStore, Shelf } from '../store/phone-store.ts';
 import { offsetOf, PhoneReports, type HeldReport } from './reports.ts';
@@ -112,11 +132,15 @@ interface Entry<T> {
   readonly archived: boolean;
 }
 
+// A photograph's file the phone holds, as its note says, and where it goes on from: as the
+// server last said, or `undefined` where the phone no longer knows (opened again after a part of
+// it went) and asks the server first.
 interface HeldFile {
   readonly photoId: string;
   readonly file: PhotoFileName;
-  readonly bytes: Uint8Array;
-  from: number;
+  readonly length: number;
+  begun: boolean;
+  from: number | undefined;
 }
 
 // What went in the sync sent last, each in its place.
@@ -133,6 +157,9 @@ export interface OutboxOptions {
   readonly holding: () => Promise<Holding>;
   // The most a part of a file may hold, as the server it sends to takes them.
   readonly filePartBytesAtMost: number;
+  // The most a whole file may hold, as the server takes them (`MEDIA_FILE_BYTES_AT_MOST`): one
+  // larger is never kept, for it would never go. None, where it isn't told.
+  readonly fileBytesAtMost?: number;
   // The wipe, on the server's `wipe: true` alone: the keyring's erase, then the store's.
   readonly wipe: () => Promise<void>;
   readonly now?: () => Date;
@@ -141,6 +168,14 @@ export interface OutboxOptions {
 const photoPrefix = 'photo:';
 const filePrefix = 'file:';
 const photoFileNames: readonly PhotoFileName[] = ['photo', 'depth'];
+// The least a part holds, however poor the signal: each part is a request of its own, counted
+// against the phone's parts a minute (`RATE_LIMIT_FILE_PARTS_PER_PHONE`). *Agent default.*
+const partBytesAtLeast = 65_536;
+// How long a part is meant to take, at the speed the last one went: one slower than that is a
+// poor signal's, and the next is smaller. *Agent default.*
+const partAimMs = 10_000;
+// A file answered not the one fingerprinted this many times in a run rests until the next.
+const notMatchedInARun = 2;
 
 const fileName = (photoId: string, file: PhotoFileName): string => `${photoId} ${file}`;
 
@@ -151,6 +186,15 @@ const hex = (bytes: Uint8Array): string =>
 // SHA-256, in hex, of what was sent as canonical JSON in UTF-8, as the server makes it (ADR-488).
 export const sentPrint = (sent: unknown): string =>
   hex(sha256(new TextEncoder().encode(sentCanonical(JSON.parse(JSON.stringify(sent))))));
+
+// A file's note as the store keeps it: its length, and whether a part of it has gone.
+function noteOf(kept: unknown): { length: number; begun: boolean } | undefined {
+  if (typeof kept !== 'object' || kept === null || Array.isArray(kept)) return undefined;
+  const { length, begun } = kept as Readonly<Record<string, unknown>>;
+  return typeof length === 'number' && Number.isInteger(length) && length > 0
+    ? { length, begun: begun === true }
+    : undefined;
+}
 
 function toldOf(kept: unknown): Told | null {
   if (typeof kept !== 'object' || kept === null || Array.isArray(kept)) return null;
@@ -231,10 +275,22 @@ export class PhoneOutbox {
   private records: Entry<SyncedRecord>[] = [];
   private photos: Entry<SyncedPhoto>[] = [];
   private files = new Map<string, HeldFile>();
+  // The one file whose bytes it holds in memory: the one going now.
+  private loaded: { readonly name: string; readonly bytes: Uint8Array } | undefined;
   // The photographs answered saved since the store was read, whose files may go.
   private readonly savedPhotos = new Set<string>();
-  // Kept records sent again since the store was read: each goes again once.
+  // Kept records sent again since the store was read: each goes again once. And photographs
+  // waiting for their record, sent again since: each goes again once more after its record is
+  // answered saved.
   private readonly sentAgain = new Set<string>();
+  private readonly photosSentAgain = new Set<string>();
+  // The files answered not the one fingerprinted in this run, how often; those resting till the
+  // next; how much the next part holds; and when the part sent last went.
+  private readonly notMatched = new Map<string, number>();
+  private readonly resting = new Set<string>();
+  private partBytes: number;
+  private partSentAt = 0;
+  private lastAsked: FileAsked | undefined;
   private holding: Holding = {
     holds: { masterPasscodeVersion: null, listsProjectId: null },
     lastUsed: [],
@@ -248,6 +304,7 @@ export class PhoneOutbox {
     this.store = store;
     this.options = options;
     this.now = options.now ?? (() => new Date());
+    this.partBytes = options.filePartBytesAtMost;
   }
 
   // The outbox as the store holds it now.
@@ -287,23 +344,34 @@ export class PhoneOutbox {
     this.savedPhotos.clear();
     for (const { id, told } of pictures)
       if (told !== null && stored(told)) this.savedPhotos.add(id);
+    // Each file by its note, its bytes left in the store. Where the server stands with one is
+    // known only from this outbox's own answers: one that has gone in part and isn't known here
+    // is asked after first.
     const files = new Map<string, HeldFile>();
     for (const { id, value } of photographs) {
-      if (!id.startsWith(filePrefix) || !(value instanceof Uint8Array)) continue;
+      if (!id.startsWith(filePrefix)) continue;
+      const note = noteOf(value);
       const [photoId, file] = id.slice(filePrefix.length).split(' ');
       const named = photoFileNames.find((one) => one === file);
-      if (photoId === undefined || named === undefined) continue;
-      const before = this.files.get(fileName(photoId, named));
-      files.set(fileName(photoId, named), {
+      if (note === undefined || photoId === undefined || named === undefined) continue;
+      const name = fileName(photoId, named);
+      const before = this.files.get(name);
+      const begun = note.begun || before?.begun === true;
+      files.set(name, {
         photoId,
         file: named,
-        bytes: value,
-        from: before?.from ?? 0,
+        length: note.length,
+        begun,
+        from: before !== undefined ? before.from : begun ? undefined : 0,
       });
     }
     this.files = files;
     this.sentAgain.clear();
+    this.photosSentAgain.clear();
+    this.notMatched.clear();
+    this.resting.clear();
     this.holding = holding;
+    await this.loadNext();
   }
 
   // A record the monitor submitted, kept now, sealed (AC-11-29): what the contract doesn't read,
@@ -336,6 +404,8 @@ export class PhoneOutbox {
   ): Promise<NotSavedNotice | undefined> {
     const read = photoRead(photo);
     if (!read.read) return read.notice;
+    const refused = this.notKeepable(files, photo.depthSha256 !== null);
+    if (refused !== undefined) return refused;
     const entry: Entry<SyncedPhoto> = {
       shelf: 'photographs',
       storeId: `${photoPrefix}${photo.id}`,
@@ -352,13 +422,23 @@ export class PhoneOutbox {
     this.next += 1;
     this.photos.push(entry);
     for (const { file, bytes } of files) this.holdFile(photo.id, file, bytes);
+    await this.loadNext();
     return undefined;
   }
 
-  // A photograph's file whose record the server has already (as the suite hands one).
-  async keepFile(photoId: string, file: PhotoFileName, bytes: Uint8Array): Promise<void> {
+  // A photograph's file whose record the server has already (as the suite hands one): what it
+  // couldn't send is not kept, and why is the answer.
+  async keepFile(
+    photoId: string,
+    file: PhotoFileName,
+    bytes: Uint8Array,
+  ): Promise<NotSavedNotice | undefined> {
+    const refused = this.notKeepable([{ file, bytes }], file === 'depth');
+    if (refused !== undefined) return refused;
     await this.store.change(this.fileChanges(photoId, [{ file, bytes }]));
     this.holdFile(photoId, file, bytes);
+    await this.loadNext();
+    return undefined;
   }
 
   // The next sync, as it goes on the wire now.
@@ -417,8 +497,11 @@ export class PhoneOutbox {
     const staying = new Set(
       this.records.filter(({ told, id }) => told === null && !goingIds.has(id)).map(({ id }) => id),
     );
-    const photosByCount = this.photos
-      .filter(({ told, value }) => told === null && !staying.has(value.owner.id))
+    const photosByCount = [
+      ...this.photos.filter(({ told }) => told === null),
+      ...this.photos.filter((entry) => this.waitsForItsRecord(entry)),
+    ]
+      .filter(({ value }) => !staying.has(value.owner.id))
       .slice(0, syncPhotosAtMost);
     const photos = photosByCount.slice(
       0,
@@ -439,7 +522,7 @@ export class PhoneOutbox {
       this.unplanned.some(({ notSaved }) => notSaved === null) ||
       this.uses.some(({ notSaved }) => notSaved === null) ||
       this.records.some(({ told, id }) => told === null || !this.sentAgain.has(id)) ||
-      this.photos.some(({ told }) => told === null)
+      this.photos.some((entry) => entry.told === null || this.waitsForItsRecord(entry))
     );
   }
 
@@ -497,10 +580,19 @@ export class PhoneOutbox {
     for (const entry of photosTold) {
       const isStored = stored(entry.told);
       if (isStored) this.savedPhotos.add(entry.id);
+      else this.photosSentAgain.add(entry.id);
       this.photos = this.photos.flatMap((one) =>
         one.id !== entry.id ? [one] : isStored ? [] : [entry],
       );
     }
+    // A photograph waiting for its record goes again once its record is answered saved.
+    const recordsStored = new Set(
+      recordsTold.filter(({ told }) => stored(told)).map(({ id }) => id),
+    );
+    for (const { id, value } of this.photos) {
+      if (recordsStored.has(value.owner.id)) this.photosSentAgain.delete(id);
+    }
+    await this.loadNext();
     return read;
   }
 
@@ -565,27 +657,30 @@ export class PhoneOutbox {
   }
 
   // The next part of a file it sends to the media endpoint now: of the first file whose
-  // photograph's record the server has, from where the server last said it stands, no larger
-  // than it takes. None where it has none to send.
+  // photograph's record the server has and that isn't resting, from where the server last said
+  // it stands, no larger than the part the signal lets (never larger than the server takes). None
+  // where it has none to send, or where it must first ask where the file stands.
   sendsFilePart(): FilePartSent | null {
-    const held = new Set(this.photos.map(({ id }) => id));
-    for (const file of this.files.values()) {
-      if (held.has(file.photoId) && !this.savedPhotos.has(file.photoId)) continue;
-      this.lastPart = {
-        photoId: file.photoId,
-        file: file.file,
-        offset: file.from,
-        length: file.bytes.byteLength,
-        bytes: file.bytes.subarray(file.from, file.from + this.options.filePartBytesAtMost),
-      };
-      return this.lastPart;
+    const file = this.goingNext();
+    const loaded = this.loaded;
+    if (file?.from === undefined || loaded?.name !== fileName(file.photoId, file.file)) {
+      return null;
     }
-    return null;
+    this.partSentAt = this.now().getTime();
+    this.lastPart = {
+      photoId: file.photoId,
+      file: file.file,
+      offset: file.from,
+      length: file.length,
+      bytes: loaded.bytes.subarray(file.from, file.from + this.partBytes),
+    };
+    return this.lastPart;
   }
 
   // What came back for the part sent last, as it came off the wire; `undefined` where nothing did.
   // Kept: the file goes from the phone. Receiving: it goes on from what the server took. Not
-  // matched: from its first byte. Anything else: from where it stood. How it was answered, where it was.
+  // matched: from its first byte, resting till the next run where it is so twice. Anything else:
+  // from where it stood, and the next part half the size. How it was answered, where it was.
   async filePartAnswered(answer: unknown): Promise<'KEPT' | 'RECEIVING' | 'NOT_MATCHED' | null> {
     const part = this.lastPart;
     this.lastPart = undefined;
@@ -594,16 +689,98 @@ export class PhoneOutbox {
     const file = this.files.get(name);
     if (file === undefined) return null;
     const read = photoFileAnswerRead(answer);
+    this.sized(read === null ? null : this.now().getTime() - this.partSentAt, part);
     const from = photoFileGoesOnFrom(read, part.offset);
     if (from === null) {
       await this.store.change([
         { shelf: 'photographs', id: `${filePrefix}${name}`, dropped: true },
+        { shelf: 'photoFiles', id: name, dropped: true },
       ]);
       this.files.delete(name);
+      if (this.loaded?.name === name) this.loaded = undefined;
     } else {
+      // A part of it has gone: opened again, the phone asks where it stands before more goes.
+      if (!file.begun) {
+        await this.store.change([
+          {
+            shelf: 'photographs',
+            id: `${filePrefix}${name}`,
+            value: { length: file.length, begun: true },
+          },
+        ]);
+        file.begun = true;
+      }
       file.from = from;
+      if (read?.upload === 'NOT_MATCHED') {
+        const times = (this.notMatched.get(name) ?? 0) + 1;
+        this.notMatched.set(name, times);
+        if (times >= notMatchedInARun) this.resting.add(name);
+      }
     }
+    await this.loadNext();
     return read?.upload ?? null;
+  }
+
+  // The file it asks the media endpoint where it stands now (`photoFileEndpoint`): the first one
+  // that would go next but that it began before it was opened, so it no longer knows where the
+  // server stood. None where it asks of none.
+  asksWhereFileStands(): FileAsked | null {
+    const file = this.goingNext(true);
+    if (file === undefined || file.from !== undefined) return null;
+    this.lastAsked = { photoId: file.photoId, file: file.file };
+    return this.lastAsked;
+  }
+
+  // What came back for that question, as it came off the wire; `undefined` where nothing did.
+  // Kept: the file goes from the phone. Otherwise it goes on from what the server took; with
+  // nothing it knows no more than before, and asks again. Whether it was an answer.
+  async fileStandsAnswered(answer: unknown): Promise<boolean> {
+    const asked = this.lastAsked;
+    this.lastAsked = undefined;
+    if (asked === undefined || this.isWiped) return false;
+    const name = fileName(asked.photoId, asked.file);
+    const file = this.files.get(name);
+    if (file === undefined) return false;
+    const at = photoFileStandsAt(photoFileAnswerRead(answer));
+    if (at === null) {
+      await this.store.change([
+        { shelf: 'photographs', id: `${filePrefix}${name}`, dropped: true },
+        { shelf: 'photoFiles', id: name, dropped: true },
+      ]);
+      this.files.delete(name);
+      if (this.loaded?.name === name) this.loaded = undefined;
+    } else if (at !== undefined) {
+      file.from = at;
+    }
+    await this.loadNext();
+    return at !== undefined;
+  }
+
+  // The part or the question sent last was told to wait (`429 LIMITED`, `503 BUSY`): nothing
+  // went, and nothing changes; the same goes again after the wait.
+  fileToldToWait(): void {
+    this.lastPart = undefined;
+    this.lastAsked = undefined;
+  }
+
+  // The part or the question sent last was refused for the file itself (too large, not an image,
+  // a photograph the server doesn't hold as this phone's): kept, it rests until the next run,
+  // and the other files go meanwhile.
+  async fileTurnedAway(): Promise<void> {
+    const sent = this.lastPart ?? this.lastAsked;
+    this.lastPart = undefined;
+    this.lastAsked = undefined;
+    if (sent === undefined) return;
+    this.resting.add(fileName(sent.photoId, sent.file));
+    await this.loadNext();
+  }
+
+  // How many of the monitor's photographs' files are still to go, of photographs the server has.
+  filesWaiting(): number {
+    const held = new Set(this.photos.map(({ id }) => id));
+    return [...this.files.values()].filter(
+      ({ photoId }) => !held.has(photoId) || this.savedPhotos.has(photoId),
+    ).length;
   }
 
   // Each file it holds that the server has not said it kept: "<photograph's id> <file>".
@@ -655,8 +832,13 @@ export class PhoneOutbox {
     this.records = [];
     this.photos = [];
     this.files.clear();
+    this.loaded = undefined;
     this.savedPhotos.clear();
     this.sentAgain.clear();
+    this.photosSentAgain.clear();
+    this.notMatched.clear();
+    this.resting.clear();
+    this.lastAsked = undefined;
     this.holding = { holds: { masterPasscodeVersion: null, listsProjectId: null }, lastUsed: [] };
     this.last = undefined;
     this.lastPart = undefined;
@@ -672,18 +854,100 @@ export class PhoneOutbox {
     return { kept: entry.kept, [field]: entry.value, told: entry.told } as unknown as Json;
   }
 
+  // A photograph kept not saved because its record isn't saved on the server, that goes again
+  // now: not yet sent again since the store was read, or since its record was answered saved.
+  private waitsForItsRecord(entry: Entry<SyncedPhoto>): boolean {
+    return entry.told?.reason === 'OWNER_NOT_SAVED' && !this.photosSentAgain.has(entry.id);
+  }
+
+  // Why a photograph's files can't be kept, where they can't: an empty one, one larger than the
+  // server takes, or a depth file where its photograph gives no depth file's fingerprint
+  // (`depthSha256` is given exactly where a depth file goes, ADR-482 (6)).
+  private notKeepable(
+    files: readonly { readonly file: PhotoFileName; readonly bytes: Uint8Array }[],
+    depthGoes: boolean,
+  ): NotSavedNotice | undefined {
+    const most = this.options.fileBytesAtMost ?? Infinity;
+    for (const { file, bytes } of files) {
+      if (bytes.byteLength === 0) return NotSaved.notARecord(`its ${file} file holds nothing`);
+      if (bytes.byteLength > most) {
+        return NotSaved.notARecord(
+          `its ${file} file is larger than the server takes, ${String(most / 1_048_576)} MiB`,
+        );
+      }
+      if (file === 'depth' && !depthGoes) {
+        return NotSaved.notARecord('a depth file goes only where its fingerprint is given');
+      }
+    }
+    return undefined;
+  }
+
+  // Each file's bytes on a shelf of their own, its note beside its photograph's record.
   private fileChanges(
     photoId: string,
     files: readonly { readonly file: PhotoFileName; readonly bytes: Uint8Array }[],
   ): Change[] {
-    return files.map(({ file, bytes }) => ({
-      shelf: 'photographs',
-      id: `${filePrefix}${fileName(photoId, file)}`,
-      value: bytes,
-    }));
+    return files.flatMap(({ file, bytes }): Change[] => [
+      { shelf: 'photoFiles', id: fileName(photoId, file), value: bytes },
+      {
+        shelf: 'photographs',
+        id: `${filePrefix}${fileName(photoId, file)}`,
+        value: { length: bytes.byteLength, begun: false },
+      },
+    ]);
   }
 
   private holdFile(photoId: string, file: PhotoFileName, bytes: Uint8Array): void {
-    this.files.set(fileName(photoId, file), { photoId, file, bytes, from: 0 });
+    this.files.set(fileName(photoId, file), {
+      photoId,
+      file,
+      length: bytes.byteLength,
+      begun: false,
+      from: 0,
+    });
+  }
+
+  // The file that goes next: the first whose photograph's record the server has, that isn't
+  // resting, and whose place is known (or, `asking`, the first whose place isn't).
+  private goingNext(asking = false): HeldFile | undefined {
+    const held = new Set(this.photos.map(({ id }) => id));
+    for (const [name, file] of this.files) {
+      if (held.has(file.photoId) && !this.savedPhotos.has(file.photoId)) continue;
+      if (this.resting.has(name)) continue;
+      if ((file.from === undefined) === asking) return file;
+    }
+    return undefined;
+  }
+
+  // The bytes of the file that goes next read from the store, and no other's held: one file at a
+  // time in memory. One the store no longer holds, or holds at another length, rests for the run.
+  private async loadNext(): Promise<void> {
+    for (let file = this.goingNext(); file !== undefined; file = this.goingNext()) {
+      const name = fileName(file.photoId, file.file);
+      if (this.loaded?.name === name) return;
+      this.loaded = undefined;
+      const bytes = await this.store.read('photoFiles', name);
+      if (bytes instanceof Uint8Array && bytes.byteLength === file.length) {
+        this.loaded = { name, bytes };
+        return;
+      }
+      this.resting.add(name);
+    }
+    this.loaded = undefined;
+  }
+
+  // The next part's size, from how the last went: with no answer, half; answered, what goes in
+  // about ten seconds at the speed it went (at most twice the last), within the least a part
+  // holds and the most the server takes.
+  private sized(tookMs: number | null, part: FilePartSent): void {
+    const most = this.options.filePartBytesAtMost;
+    const least = Math.min(partBytesAtLeast, most);
+    const next =
+      tookMs === null
+        ? this.partBytes / 2
+        : tookMs <= 0
+          ? this.partBytes * 2
+          : Math.min(this.partBytes * 2, (part.bytes.byteLength / tookMs) * partAimMs);
+    this.partBytes = Math.max(least, Math.min(most, Math.floor(next)));
   }
 }

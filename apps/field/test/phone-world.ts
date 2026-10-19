@@ -14,10 +14,12 @@ import {
   openPasscodeSessionOnPhoneEndpoint,
   phoneListsEndpoint,
   phoneLoginListEndpoint,
+  photoFileEndpoint,
   phoneSetupChoicesEndpoint,
   provePhoneEndpoint,
   reportPasscodeUseEndpoint,
   reportUnplannedAssignmentEndpoint,
+  sendPhotoFilePartEndpoint,
   signInOnPhoneEndpoint,
   signOutOnPhoneEndpoint,
   syncedRecordId,
@@ -25,7 +27,10 @@ import {
   takeOfflineSignInOnPhoneEndpoint,
   type Endpoint,
   type ErrorCode,
+  type PhotoAnswer,
+  type PhotoFileAnswer,
   type RecordAnswer,
+  type SyncedPhoto,
   type SeriesHeld,
   type SyncedRecord,
   type SyncSent,
@@ -147,6 +152,12 @@ export interface Sent {
   readonly json?: unknown;
   readonly token?: string | undefined;
   readonly session?: string | undefined;
+  // A part of a file: its path's ids, its query, how many bytes it held, and how long it was
+  // waited for.
+  readonly ids?: Readonly<Record<string, string>> | undefined;
+  readonly query?: Readonly<Record<string, string>> | undefined;
+  readonly bytes?: number | undefined;
+  readonly answerMs?: number | undefined;
 }
 
 // The API as these tests need it: a phone enrolled and proven, by its key or with the master
@@ -173,6 +184,18 @@ export class TestServer extends Server {
   readonly waits: { readonly code: ErrorCode; readonly seconds: number }[] = [];
   numbers: (sync: SyncSent) => SeriesHeld[] = () => [];
   setupVersion = towerLists.setupVersion;
+  // How each photograph's record is answered (saved where it says nothing); the media endpoint as
+  // the API plays it: the bytes of each file taken so far, the files kept, those it will answer
+  // not matched once, what it refuses a part of a file with, and what it does as each part
+  // arrives (a test moves the phone's clock, or takes its signal).
+  photoAnswer: (photo: SyncedPhoto) => PhotoAnswer | undefined = () => undefined;
+  readonly filesTaken = new Map<string, number[]>();
+  readonly kept = new Map<string, Uint8Array>();
+  readonly unmatched = new Set<string>();
+  private readonly lengths = new Map<string, number>();
+  fileRefusal: ErrorCode | null = null;
+  readonly fileWaits: { readonly code: ErrorCode; readonly seconds: number }[] = [];
+  onPart: (part: { name: string; offset: number; bytes: number }) => void = () => undefined;
 
   constructor() {
     super('https://api.adms.localhost');
@@ -184,6 +207,11 @@ export class TestServer extends Server {
       json: asking.json,
       token: asking.token,
       session: asking.session,
+      ...(asking.bytes === undefined
+        ? {}
+        : { ids: asking.ids, query: asking.query, bytes: asking.bytes.byteLength }),
+      ...(asking.answerMs === undefined ? {} : { answerMs: asking.answerMs }),
+      ...((served as Endpoint) === photoFileEndpoint ? { ids: asking.ids } : {}),
     });
     if (!this.signal) return Promise.resolve({ kind: 'unreachable' });
     return Promise.resolve(this.answer(served, asking) as Reply<E>);
@@ -296,6 +324,10 @@ export class TestServer extends Server {
       if (!inUse) return { kind: 'refused', code: 'NOT_SIGNED_IN' };
       return this.synced(json as unknown as SyncSent);
     }
+    if (served === photoFileEndpoint || served === sendPhotoFilePartEndpoint) {
+      if (!inUse) return { kind: 'refused', code: 'NOT_SIGNED_IN' };
+      return this.filed(served === photoFileEndpoint, asking);
+    }
     if (asking.session === undefined) return { kind: 'refused', code: 'NOT_SIGNED_IN' };
     if (served === phoneListsEndpoint) {
       return {
@@ -361,7 +393,10 @@ export class TestServer extends Server {
           const id = syncedRecordId(record);
           return this.recordAnswer(record) ?? { answer: 'SAVED' as const, id, notes: [] };
         }),
-        photos: sync.photos.map(({ id }) => ({ answer: 'SAVED' as const, id, notes: [] })),
+        photos: sync.photos.map(
+          (photo) =>
+            this.photoAnswer(photo) ?? { answer: 'SAVED' as const, id: photo.id, notes: [] },
+        ),
         numbers: this.numbers(sync),
         masterPasscode: {
           version: 1,
@@ -373,6 +408,47 @@ export class TestServer extends Server {
             : null,
       },
     };
+  }
+
+  // The media endpoint (ADR-482): asked where a file stands, or a part taken where it starts the
+  // file or goes on where the last ended; whole, kept, or answered not matched once where the
+  // test says.
+  private filed(asks: boolean, asking: Asking): Reply<Endpoint> {
+    const name = `${asking.ids?.['photoId'] ?? ''} ${asking.ids?.['file'] ?? ''}`;
+    const answered = (answer: PhotoFileAnswer): Reply<Endpoint> => ({ kind: 'answered', answer });
+    if (this.kept.has(name)) return answered({ upload: 'KEPT' });
+    const so = this.filesTaken.get(name) ?? [];
+    const length = asks ? (this.lengths.get(name) ?? 1) : Number(asking.query?.['length'] ?? '0');
+    if (!asks) this.lengths.set(name, length);
+    if (asks) {
+      return answered({
+        upload: 'RECEIVING',
+        received: so.length,
+        length: so.length === 0 ? null : length,
+      });
+    }
+    if (this.fileRefusal !== null) return { kind: 'refused', code: this.fileRefusal };
+    const wait = this.fileWaits.shift();
+    if (wait !== undefined) return { kind: 'refused', code: wait.code, waitSeconds: wait.seconds };
+    const offset = Number(asking.query?.['offset'] ?? '-1');
+    const bytes = [...(asking.bytes ?? [])];
+    this.onPart({ name, offset, bytes: bytes.length });
+    if (offset !== 0 && offset !== so.length) {
+      return answered({
+        upload: 'RECEIVING',
+        received: so.length,
+        length: so.length === 0 ? null : length,
+      });
+    }
+    const now = offset === 0 ? bytes : [...so, ...bytes];
+    if (now.length < length) {
+      this.filesTaken.set(name, now);
+      return answered({ upload: 'RECEIVING', received: now.length, length });
+    }
+    this.filesTaken.delete(name);
+    if (this.unmatched.delete(name)) return answered({ upload: 'NOT_MATCHED' });
+    this.kept.set(name, Uint8Array.from(now));
+    return answered({ upload: 'KEPT' });
   }
 
   // Two monitors a page, in the order the server holds them; a picked project's sites and pay
@@ -399,7 +475,10 @@ export class TestServer extends Server {
   }
 }
 
-export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
+export async function phone(
+  clock = { now: new Date('2026-10-19T11:00:00Z') },
+  { partBytes = 65_536 }: { readonly partBytes?: number } = {},
+) {
   const now = () => clock.now;
   const store = new HeldStore();
   const keyring = new HeldKeyring();
@@ -431,38 +510,44 @@ export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
     reports,
     policy,
   );
-  const outbox = await PhoneOutbox.opened(store, {
-    holding: async () => {
-      const [check, held, lastUsed] = await Promise.all([
-        loginList.passcode(),
-        lists.held(),
-        lists.lastUsed(),
-      ]);
-      return {
-        holds: {
-          masterPasscodeVersion: check?.version ?? null,
-          listsProjectId: held?.assignment.project.id ?? null,
-        },
-        lastUsed,
-      };
-    },
-    filePartBytesAtMost: 65_536,
-    wipe: () => store.erase(),
-    now,
-  });
   // How long the phone was told to wait each time, as it waited.
   const slept: number[] = [];
-  const sync = new PhoneSync(
-    { store, outbox, monitor, lists, loginList },
-    {
-      now,
-      sleep: (milliseconds) => {
-        slept.push(milliseconds);
-        return Promise.resolve();
+  // The outbox and the sync over the phone's store, as the app opens them.
+  const opened = async () => {
+    const outbox = await PhoneOutbox.opened(store, {
+      holding: async () => {
+        const [check, held, lastUsed] = await Promise.all([
+          loginList.passcode(),
+          lists.held(),
+          lists.lastUsed(),
+        ]);
+        return {
+          holds: {
+            masterPasscodeVersion: check?.version ?? null,
+            listsProjectId: held?.assignment.project.id ?? null,
+          },
+          lastUsed,
+        };
       },
-      random: () => 0.5,
-    },
-  );
+      filePartBytesAtMost: partBytes,
+      fileBytesAtMost: policy.mediaFileBytesAtMost,
+      wipe: () => store.erase(),
+      now,
+    });
+    const sync = new PhoneSync(
+      { store, outbox, monitor, lists, loginList },
+      {
+        now,
+        sleep: (milliseconds) => {
+          slept.push(milliseconds);
+          return Promise.resolve();
+        },
+        random: () => 0.5,
+      },
+    );
+    return { outbox, sync };
+  };
+  const { outbox, sync } = await opened();
   server.sent.length = 0;
   return {
     clock,
@@ -476,6 +561,9 @@ export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
     outbox,
     sync,
     slept,
+    // The app opened again after it stopped: a new outbox and sync over the same store, what the
+    // last knew in memory alone gone.
+    reopened: opened,
     passcodeOnPhone,
     signingIn,
     setup,
@@ -485,8 +573,8 @@ export async function phone(clock = { now: new Date('2026-10-19T11:00:00Z') }) {
 
 // Ana's tower day read on the phone, with the login list and the passcode's check, then signed
 // out: the phone holds P1's lists.
-export async function heldP1(clock?: { now: Date }) {
-  const held = await phone(clock);
+export async function heldP1(clock?: { now: Date }, options?: { readonly partBytes?: number }) {
+  const held = await phone(clock, options);
   expect(await held.signingIn.signIn(ana.number, passwords[ana.id] ?? '')).toMatchObject({
     kind: 'signedIn',
   });

@@ -17,12 +17,26 @@
 //   setup version of the project whose lists it holds, which makes it read its lists again where
 //   it isn't theirs (`PhoneLists.readUnless`, AC-11-17); the login list is read with the lists.
 // - **When it was last answered** is kept, and every screen says it ("Last synced").
+// - **Then its photographs' files** (AC-11-32, 33; ADR-482, 579), after the records and the lists
+//   (so a monitor's lists never wait behind megabytes): a question or a part at a time from the
+//   outbox, each answered before the next, until none goes. Where it began a file before the app
+//   last opened, it asks where the file stands first (`photoFileEndpoint`). A part is waited for
+//   two minutes at most: past it, no answer, and the next part is half the size. No answer stops
+//   the files and keeps them, to go on from where the server stood next time; told to wait, it
+//   waits as a sync does; a file refused for itself (too large, not an image, not this phone's)
+//   rests until the next run and the rest go.
 //
 // Which occasions read the lists whatever the sync brought (*agent default*, ADR-578): signing in,
 // finding a connection and the monitor asking read them after the sync, as task 3.2.3 built (an
 // assignment may have changed, a truck been certified); coming back to the front, which a phone
 // does many times an hour, reads them only where the setup version moved or no assignment is taken.
-import { syncPhoneEndpoint, waitAnswers } from '@open-adms/contracts';
+import {
+  photoFileEndpoint,
+  sendPhotoFilePartEndpoint,
+  syncPhoneEndpoint,
+  waitAnswers,
+  type ErrorCode,
+} from '@open-adms/contracts';
 
 import type { NotAnswered } from '../server.ts';
 import type { PhoneStore } from '../store/phone-store.ts';
@@ -34,13 +48,14 @@ import type { PhoneOutbox } from './outbox.ts';
 // Whether the lists are read after the sync whatever it brought, or only where it says they moved.
 export type ListsAfter = 'read' | 'unlessMoved';
 
-// What a run came to: synced (and the lists after it, read or the same), nobody signed in, or why
-// it stopped, everything kept.
+// What a run came to: synced (and the lists after it, read or the same, and the photographs'
+// files, all sent or where they stopped), nobody signed in, or why it stopped, everything kept.
 export type SyncRun =
   | {
       readonly kind: 'synced';
       readonly at: Date;
       readonly lists: ListsRead | 'same';
+      readonly files: 'sent' | NotAnswered;
     }
   | { readonly kind: 'nobodySignedIn' }
   | NotAnswered;
@@ -50,6 +65,17 @@ export type SyncRun =
 const waitsInARowAtMost = 10;
 // How much longer than it was told a phone waits, at most, at random: a tenth.
 const waitSpread = 0.1;
+
+// How long a part of a file is waited for: past it, it is a poor signal's, and the next is
+// smaller (ADR-579). A part of the most the server takes, 4 MiB, goes in it at 35 KB a second.
+const partAnswerMs = 120_000;
+// What the media endpoint refuses of a file itself: it rests till the next run, the rest go on.
+const fileRefusals: readonly ErrorCode[] = [
+  'TOO_LARGE',
+  'UNSUPPORTED_MEDIA_TYPE',
+  'BAD_REQUEST',
+  'NOT_FOUND',
+];
 
 const keptAnswers = 'keptAnswers';
 const lastSyncId = 'lastSync';
@@ -183,6 +209,59 @@ export class PhoneSync {
     if (afterwards !== 'same' && (afterwards.kind === 'taken' || afterwards.kind === 'none')) {
       await this.loginList.read(this.monitor);
     }
-    return { kind: 'synced', at: at ?? this.now(), lists: afterwards };
+    const files = await this.sentFiles();
+    return { kind: 'synced', at: at ?? this.now(), lists: afterwards, files };
+  }
+
+  // The photographs' files the outbox holds, a question or a part at a time, until none goes; or
+  // where they stopped, everything kept. The sync just before carried the phone's reports.
+  private async sentFiles(): Promise<'sent' | NotAnswered> {
+    for (let waitsInARow = 0; ;) {
+      const asked = this.outbox.asksWhereFileStands();
+      const part = asked === null ? this.outbox.sendsFilePart() : null;
+      const named = asked ?? part;
+      if (named === null) return 'sent';
+      const ids = { photoId: named.photoId, file: named.file };
+      const reply =
+        part === null
+          ? await this.monitor.ask(photoFileEndpoint, { ids }, { carriesReports: true })
+          : await this.monitor.ask(
+              sendPhotoFilePartEndpoint,
+              {
+                ids,
+                query: { offset: String(part.offset), length: String(part.length) },
+                bytes: part.bytes,
+                answerMs: partAnswerMs,
+              },
+              { carriesReports: true },
+            );
+      if (reply.kind === 'answered') {
+        waitsInARow = 0;
+        // What it can't read is no answer: the run stops there rather than ask again for ever.
+        const read =
+          part === null
+            ? await this.outbox.fileStandsAnswered(reply.answer)
+            : (await this.outbox.filePartAnswered(reply.answer)) !== null;
+        if (!read) return { kind: 'unreadable' };
+        continue;
+      }
+      if (reply.kind === 'refused' && fileRefusals.includes(reply.code)) {
+        await this.outbox.fileTurnedAway();
+        continue;
+      }
+      const told = reply.kind === 'refused' ? reply.waitSeconds : undefined;
+      const waits =
+        reply.kind === 'refused' && (waitAnswers as readonly string[]).includes(reply.code);
+      if (waits && told !== undefined && waitsInARow < waitsInARowAtMost) {
+        this.outbox.fileToldToWait();
+        waitsInARow += 1;
+        await this.sleep(told * 1000 * (1 + this.random() * waitSpread));
+        continue;
+      }
+      // No answer, or no answer it can read: what was sent is taken for nothing.
+      if (part === null) await this.outbox.fileStandsAnswered(undefined);
+      else await this.outbox.filePartAnswered(undefined);
+      return reply;
+    }
   }
 }

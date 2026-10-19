@@ -12,8 +12,11 @@
 export const shelves = [
   // The field events, forms and certifications made on the phone, sent or not (AC-11-07).
   'records',
-  // The photographs waiting to go, each file by itself (ARCHITECTURE §11).
+  // The photographs waiting to go: each one's record, and a note of each of its files (ARCHITECTURE
+  // §11).
   'photographs',
+  // Each photograph's file itself, by itself: read one at a time, as it goes (ADR-579).
+  'photoFiles',
   // The lists its assignment brought: debris types, sites, certifications, blocks… (§7.1).
   'lists',
   // The login list: one entry a monitor, for signing in offline (§7.2, ADR-105).

@@ -55,6 +55,7 @@ const phone = BrowserStore.opened().then(async (store) => {
       };
     },
     filePartBytesAtMost: policy.mediaPartBytesAtMost,
+    fileBytesAtMost: policy.mediaFileBytesAtMost,
     // The keyring first, then the store (NIST SP 800-88; task 3.4.3's turn-in).
     wipe: async () => {
       await keyring.erase();

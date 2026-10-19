@@ -46,6 +46,7 @@ import {
   fitByWeight,
   photoFileAnswerRead,
   photoFileGoesOnFrom,
+  photoFileStandsAt,
   stored,
   syncAnswerRead,
   syncedRecordAssignment,
@@ -61,6 +62,7 @@ import {
   toWipe,
   turnInAnswerRead,
   turnInSentSchema,
+  type FileAsked,
   type FilePartSent,
   type PhotoAnswer,
   type PhotoFileName,
@@ -131,6 +133,9 @@ export interface HeldPhoto {
 export interface PhoneServer {
   received(deviceId: string, sent: SyncReceived): Promise<{ readonly answered: SyncAnswered }>;
   filePart(deviceId: string, part: FilePartSent): Promise<unknown>;
+  // Where a file stands (`photoFileEndpoint`), asked only by a phone opened again after it began
+  // a file (ADR-579): a story's server that never reopens a phone has none.
+  fileStands?(deviceId: string, asked: FileAsked): Promise<unknown>;
   // A phone turned in under the master passcode: the turn-in endpoint, its answer as it comes
   // off the wire (ADR-488, 491). A server of a story's or a test's own that
   // turns no phone in has none.
@@ -175,7 +180,10 @@ interface HeldFile {
   readonly photoId: string;
   readonly file: PhotoFileName;
   readonly bytes: Buffer;
-  from: number;
+  // Where it goes on from, as the server last said; unknown once the phone was opened again
+  // after a part of it was sent (it asks the server first, ADR-579).
+  from: number | undefined;
+  begun: boolean;
   saved: boolean;
 }
 
@@ -576,6 +584,12 @@ export class SimulatedDevice {
   private partBytes: number;
   private readonly resting = new Set<string>();
   private lastPart: FilePartSent | undefined;
+  private lastAsked: FileAsked | undefined;
+  // Its photographs answered not saved because their record isn't saved on the server, each
+  // waiting to go again once its record is answered saved (ADR-481 (4), 579); and the records it
+  // was answered saved.
+  private readonly ownerWaits: RecordedPhoto[] = [];
+  private readonly savedRecords = new Set<string>();
   // What it reports besides its records, still to be answered; and the sync it sent last.
   private reports: Reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
   private last:
@@ -956,11 +970,12 @@ export class SimulatedDevice {
     this.partBytes = bytes;
   }
 
-  private holdFile(held: Omit<HeldFile, 'from'>): void {
+  private holdFile(held: Omit<HeldFile, 'from' | 'begun'>): void {
     this.files.set(`${held.photoId} ${held.file}`, {
       ...held,
       bytes: Buffer.from(held.bytes),
       from: 0,
+      begun: false,
     });
   }
 
@@ -1096,12 +1111,12 @@ export class SimulatedDevice {
 
   get filesWaiting(): readonly {
     readonly name: string;
-    readonly from: number;
+    readonly from: number | null;
     readonly saved: boolean;
   }[] {
     return [...this.files.entries()].map(([name, held]) => ({
       name,
-      from: held.from,
+      from: held.from ?? null,
       saved: held.saved,
     }));
   }
@@ -1158,6 +1173,12 @@ export class SimulatedDevice {
   // assignment that has to wait for the next sync, and no photograph ahead of the sync that
   // carries its record.
   sends(): SyncSent {
+    // A photograph that waited for its record goes again once its record is saved.
+    for (const photo of [...this.ownerWaits]) {
+      if (!this.savedRecords.has(photo.owner.id)) continue;
+      this.ownerWaits.splice(this.ownerWaits.indexOf(photo), 1);
+      this.photoOutbox.push(photo);
+    }
     const clockAt = this.now();
     const unplannedAssignments = this.reports.unplannedAssignments.slice(
       0,
@@ -1267,6 +1288,7 @@ export class SimulatedDevice {
       if (each === undefined) return;
       this.outbox.splice(this.outbox.indexOf(sent), 1);
       this.told.push({ sent, answer: each });
+      if (stored(each)) this.savedRecords.add(heldId(sent));
       if ('reason' in each) {
         this.shown.push({ id: heldId(sent), reason: each.reason, message: each.message });
       }
@@ -1278,6 +1300,10 @@ export class SimulatedDevice {
       this.told.push({ sent: { record: 'PHOTO', photo }, answer: each });
       if ('reason' in each) {
         this.shown.push({ id: photo.id, reason: each.reason, message: each.message });
+        if (each.reason === 'OWNER_NOT_SAVED') this.ownerWaits.push(photo);
+      } else {
+        // Saved the second time, it is shown as not saved no more.
+        this.shown.splice(0, this.shown.length, ...this.shown.filter(({ id }) => id !== photo.id));
       }
       // Its files go once its record is saved; one not saved keeps them with it.
       for (const file of this.files.values()) {
@@ -1358,7 +1384,7 @@ export class SimulatedDevice {
   // said it stands, no larger than the server takes. None where it has none to send.
   sendsFilePart(): FilePartSent | null {
     for (const [name, held] of this.files) {
-      if (!held.saved || this.resting.has(name)) continue;
+      if (!held.saved || this.resting.has(name) || held.from === undefined) continue;
       this.lastPart = {
         photoId: held.photoId,
         file: held.file,
@@ -1382,11 +1408,47 @@ export class SimulatedDevice {
     const name = `${part.photoId} ${part.file}`;
     const held = this.files.get(name);
     if (held === undefined) return null;
+    held.begun = true;
     const read = photoFileAnswerRead(answer);
     const from = photoFileGoesOnFrom(read, part.offset);
     if (from === null) this.files.delete(name);
     else held.from = from;
     return read?.upload ?? null;
+  }
+
+  // The file it asks the media endpoint where it stands (`photoFileEndpoint`): one whose
+  // photograph's record was answered saved and that it began before it was opened again, so it
+  // no longer knows where the server stood (AC-11-33; ADR-579). None where it asks of none.
+  asksWhereFileStands(): FileAsked | null {
+    for (const held of this.files.values()) {
+      if (!held.saved || held.from !== undefined) continue;
+      this.lastAsked = { photoId: held.photoId, file: held.file };
+      return this.lastAsked;
+    }
+    return null;
+  }
+
+  // What came back for that question, off the wire; `undefined` where nothing came. Read by the
+  // contract's own rule (`photoFileStandsAt`): kept, it lets the file go; otherwise it goes on
+  // from what the server took; with no answer it knows no more, and asks again.
+  fileStandsAnswered(answer: unknown): void {
+    const asked = this.lastAsked;
+    if (asked === undefined) throw new Error(`${this.name} was answered before it asked.`);
+    this.lastAsked = undefined;
+    const name = `${asked.photoId} ${asked.file}`;
+    const held = this.files.get(name);
+    if (held === undefined) return;
+    const at = photoFileStandsAt(photoFileAnswerRead(answer));
+    if (at === null) this.files.delete(name);
+    else if (at !== undefined) held.from = at;
+  }
+
+  // The phone opened again after it stopped: what it kept is there, and where the server stood
+  // with each file it had begun is no longer known (the field app keeps that in memory alone).
+  reopened(): void {
+    for (const held of this.files.values()) if (held.begun) held.from = undefined;
+    this.lastPart = undefined;
+    this.lastAsked = undefined;
   }
 
   // Its photographs' files, after the records that carried them were answered (ARCHITECTURE §9
@@ -1401,7 +1463,31 @@ export class SimulatedDevice {
     const notMatched = new Map<string, number>();
     let parts = 0;
     let toldInARow = 0;
-    for (let part = this.sendsFilePart(); part !== null; part = this.sendsFilePart()) {
+    for (;;) {
+      // Opened again after it began a file, it asks where the file stands first (ADR-579).
+      const asked = this.asksWhereFileStands();
+      if (asked !== null) {
+        if (server.fileStands === undefined) {
+          throw new Error(`${this.name} asks where a file stands of a server that answers none.`);
+        }
+        const askedAt = this.clock.now();
+        try {
+          const stands = await server.fileStands(this.current.deviceId, asked);
+          this.fileStandsAnswered(JSON.parse(JSON.stringify(stands)));
+          toldInARow = 0;
+        } catch (caught) {
+          this.fileStandsAnswered(undefined);
+          if (caught instanceof ToldToWait) {
+            toldInARow = this.waitsOut(caught, askedAt, toldInARow);
+            continue;
+          }
+          if (!(caught instanceof NoSignal)) throw caught;
+          return parts;
+        }
+        continue;
+      }
+      const part = this.sendsFilePart();
+      if (part === null) return parts;
       parts += 1;
       const sentAt = this.clock.now();
       let answer: unknown;
@@ -1425,7 +1511,6 @@ export class SimulatedDevice {
         if (times >= 2) this.resting.add(name);
       }
     }
-    return parts;
   }
 
   // "Sync and turn in" (ARCHITECTURE §8; AC-02-58; ADR-096, 488): what it sends to be turned
@@ -1480,6 +1565,8 @@ export class SimulatedDevice {
     this.dropped.length = 0;
     this.outbox.length = 0;
     this.photoOutbox.length = 0;
+    this.ownerWaits.length = 0;
+    this.savedRecords.clear();
     this.files.clear();
     this.resting.clear();
     this.reports = { unplannedAssignments: [], passcodeUses: [], lastUsed: [] };
@@ -1524,7 +1611,16 @@ export class SimulatedDevice {
   // What it shows its monitor as not saved: each record the server kept in quarantine or could
   // not save, with the reason. Never swallowed (ADR-022, 468; REQ-308c).
   get notSaved(): readonly Answered[] {
-    return this.told.filter((one) => !stored(one.answer));
+    // A photograph sent again once its record was saved, and saved then, is no longer one.
+    const savedLater = new Set(
+      this.told.flatMap((one) =>
+        one.sent.record === 'PHOTO' && stored(one.answer) ? [one.sent.photo.id] : [],
+      ),
+    );
+    return this.told.filter(
+      (one) =>
+        !stored(one.answer) && !(one.sent.record === 'PHOTO' && savedLater.has(one.sent.photo.id)),
+    );
   }
 
   // The same, with the reports not saved beside the records, as the contract's suite reads it;
