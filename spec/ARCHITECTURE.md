@@ -920,7 +920,7 @@ So the protection can't rest on the password. It rests on these:
   still holds; the server answers `wipe: true` only when it has all of it from that phone, and
   in the same piece of work hands back (or, for a lost phone or a series not reported, retires)
   its numbers and revokes its key (§7.4's note; KD-77 closed, ADR-495). Otherwise nothing changes and the answer
-  names what it doesn't have. A client wipes only on `wipe: true` (the sync contract's suite).* Cancelled tickets are the only exception to
+  names what it doesn't have. A client wipes only on `wipe: true` (the sync contract's suite).* ⚠️ *ADR-580 (agent defaults), the field app as built: steps 2 and 3 as the master user (the passcode beside the device key's proof, every queue and file sent, no monitor needed); the wipe the keyring's erase, then the store's, on `wipe: true`, or on the device key refused after a turn-in whose answer never came (only a turn-in revokes a key so); a record the app's contract no longer reads is named by its fingerprint, so the phone isn't wiped over it unless the server holds it.* Cancelled tickets are the only exception to
   syncing: they stay on the device until it is set up again (ADR-056).
 - **Browser test build:** IndexedDB, encrypted with a WebCrypto key that can't be exported. It's
   good enough for testing, but it isn't device-grade, so real work never uses it.

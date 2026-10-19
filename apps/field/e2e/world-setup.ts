@@ -23,6 +23,7 @@ interface Ready {
   readonly apiOrigin: string;
   readonly masterPasscode: string;
   readonly cast: unknown;
+  readonly lostPhone: unknown;
 }
 
 export default async function worldSetup(): Promise<() => Promise<void>> {
@@ -45,11 +46,12 @@ export default async function worldSetup(): Promise<() => Promise<void>> {
         else reject(new Error('The harness said something other than that the world was ready.'));
       });
     });
-    // Handed to every test's process: where the world's page is, its made-up master passcode, and
-    // its cast of monitors with their made-up passwords.
+    // Handed to every test's process: where the world's page is, its made-up master passcode, its
+    // cast of monitors with their made-up passwords, and its lost tower phone with its key.
     process.env['ADMS_E2E_WORLD_ORIGIN'] = page.origin;
     process.env['ADMS_E2E_WORLD_PASSCODE'] = ready.masterPasscode;
     process.env['ADMS_E2E_WORLD_CAST'] = JSON.stringify(ready.cast);
+    process.env['ADMS_E2E_WORLD_LOST_PHONE'] = JSON.stringify(ready.lostPhone);
   } catch (problem) {
     made.kill('SIGTERM');
     await stopped;

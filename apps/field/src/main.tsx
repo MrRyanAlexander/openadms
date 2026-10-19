@@ -19,6 +19,7 @@ import { PhoneReports } from './phone/reports.ts';
 import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
 import { PhoneSync } from './phone/sync.ts';
+import { PhoneTurnIn } from './phone/turn-in.ts';
 import { Server } from './server.ts';
 import { Shell } from './shell.tsx';
 import { BrowserKeyring } from './store/browser-keyring.ts';
@@ -62,13 +63,14 @@ const phone = BrowserStore.opened().then(async (store) => {
       await store.erase();
     },
   });
+  const sync = new PhoneSync({ store, outbox, monitor, lists, loginList });
   return {
     identity,
     monitor,
     lists,
     loginList,
     outbox,
-    sync: new PhoneSync({ store, outbox, monitor, lists, loginList }),
+    sync,
     signingIn: new SigningIn(monitor, lists, loginList, passcode, reports, policy),
     setup,
     passcode,
@@ -76,6 +78,12 @@ const phone = BrowserStore.opened().then(async (store) => {
     inactivity: {
       lockMinutes: policy.phoneInactivityLockMinutes,
       warningSeconds: policy.phoneInactivityWarningSeconds,
+    },
+    turnIn: new PhoneTurnIn({ store, identity, outbox, sync }),
+    // Erased, the store can't be used again: the page opens afresh, with a new store, at
+    // enrolment (AC-11-34).
+    reopened: () => {
+      window.location.reload();
     },
   };
 });

@@ -56,7 +56,12 @@ P1 and its sites, monitors created at the API (Kim on disposals and the drop-off
 Road TDSR, Ana on collections and incidents, Lee on two assignments, Tariq on none, for the
 project's today and tomorrow), each signed in on a test's own phone with `worldCast()`'s Monitor
 ID and password; a test needing other work adds it to `BrowserWorld.cast`, never by hand in the
-test. What a page's own requests write lands after their answer: wait for it (`rawlyHeld`'s
+test. **And `P1-TWR-LF`** (ADR-580): lost, its key revoked by the worker's pass after the firm's
+hours (enrolled and marked on the cast's clock set back that long: the database holds a
+revocation to its own `now()`), its key handed on by `worldLostPhone()` for the bench's
+`plantedPhone` to put in the browser's keyring (the private half not extractable) with its
+enrolment; a page opened again then is that phone. The bench (`e2e/outbox-bench.ts`) also keeps a
+record the contract can't read (`keptUnreadable`). What a page's own requests write lands after their answer: wait for it (`rawlyHeld`'s
 `storeRows` polled), never read it at the answer. The page's helpers are `e2e/phone-page.ts`; the API's error lines go to the
 run's standard error. The database is dropped then; a run stopped short leaves one for `pnpm
 scenarios clean`. The root `pnpm e2e` generates and builds the workspaces first (the world needs the

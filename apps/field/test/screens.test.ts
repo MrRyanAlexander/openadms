@@ -37,6 +37,8 @@ describe('AC-11-51: the screens of the field app', () => {
       'no-assignment',
       'sync',
       'settings',
+      'turned-in',
+      'turn-in',
       'prototype-collection',
       'prototype-stop',
       'prototype-sync',
@@ -117,7 +119,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 28 of 28 screens checked, in 29 checks; 0 found.',
+      '\nAccessibility: 30 of 30 screens checked, in 31 checks; 0 found.',
     );
   });
 

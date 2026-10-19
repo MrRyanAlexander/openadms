@@ -2,8 +2,9 @@
 // passcode.ts, passcode-sessions.ts and their part of signing-in.ts, monitor.ts and lists.ts;
 // BACKLOG 3.3.1, 3.3.2; ADR-576, 577): a phone enrolled against a server of the test's own, its
 // cast (Ana on the Landfill's tower on P1, Kim, Jo), the lists Ana's sign-in brings, and what the
-// server answers each call the phone makes under the passcode. Against the real API, in a real
-// browser: e2e/setup.e2e.ts, e2e/switching.e2e.ts.
+// server answers each call the phone makes under the passcode, its turn-in among them, and a key
+// revoked by a turn-in or by the firm's time (task 3.4.3). Against the real API, in a real
+// browser: e2e/setup.e2e.ts, e2e/switching.e2e.ts, e2e/turn-in.e2e.ts.
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
@@ -17,6 +18,7 @@ import {
   photoFileEndpoint,
   phoneSetupChoicesEndpoint,
   provePhoneEndpoint,
+  provenPhoneEndpoint,
   reportPasscodeUseEndpoint,
   reportUnplannedAssignmentEndpoint,
   sendPhotoFilePartEndpoint,
@@ -25,6 +27,7 @@ import {
   syncedRecordId,
   syncPhoneEndpoint,
   takeOfflineSignInOnPhoneEndpoint,
+  turnInPhoneEndpoint,
   type Endpoint,
   type ErrorCode,
   type PhotoAnswer,
@@ -38,6 +41,8 @@ import {
   type PhoneAssignmentAnswer,
   type PhoneListsRecord,
   type PhoneSetupChoicesAnswer,
+  type TurnInAnswer,
+  type TurnInReceived,
 } from '@open-adms/contracts';
 import { OfflineSignInRules, Policy, SignInTries } from '@open-adms/domain';
 import { expect } from 'vitest';
@@ -53,6 +58,7 @@ import { PhoneReports } from '../src/phone/reports.ts';
 import { PhoneSetup, type SetupPicked } from '../src/phone/setup.ts';
 import { SigningIn } from '../src/phone/signing-in.ts';
 import { PhoneSync } from '../src/phone/sync.ts';
+import { PhoneTurnIn } from '../src/phone/turn-in.ts';
 import { Server, type Asking, type Reply } from '../src/server.ts';
 import { checkOf, noLists } from './checks.ts';
 import { HeldKeyring, HeldStore } from './held.ts';
@@ -196,6 +202,18 @@ export class TestServer extends Server {
   fileRefusal: ErrorCode | null = null;
   readonly fileWaits: { readonly code: ErrorCode; readonly seconds: number }[] = [];
   onPart: (part: { name: string; offset: number; bytes: number }) => void = () => undefined;
+  // The phone's key as the server holds it: standing, revoked by its turn-in (it proves nothing
+  // again), or by the firm's time (it proves itself only with the passcode beside it, ADR-530).
+  keyRevoked: 'turnIn' | 'firmTime' | null = null;
+  // Each turn-in sent, as the server read it; how it is answered (turned in, its numbers handed
+  // back, where it says nothing); and whether its answer is lost on the way back, the turn-in done.
+  readonly turnIns: TurnInReceived[] = [];
+  turnInAnswer: (sent: TurnInReceived) => TurnInAnswer | undefined = () => undefined;
+  turnInAnswerLost = false;
+  // The master user's token run out once, at the turn-in (a long act's files outlasting it); and
+  // the passcode the turn-in itself takes (the firm may change it between the proof and the call).
+  masterTokenRunsOut = false;
+  turnInPasscode = passcode;
 
   constructor() {
     super('https://api.adms.localhost');
@@ -229,9 +247,40 @@ export class TestServer extends Server {
       if (json['passcode'] !== undefined && json['passcode'] !== passcode) {
         return { kind: 'refused', code: 'PHONE_NOT_PROVEN' };
       }
+      if (this.keyRevoked === 'turnIn') return { kind: 'refused', code: 'PHONE_NOT_PROVEN' };
+      if (this.keyRevoked === 'firmTime' && json['passcode'] === undefined) {
+        return { kind: 'refused', code: 'MASTER_PASSCODE_NEEDED' };
+      }
       const token = json['passcode'] === undefined ? 'phone-token' : 'master-user-token';
       return { kind: 'answered', answer: { token, expiresInSeconds: 900 } };
     }
+    // A token of the key's alone stands no longer once the key is revoked; the master user's, only
+    // by the firm's time.
+    if (
+      (this.keyRevoked !== null && asking.token === 'phone-token') ||
+      (this.keyRevoked === 'turnIn' && asking.token !== undefined)
+    ) {
+      return { kind: 'refused', code: 'PHONE_NOT_PROVEN' };
+    }
+    if (served === provenPhoneEndpoint) {
+      return {
+        kind: 'answered',
+        answer: {
+          deviceId,
+          name: 'P1-TWR-LF',
+          status: this.keyRevoked === null ? 'ACTIVE' : 'LOST',
+          outOfServiceAt: null,
+          keyRevoked: this.keyRevoked !== null,
+          masterPasscodeVersion: 1,
+          masterPasscodeVersionInForce: 1,
+        },
+      };
+    }
+    if (served === turnInPhoneEndpoint && this.masterTokenRunsOut) {
+      this.masterTokenRunsOut = false;
+      return { kind: 'refused', code: 'PHONE_NOT_PROVEN' };
+    }
+    if (served === turnInPhoneEndpoint) return this.turnedIn(json as unknown as TurnInReceived);
     if (served === phoneSetupChoicesEndpoint) return this.choices(json);
     if (served === signInOnPhoneEndpoint) {
       if (json['monitorNumber'] !== ana.number || json['password'] !== passwords[ana.id]) {
@@ -451,6 +500,29 @@ export class TestServer extends Server {
     return answered({ upload: 'KEPT' });
   }
 
+  // A turn-in (ADR-488): the passcode checked; then as the test says, or turned in, each series it
+  // reports handed back, its key revoked by it. Its answer lost where the test says, the turn-in
+  // done all the same.
+  private turnedIn(sent: TurnInReceived): Reply<Endpoint> {
+    if (sent.passcode !== this.turnInPasscode) {
+      return { kind: 'refused', code: 'MASTER_PASSCODE_REFUSED' };
+    }
+    this.turnIns.push(sent);
+    const answer: TurnInAnswer = this.turnInAnswer(sent) ?? {
+      turnedIn: true,
+      wipe: true,
+      numbers: sent.lastUsed.map(({ projectId, series }) => ({
+        projectId,
+        series,
+        ended: 'RECLAIMED',
+        blocks: [],
+      })),
+    };
+    if (answer.turnedIn) this.keyRevoked = 'turnIn';
+    if (this.turnInAnswerLost) return { kind: 'unreachable' };
+    return { kind: 'answered', answer };
+  }
+
   // Two monitors a page, in the order the server holds them; a picked project's sites and pay
   // items, P2 being closed.
   private choices(json: Record<string, unknown>): Reply<Endpoint> {
@@ -512,6 +584,8 @@ export async function phone(
   );
   // How long the phone was told to wait each time, as it waited.
   const slept: number[] = [];
+  // What the wipe erased, in the order it did.
+  const erased: string[] = [];
   // The outbox and the sync over the phone's store, as the app opens them.
   const opened = async () => {
     const outbox = await PhoneOutbox.opened(store, {
@@ -531,7 +605,12 @@ export async function phone(
       },
       filePartBytesAtMost: partBytes,
       fileBytesAtMost: policy.mediaFileBytesAtMost,
-      wipe: () => store.erase(),
+      wipe: async () => {
+        await keyring.erase();
+        erased.push('keyring');
+        await store.erase();
+        erased.push('store');
+      },
       now,
     });
     const sync = new PhoneSync(
@@ -545,9 +624,9 @@ export async function phone(
         random: () => 0.5,
       },
     );
-    return { outbox, sync };
+    return { outbox, sync, turnIn: new PhoneTurnIn({ store, identity, outbox, sync }, now) };
   };
-  const { outbox, sync } = await opened();
+  const { outbox, sync, turnIn } = await opened();
   server.sent.length = 0;
   return {
     clock,
@@ -560,7 +639,9 @@ export async function phone(
     loginList,
     outbox,
     sync,
+    turnIn,
     slept,
+    erased,
     // The app opened again after it stopped: a new outbox and sync over the same store, what the
     // last knew in memory alone gone.
     reopened: opened,

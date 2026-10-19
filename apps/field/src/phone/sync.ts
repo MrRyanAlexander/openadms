@@ -17,6 +17,10 @@
 //   setup version of the project whose lists it holds, which makes it read its lists again where
 //   it isn't theirs (`PhoneLists.readUnless`, AC-11-17); the login list is read with the lists.
 // - **When it was last answered** is kept, and every screen says it ("Last synced").
+// - **The master user's run** ("Sync and turn in", task 3.4.3, ADR-580): the same syncs and files,
+//   sent by the master user at the phone (the passcode beside its proof) with or without a monitor
+//   signed in, and no lists read after; it holds the sync for the whole act it is part of (the
+//   turn-in), so a monitor's run waits for all of it, and it for a monitor's.
 // - **Then its photographs' files** (AC-11-32, 33; ADR-482, 579), after the records and the lists
 //   (so a monitor's lists never wait behind megabytes): a question or a part at a time from the
 //   outbox, each answered before the next, until none goes. Where it began a file before the app
@@ -38,7 +42,7 @@ import {
   type ErrorCode,
 } from '@open-adms/contracts';
 
-import type { NotAnswered } from '../server.ts';
+import type { NotAnswered, Sender } from '../server.ts';
 import type { PhoneStore } from '../store/phone-store.ts';
 import type { ListsRead, PhoneLists } from './lists.ts';
 import type { LoginList } from './login-list.ts';
@@ -93,6 +97,8 @@ export class PhoneSync {
   // same sync, and one that comes during a run is never lost (the lists it asks for read after).
   private running: Promise<SyncRun> | undefined;
   private again: { lists: ListsAfter; readonly run: Promise<SyncRun> } | undefined;
+  // The master user's act under way: a monitor's run waits for it.
+  private master: Promise<unknown> | undefined;
 
   constructor(
     parts: {
@@ -128,6 +134,7 @@ export class PhoneSync {
   // A run now, by the monitor signed in; asked while one is under way, one more after it, which
   // every occasion asked meanwhile shares (reading the lists whatever, where any of them asked).
   run(lists: ListsAfter = 'read'): Promise<SyncRun> {
+    if (this.master !== undefined) return this.master.then(() => this.run(lists));
     if (this.running === undefined) {
       this.running = this.ran(lists).finally(() => {
         this.running = undefined;
@@ -159,10 +166,56 @@ export class PhoneSync {
       : undefined;
   }
 
+  // The master user's act ("Sync and turn in"), once a monitor's run under way has ended, and no
+  // monitor's run until it has: it is handed the master user's run, every sync until nothing more
+  // goes, then every photograph's file, sent as it says; no lists. That run comes to sent, or
+  // where it stopped, everything kept.
+  async asMasterUser<T>(
+    act: (synced: (send: Sender) => Promise<'sent' | NotAnswered>) => Promise<T>,
+  ): Promise<T> {
+    while (this.running !== undefined || this.master !== undefined) {
+      await (this.running ?? this.master);
+    }
+    const going = act((send) => this.sentAll(send));
+    this.master = going.finally(() => {
+      this.master = undefined;
+    });
+    return going;
+  }
+
+  private async sentAll(send: Sender): Promise<'sent' | NotAnswered> {
+    await this.outbox.read();
+    const synced = await this.synced(send);
+    return 'kind' in synced ? synced : this.sentFiles(send);
+  }
+
   private async ran(lists: ListsAfter): Promise<SyncRun> {
     const signedIn = await this.monitor.signedIn();
     if (signedIn === undefined) return { kind: 'nobodySignedIn' };
     await this.outbox.read();
+    const send: Sender = (served, asking) =>
+      this.monitor.ask(served, asking, { carriesReports: true });
+    const synced = await this.synced(send);
+    if ('kind' in synced) return synced;
+    const { at, setupVersion } = synced;
+    const afterwards =
+      lists === 'unlessMoved' && signedIn.assignment !== null && setupVersion !== null
+        ? await this.lists.readUnless(setupVersion)
+        : await this.lists.read();
+    if (afterwards !== 'same' && (afterwards.kind === 'taken' || afterwards.kind === 'none')) {
+      await this.loginList.read(this.monitor);
+    }
+    const files = await this.sentFiles(send);
+    return { kind: 'synced', at: at ?? this.now(), lists: afterwards, files };
+  }
+
+  // A sync at a time from the outbox, each answered before the next, until nothing more goes:
+  // when the last was answered and the setup version it brought; or where it stopped.
+  private async synced(
+    send: Sender,
+  ): Promise<
+    { readonly at: Date | undefined; readonly setupVersion: number | null } | NotAnswered
+  > {
     let setupVersion: number | null = null;
     let at: Date | undefined;
     for (let waitsInARow = 0, first = true; first || this.outbox.goesNext();) {
@@ -175,11 +228,7 @@ export class PhoneSync {
         sync.records.length +
         sync.photos.length;
       if (!first && carries === 0) break;
-      const reply = await this.monitor.ask(
-        syncPhoneEndpoint,
-        { json: sync },
-        { carriesReports: true },
-      );
+      const reply = await send(syncPhoneEndpoint, { json: sync });
       if (reply.kind !== 'answered') {
         await this.outbox.answered(undefined);
         const told = reply.kind === 'refused' ? reply.waitSeconds : undefined;
@@ -202,20 +251,12 @@ export class PhoneSync {
         { shelf: keptAnswers, id: lastSyncId, value: { answeredAt: at.toISOString() } },
       ]);
     }
-    const afterwards =
-      lists === 'unlessMoved' && signedIn.assignment !== null && setupVersion !== null
-        ? await this.lists.readUnless(setupVersion)
-        : await this.lists.read();
-    if (afterwards !== 'same' && (afterwards.kind === 'taken' || afterwards.kind === 'none')) {
-      await this.loginList.read(this.monitor);
-    }
-    const files = await this.sentFiles();
-    return { kind: 'synced', at: at ?? this.now(), lists: afterwards, files };
+    return { at, setupVersion };
   }
 
   // The photographs' files the outbox holds, a question or a part at a time, until none goes; or
   // where they stopped, everything kept. The sync just before carried the phone's reports.
-  private async sentFiles(): Promise<'sent' | NotAnswered> {
+  private async sentFiles(send: Sender): Promise<'sent' | NotAnswered> {
     for (let waitsInARow = 0; ;) {
       const asked = this.outbox.asksWhereFileStands();
       const part = asked === null ? this.outbox.sendsFilePart() : null;
@@ -224,17 +265,13 @@ export class PhoneSync {
       const ids = { photoId: named.photoId, file: named.file };
       const reply =
         part === null
-          ? await this.monitor.ask(photoFileEndpoint, { ids }, { carriesReports: true })
-          : await this.monitor.ask(
-              sendPhotoFilePartEndpoint,
-              {
-                ids,
-                query: { offset: String(part.offset), length: String(part.length) },
-                bytes: part.bytes,
-                answerMs: partAnswerMs,
-              },
-              { carriesReports: true },
-            );
+          ? await send(photoFileEndpoint, { ids })
+          : await send(sendPhotoFilePartEndpoint, {
+              ids,
+              query: { offset: String(part.offset), length: String(part.length) },
+              bytes: part.bytes,
+              answerMs: partAnswerMs,
+            });
       if (reply.kind === 'answered') {
         waitsInARow = 0;
         // What it can't read is no answer: the run stops there rather than ask again for ever.

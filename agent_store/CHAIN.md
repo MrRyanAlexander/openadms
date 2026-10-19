@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-18, task 3.4.2 (ADR-579), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 12 min 23 s; then, after one test of the new file made its floor case real, `pnpm chain typecheck test e2e lint`; every count below as seen.
+**Seen whole:** 2026-10-19, task 3.4.3 (ADR-580), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 12 min 8 s; every count below as seen (the browser tests took 2.2 min in that run and 32.5 s run again alone right after: the machine's load, not the tests).
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 203 passed (203)`, `Tests 3481 passed (3481)`.**
+**`Test Files 204 passed (204)`, `Tests 3494 passed (3494)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 186 | 15 | nothing (its photographs' files sent, asked after on reopening and sized by the signal 8, ADR-579; the field app's own sync client held to the sync contract's suite over its store, twice 42, and its sync runs 9, ADR-578; the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+| `apps/field` | 199 | 16 | nothing ("Sync and turn in", the wipe, a key the firm's time revoked, a lost answer, a record it can't read 13, ADR-580; its photographs' files sent, asked after on reopening and sized by the signal 8, ADR-579; the field app's own sync client held to the sync contract's suite over its store, twice 42, and its sync runs 9, ADR-578; the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -68,7 +68,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**40 browser tests**, `40 passed (32.3s)` in the chain: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577), the sync contract's suite in Chromium over the browser build's store 1 (`e2e/sync-client.e2e.ts`) and the phone's sync against the world's API 1 (`e2e/sync.e2e.ts`, ADR-578), and its photographs' files against the world's media endpoint 1 (`e2e/photo-files.e2e.ts`, ADR-579). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 28 of 28 screens checked, in 146 checks; 0 found.`, **28 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync` and `settings`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
+**43 browser tests**, `43 passed (32.5s)` alone: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577), the sync contract's suite in Chromium over the browser build's store 1 (`e2e/sync-client.e2e.ts`) and the phone's sync against the world's API 1 (`e2e/sync.e2e.ts`, ADR-578), its photographs' files against the world's media endpoint 1 (`e2e/photo-files.e2e.ts`, ADR-579), and "Sync and turn in" 3 (`e2e/turn-in.e2e.ts`, ADR-580: Ana's phone turned in and erased, one answered not turned in, the world's lost `P1-TWR-LF` turned in with the passcode). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 30 of 30 screens checked, in 157 checks; 0 found.`, **30 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync`, `settings`, `turn-in` and `turned-in`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
 
 ## `pnpm security`
 
@@ -88,7 +88,7 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm chain`, the whole chain, 11 min 11 s (seen 2026-10-18; `pnpm test` 4 min 9 s of it, `pnpm scenarios` 5 min 19 s, `pnpm e2e` 32 s).
+`pnpm chain`, the whole chain, 12 min 8 s (seen 2026-10-19; `pnpm test` 4 min 6 s of it, `pnpm scenarios` 3 min 14 s, `pnpm e2e` 2 min 17 s under load, 33 s alone).
 `pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

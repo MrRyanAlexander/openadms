@@ -56,8 +56,12 @@
 // signal**: each is sized to go in about ten seconds at the speed the last one went, never under
 // 64 KiB, and one with no answer halves the next. A file answered not the one fingerprinted goes
 // again from its first byte, and rests until the next run where it is answered so twice.
-// **Turned in** ("Sync and turn in", task 3.4.3), it names everything it still holds, and wipes
-// only on `wipe: true`.
+// **Turned in** ("Sync and turn in", task 3.4.3, ADR-580), it names everything it still holds, and
+// wipes only on `wipe: true`, or where the server's refusal of its key says a turn-in whose answer
+// never came was done (`turnedInUnanswered`). **A record or a photograph's record the contract
+// no longer reads** (kept by an earlier release, C183) is never sent; it is named at turn-in by
+// the fingerprint of what stands in its place, so the phone is wiped over it only where the
+// server holds that same thing from this phone, and the screen says how many there are.
 import { sha256 } from '@noble/hashes/sha2.js';
 import {
   fitByWeight,
@@ -187,6 +191,19 @@ const hex = (bytes: Uint8Array): string =>
 export const sentPrint = (sent: unknown): string =>
   hex(sha256(new TextEncoder().encode(sentCanonical(JSON.parse(JSON.stringify(sent))))));
 
+// What the store keeps that the contract no longer reads, named as the server would name it had
+// it been sent (ADR-488): the fingerprint of what stands in the record's place, or of all of it
+// where nothing does. None where the server answered it stored.
+function unreadPrint(kept: unknown, field: 'record' | 'photo'): string[] {
+  const fields =
+    typeof kept === 'object' && kept !== null && !Array.isArray(kept)
+      ? (kept as Readonly<Record<string, unknown>>)
+      : {};
+  const told = toldOf(fields['told']);
+  if (told !== null && stored(told)) return [];
+  return [sentPrint(field in fields ? fields[field] : kept)];
+}
+
 // A file's note as the store keeps it: its length, and whether a part of it has gone.
 function noteOf(kept: unknown): { length: number; begun: boolean } | undefined {
   if (typeof kept !== 'object' || kept === null || Array.isArray(kept)) return undefined;
@@ -295,6 +312,9 @@ export class PhoneOutbox {
     holds: { masterPasscodeVersion: null, listsProjectId: null },
     lastUsed: [],
   };
+  // The fingerprints of what the store holds that the contract no longer reads, not answered
+  // stored: never sent, named at turn-in.
+  private unread: string[] = [];
   private next = 1;
   private last: Sent | undefined;
   private lastPart: FilePartSent | undefined;
@@ -329,14 +349,34 @@ export class PhoneOutbox {
     ]);
     this.unplanned = kept.unplannedAssignments;
     this.uses = kept.passcodeUses;
-    const all = [
-      ...records.map((one) => entryOf('records', one.id, one.value, 'record', recordOf)),
-      ...archived.map((one) => entryOf('archivedQueues', one.id, one.value, 'record', recordOf)),
-    ].filter((one) => one !== undefined);
-    const pictures = photographs
+    const read = [
+      ...records.map((one) => ({
+        kept: one.value,
+        entry: entryOf('records', one.id, one.value, 'record', recordOf),
+      })),
+      ...archived.map((one) => ({
+        kept: one.value,
+        entry: entryOf('archivedQueues', one.id, one.value, 'record', recordOf),
+      })),
+    ];
+    const photosRead = photographs
       .filter(({ id }) => id.startsWith(photoPrefix))
-      .map((one) => entryOf('photographs', one.id, one.value, 'photo', photoOf))
-      .filter((one) => one !== undefined);
+      .map((one) => ({
+        kept: one.value,
+        entry: entryOf('photographs', one.id, one.value, 'photo', photoOf),
+      }));
+    const all = read.flatMap(({ entry }) => (entry === undefined ? [] : [entry]));
+    const pictures = photosRead.flatMap(({ entry }) => (entry === undefined ? [] : [entry]));
+    this.unread = [
+      ...new Set(
+        [
+          ...read.map((one) => ({ ...one, field: 'record' as const })),
+          ...photosRead.map((one) => ({ ...one, field: 'photo' as const })),
+        ].flatMap(({ kept, entry, field }) =>
+          entry === undefined ? unreadPrint(kept, field) : [],
+        ),
+      ),
+    ];
     this.next =
       Math.max(0, ...all.map(({ kept }) => kept), ...pictures.map(({ kept }) => kept)) + 1;
     this.records = all.filter(({ told }) => told === null || !stored(told)).sort(byKept);
@@ -788,11 +828,17 @@ export class PhoneOutbox {
     return [...this.files.keys()];
   }
 
+  // How many things the store holds that the contract no longer reads (C183): never sent, and the
+  // phone isn't wiped over them unless the server has them.
+  unreadable(): number {
+    return this.unread.length;
+  }
+
   // "Sync and turn in" (ARCHITECTURE §8; AC-02-58; ADR-096, 488): everything it still holds,
   // each once, by the id it was made under: its reports, records and photographs waiting or not
   // stored, the archived queues' too, each photograph with a file not yet kept; by its fingerprint
-  // what was answered under no id; the last number it used of each series; the passcode as typed.
-  // Never which phone it is.
+  // what was answered under no id, and what the contract no longer reads (C183); the last number
+  // it used of each series; the passcode as typed. Never which phone it is.
   turnsIn(passcode: string): TurnInSent {
     const underNoId = (told: Told | null) => told !== null && told.id === null;
     return {
@@ -802,11 +848,12 @@ export class PhoneOutbox {
         passcodeUses: this.uses.map(({ report }) => report.id),
         records: this.records.filter(({ told }) => !underNoId(told)).map(({ id }) => id),
         held: [
-          ...new Set(
-            [...this.records, ...this.photos]
+          ...new Set([
+            ...[...this.records, ...this.photos]
               .filter(({ told }) => underNoId(told))
               .map(({ value }) => sentPrint(value)),
-          ),
+            ...this.unread,
+          ]),
         ],
         photos: [
           ...new Set([
@@ -825,10 +872,29 @@ export class PhoneOutbox {
   async turnInAnswered(answer: unknown): Promise<TurnInAnswer | null> {
     const read = answer === undefined ? null : turnInAnswerRead(answer);
     if (!toWipe(read) || this.isWiped) return read;
+    await this.erased();
+    return read;
+  }
+
+  // A turn-in sent whose answer never came, then the phone's own key refused by the server: only a
+  // turn-in that found everything on the server revokes a key so (ADR-488; the firm's time asks
+  // for the passcode instead, ADR-530), so it was turned in, and the phone wipes as told then.
+  async turnedInUnanswered(): Promise<void> {
+    if (!this.isWiped) await this.erased();
+  }
+
+  // Whether it has wiped what it held.
+  wiped(): boolean {
+    return this.isWiped;
+  }
+
+  // The wipe: the keyring's erase, then the store's (NIST SP 800-88), and nothing held after.
+  private async erased(): Promise<void> {
     await this.options.wipe();
     this.isWiped = true;
     this.unplanned = [];
     this.uses = [];
+    this.unread = [];
     this.records = [];
     this.photos = [];
     this.files.clear();
@@ -842,12 +908,6 @@ export class PhoneOutbox {
     this.holding = { holds: { masterPasscodeVersion: null, listsProjectId: null }, lastUsed: [] };
     this.last = undefined;
     this.lastPart = undefined;
-    return read;
-  }
-
-  // Whether it has wiped what it held.
-  wiped(): boolean {
-    return this.isWiped;
   }
 
   private stored<T>(entry: Entry<T>, field: 'record' | 'photo'): Json {

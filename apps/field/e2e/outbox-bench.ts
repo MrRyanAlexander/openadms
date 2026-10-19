@@ -5,6 +5,7 @@
 import { syncClientSuite, type SyncedPhoto, type SyncedRecord } from '@open-adms/contracts';
 
 import { PhoneOutbox } from '../src/phone/outbox.ts';
+import { browserKeyringName } from '../src/store/browser-keyring.ts';
 import { BrowserStore, browserStoreName } from '../src/store/browser-store.ts';
 import { suiteMaker } from '../test/suite-client.ts';
 
@@ -81,4 +82,68 @@ export async function keptPhotos(
   }
   store.close();
   return refused;
+}
+
+// A record kept on that phone by an earlier or later release, which this one's contract doesn't
+// read (C183): on the records shelf as the outbox keeps one, never through it.
+export async function keptUnreadable(id: string, record: unknown): Promise<void> {
+  const store = await BrowserStore.opened(browserStoreName);
+  await store.change([{ shelf: 'records', id, value: { kept: 1, record, told: null } as never }]);
+  store.close();
+}
+
+// The world's lost tower phone planted as the phone the page opens (task 3.4.3, ADR-580): its key
+// held by the keyring as the browser build keeps its own (the private half imported not
+// extractable), and its enrolment kept in the store as the phone keeps the server's answer.
+export async function plantedPhone(phone: {
+  readonly deviceId: string;
+  readonly name: string;
+  readonly masterPasscodeVersion: number;
+  readonly publicKey: string;
+  readonly privateKey: string;
+}): Promise<void> {
+  const der = (base64: string) => Uint8Array.from(atob(base64), (one) => one.charCodeAt(0));
+  const kind = { name: 'ECDSA', namedCurve: 'P-256' };
+  const pair = {
+    privateKey: await crypto.subtle.importKey('pkcs8', der(phone.privateKey), kind, false, [
+      'sign',
+    ]),
+    publicKey: await crypto.subtle.importKey('spki', der(phone.publicKey), kind, true, ['verify']),
+  };
+  const keyring = await new Promise<IDBDatabase>((resolve, reject) => {
+    const asked = indexedDB.open(browserKeyringName, 1);
+    asked.onupgradeneeded = () => {
+      asked.result.createObjectStore('keys');
+    };
+    asked.onsuccess = () => {
+      resolve(asked.result);
+    };
+    asked.onerror = () => {
+      reject(asked.error ?? new Error('The keyring wasn’t opened.'));
+    };
+  });
+  await new Promise<void>((resolve, reject) => {
+    const work = keyring.transaction('keys', 'readwrite');
+    work.objectStore('keys').put(pair, 'device');
+    work.oncomplete = () => {
+      resolve();
+    };
+    work.onerror = () => {
+      reject(work.error ?? new Error('The key wasn’t kept.'));
+    };
+  });
+  keyring.close();
+  const store = await BrowserStore.opened(browserStoreName);
+  await store.change([
+    {
+      shelf: 'keptAnswers',
+      id: 'enrolment',
+      value: {
+        deviceId: phone.deviceId,
+        masterPasscodeVersion: phone.masterPasscodeVersion,
+        name: phone.name,
+      },
+    },
+  ]);
+  store.close();
 }

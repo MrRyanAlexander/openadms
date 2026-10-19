@@ -18,6 +18,8 @@ export function refusalWords(
   if (special !== undefined) return special;
   if (reply.waitSeconds !== undefined) return counted(said.wait, reply.waitSeconds);
   if (reply.code === 'PHONE_OUT_OF_SERVICE') return said.outOfService;
+  // Its key revoked by the firm's time (ADR-530): only the master user syncs it and turns it in.
+  if (reply.code === 'MASTER_PASSCODE_NEEDED') return said.passcodeNeeded;
   return said.other;
 }
 

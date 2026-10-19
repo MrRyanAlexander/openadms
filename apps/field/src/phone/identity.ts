@@ -123,17 +123,24 @@ export class PhoneIdentity {
 
   // The master user at the phone (ADR-531, 576): it proves itself with the master passcode beside
   // its signature, and what is handed back sends as somebody signed in on it, for this act alone.
-  // That token is kept nowhere, and the passcode is sent once and held by nobody here.
+  // That token is kept nowhere, and the passcode is held by nobody here but the act's own sender:
+  // answered `PHONE_NOT_PROVEN` (the token run out during a long act, a turn-in's files), it proves
+  // itself with the passcode again once and asks once more, as `asPhone` does (ADR-580).
   async masterUser(
     passcode: string,
   ): Promise<{ readonly kind: 'atThePhone'; readonly send: Sender } | NotAnswered> {
     const proven = await this.proof(passcode);
     if (!('token' in proven)) return proven;
-    const { token } = proven;
-    return {
-      kind: 'atThePhone',
-      send: (served, asking = {}) => this.server.ask(served, { ...asking, token }),
+    let { token } = proven;
+    const send: Sender = async (served, asking = {}) => {
+      const reply = await this.server.ask(served, { ...asking, token });
+      if (reply.kind !== 'refused' || reply.code !== 'PHONE_NOT_PROVEN') return reply;
+      const again = await this.proof(passcode);
+      if (!('token' in again)) return again;
+      token = again.token;
+      return this.server.ask(served, { ...asking, token });
     };
+    return { kind: 'atThePhone', send };
   }
 
   private async token(): Promise<{ readonly token: string } | NotAnswered> {

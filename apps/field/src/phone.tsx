@@ -14,6 +14,10 @@
 // passcode signs in from here, as the phone's monitor or the temporary session; and **the phone
 // locked after ten wrong tries of the passcode with no signal** shows only the passcode, which
 // opens it once the server takes it, with signal ("phone-locked").
+//
+// Task 3.4.3 (ADR-580): whoever holds the master passcode syncs the phone and turns it in from here,
+// with or without its monitor; a phone whose key alone the server no longer takes (revoked by the
+// firm's time, ADR-530) says the passcode is needed for that (AC-11-35).
 import { provenPhoneEndpoint } from '@open-adms/contracts';
 import { useEffect, useState } from 'react';
 
@@ -57,6 +61,7 @@ export function Phone({
   onCreateMonitor,
   onSetUp,
   onPasscodeSession,
+  onTurnIn,
 }: {
   readonly enrolment: Enrolment;
   readonly identity: PhoneIdentity;
@@ -69,6 +74,7 @@ export function Phone({
   readonly onCreateMonitor: () => void;
   readonly onSetUp: () => void;
   readonly onPasscodeSession: () => void;
+  readonly onTurnIn: () => void;
 }) {
   const said = words.phone;
   const [standing, setStanding] = useState<Standing>('checking');
@@ -89,7 +95,7 @@ export function Phone({
       if (reply.kind === 'answered') {
         setStanding(reply.answer.status === 'ACTIVE' ? 'inService' : 'outOfService');
       } else if (reply.kind === 'refused') {
-        setStanding('notProven');
+        setStanding(reply.code === 'MASTER_PASSCODE_NEEDED' ? 'passcodeNeeded' : 'notProven');
       } else {
         setStanding('unreachable');
       }
@@ -318,6 +324,9 @@ export function Phone({
           </Button>
           <Button wide isDisabled={busy} onPress={onCreateMonitor}>
             {said.createMonitor}
+          </Button>
+          <Button wide isDisabled={busy} onPress={onTurnIn}>
+            {said.turnIn}
           </Button>
         </div>
       </div>

@@ -3,7 +3,8 @@
 // their Monitor ID and made-up password, and the board Luis wrote for them: Kim Nguyen on
 // disposals and the drop-off log at Marsh Road TDSR, Ana Brooks on collections and incidents,
 // Lee Morgan on two assignments, Tariq Patel on none), as the run's setup handed them on. The world
-// also holds P2, with nobody's work, for the setup tests' own monitors (ADR-576).
+// also holds P2, with nobody's work, for the setup tests' own monitors (ADR-576), and P1-TWR-LF,
+// marked lost, whose key the firm's time revoked, with its key for a test to plant (ADR-580).
 function handedOn(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {
@@ -21,6 +22,19 @@ export interface CastMonitor {
   readonly monitorNumber: string;
   readonly password: string;
 }
+
+// The lost tower phone: its id, name and passcode version as enrolled, and its key's two halves in
+// base64 DER (SubjectPublicKeyInfo, PKCS #8).
+export interface LostPhone {
+  readonly deviceId: string;
+  readonly name: string;
+  readonly masterPasscodeVersion: number;
+  readonly publicKey: string;
+  readonly privateKey: string;
+}
+
+export const worldLostPhone = (): LostPhone =>
+  JSON.parse(handedOn('ADMS_E2E_WORLD_LOST_PHONE')) as LostPhone;
 
 export const worldCast = (): Readonly<Record<'kim' | 'ana' | 'lee' | 'tariq', CastMonitor>> =>
   JSON.parse(handedOn('ADMS_E2E_WORLD_CAST')) as Readonly<

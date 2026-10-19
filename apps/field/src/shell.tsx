@@ -8,7 +8,9 @@
 // Monitor ID filled in. Nothing is shown until the store has said whether the phone is enrolled,
 // which takes no network. The master passcode also signs in from the sign-in screen, and hands
 // the phone over from Settings; the phone locked by its tenth wrong try with no signal shows the
-// sign-in screen locked (task 3.3.2, ADR-577).
+// sign-in screen locked (task 3.3.2, ADR-577). Whoever holds the master passcode syncs the phone
+// and turns it in from the sign-in screen, from Settings and from Sync (task 3.4.3, ADR-580);
+// turned in and erased, the phone opens again at enrolment.
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
@@ -27,13 +29,15 @@ import type { PasscodeOnPhone } from './phone/passcode.ts';
 import type { PhoneSetup, SetupMonitor } from './phone/setup.ts';
 import type { SigningIn } from './phone/signing-in.ts';
 import type { PhoneSync } from './phone/sync.ts';
+import type { PhoneTurnIn } from './phone/turn-in.ts';
 import type { Server } from './server.ts';
 import { Setup } from './setup.tsx';
 import { SignedInPhone, type Inactivity } from './signed-in.tsx';
+import { TurnIn } from './turn-in.tsx';
 
 // The phone as the build opens it: who it is to the server, the monitor signed in on it, the
 // lists and the login list it holds, what it holds to send and how it syncs, how a sign-in goes,
-// and how long it may be left alone.
+// how long it may be left alone, how it is turned in, and how it opens again once erased.
 export interface OpenedPhone {
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
@@ -46,6 +50,8 @@ export interface OpenedPhone {
   readonly passcode: PasscodeOnPhone;
   readonly sessions: PasscodeSessions;
   readonly inactivity: Inactivity;
+  readonly turnIn: PhoneTurnIn;
+  readonly reopened: () => void;
 }
 
 type Seen =
@@ -65,6 +71,11 @@ type Seen =
   | { readonly screen: 'passcodeSession'; readonly enrolment: Enrolment }
   | { readonly screen: 'signedIn'; readonly enrolment: Enrolment; readonly signedIn: SignedIn }
   | { readonly screen: 'createMonitor'; readonly enrolment: Enrolment }
+  | {
+      readonly screen: 'turnIn';
+      readonly enrolment: Enrolment;
+      readonly signedIn: SignedIn | null;
+    }
   | {
       readonly screen: 'monitorCreated';
       readonly enrolment: Enrolment;
@@ -150,6 +161,23 @@ export function Shell({
           onPasscodeSession={() => {
             setSeen({ screen: 'passcodeSession', enrolment: seen.enrolment });
           }}
+          onTurnIn={() => {
+            setSeen({ screen: 'turnIn', enrolment: seen.enrolment, signedIn: null });
+          }}
+        />
+      );
+    case 'turnIn':
+      return (
+        <TurnIn
+          turnIn={opened.turnIn}
+          standing={{ ...nobody, signedIn: seen.signedIn?.name ?? null }}
+          onCancel={() => {
+            // Back where it was asked from: the monitor's screens re-read who is signed in.
+            if (seen.signedIn === null) signedOut(null);
+            else
+              setSeen({ screen: 'signedIn', enrolment: seen.enrolment, signedIn: seen.signedIn });
+          }}
+          onDone={opened.reopened}
         />
       );
     case 'passcodeSession':
@@ -212,6 +240,9 @@ export function Shell({
           signedIn={seen.signedIn}
           onSignedOut={signedOut}
           onHandedOver={handedOver}
+          onTurnIn={(signedIn) => {
+            setSeen({ screen: 'turnIn', enrolment: seen.enrolment, signedIn });
+          }}
         />
       );
     case 'createMonitor':

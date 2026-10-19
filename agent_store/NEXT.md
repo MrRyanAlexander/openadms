@@ -67,28 +67,17 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-579)
-- **Phase 3 is open (ADR-557)**: 13 of 33 tasks done (ADR-557…579). Milestone 3.1 is done (the plan,
-  the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
-  the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
-  the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
-  recommendation of Q-215…Q-218 (ADR-573):** no confirmation after each value; today's own count on
-  home; the bottom menu Work, Time (clock on), Sync, Settings; the number typed again only where a
-  person copied it. Their notes on the prototype are ADR-571 (the number at New, open tickets,
-  waypoints, photos at any step). **Milestone 3.2 is done** (ADR-570…575): the store, enrolment and
-  the proof, online sign-in and the assignment, the login list and signing in offline.
-  **Milestone 3.3 is done** (ADR-576, 577): setup under the master passcode with no assignment;
-  then (3.3.2) **the user's answer on the passcode's ten wrong tries offline: the phone locked
-  until the passcode is entered** (built as entered with signal, the server taking it), switching
-  (a setup for another monitor is a switch; a hand-over with no assignment), moving, and sessions
-  as the phone's monitor or temporary, the temporary one ending at the project's midnight.
-  **Task 3.4.1 is done** (ADR-578): the phone syncs through its own outbox over its store (the
-  sync contract's suite passed, in Chromium too), only with somebody signed in, a kept record sent
-  again by itself once a run, the reports carried by the sync. **Task 3.4.2 is done** (ADR-579): a
-  photograph's files go after the records and the lists, in parts sized by the signal, one file read
-  at a time, asked after (`photoFileEndpoint`) when the app opens again mid-file; `syncClientSuite`
-  holds every client to it. **Next: task 3.4.3.** What each task did is its ADR and its `BACKLOG.md`
-  tick.
+### Where things stand (2026-10-19, through ADR-580)
+- **Phase 3 is open (ADR-557)**: 14 of 33 tasks done (ADR-557…580). **Milestones 3.1…3.4 are done**:
+  the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
+  (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
+  chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
+  answers to Q-215…Q-218 ADR-573); the store, enrolment and its proof, sign-in online and offline;
+  setup, switching, moving and sessions under the master passcode (its ten wrong tries offline lock
+  the phone, the user, ADR-577); the phone's own sync, its photographs' files, and **"Sync and turn
+  in" with the wipe (ADR-580)**. **Next: Milestone 3.5, the capture, from task 3.5.1.** What each
+  task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
+  `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -156,7 +145,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 13 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 14 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -240,14 +229,14 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.4.3, Sync and turn in, and the wipe** (`BACKLOG.md`, Milestone 3.4; REQ-313, 124c; C69,
-C141, C170, C183; AC-02-58, AC-05-56, AC-11-08, 34, 35): "Sync and turn in" under the master
-passcode: the master user syncs the records and sends the files first (`PhoneSync` syncs only for
-a monitor today; the outbox's `turnsIn`/`turnInAnswered` are built), then `turnInPhoneEndpoint`;
-the server's words and what it lacks shown; **the wipe only on `wipe: true`** (the keyring's
-`erase`, then the store's, NIST SP 800-88), never over a record the contract no longer reads
-(C183); `MASTER_PASSCODE_NEEDED` at a proof (AC-11-35); a reset phone's blocks reclaimed. **From
-2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read again).
+**Task 3.5.1, The collection, and what every capture shares** (`BACKLOG.md`, Milestone 3.5;
+REQ-303, 308a, 309, 317 in part, 318, 319; C68, C96, C121, C135, C171, C179, C180, C184; its ACs
+in its brief). **Its server half first: waypoints** (C180, by the endpoint recipe). Then the
+badge, then the number, at New (ADR-571); the open list; the debris type and field tag by name;
+GPS, waypoints, the address; photos at any step; cancel; sealed at submit; the harness's phone
+moved to the new order (C179); **the phone's first block of numbers** (C184: it asks none today).
+Read its whole brief first. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read
+again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

@@ -4888,3 +4888,27 @@ REQ in the same response (ADR-519's lesson).
 ## Moved 2026-10-18 (ADR-577): the register's C122…C126 item, done by tasks 3.3.1 and 3.3.2
 
 - **C122, C123, C124, C126.** *(Setup under the passcode: the report kept until `SAVED`/`ALREADY_SAVED` and sent before anything else of the monitor's; the passcode in memory only, asked with `projectId: null` then the project, paged by `moreMonitorsAfter`, offline only on the project whose lists it holds; each use the phone checks logged with its own id, clock and offset, never the passcode; the lock lifted a logged use, `SIGN_IN_UNLOCK`: done, task 3.3.1, ADR-576; C125 with it.)* Left for 3.3.2: a move and a switch done under the passcode, offline if need be, each making the new assignment's id with `PhoneSetup`'s report (`occasion: 'MONITOR_SWITCH'` for a switch; a switch to a monitor the phone holds an assignment for makes none, reported as the use `MONITOR_SWITCH`; the earlier monitor's unsynced work hidden, AC-02-46); a setup from "No assignment today" for another monitor than the one signed in is a switch; the monitor's id sent from the lists, never typed; a session shown as the passcode's, ended at the project's midnight offline (`SESSION_AS_MONITOR`, `TEMPORARY_SESSION` kept with `PhoneReports.keepUse`); what ten wrong tries at the passcode offline do (63B §3.2.10) is its to propose (today each is only kept as a `WRONG_TRY`, setup's and the unlock's alike); a switch drops the earlier monitor's session and offline sign-in's proof (AC-11-64).
+
+## Moved 2026-10-19 (ADR-580): `NEXT.md`'s "Where things stand", Phase 3's bullet as it stood through ADR-579
+
+- **Phase 3 is open (ADR-557)**: 13 of 33 tasks done (ADR-557…579). Milestone 3.1 is done (the plan,
+  the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
+  the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
+  the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
+  recommendation of Q-215…Q-218 (ADR-573):** no confirmation after each value; today's own count on
+  home; the bottom menu Work, Time (clock on), Sync, Settings; the number typed again only where a
+  person copied it. Their notes on the prototype are ADR-571 (the number at New, open tickets,
+  waypoints, photos at any step). **Milestone 3.2 is done** (ADR-570…575): the store, enrolment and
+  the proof, online sign-in and the assignment, the login list and signing in offline.
+  **Milestone 3.3 is done** (ADR-576, 577): setup under the master passcode with no assignment;
+  then (3.3.2) **the user's answer on the passcode's ten wrong tries offline: the phone locked
+  until the passcode is entered** (built as entered with signal, the server taking it), switching
+  (a setup for another monitor is a switch; a hand-over with no assignment), moving, and sessions
+  as the phone's monitor or temporary, the temporary one ending at the project's midnight.
+  **Task 3.4.1 is done** (ADR-578): the phone syncs through its own outbox over its store (the
+  sync contract's suite passed, in Chromium too), only with somebody signed in, a kept record sent
+  again by itself once a run, the reports carried by the sync. **Task 3.4.2 is done** (ADR-579): a
+  photograph's files go after the records and the lists, in parts sized by the signal, one file read
+  at a time, asked after (`photoFileEndpoint`) when the app opens again mid-file; `syncClientSuite`
+  holds every client to it. **Next: task 3.4.3.** What each task did is its ADR and its `BACKLOG.md`
+  tick.

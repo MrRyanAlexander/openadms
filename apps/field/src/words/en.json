@@ -23,7 +23,8 @@
     "passcodeWait": {
       "one": "Too many wrong tries of the master passcode. Try again in 1 second.",
       "other": "Too many wrong tries of the master passcode. Try again in {count} seconds."
-    }
+    },
+    "passcodeNeeded": "This phone’s key was revoked after it was taken out of service. Whoever holds the master passcode syncs it and turns it in."
   },
   "enrol": {
     "notEnrolled": "This phone isn’t enrolled yet. Enrolling needs the master passcode and a connection.",
@@ -43,7 +44,8 @@
       "inService": "The server knows this phone. It is in service.",
       "outOfService": "This phone is out of service. It sends the work it holds and is turned in.",
       "notProven": "The server didn’t take this phone’s proof. Ask your supervisor.",
-      "unreachable": "Can’t reach the server right now. The phone works without it."
+      "unreachable": "Can’t reach the server right now. The phone works without it.",
+      "passcodeNeeded": "This phone’s key was revoked after it was taken out of service. Whoever holds the master passcode syncs it and turns it in."
     },
     "createMonitor": "Create monitor",
     "monitorNumber": "Monitor ID",
@@ -75,7 +77,8 @@
     "phoneLockedNoSignal": "Can’t reach the server. This phone opens only when the master passcode is entered with signal: find signal and try again.",
     "handedTo": "This phone is handed over to {name}. {name} signs in now with their Monitor ID and password.",
     "temporaryEnded": "The temporary session under the master passcode has ended with the day. Sign in with your own Monitor ID and password: nothing on this phone is lost.",
-    "withPasscode": "With the master passcode"
+    "withPasscode": "With the master passcode",
+    "turnIn": "Sync and turn in"
   },
   "createMonitor": {
     "title": "Create monitor",
@@ -328,7 +331,8 @@
       "HAUL_OUT_COLLECTION": "haul-out collection",
       "HAUL_OUT_DISPOSAL": "haul-out disposal",
       "UNIT_RATE": "unit rate"
-    }
+    },
+    "turnIn": "Sync and turn in"
   },
   "settings": {
     "title": "Settings",
@@ -342,7 +346,50 @@
       "TEMPORARY": "A temporary session by the master passcode. It ends at midnight."
     },
     "handOver": "Hand this phone over",
-    "move": "Move to another site"
+    "move": "Move to another site",
+    "turnIn": "Sync and turn in"
+  },
+  "turnIn": {
+    "title": "Sync and turn in",
+    "needs": "Turning this phone in needs the master passcode and a connection. It sends everything it holds, its monitor’s and any earlier monitor’s, and every photograph’s file. Only when the server has all of it is the phone erased.",
+    "passcode": "Master passcode",
+    "turnIn": "Sync and turn in",
+    "turning": "Syncing and turning in…",
+    "cancel": "Cancel",
+    "notTurnedIn": {
+      "title": "Not turned in",
+      "kept": "Nothing on this phone was erased.",
+      "lacks": "What the server doesn’t have yet:",
+      "unplannedAssignments": {
+        "one": "1 setup made on this phone",
+        "other": "{count} setups made on this phone"
+      },
+      "passcodeUses": {
+        "one": "1 use of the master passcode",
+        "other": "{count} uses of the master passcode"
+      },
+      "records": {
+        "one": "1 record",
+        "other": "{count} records"
+      },
+      "held": {
+        "one": "1 record it couldn’t read",
+        "other": "{count} records it couldn’t read"
+      },
+      "photos": {
+        "one": "1 photograph, or its file",
+        "other": "{count} photographs, or their files"
+      },
+      "unreadable": {
+        "one": "This phone holds 1 record this version of the app can’t read. It stays on the phone, which can’t be turned in until the app is updated to read it.",
+        "other": "This phone holds {count} records this version of the app can’t read. They stay on the phone, which can’t be turned in until the app is updated to read them."
+      }
+    },
+    "done": {
+      "title": "Phone turned in",
+      "erased": "The server has everything this phone held. The phone is erased: nothing it held can be read.",
+      "enrol": "Enrol this phone again"
+    }
   },
   "move": {
     "title": "Move to another site",

@@ -17,15 +17,26 @@
 // TDSR entered again on it and nobody's assignment: where the tests that set a phone up under the
 // master passcode put the monitors they create, so that P1's login list, which other tests read
 // whole, stays the cast's.
-import type { ApiProcess } from '@open-adms/api';
+//
+// **And a lost tower phone whose key the firm's time revoked** (task 3.4.3, ADR-580): P1-TWR-LF,
+// enrolled at the API with a key made here and marked lost by Luis with the firm's reason, both on
+// the cast's clock set back the firm's 24 hours and a minute; then its key revoked by the worker's
+// own pass as the system actor, on the real clock, which the database holds it to.
+// Its key is handed to the test with the rest (a made-up world's, never an installation's), for
+// the browser's keyring to hold as the phone's own: the browser can't otherwise hold a key made
+// before the run, and nothing else of it is planted.
+import { generateKeyPairSync } from 'node:crypto';
+
+import { Phones, type ApiProcess } from '@open-adms/api';
 import type { Prisma } from '@open-adms/db';
 import { NewProjectSettings, uuidv7, type Policy } from '@open-adms/domain';
+import { PhoneKeyBackstop, WorkerLog } from '@open-adms/worker';
 
 import { storiesHostname } from './over-https.ts';
 import { builtInPolicy } from './policy.ts';
 import { assigned } from './stories/board.ts';
 import { p1TimeZone, setUpP1, setUpP1Sites, startSeries, type P1 } from './stories/p1.ts';
-import { listeningApi, StoryApi } from './story-api.ts';
+import { listeningApi, StoryApi, type PhoneRequests } from './story-api.ts';
 import { StoryDatabase, storyMasterPasscode } from './story-database.ts';
 import { StoryMedia } from './story-media.ts';
 import { SoftwareKey } from './software-key.ts';
@@ -42,6 +53,17 @@ export interface WorldCast {
   readonly ana: CastMonitor;
   readonly lee: CastMonitor;
   readonly tariq: CastMonitor;
+}
+
+// The lost tower phone, as a browser test plants it: its id and name as enrolled, the passcode
+// version it was enrolled under, and its key's two halves in base64 DER (SubjectPublicKeyInfo,
+// PKCS #8).
+export interface LostPhone {
+  readonly deviceId: string;
+  readonly name: string;
+  readonly masterPasscodeVersion: number;
+  readonly publicKey: string;
+  readonly privateKey: string;
 }
 
 // A day as the project's people name it: 2026-10-19.
@@ -63,15 +85,22 @@ export class BrowserWorld {
 
   readonly database: string;
   readonly cast: WorldCast;
+  readonly lostPhone: LostPhone;
   private readonly made: StoryDatabase;
   private readonly api: ApiProcess;
   // The API's error lines (a failure's kind and frames, never what was sent: ADR-385).
   readonly errors: string[];
 
-  private constructor(made: StoryDatabase, cast: WorldCast, api: ApiProcess, errors: string[]) {
+  private constructor(
+    made: StoryDatabase,
+    { cast, lostPhone }: { readonly cast: WorldCast; readonly lostPhone: LostPhone },
+    api: ApiProcess,
+    errors: string[],
+  ) {
     this.made = made;
     this.database = made.name;
     this.cast = cast;
+    this.lostPhone = lostPhone;
     this.api = api;
     this.errors = errors;
   }
@@ -84,7 +113,7 @@ export class BrowserWorld {
       made.migrate();
       await made.seed();
       const policy = builtInPolicy();
-      const cast = await BrowserWorld.cast(made, policy);
+      const people = await BrowserWorld.cast(made, policy);
       const api = await listeningApi({
         database: made,
         policy,
@@ -95,7 +124,7 @@ export class BrowserWorld {
           if (/"level":(50|60)\b/.test(line)) errors.push(line.trim());
         },
       });
-      return new BrowserWorld(made, cast, api, errors);
+      return new BrowserWorld(made, people, api, errors);
     } catch (problem) {
       await made.drop();
       throw problem;
@@ -149,8 +178,13 @@ export class BrowserWorld {
   // The cast, written as the stories write theirs: setup by Dana Reyes through `$write`, the yard
   // phone and the monitors at the API's own endpoints (its process, on the real clock, stopped
   // before the world's own starts on the same port), the board through `Assignments`.
-  private static async cast(made: StoryDatabase, policy: Policy): Promise<WorldCast> {
-    const clock = { now: () => new Date() };
+  private static async cast(
+    made: StoryDatabase,
+    policy: Policy,
+  ): Promise<{ readonly cast: WorldCast; readonly lostPhone: LostPhone }> {
+    // The cast's clock, set back only while the lost phone is enrolled and marked.
+    let behindMs = 0;
+    const clock = { now: () => new Date(Date.now() - behindMs) };
     const api = made.open('api');
     const served = new StoryApi({ database: made, clock, policy, media: new StoryMedia() });
     try {
@@ -233,14 +267,77 @@ export class BrowserWorld {
         password,
       });
       return {
-        kim: handed(of('Kim Nguyen')),
-        ana: handed(of('Ana Brooks')),
-        lee: handed(of('Lee Morgan')),
-        tariq: handed(of('Tariq Patel')),
+        cast: {
+          kim: handed(of('Kim Nguyen')),
+          ana: handed(of('Ana Brooks')),
+          lee: handed(of('Lee Morgan')),
+          tariq: handed(of('Tariq Patel')),
+        },
+        lostPhone: await BrowserWorld.lostPhone(made, asked, office.luis, (ms) => {
+          behindMs = ms;
+        }),
       };
     } finally {
       await served.close();
       await api.$disconnect();
+    }
+  }
+
+  // P1-TWR-LF enrolled and marked lost by Luis the firm's hours and a minute ago (the cast's clock
+  // set back that long, then put right), and its key revoked now by the worker's pass.
+  private static async lostPhone(
+    made: StoryDatabase,
+    asked: PhoneRequests,
+    luis: string,
+    setBack: (ms: number) => void,
+  ): Promise<LostPhone> {
+    const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const publicKey = pair.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+    const name = 'P1-TWR-LF';
+    const api = made.open('api');
+    const worker = made.open('worker');
+    try {
+      const { phoneKeyRevokedAfterHours: hours } = await api.firmSettings.findUniqueOrThrow({
+        where: { id: 1 },
+      });
+      if (hours === null) throw new Error('The firm keeps a lost phone’s key for good.');
+      const reason = await api.reason.findFirstOrThrow({
+        where: { name: 'Lost in the field', uses: { has: 'PHONE_REMOVAL' } },
+      });
+      const behindMs = (hours * 60 + 1) * 60_000;
+      setBack(behindMs);
+      let enrolled: Awaited<ReturnType<PhoneRequests['enrol']>>;
+      try {
+        enrolled = await asked.enrol({ name, passcode: storyMasterPasscode, publicKey });
+        const removed = await new Phones(api, {
+          now: () => new Date(Date.now() - behindMs),
+        }).remove(luis, enrolled.deviceId, {
+          status: 'LOST',
+          reasonId: reason.id,
+          note: 'Not handed in at the Landfill’s tower',
+        });
+        if (!removed.saved) throw new Error(removed.refusal.message);
+      } finally {
+        setBack(0);
+      }
+      const revoked = await new PhoneKeyBackstop(
+        worker,
+        new WorkerLog({ write: () => undefined }),
+        { now: () => new Date() },
+      ).pass();
+      if (!revoked.revoked.includes(enrolled.deviceId)) {
+        throw new Error('The worker’s pass didn’t revoke the lost phone’s key.');
+      }
+      return {
+        deviceId: enrolled.deviceId,
+        name,
+        masterPasscodeVersion: enrolled.masterPasscodeVersion,
+        publicKey,
+        privateKey: pair.privateKey.export({ format: 'der', type: 'pkcs8' }).toString('base64'),
+      };
+    } finally {
+      await api.$disconnect();
+      await worker.$disconnect();
     }
   }
 

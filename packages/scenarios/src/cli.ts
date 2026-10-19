@@ -84,6 +84,7 @@ async function world(pageOrigin: string | undefined): Promise<number> {
         apiOrigin: BrowserWorld.apiOrigin,
         masterPasscode: BrowserWorld.masterPasscode,
         cast: made.cast,
+        lostPhone: made.lostPhone,
       }),
     );
     await new Promise<void>((done) => {

@@ -200,6 +200,13 @@ gets tracked on a spreadsheet."
     all of it; the same step ends its blocks and revokes its key, as the phone is told to wipe
     (the user, KD-77 closed, ADR-495). The field app wipes only on
     `wipe: true` (the sync contract's suite, checks 14…16).*
+    ⚠️ *Built in the field app (ADR-580, agent defaults): "Sync and turn in" on the sign-in
+    screen, in Settings and on Sync; the phone proves itself with the passcode beside its key,
+    syncs every queue and sends every file as the master user, then turns in; the keyring's erase,
+    then the store's, on `wipe: true`, or when its key alone is refused after a turn-in whose
+    answer never came; a key the firm's time revoked is told `MASTER_PASSCODE_NEEDED` and turned
+    in with the passcode; a record the contract no longer reads is named by its fingerprint, so
+    the phone isn't wiped over it unless the server holds it.*
 13. **The time clock** (where the project has it on), on the **assignment**: clock in, a break
     (start and end) and clock out **by hand**. **Simple nudges only**: "You're not clocked in. Clock
     in now?" on starting a field event; "Clock out?" on signing out. Activity lines are pre-filled

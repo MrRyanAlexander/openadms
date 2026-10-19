@@ -96,7 +96,11 @@ Decides who can do what, and on which phone:
     the monitor: it uploads every queue, waits for the server to confirm each record, returns its
     unused numbers and wipes itself (ADR-096, 134). ⚠️ *As built (ADR-488): it is told to wipe only
     when the server has everything it still holds; its key is revoked in the same step, so it is
-    refused from then on (the user kept that moment: KD-77 closed, ADR-495).*
+    refused from then on (the user kept that moment: KD-77 closed, ADR-495).* ⚠️ *As built in the
+    field app (ADR-580): "Sync and turn in" is on the sign-in screen, in Settings and on Sync; the
+    phone is erased (its keys first) only on the server's word, and a turn-in whose answer was lost
+    is known done when the server then refuses the phone's key alone; if the server lacks
+    anything, the phone keeps everything and shows what is missing.*
 13. **A lost or broken phone** is marked in the back office. If it turns up and syncs, everything on
     it is received: what it made **after** its removal time arrives **flagged**; then its number
     block is retired and it's wiped, and only then refused (ADR-065, 134). ⚠️ *As built (ADR-488):

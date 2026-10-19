@@ -26,6 +26,10 @@
 // hands the phone over to another monitor and moves it to another site, each under the passcode
 // (AC-02-46, 47, AC-11-27); handed over, or the phone locked by the passcode's tenth wrong try
 // with no signal, the monitor is signed out and the sign-in screen says why.
+//
+// Task 3.4.3 (ADR-580): Settings offers "Sync and turn in" under the master passcode, the monitor
+// still signed in; so does Sync, where the server no longer takes the phone's key alone (revoked by
+// the firm's time, AC-11-35).
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Home } from './home.tsx';
@@ -94,6 +98,7 @@ export function SignedInPhone({
   signedIn: first,
   onSignedOut,
   onHandedOver,
+  onTurnIn,
 }: {
   readonly enrolment: Enrolment;
   readonly monitor: MonitorOnPhone;
@@ -107,6 +112,8 @@ export function SignedInPhone({
   readonly onSignedOut: (ended: Ended | null) => void;
   // Handed over to another monitor under the passcode, or set up for them: the phone is theirs.
   readonly onHandedOver: (to: SetUpFor) => void;
+  // "Sync and turn in" asked for, the monitor signed in as they are now.
+  readonly onTurnIn: (signedIn: SignedIn) => void;
 }) {
   const [signedIn, setSignedIn] = useState(first);
   const [held, setHeld] = useState<HeldLists | undefined>(undefined);
@@ -242,6 +249,11 @@ export function SignedInPhone({
   const stale = listsRead(held?.readAt, now);
   const stopped = stoppedAt(lastRun);
   const unread = stopped === null ? null : refusalWords(stopped);
+  const passcodeNeeded = stopped?.kind === 'refused' && stopped.code === 'MASTER_PASSCODE_NEEDED';
+  const turnIn = () => {
+    theirs.current = false;
+    onTurnIn(signedIn);
+  };
   const warning = warned ? (
     <div className="screen-warning">
       <Banner tone="notice" announced>
@@ -429,6 +441,11 @@ export function SignedInPhone({
           <Button main wide isDisabled={reading} onPress={() => void read()}>
             {reading ? said.syncing : said.syncNow}
           </Button>
+          {passcodeNeeded ? (
+            <Button wide isDisabled={reading} onPress={turnIn}>
+              {said.turnIn}
+            </Button>
+          ) : null}
         </div>
         {bottom}
       </main>
@@ -472,6 +489,9 @@ export function SignedInPhone({
             {said.move}
           </Button>
         )}
+        <Button wide isDisabled={signingOut} onPress={turnIn}>
+          {said.turnIn}
+        </Button>
       </div>
       {bottom}
     </main>
