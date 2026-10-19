@@ -18,6 +18,12 @@ describe('AC-11-51: the screens of the field app', () => {
       'enrol',
       'home',
       'monitor-created',
+      'move-passcode',
+      'move-site',
+      'move-made',
+      'session-passcode',
+      'session-monitor',
+      'phone-locked',
       'phone',
       'setup-passcode',
       'setup-project',
@@ -25,6 +31,8 @@ describe('AC-11-51: the screens of the field app', () => {
       'setup-site',
       'setup-pay-items',
       'setup-monitor',
+      'setup-hand-over',
+      'setup-handed',
       'setup-made',
       'no-assignment',
       'sync',
@@ -109,7 +117,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 20 of 20 screens checked, in 21 checks; 0 found.',
+      '\nAccessibility: 28 of 28 screens checked, in 29 checks; 0 found.',
     );
   });
 

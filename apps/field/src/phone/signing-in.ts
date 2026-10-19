@@ -7,7 +7,12 @@
 // **Who signs in with no connection** (*agent default*, ADR-575): the phone's monitor, the one
 // whose assignment and lists it holds, since with no signal the phone can learn nobody else's
 // work. Anybody else on its list is told whose work it holds: a supervisor hands it over with the
-// master passcode (ADR-120; the switch, task 3.3.2), or they sign in where there is signal.
+// master passcode (ADR-120; the switch, task 3.3.2), or they sign in where there is signal. Handed
+// over to a monitor with their own assignment (ADR-577), that monitor is the phone's: they sign in
+// with no connection on no assignment until they find signal, the lists held being another's.
+//
+// **The phone locked after ten wrong tries of the master passcode with no signal** (ADR-577;
+// passcode.ts) takes no sign-in at all until the passcode is entered with signal.
 import type { Policy, WrongTry } from '@open-adms/domain';
 
 import type { NotAnswered } from '../server.ts';
@@ -15,6 +20,7 @@ import type { PhoneLists } from './lists.ts';
 import type { LoginList, ScreenTries } from './login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './monitor.ts';
 import { checkOpened } from './offline-check.ts';
+import type { PasscodeChecked, PasscodeOnPhone } from './passcode.ts';
 import type { PhoneReports } from './reports.ts';
 
 export type SignInOutcome =
@@ -29,12 +35,15 @@ export type SignInOutcome =
   // No connection; the password was theirs, but the phone holds another monitor's work.
   | { readonly kind: 'anotherMonitor'; readonly name: string | null }
   // No connection, and the phone holds no login list to check against.
-  | { readonly kind: 'noList' };
+  | { readonly kind: 'noList' }
+  // The phone is locked until the master passcode is entered with signal (ADR-577).
+  | { readonly kind: 'phoneLocked' };
 
 export class SigningIn {
   private readonly monitor: MonitorOnPhone;
   private readonly lists: PhoneLists;
   private readonly loginList: LoginList;
+  private readonly passcode: PasscodeOnPhone;
   private readonly reports: PhoneReports;
   private readonly policy: Pick<Policy, 'monitorSessionHours'>;
 
@@ -42,17 +51,20 @@ export class SigningIn {
     monitor: MonitorOnPhone,
     lists: PhoneLists,
     loginList: LoginList,
+    passcode: PasscodeOnPhone,
     reports: PhoneReports,
     policy: Pick<Policy, 'monitorSessionHours'>,
   ) {
     this.monitor = monitor;
     this.lists = lists;
     this.loginList = loginList;
+    this.passcode = passcode;
     this.reports = reports;
     this.policy = policy;
   }
 
   async signIn(monitorNumber: string, password: string): Promise<SignInOutcome> {
+    if ((await this.loginList.screen('passcode')).locked) return { kind: 'phoneLocked' };
     const tries = await this.loginList.screen();
     if (this.loginList.closed(tries)) return { kind: 'closed', tries };
     const reply = await this.monitor.signIn(monitorNumber, password);
@@ -66,20 +78,18 @@ export class SigningIn {
       : { kind: 'signedIn', signedIn };
   }
 
-  // The lock lifted (AC-02-40): the master passcode checked against the phone's own check of it,
-  // held only for this call. Each try is a use of the passcode the phone keeps and reports
-  // (AC-11-23; ADR-576): the unlock, or a wrong try, naming nobody. Nothing where the phone holds
-  // no check.
-  async unlock(passcode: string): Promise<'unlocked' | 'wrong' | 'noCheck'> {
-    const held = await this.loginList.passcode();
-    if (held === undefined) return 'noCheck';
-    if ((await checkOpened(passcode, held.check)) === undefined) {
-      await this.reports.keepUse('WRONG_TRY', null);
-      return 'wrong';
-    }
+  // The screen's lock lifted (AC-02-40): the master passcode checked against the phone's own check
+  // of it, counted as every try of it with no connection is (passcode.ts). Opened, the screen's
+  // count starts again and the unlock is kept as a use to report, naming nobody (AC-11-23;
+  // ADR-576); otherwise what the try came to, the phone locked at the passcode's tenth (ADR-577).
+  async unlock(
+    passcode: string,
+  ): Promise<{ readonly kind: 'unlocked' } | Exclude<PasscodeChecked, { kind: 'opened' }>> {
+    const checked = await this.passcode.checked(passcode);
+    if (checked.kind !== 'opened') return checked;
     await this.loginList.right();
     await this.reports.keepUse('SIGN_IN_UNLOCK', null);
-    return 'unlocked';
+    return { kind: 'unlocked' };
   }
 
   private async offline(monitorNumber: string, password: string): Promise<SignInOutcome> {
@@ -91,14 +101,16 @@ export class SigningIn {
       return { kind: 'wrong', cost: await this.loginList.wrong() };
     }
     await this.loginList.right();
-    const held = await this.lists.held();
-    if (held?.monitorId !== entry.monitorId) {
-      const holder = entries.find(({ monitorId }) => monitorId === held?.monitorId);
+    const [held, phones] = await Promise.all([this.lists.held(), this.lists.phonesMonitor()]);
+    if (phones !== entry.monitorId) {
+      const holder = entries.find(({ monitorId }) => monitorId === phones);
       return { kind: 'anotherMonitor', name: holder?.name ?? null };
     }
     const seconds =
       (await this.loginList.sessionLength()) ?? this.policy.monitorSessionHours * 3600;
-    const signedIn = await this.monitor.signInOffline(entry, firstHash, held.assignment, seconds);
+    // The lists' assignment where they are this monitor's; none where they were handed the phone.
+    const assignment = held?.monitorId === entry.monitorId ? held.assignment : null;
+    const signedIn = await this.monitor.signInOffline(entry, firstHash, assignment, seconds);
     return signedIn === undefined ? { kind: 'noList' } : { kind: 'signedIn', signedIn };
   }
 }

@@ -19,7 +19,11 @@
     },
     "unreachable": "Can’t reach the server. This needs a connection: find signal and try again.",
     "outOfService": "This phone is out of service. It sends the work it holds and is turned in.",
-    "other": "The server couldn’t do that. Try again."
+    "other": "The server couldn’t do that. Try again.",
+    "passcodeWait": {
+      "one": "Too many wrong tries of the master passcode. Try again in 1 second.",
+      "other": "Too many wrong tries of the master passcode. Try again in {count} seconds."
+    }
   },
   "enrol": {
     "notEnrolled": "This phone isn’t enrolled yet. Enrolling needs the master passcode and a connection.",
@@ -65,7 +69,13 @@
     "unlocked": "Unlocked. Sign in.",
     "noPasscodeCheck": "This phone holds no check of the master passcode yet. Ask your supervisor.",
     "setUp": "Set up this phone",
-    "setUpFor": "This phone is set up for {name} on {project}. {name} signs in now with their Monitor ID and password."
+    "setUpFor": "This phone is set up for {name} on {project}. {name} signs in now with their Monitor ID and password.",
+    "passcodeSession": "Open a session with the master passcode",
+    "phoneLocked": "This phone is locked: the master passcode was typed wrong too many times with no signal. It opens when the master passcode is entered with signal.",
+    "phoneLockedNoSignal": "Can’t reach the server. This phone opens only when the master passcode is entered with signal: find signal and try again.",
+    "handedTo": "This phone is handed over to {name}. {name} signs in now with their Monitor ID and password.",
+    "temporaryEnded": "The temporary session under the master passcode has ended with the day. Sign in with your own Monitor ID and password: nothing on this phone is lost.",
+    "withPasscode": "With the master passcode"
   },
   "createMonitor": {
     "title": "Create monitor",
@@ -149,6 +159,20 @@
       "notSaved": "The server didn’t take it. It stays on the phone, and the back office is told.",
       "notHere": "This phone holds another project’s lists: {name} signs in with signal to take this one.",
       "done": "Done"
+    },
+    "handOverTitle": "Hand this phone over",
+    "handOverNeeds": "Handing this phone to another monitor needs the master passcode. The work it holds that isn’t sent yet stays its monitor’s: the phone keeps it apart and sends it.",
+    "handOver": {
+      "title": "Does {name} have their own assignment today?",
+      "own": "{name} has their own assignment",
+      "ownDetail": "They sign in and the phone takes it, with signal",
+      "setUp": "Set up {name}’s work here",
+      "setUpDetail": "An unplanned assignment for today"
+    },
+    "handed": {
+      "title": "Phone handed over",
+      "to": "Handed over to {name}.",
+      "done": "Done"
     }
   },
   "look": {
@@ -169,6 +193,10 @@
         "in": "Clocked in",
         "break": "On a break",
         "out": "Not clocked in"
+      },
+      "underPasscode": {
+        "AS_MONITOR": "{name}, by the master passcode",
+        "TEMPORARY": "{name}, temporary, by the master passcode"
       }
     },
     "back": "Back",
@@ -263,6 +291,58 @@
     "offline": "Signed in without signal. The server is told when the phone finds signal.",
     "phone": "This phone is {name}.",
     "signOut": "Sign out",
-    "signingOut": "Signing out…"
+    "signingOut": "Signing out…",
+    "underPasscode": {
+      "AS_MONITOR": "Signed in by the master passcode.",
+      "TEMPORARY": "A temporary session by the master passcode. It ends at midnight."
+    },
+    "handOver": "Hand this phone over",
+    "move": "Move to another site"
+  },
+  "move": {
+    "title": "Move to another site",
+    "needs": "Moving this phone to another site needs the master passcode. It is recorded as an unplanned assignment at the new site; what was made here keeps this site.",
+    "passcode": "Master passcode",
+    "next": "Next",
+    "checking": "Checking…",
+    "cancel": "Cancel",
+    "offline": "No signal: the sites this phone holds for {project}.",
+    "noLists": "This phone holds no lists for the project. Find signal and try again.",
+    "noCheck": "This phone holds no check of the master passcode yet, so it can’t move with no signal. Find signal and try again.",
+    "closed": "That project has closed.",
+    "notSignedIn": "Moving needs a monitor signed in on an assignment.",
+    "site": {
+      "title": "Which site now?",
+      "none": "Pick the site.",
+      "nothing": "This project has no other site."
+    },
+    "make": "Move the phone",
+    "making": "Moving…",
+    "made": {
+      "title": "Phone moved",
+      "to": "Moved to {site}, as an unplanned assignment.",
+      "done": "Done"
+    }
+  },
+  "session": {
+    "title": "A session under the master passcode",
+    "needs": "The master passcode signs in as this phone’s monitor, or opens a temporary session for another monitor, which ends with the day. Every record made in it says so.",
+    "passcode": "Master passcode",
+    "next": "Next",
+    "checking": "Checking…",
+    "cancel": "Cancel",
+    "noLists": "With no signal, this needs the lists and login list the phone reads when somebody signs in on it with signal. Find signal and try again.",
+    "noCheck": "This phone holds no check of the master passcode yet. Find signal and try again.",
+    "offline": "No signal: the monitors on this phone’s login list.",
+    "monitor": {
+      "title": "Who is signing in?",
+      "phones": "This phone’s monitor",
+      "temporary": "Temporary session: ends with the day",
+      "more": "Show more monitors",
+      "loading": "Loading…",
+      "none": "Pick the monitor."
+    },
+    "open": "Sign in",
+    "opening": "Signing in…"
   }
 }

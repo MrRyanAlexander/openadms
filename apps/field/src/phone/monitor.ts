@@ -18,6 +18,15 @@
 // unplanned assignment set up on it and the uses of the master passcode it logged, sent with the
 // monitor's session ahead of the request asked for (reports.ts), so the lists the server answers
 // take an assignment set up with no connection (AC-11-25).
+//
+// **A session under the master passcode** (ARCHITECTURE §7.2, §7.3; BACKLOG 3.3.2, C124, C171;
+// ADR-462, 531, 577): opened as the phone's monitor, the passcode in place of their password, or
+// the temporary session for a monitor picked from the roster; with signal by the server
+// (`POST /phones/current/passcode-sessions`), with none against the phone's own check, kept as a
+// sign-in made offline of that kind with its proof from the passcode. Either way the session says
+// so (`masterPasscodeSession`), every screen shows it, and every field event made in it carries it
+// (3.5.1). It ends as the domain's `PasscodeSessionRules` says: the temporary one with the
+// project's day, even with no signal, by the phone's clock (AC-11-26).
 import {
   monitorSignedInAnswerSchema,
   offlineSignInReportSchema,
@@ -27,9 +36,16 @@ import {
   type Endpoint,
   type MonitorSignedInAnswer,
   type OfflineSignInReport,
+  openPasscodeSessionOnPhoneEndpoint,
   type PhoneAssignmentAnswer,
 } from '@open-adms/contracts';
-import { OfflineSignInRules, uuidv7, type NoAssignmentReason } from '@open-adms/domain';
+import {
+  masterPasscodeSessions,
+  OfflineSignInRules,
+  uuidv7,
+  type MasterPasscodeSessionKind,
+  type NoAssignmentReason,
+} from '@open-adms/domain';
 
 import type { Asking, NotAnswered, Reply } from '../server.ts';
 import type { Keyring } from '../store/keyring.ts';
@@ -39,8 +55,9 @@ import { signInProof } from './offline-check.ts';
 import type { PhoneReports } from './reports.ts';
 
 // Who is signed in, until when by the phone's clock, and the assignment the phone takes for them
-// now, or why it takes none; and whether they signed in with no connection and the server hasn't
-// yet taken it. Never the token or the proof.
+// now, or why it takes none; whether they signed in with no connection and the server hasn't
+// yet taken it; and whether the session is the master passcode's, and which way. Never the token
+// or the proof.
 export interface SignedIn {
   readonly userId: string;
   readonly monitorNumber: string;
@@ -49,21 +66,43 @@ export interface SignedIn {
   readonly assignment: PhoneAssignmentAnswer | null;
   readonly noAssignment: NoAssignmentReason | null;
   readonly offline: boolean;
+  readonly masterPasscodeSession: MasterPasscodeSessionKind | null;
 }
 
-// The session as the keyring holds it: what the sign-in answered, and until when.
+// Who a session is for, as the phone's lists or login list name them.
+export interface SessionFor {
+  readonly monitorId: string;
+  readonly monitorNumber: string;
+  readonly name: string;
+}
+
+// The session as the keyring holds it: what the sign-in answered, until when, and which way it
+// was opened under the master passcode, if it was.
 interface HeldSession {
   readonly answer: MonitorSignedInAnswer;
   readonly until: string;
+  readonly masterPasscodeSession: MasterPasscodeSessionKind | null;
+}
+
+function passcodeSessionOf(kept: unknown): MasterPasscodeSessionKind | null {
+  return masterPasscodeSessions.find((kind) => kind === kept) ?? null;
 }
 
 function heldSession(kept: string | undefined): HeldSession | undefined {
   if (kept === undefined) return undefined;
   try {
-    const { answer, until } = JSON.parse(kept) as { answer?: unknown; until?: unknown };
+    const { answer, until, masterPasscodeSession } = JSON.parse(kept) as {
+      answer?: unknown;
+      until?: unknown;
+      masterPasscodeSession?: unknown;
+    };
     const read = monitorSignedInAnswerSchema.safeParse(answer);
     return read.success && typeof until === 'string' && !Number.isNaN(Date.parse(until))
-      ? { answer: read.data, until }
+      ? {
+          answer: read.data,
+          until,
+          masterPasscodeSession: passcodeSessionOf(masterPasscodeSession),
+        }
       : undefined;
   } catch {
     return undefined;
@@ -155,7 +194,33 @@ export class MonitorOnPhone {
     if (reply.kind === 'answered') {
       const until = new Date(asked.getTime() + reply.answer.expiresInSeconds * 1000);
       await this.keyring.keep('offlineSignIn', undefined);
-      await this.kept({ answer: reply.answer, until: until.toISOString() });
+      await this.kept({
+        answer: reply.answer,
+        until: until.toISOString(),
+        masterPasscodeSession: null,
+      });
+    }
+    return reply;
+  }
+
+  // A session opened under the master passcode with signal (ADR-462): for the monitor named, as
+  // the phone's monitor or the temporary one, the passcode sent for this call alone. The session
+  // the server answered is kept in place of any held, marked as the passcode's; anything else is
+  // the answer, and leaves whoever was signed in as they were.
+  async openedUnderPasscode(
+    personId: string,
+    kind: MasterPasscodeSessionKind,
+    passcode: string,
+  ): Promise<Reply<typeof openPasscodeSessionOnPhoneEndpoint>> {
+    const asked = this.now();
+    const reply = await this.identity.asPhone(openPasscodeSessionOnPhoneEndpoint, {
+      json: { personId, kind, passcode },
+    });
+    if (reply.kind === 'answered') {
+      const { masterPasscodeSession, ...answer } = reply.answer;
+      const until = new Date(asked.getTime() + answer.expiresInSeconds * 1000);
+      await this.keyring.keep('offlineSignIn', undefined);
+      await this.kept({ answer, until: until.toISOString(), masterPasscodeSession });
     }
     return reply;
   }
@@ -171,17 +236,54 @@ export class MonitorOnPhone {
     assignment: PhoneAssignmentAnswer | null,
     seconds: number,
   ): Promise<SignedIn | undefined> {
+    return this.keptOffline(
+      entry,
+      { kind: 'OWN_PASSWORD', masterPasscodeVersion: null, firstHash },
+      assignment,
+      (signedInAt) => new Date(signedInAt.getTime() + seconds * 1000),
+    );
+  }
+
+  // A session opened under the master passcode with no connection (ADR-531, 577): the passcode
+  // already opened the phone's own check, its first slow hash and version handed in; the sign-in
+  // is kept as one made offline of that kind, proven by the passcode, until `endsAt` says from
+  // when it was made.
+  async openedOffline(
+    person: SessionFor,
+    kind: MasterPasscodeSessionKind,
+    passcode: { readonly firstHash: Uint8Array; readonly version: number },
+    assignment: PhoneAssignmentAnswer | null,
+    endsAt: (signedInAt: Date) => Date,
+  ): Promise<SignedIn | undefined> {
+    return this.keptOffline(
+      person,
+      { kind, masterPasscodeVersion: passcode.version, firstHash: passcode.firstHash },
+      assignment,
+      endsAt,
+    );
+  }
+
+  private async keptOffline(
+    person: SessionFor,
+    how: {
+      readonly kind: OfflineSignInReport['kind'];
+      readonly masterPasscodeVersion: number | null;
+      readonly firstHash: Uint8Array;
+    },
+    assignment: PhoneAssignmentAnswer | null,
+    endsAt: (signedInAt: Date) => Date,
+  ): Promise<SignedIn | undefined> {
     const enrolment = await this.identity.enrolment();
     if (enrolment === undefined) return undefined;
     const signedInAt = this.now();
     const said = {
       deviceId: enrolment.deviceId,
       id: uuidv7(signedInAt),
-      kind: 'OWN_PASSWORD',
-      personId: entry.monitorId,
+      kind: how.kind,
+      personId: person.monitorId,
       signedInAt,
-      masterPasscodeVersion: null,
-    } as const;
+      masterPasscodeVersion: how.masterPasscodeVersion,
+    };
     const report: OfflineSignInReport = {
       id: said.id,
       kind: said.kind,
@@ -189,15 +291,15 @@ export class MonitorOnPhone {
       signedInAt: signedInAt.toISOString(),
       // ADR-100: how far the phone's clock stands from UTC, in minutes.
       deviceUtcOffsetMinutes: 0 - signedInAt.getTimezoneOffset(),
-      masterPasscodeVersion: null,
-      proof: signInProof(firstHash, offlineSignIns.signed(said)),
+      masterPasscodeVersion: how.masterPasscodeVersion,
+      proof: signInProof(how.firstHash, offlineSignIns.signed(said)),
     };
     const held: HeldOffline = {
       report,
-      monitorNumber: entry.monitorNumber,
-      name: entry.name,
+      monitorNumber: person.monitorNumber,
+      name: person.name,
       assignment,
-      until: new Date(signedInAt.getTime() + seconds * 1000).toISOString(),
+      until: endsAt(signedInAt).toISOString(),
     };
     await this.keyring.keep('monitorSession', undefined);
     await this.keyring.keep('offlineSignIn', JSON.stringify(held));
@@ -210,7 +312,17 @@ export class MonitorOnPhone {
     if (held !== undefined) {
       const { userId, monitorNumber, name, assignment, noAssignment } = held.answer;
       const until = new Date(held.until);
-      return { userId, monitorNumber, name, until, assignment, noAssignment, offline: false };
+      const { masterPasscodeSession } = held;
+      return {
+        userId,
+        monitorNumber,
+        name,
+        until,
+        assignment,
+        noAssignment,
+        offline: false,
+        masterPasscodeSession,
+      };
     }
     const offline = await this.offline();
     if (offline === undefined) return undefined;
@@ -223,6 +335,7 @@ export class MonitorOnPhone {
       assignment,
       noAssignment: null,
       offline: true,
+      masterPasscodeSession: offlineSignIns.underPasscode(report.kind),
     };
   }
 
@@ -263,16 +376,21 @@ export class MonitorOnPhone {
   }
 
   // The assignment the phone takes now, as a later answer said (its lists read, ADR-450) or as
-  // the phone was set up for this monitor under the master passcode (ADR-576): the session keeps
-  // it in place of the one the sign-in answered. (A sign-in made offline always holds the lists'
-  // assignment, so it is never set up from "No assignment today".)
+  // the phone was set up or moved for this monitor under the master passcode (ADR-576, 577): the
+  // session keeps it in place of the one the sign-in answered, and so does a sign-in made offline
+  // and not yet reported (a move made with no signal).
   async took(
     assignment: PhoneAssignmentAnswer | null,
     noAssignment: NoAssignmentReason | null,
   ): Promise<void> {
     const held = await this.held();
-    if (held === undefined) return;
-    await this.kept({ ...held, answer: { ...held.answer, assignment, noAssignment } });
+    if (held !== undefined) {
+      await this.kept({ ...held, answer: { ...held.answer, assignment, noAssignment } });
+      return;
+    }
+    const offline = await this.offline();
+    if (offline === undefined) return;
+    await this.keyring.keep('offlineSignIn', JSON.stringify({ ...offline, assignment }));
   }
 
   // Signed out, by the monitor or the lock after inactivity (AC-11-64): the server told where it
@@ -301,8 +419,10 @@ export class MonitorOnPhone {
       }
       return reply;
     }
-    const { token, userId, monitorNumber, name, expiresInSeconds } = reply.answer;
+    const { token, userId, monitorNumber, name, expiresInSeconds, masterPasscodeSession } =
+      reply.answer;
     const session: HeldSession = {
+      masterPasscodeSession,
       answer: {
         token,
         userId,

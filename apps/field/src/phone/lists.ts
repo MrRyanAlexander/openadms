@@ -7,6 +7,11 @@
 // them again (AC-11-17). What the store keeps is read back by the contracts' own schema, with the
 // monitor they were read for: the phone's monitor, the one whose work it holds, who alone signs in
 // on it with no connection (ADR-120, 575).
+//
+// **Handed over under the master passcode** to a monitor with their own assignment (task 3.3.2,
+// ADR-577), the phone's monitor is the one it was handed to, kept beside the lists until lists
+// are read or the phone is set up anew: the lists held stay the earlier monitor's, so the one
+// handed to signs in with no connection on no assignment, and takes theirs with signal.
 import {
   phoneListsAnswerSchema,
   phoneListsEndpoint,
@@ -37,6 +42,7 @@ export type ListsRead =
 
 const listsShelf = 'lists';
 const listsId = 'assignment';
+const handedToId = 'handedTo';
 
 export class PhoneLists {
   private readonly store: PhoneStore;
@@ -83,6 +89,7 @@ export class PhoneLists {
         id: listsId,
         value: { ...reply.answer, monitorId, readAt: asked.toISOString() } as unknown as Json,
       },
+      { shelf: listsShelf, id: handedToId, dropped: true },
     ]);
     return { kind: 'taken', held: { assignment, lists, monitorId, readAt: asked } };
   }
@@ -118,8 +125,26 @@ export class PhoneLists {
           readAt: held.readAt.toISOString(),
         } as unknown as Json,
       },
+      { shelf: listsShelf, id: handedToId, dropped: true },
     ]);
     return true;
+  }
+
+  // The phone's monitor: the one it was handed to under the master passcode, or else the one its
+  // lists were read or set up for; none before either.
+  async phonesMonitor(): Promise<string | null> {
+    const handed = await this.store.read(listsShelf, handedToId);
+    if (typeof handed === 'object' && handed !== null && !Array.isArray(handed)) {
+      const { monitorId } = handed as Readonly<Record<string, unknown>>;
+      if (typeof monitorId === 'string') return monitorId;
+    }
+    return (await this.held())?.monitorId ?? null;
+  }
+
+  // Handed over to a monitor with their own assignment (ADR-577): they are the phone's monitor
+  // now; the lists held are kept as they are.
+  async handedTo(monitorId: string): Promise<void> {
+    await this.store.change([{ shelf: listsShelf, id: handedToId, value: { monitorId } }]);
   }
 
   // Read again where the setup version the server named isn't the one the lists held are, or

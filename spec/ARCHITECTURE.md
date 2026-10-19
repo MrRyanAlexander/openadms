@@ -807,6 +807,16 @@ So the protection can't rest on the password. It rests on these:
 
 ✅ **Approved:** archived records are hidden from the next monitor and can't be edited by them.
 
+⚠️ *ADR-577 (2026-10-18; the user's answer, its design agent defaults), as built in the field app:*
+> **User:** "ten wrong passcode tries do without signal results in the phone locked until the
+> master passcode is entered." Every wrong try of the master passcode against the phone's own
+> check is counted (a wait from the 5th); at the 10th the phone signs out whoever is signed in and
+> opens nothing, until the passcode is entered with signal and the server takes it. A setup for
+> another monitor than the phone's is a switch; a switch signs the earlier monitor out and keeps
+> their unsent work apart under their id. A session under the passcode is as the phone's monitor
+> or, for anybody else, the temporary one, which ends at the project's midnight on the phone's
+> clock, with no signal too.
+
 ### 7.4 The device's own identity
 
 ✅ **Approved:**

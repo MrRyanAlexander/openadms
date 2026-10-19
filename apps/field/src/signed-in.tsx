@@ -16,11 +16,19 @@
 // sent back to sign in online. **Left alone for the policy's minutes, the phone signs them out**
 // (AC-02-40, AC-11-20, 64), warning the policy's seconds before so one tap keeps the session
 // (WCAG 2.2.1); nothing on the phone not yet submitted is touched.
+//
+// Task 3.3.2 (ADR-577): a session under the master passcode is shown as the passcode's on every
+// screen (the status strip) and in Settings, and ends when its time comes by the phone's clock,
+// with no signal too (a temporary one at midnight in the project's time zone, AC-11-26). Settings
+// hands the phone over to another monitor and moves it to another site, each under the passcode
+// (AC-02-46, 47, AC-11-27); handed over, or the phone locked by the passcode's tenth wrong try
+// with no signal, the monitor is signed out and the sign-in screen says why.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
-import type { Ended } from './phone.tsx';
+import { Move } from './move.tsx';
+import type { Ended, SetUpFor } from './phone.tsx';
 import type { Enrolment } from './phone/identity.ts';
 import type { HeldLists, ListsRead, PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
@@ -49,6 +57,7 @@ export function SignedInPhone({
   setup,
   signedIn: first,
   onSignedOut,
+  onHandedOver,
 }: {
   readonly enrolment: Enrolment;
   readonly monitor: MonitorOnPhone;
@@ -59,6 +68,8 @@ export function SignedInPhone({
   readonly signedIn: SignedIn;
   // Signed out by the monitor (nothing to say), or why the sign-in ended under them.
   readonly onSignedOut: (ended: Ended | null) => void;
+  // Handed over to another monitor under the passcode, or set up for them: the phone is theirs.
+  readonly onHandedOver: (to: SetUpFor) => void;
 }) {
   const [signedIn, setSignedIn] = useState(first);
   const [held, setHeld] = useState<HeldLists | undefined>(undefined);
@@ -68,7 +79,8 @@ export function SignedInPhone({
   const [signingOut, setSigningOut] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [warned, setWarned] = useState(false);
-  const [settingUp, setSettingUp] = useState(false);
+  const [settingUp, setSettingUp] = useState<'setUp' | 'handOver' | null>(null);
+  const [moving, setMoving] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
   // after the lock, says nothing.
@@ -128,6 +140,15 @@ export function SignedInPhone({
     const lockAfter = inactivity.lockMinutes * 60_000;
     const warnAfter = lockAfter - inactivity.warningSeconds * 1000;
     const checking = window.setInterval(() => {
+      // The session's own end, by the phone's clock (AC-11-26).
+      if (Date.now() >= signedIn.until.getTime() && theirs.current) {
+        theirs.current = false;
+        const temporary = signedIn.masterPasscodeSession === 'TEMPORARY';
+        void monitor.signOut().then(() => {
+          onSignedOut({ why: temporary ? 'temporaryEnded' : 'ended' });
+        });
+        return;
+      }
       const quiet = Date.now() - lastTouched.current;
       if (quiet < lockAfter) {
         setWarned(quiet >= warnAfter);
@@ -144,7 +165,7 @@ export function SignedInPhone({
       document.removeEventListener('keydown', touched);
       window.clearInterval(checking);
     };
-  }, [inactivity, monitor, onSignedOut]);
+  }, [inactivity, monitor, onSignedOut, signedIn]);
 
   const signOut = async () => {
     theirs.current = false;
@@ -153,8 +174,12 @@ export function SignedInPhone({
     onSignedOut(null);
   };
 
+  const marked = signedIn.masterPasscodeSession;
   const standing = {
-    signedIn: signedIn.name,
+    signedIn:
+      marked === null
+        ? signedIn.name
+        : say(words.look.strip.underPasscode[marked], { name: signedIn.name }),
     waiting: 0,
     lastSent: null,
     now,
@@ -189,23 +214,71 @@ export function SignedInPhone({
     </>
   );
 
-  if (settingUp) {
+  // Passed on, or locked: the monitor signed out already by the phone; these screens are done.
+  const handedTo = (to: SetUpFor) => {
+    theirs.current = false;
+    onHandedOver(to);
+  };
+  const locked = () => {
+    theirs.current = false;
+    onSignedOut({ why: 'phoneLocked' });
+  };
+
+  if (settingUp !== null) {
+    const handingOver = settingUp === 'handOver';
     return (
       <>
         <Setup
           setup={setup}
           standing={standing}
-          forMonitor={{
-            monitorId: signedIn.userId,
-            monitorNumber: signedIn.monitorNumber,
-            name: signedIn.name,
+          forMonitor={
+            handingOver
+              ? null
+              : {
+                  monitorId: signedIn.userId,
+                  monitorNumber: signedIn.monitorNumber,
+                  name: signedIn.name,
+                }
+          }
+          handingOver={handingOver}
+          onDone={(made, to) => {
+            setSettingUp(null);
+            if (to.monitorId === signedIn.userId) {
+              void read();
+              return;
+            }
+            const { name, monitorNumber } = to;
+            handedTo({ name, monitorNumber, project: made.assignment.project.name });
           }}
+          onHandedOver={({ name, monitorNumber }) => {
+            handedTo({ name, monitorNumber, project: null });
+          }}
+          onLocked={locked}
+          onCancel={() => {
+            setSettingUp(null);
+          }}
+        />
+        {warning}
+      </>
+    );
+  }
+
+  if (moving && signedIn.assignment !== null) {
+    return (
+      <>
+        <Move
+          setup={setup}
+          standing={standing}
+          project={signedIn.assignment.project.name}
+          currentSiteId={signedIn.assignment.site?.id ?? null}
           onDone={() => {
-            setSettingUp(false);
+            setMoving(false);
+            setPlace('work');
             void read();
           }}
+          onLocked={locked}
           onCancel={() => {
-            setSettingUp(false);
+            setMoving(false);
           }}
         />
         {warning}
@@ -252,7 +325,7 @@ export function SignedInPhone({
             wide
             isDisabled={reading}
             onPress={() => {
-              setSettingUp(true);
+              setSettingUp('setUp');
             }}
           >
             {said.setUp}
@@ -300,12 +373,33 @@ export function SignedInPhone({
           {say(said.signedInAs, { name: signedIn.name, monitorNumber: signedIn.monitorNumber })}
         </p>
         {signedIn.offline ? <p>{said.offline}</p> : null}
+        {marked === null ? null : <p>{said.underPasscode[marked]}</p>}
         <p>{say(said.phone, { name: enrolment.name })}</p>
       </div>
       <div className="screen-actions">
         <Button main wide isDisabled={signingOut} onPress={() => void signOut()}>
           {signingOut ? said.signingOut : said.signOut}
         </Button>
+        <Button
+          wide
+          isDisabled={signingOut}
+          onPress={() => {
+            setSettingUp('handOver');
+          }}
+        >
+          {said.handOver}
+        </Button>
+        {signedIn.assignment === null ? null : (
+          <Button
+            wide
+            isDisabled={signingOut}
+            onPress={() => {
+              setMoving(true);
+            }}
+          >
+            {said.move}
+          </Button>
+        )}
       </div>
       {bottom}
     </main>

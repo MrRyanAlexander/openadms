@@ -179,6 +179,7 @@ describe('signing in on the phone', () => {
       assignment: towerMonday,
       noAssignment: null,
       offline: false,
+      masterPasscodeSession: null,
     });
     await lists.read();
     expect(server.sent.at(-1)).toMatchObject({

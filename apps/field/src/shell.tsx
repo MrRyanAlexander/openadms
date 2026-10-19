@@ -6,18 +6,23 @@
 // for a monitor with no assignment from the sign-in screen, or straight on from "Monitor created"
 // for the monitor just created (task 3.3.1, ADR-576); the sign-in screen then says for whom, their
 // Monitor ID filled in. Nothing is shown until the store has said whether the phone is enrolled,
-// which takes no network.
+// which takes no network. The master passcode also signs in from the sign-in screen, and hands
+// the phone over from Settings; the phone locked by its tenth wrong try with no signal shows the
+// sign-in screen locked (task 3.3.2, ADR-577).
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CreateMonitor } from './create-monitor.tsx';
 import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';
+import { PasscodeSession } from './passcode-session.tsx';
 import { Phone, type Ended, type SetUpFor } from './phone.tsx';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
+import type { PasscodeSessions } from './phone/passcode-sessions.ts';
+import type { PasscodeOnPhone } from './phone/passcode.ts';
 import type { PhoneSetup, SetupMonitor } from './phone/setup.ts';
 import type { SigningIn } from './phone/signing-in.ts';
 import type { Server } from './server.ts';
@@ -33,6 +38,8 @@ export interface OpenedPhone {
   readonly loginList: LoginList;
   readonly signingIn: SigningIn;
   readonly setup: PhoneSetup;
+  readonly passcode: PasscodeOnPhone;
+  readonly sessions: PasscodeSessions;
   readonly inactivity: Inactivity;
 }
 
@@ -50,6 +57,7 @@ type Seen =
       readonly enrolment: Enrolment;
       readonly forMonitor: SetupMonitor | null;
     }
+  | { readonly screen: 'passcodeSession'; readonly enrolment: Enrolment }
   | { readonly screen: 'signedIn'; readonly enrolment: Enrolment; readonly signedIn: SignedIn }
   | { readonly screen: 'createMonitor'; readonly enrolment: Enrolment }
   | {
@@ -93,6 +101,15 @@ export function Shell({
     },
     [enrolment],
   );
+  const handedOver = useCallback(
+    (to: SetUpFor) => {
+      if (enrolment !== undefined) {
+        setSeen({ screen: 'phone', enrolment, ended: null, setUpFor: to });
+      }
+    },
+    [enrolment],
+  );
+  const nobody = { signedIn: null, waiting: 0, lastSent: null, now: new Date() };
 
   if (opened === null || seen.screen === 'opening') return null;
   switch (seen.screen) {
@@ -113,6 +130,7 @@ export function Shell({
           identity={opened.identity}
           signingIn={opened.signingIn}
           loginList={opened.loginList}
+          passcodeOnPhone={opened.passcode}
           ended={seen.ended}
           setUpFor={seen.setUpFor ?? null}
           onSignedIn={(signedIn) => {
@@ -124,13 +142,34 @@ export function Shell({
           onSetUp={() => {
             setSeen({ screen: 'setup', enrolment: seen.enrolment, forMonitor: null });
           }}
+          onPasscodeSession={() => {
+            setSeen({ screen: 'passcodeSession', enrolment: seen.enrolment });
+          }}
+        />
+      );
+    case 'passcodeSession':
+      return (
+        <PasscodeSession
+          setup={opened.setup}
+          sessions={opened.sessions}
+          lists={opened.lists}
+          standing={nobody}
+          onSignedIn={(signedIn) => {
+            setSeen({ screen: 'signedIn', enrolment: seen.enrolment, signedIn });
+          }}
+          onLocked={() => {
+            signedOut({ why: 'phoneLocked' });
+          }}
+          onCancel={() => {
+            signedOut(null);
+          }}
         />
       );
     case 'setup':
       return (
         <Setup
           setup={opened.setup}
-          standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }}
+          standing={nobody}
           forMonitor={seen.forMonitor}
           onDone={(made, monitor) => {
             setSeen({
@@ -143,6 +182,12 @@ export function Shell({
                 project: made.assignment.project.name,
               },
             });
+          }}
+          onHandedOver={({ name, monitorNumber }) => {
+            handedOver({ name, monitorNumber, project: null });
+          }}
+          onLocked={() => {
+            signedOut({ why: 'phoneLocked' });
           }}
           onCancel={() => {
             setSeen({ screen: 'phone', enrolment: seen.enrolment, ended: null });
@@ -160,6 +205,7 @@ export function Shell({
           setup={opened.setup}
           signedIn={seen.signedIn}
           onSignedOut={signedOut}
+          onHandedOver={handedOver}
         />
       );
     case 'createMonitor':

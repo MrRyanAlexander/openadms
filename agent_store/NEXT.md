@@ -39,7 +39,7 @@ one task per response (ADR-558); read its brief before any task.
    approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
    every story still passing.
 2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
-   (`spec/acceptance/11-field-app.md`: 132).
+   (`spec/acceptance/11-field-app.md`: 133).
 3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
 4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
    control by control; the threat model's phone rows read again; `pnpm security` passing.
@@ -67,8 +67,8 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-576)
-- **Phase 3 is open (ADR-557)**: 10 of 33 tasks done (ADR-557…576). Milestone 3.1 is done (the plan,
+### Where things stand (2026-10-18, through ADR-577)
+- **Phase 3 is open (ADR-557)**: 11 of 33 tasks done (ADR-557…577). Milestone 3.1 is done (the plan,
   the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
   the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
   the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
@@ -77,11 +77,12 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   person copied it. Their notes on the prototype are ADR-571 (the number at New, open tickets,
   waypoints, photos at any step). **Milestone 3.2 is done** (ADR-570…575): the store, enrolment and
   the proof, online sign-in and the assignment, the login list and signing in offline.
-  **Milestone 3.3: setup with no assignment (3.3.1, ADR-576)**: the phone set up under the master
-  passcode from the sign-in screen, "No assignment today" or "Monitor created", online or on the
-  lists it holds; the report kept until saved and sent first; the uses of the passcode it checks
-  itself reported; the browser tests' world given P2.
-  **Next: task 3.3.2.** What each task did is its ADR and its `BACKLOG.md` tick.
+  **Milestone 3.3 is done** (ADR-576, 577): setup under the master passcode with no assignment;
+  then (3.3.2) **the user's answer on the passcode's ten wrong tries offline: the phone locked
+  until the passcode is entered** (built as entered with signal, the server taking it), switching
+  (a setup for another monitor is a switch; a hand-over with no assignment), moving, and sessions
+  as the phone's monitor or temporary, the temporary one ending at the project's midnight.
+  **Next: task 3.4.1.** What each task did is its ADR and its `BACKLOG.md` tick.
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -149,7 +150,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 10 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 11 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -233,18 +234,16 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.3.2, switching, moving and passcode sessions** (`BACKLOG.md`, Milestone 3.3; REQ-312;
-C122's rest, C123, C124, C126, C171; AC-02-42, 46, 47, AC-11-26, 27, 64): a switch under the
-master passcode (the earlier monitor's unsynced work archived, hidden, synced in the background;
-their session and offline sign-in's proof dropped) and a site move, offline if need be, each an
-unplanned assignment by `PhoneSetup`'s report (`occasion: 'MONITOR_SWITCH'`; a switch to a monitor
-with their own assignment the use `MONITOR_SWITCH`); sessions as the phone's monitor and temporary
-(`POST /phones/current/passcode-sessions` online; kept as uses with `PhoneReports.keepUse`
-offline), shown as the passcode's and ended at the project's midnight; `masterPasscodeSession` on
-every field event; **what ten wrong tries at the passcode offline do, proposed by ADR** (NIST
-SP 800-63B §3.2.10; today each is only kept as a `WRONG_TRY`). Builds on `PhoneSetup`,
-`PhoneReports` and `SigningIn` (`apps/field/src/phone/`, ADR-575, 576). **From 2026-10-21, C175**
-(React 19.3.1 and Playwright 1.64.1 read again).
+**Task 3.4.1, the phone's `SyncClient`** (`BACKLOG.md`, Milestone 3.4; REQ-308, 308c; C127, C128,
+C130, C132, C133, C139, C152, C153, C166, C168, C181; AC-05-01, 06, 07, 08, 20, 46, AC-11-22,
+28…31): `syncClientSuite` passed against the app's own store; splits by weight and count; waits
+waited out; `NOT_SAVED` shown and kept, a kept record resent with its fingerprint (**when: by ADR**,
+ADR-470 (3); file 11, left 4); syncs only while somebody is signed in; what it holds said in every
+sync; **the reports `PhoneReports.held()` holds carried by the sync** (C181) and **the archived
+queues of an earlier monitor sent in the background** (ADR-577, under that monitor's id on the
+store's `archivedQueues`). Builds on `MonitorOnPhone`, `PhoneLists.readUnless`, `PhoneReports`
+(`apps/field/src/phone/`, ADR-574…577). **From 2026-10-21, C175** (React 19.3.1 and Playwright
+1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

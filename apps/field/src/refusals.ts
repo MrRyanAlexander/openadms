@@ -20,3 +20,11 @@ export function refusalWords(
   if (reply.code === 'PHONE_OUT_OF_SERVICE') return said.outOfService;
   return said.other;
 }
+
+// What a wrong try of the master passcode with no signal says (ADR-577): that it wasn't taken, or
+// the wait its count put on, in seconds from now.
+export function passcodeWrong(waitUntil: Date | null, now = new Date()): string {
+  if (waitUntil === null) return words.refusals.passcode;
+  const seconds = Math.max(1, Math.ceil((waitUntil.getTime() - now.getTime()) / 1000));
+  return counted(words.refusals.passcodeWait, seconds);
+}

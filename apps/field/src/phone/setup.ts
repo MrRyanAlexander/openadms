@@ -23,6 +23,22 @@
 // - **The work it offers** is every kind of field event, certifying and the forms that are no
 //   ticket's (lists every phone has, ADR-463); a site is offered from the project's, or none for a
 //   curb; nothing is refused over what is picked (flag, never block). *Agent defaults* (ADR-576).
+//
+// **Switching and moving** (ARCHITECTURE §7.3; adms-field-app §4A.0 (8), (9); BACKLOG 3.3.2, C122,
+// C123; AC-02-46, 47, AC-11-27, 64; ADR-095, 120, 458, 464, 577), each under the passcode, with no
+// connection if need be:
+// - **A setup for another monitor than the phone's** (the one it was handed to, or whose lists it
+//   holds) **is a switch**: its report says `MONITOR_SWITCH`. A switch to a monitor with their
+//   own assignment makes none (`handedOver`): the phone logs the use `MONITOR_SWITCH` naming them,
+//   and their own sign-in takes theirs; where the phone holds their assignment for the day
+//   already, it is never asked.
+// - **Either way the earlier monitor's work is passed on** (`passedOn`): whoever is signed in is
+//   signed out, their session and any sign-in made offline with its proof dropped (AC-11-64); the
+//   records they made and the phone hasn't sent are moved to the archived queues under their id,
+//   still theirs, hidden from the next monitor, and sent by the sync (3.4.1).
+// - **A move** (`moved`) is a new unplanned assignment for the monitor signed in, at another of
+//   the project's sites, with the same work and unit rate pay items, reported with `occasion:
+//   'SETUP'`; the earlier assignment stands as it was, and each record keeps its own.
 import {
   phoneSetupChoicesEndpoint,
   type PhoneAssignmentAnswer,
@@ -32,17 +48,20 @@ import {
 } from '@open-adms/contracts';
 import {
   AssignmentRules,
+  ProjectClock,
   uuidv7,
   type AssignmentFormDocumentType,
   type FieldEventKindName,
+  type UnplannedOccasion,
 } from '@open-adms/domain';
 
 import type { NotAnswered } from '../server.ts';
+import type { Change, PhoneStore } from '../store/phone-store.ts';
 import type { PhoneIdentity } from './identity.ts';
 import type { PhoneLists } from './lists.ts';
 import type { LoginList } from './login-list.ts';
 import type { MonitorOnPhone } from './monitor.ts';
-import { checkOpened } from './offline-check.ts';
+import type { PasscodeOnPhone } from './passcode.ts';
 import { offsetOf, type PhoneReports, type ReportStanding } from './reports.ts';
 
 export type SetupProject = PhoneSetupChoicesAnswer['projects'][number];
@@ -71,8 +90,11 @@ export type SetupOpened =
       readonly choices: ProjectChoices;
       readonly monitors: readonly SetupMonitor[];
     }
-  // No connection, and the passcode didn't open the phone's own check of it.
-  | { readonly kind: 'wrong' }
+  // No connection, and the passcode didn't open the phone's own check of it: counted, and any
+  // wait that puts on it; not checked while a wait holds; the phone locked (ADR-577).
+  | { readonly kind: 'wrong'; readonly waitUntil: Date | null }
+  | { readonly kind: 'waiting'; readonly until: Date }
+  | { readonly kind: 'locked' }
   // No connection, and the phone holds no lists, or no check of the passcode.
   | { readonly kind: 'noLists' }
   | { readonly kind: 'noCheck' }
@@ -102,30 +124,62 @@ export interface SetupMade {
   readonly report: ReportStanding;
 }
 
+// What a move picks from: the project's sites, with signal as the server answers them, else
+// those the phone holds; or why not.
+export type MoveOpened =
+  | { readonly kind: 'online' | 'offline'; readonly sites: readonly SetupSite[] }
+  | { readonly kind: 'notSignedIn' }
+  | { readonly kind: 'closed' }
+  | Exclude<SetupOpened, { readonly kind: 'online' } | { readonly kind: 'offline' }>;
+
+const archived = 'archivedQueues';
+
 const rules = new AssignmentRules();
 
 export class PhoneSetup {
+  private readonly store: PhoneStore;
   private readonly identity: PhoneIdentity;
   private readonly monitor: MonitorOnPhone;
   private readonly lists: PhoneLists;
   private readonly loginList: LoginList;
+  private readonly passcode: PasscodeOnPhone;
   private readonly reports: PhoneReports;
   private readonly now: () => Date;
 
   constructor(
+    store: PhoneStore,
     identity: PhoneIdentity,
     monitor: MonitorOnPhone,
     lists: PhoneLists,
     loginList: LoginList,
+    passcode: PasscodeOnPhone,
     reports: PhoneReports,
     now = () => new Date(),
   ) {
+    this.store = store;
     this.identity = identity;
     this.monitor = monitor;
     this.lists = lists;
     this.loginList = loginList;
+    this.passcode = passcode;
     this.reports = reports;
     this.now = now;
+  }
+
+  // Whether a setup for that monitor passes the phone on: the phone has a monitor, and it is
+  // somebody else.
+  async isSwitch(monitorId: string): Promise<boolean> {
+    const earlier = await this.lists.phonesMonitor();
+    return earlier !== null && earlier !== monitorId;
+  }
+
+  // Whether the phone holds that monitor's assignment for today, by its project's day: a switch
+  // to them makes none, and nobody is asked (AC-11-27).
+  async holdsAssignmentFor(monitorId: string): Promise<boolean> {
+    const held = await this.lists.held();
+    if (held?.monitorId !== monitorId) return false;
+    const { workDate, project } = held.assignment;
+    return workDate === new ProjectClock(project.timeZone).day(this.now());
   }
 
   // The passcode typed: the server asked first, with no project picked yet; unreachable, the
@@ -181,18 +235,107 @@ export class PhoneSetup {
   // the phone holds that project's lists; and, where the passcode is handed in (a setup made
   // online), sent at once by the master user. Its report's standing is what the server said.
   async made(picked: SetupPicked, passcode: string | null): Promise<SetupMade> {
-    const madeAt = this.now();
     const { project, work, site, payItemIds, monitor } = picked;
+    const occasion: UnplannedOccasion = (await this.isSwitch(monitor.monitorId))
+      ? 'MONITOR_SWITCH'
+      : 'SETUP';
+    if (occasion === 'MONITOR_SWITCH') await this.passedOn(monitor.monitorId);
+    return this.unplanned(
+      { project, work, site, payItemIds, monitorId: monitor.monitorId, occasion },
+      passcode,
+    );
+  }
+
+  // Handed over to a monitor who has their own assignment (ADR-464, 577): no assignment made; the
+  // earlier monitor's work passed on, the use `MONITOR_SWITCH` naming them kept, and sent at once
+  // by the master user where the passcode is handed in (a switch made with signal). They are the
+  // phone's monitor now, and sign in with their own Monitor ID and password. Where the use stands.
+  async handedOver(monitor: SetupMonitor, passcode: string | null): Promise<ReportStanding> {
+    await this.passedOn(monitor.monitorId);
+    const use = await this.reports.keepUse('MONITOR_SWITCH', monitor.monitorId);
+    await this.lists.handedTo(monitor.monitorId);
+    await this.sentAtOnce(passcode);
+    return this.reports.standing(use.id);
+  }
+
+  // What a move picks from, for the monitor signed in on the project whose lists the phone holds
+  // (AC-02-47): with signal, the project's live sites as the server answers them (the passcode
+  // checked there); with none, those the phone holds, against its own check.
+  async forMove(passcode: string): Promise<MoveOpened> {
+    const [signedIn, held] = await Promise.all([this.monitor.signedIn(), this.lists.held()]);
+    if (signedIn?.assignment == null) return { kind: 'notSignedIn' };
+    if (held === undefined) return { kind: 'noLists' };
+    const reply = await this.project(passcode, signedIn.assignment.project.id);
+    if (reply.kind === 'project') return { kind: 'online', sites: reply.choices.sites };
+    if (reply.kind !== 'unreachable') return reply;
+    const checked = await this.passcode.checked(passcode);
+    if (checked.kind !== 'opened') return checked;
+    return { kind: 'offline', sites: held.lists.sites };
+  }
+
+  // Moved to another site (ADR-458; AC-02-47, AC-11-27): a new unplanned assignment for the
+  // monitor signed in, at that site, with their work and the unit rate pay items the phone holds
+  // for it, made now by the phone's clock and taken at once. Nothing where nobody is signed in on
+  // an assignment the phone holds the lists of.
+  async moved(site: SetupSite, passcode: string | null): Promise<SetupMade | undefined> {
+    const [signedIn, held] = await Promise.all([this.monitor.signedIn(), this.lists.held()]);
+    const assignment = signedIn?.assignment;
+    if (signedIn === undefined || assignment == null || held === undefined) return undefined;
+    if (held.assignment.id !== assignment.id) return undefined;
+    const { project, fieldEventKinds, certifying, formDocumentTypes } = assignment;
+    return this.unplanned(
+      {
+        project,
+        work: { fieldEventKinds, certifying, formDocumentTypes },
+        site,
+        payItemIds: held.lists.payItems.map(({ id }) => id),
+        monitorId: signedIn.userId,
+        occasion: 'SETUP',
+      },
+      passcode,
+    );
+  }
+
+  // The phone passed on to the monitor named (AC-02-46, AC-11-64): whoever else is signed in is
+  // signed out, their session and offline proof dropped; the records the phone hasn't sent, which
+  // are its monitor's (one at a time), moved to the archived queues under that monitor's id, still
+  // theirs, hidden from the next. Nothing where the phone is passed to its own monitor.
+  async passedOn(to: string): Promise<void> {
+    const earlier = await this.lists.phonesMonitor();
+    const signedIn = await this.monitor.signedIn();
+    if (signedIn !== undefined && signedIn.userId !== to) await this.monitor.signOut();
+    if (earlier === null || earlier === to) return;
+    const unsent = await this.store.readAll('records');
+    const changes: Change[] = unsent.flatMap(({ id, value }) => [
+      { shelf: archived, id: `${earlier}:${id}`, value },
+      { shelf: 'records', id, dropped: true },
+    ]);
+    if (changes.length > 0) await this.store.change(changes);
+  }
+
+  private async unplanned(
+    made: {
+      readonly project: SetupProject;
+      readonly work: SetupWork;
+      readonly site: SetupSite | null;
+      readonly payItemIds: readonly string[];
+      readonly monitorId: string;
+      readonly occasion: UnplannedOccasion;
+    },
+    passcode: string | null,
+  ): Promise<SetupMade> {
+    const madeAt = this.now();
+    const { project, work, site, payItemIds, monitorId, occasion } = made;
     const report: UnplannedAssignmentReport = {
       id: uuidv7(madeAt),
       projectId: project.id,
-      personId: monitor.monitorId,
+      personId: monitorId,
       fieldEventKinds: [...work.fieldEventKinds],
       certifying: work.certifying,
       formDocumentTypes: [...work.formDocumentTypes],
       siteId: site?.id ?? null,
       payItemIds: [...payItemIds],
-      occasion: 'SETUP',
+      occasion,
       madeAt: madeAt.toISOString(),
       deviceUtcOffsetMinutes: offsetOf(madeAt),
     };
@@ -206,15 +349,20 @@ export class PhoneSetup {
       formDocumentTypes: report.formDocumentTypes,
       site: site === null ? null : { id: site.id, name: site.name },
     };
-    const takenHere = await this.lists.setUp(assignment, monitor.monitorId, payItemIds);
-    if (takenHere && (await this.monitor.signedIn())?.userId === monitor.monitorId) {
+    const takenHere = await this.lists.setUp(assignment, monitorId, payItemIds);
+    if (takenHere && (await this.monitor.signedIn())?.userId === monitorId) {
       await this.monitor.took(assignment, null);
     }
-    if (passcode !== null) {
-      const master = await this.identity.masterUser(passcode);
-      if (master.kind === 'atThePhone') await this.reports.sent(master.send);
-    }
+    await this.sentAtOnce(passcode);
     return { assignment, takenHere, report: await this.reports.standing(report.id) };
+  }
+
+  // What the phone holds to report, sent at once by the master user where the passcode is handed
+  // in; kept for the monitor's next request otherwise, or where there is no answer.
+  private async sentAtOnce(passcode: string | null): Promise<void> {
+    if (passcode === null) return;
+    const master = await this.identity.masterUser(passcode);
+    if (master.kind === 'atThePhone') await this.reports.sent(master.send);
   }
 
   private choices(passcode: string, projectId: string | null, monitorsAfter: string | null) {
@@ -226,12 +374,8 @@ export class PhoneSetup {
   private async offline(passcode: string): Promise<SetupOpened> {
     const held = await this.lists.held();
     if (held === undefined) return { kind: 'noLists' };
-    const check = await this.loginList.passcode();
-    if (check === undefined) return { kind: 'noCheck' };
-    if ((await checkOpened(passcode, check.check)) === undefined) {
-      await this.reports.keepUse('WRONG_TRY', null);
-      return { kind: 'wrong' };
-    }
+    const checked = await this.passcode.checked(passcode);
+    if (checked.kind !== 'opened') return checked;
     const entries = await this.loginList.entries();
     return {
       kind: 'offline',

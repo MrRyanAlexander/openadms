@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-18, task 3.3.1 (ADR-576), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 11 min 11 s; every count below as seen.
+**Seen whole:** 2026-10-18, task 3.3.2 (ADR-577), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 9 min 12 s; every count below as seen.
 
 ## `pnpm ready`
 
@@ -20,7 +20,7 @@
 
 ## `pnpm test`
 
-**`Test Files 199 passed (199)`, `Tests 3403 passed (3403)`.**
+**`Test Files 200 passed (200)`, `Tests 3417 passed (3417)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 113 | 11 | nothing (setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+| `apps/field` | 127 | 12 | nothing (the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -68,7 +68,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**33 browser tests**, `33 passed (27.2s)` in the chain: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) and setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 20 of 20 screens checked, in 116 checks; 0 found.`, **20 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-made`, `no-assignment`, `sync` and `settings`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
+**37 browser tests**, `37 passed (31.1s)` in the chain: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) and the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 28 of 28 screens checked, in 137 checks; 0 found.`, **28 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync` and `settings`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
 
 ## `pnpm security`
 

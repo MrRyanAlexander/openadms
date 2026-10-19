@@ -12,6 +12,11 @@
 // the screen, and at its second the screen locks until the master passcode is typed (the domain's
 // `SignInTries.onPhone`). A sign-in that works, or the passcode, starts it again. A try the server
 // checks online is the server's to count (ADR-443).
+//
+// **The master passcode's own count** (task 3.3.2; the user, ADR-577): every wrong try of the
+// passcode against the phone's own check of it, whatever it was typed for, is counted the same way
+// and kept beside the screen's (`count: 'passcode'`); the passcode right against that check starts
+// it again. What the lock it reaches does is passcode.ts's.
 import {
   phoneLoginListAnswerSchema,
   phoneLoginListEndpoint,
@@ -38,7 +43,10 @@ export interface PasscodeCheck {
   readonly check: OfflineCheckRecord;
 }
 
-// The screen's wrong tries in a row, the wait they put on it, and whether it is locked.
+// Which count: the sign-in screen's, or the master passcode's against the phone's own check.
+export type TriesCount = 'screen' | 'passcode';
+
+// A count's wrong tries in a row, the wait they put on it, and whether it is locked.
 export interface ScreenTries {
   readonly wrongInARow: number;
   readonly waitUntil: Date | null;
@@ -54,7 +62,10 @@ export type LoginListRead =
 const shelf = 'loginList';
 const entryId = (monitorId: string) => `monitor:${monitorId}`;
 const passcodeId = 'passcode';
-const screenId = 'screen';
+const countIds: Readonly<Record<TriesCount, string>> = {
+  screen: 'screen',
+  passcode: 'passcodeTries',
+};
 const sessionLengthId = 'sessionLength';
 // A read asks again while the answer says there are more: a project of five thousand monitors is a
 // hundred asks at the API's fifty entries each, and a read stops there whatever it is told.
@@ -147,9 +158,9 @@ export class LoginList {
       : undefined;
   }
 
-  // The screen's count as it stands now.
-  async screen(): Promise<ScreenTries> {
-    const kept = record(await this.store.read(shelf, screenId));
+  // A count as it stands now: the screen's, unless the passcode's is asked.
+  async screen(count: TriesCount = 'screen'): Promise<ScreenTries> {
+    const kept = record(await this.store.read(shelf, countIds[count]));
     const wrongInARow = typeof kept?.['wrongInARow'] === 'number' ? kept['wrongInARow'] : 0;
     const until = kept?.['waitUntil'];
     const waitUntil =
@@ -163,17 +174,18 @@ export class LoginList {
   }
 
   // One more wrong try counted, and what it does.
-  async wrong(): Promise<WrongTry> {
-    const wrongInARow = (await this.screen()).wrongInARow + 1;
+  async wrong(count: TriesCount = 'screen'): Promise<WrongTry> {
+    const wrongInARow = (await this.screen(count)).wrongInARow + 1;
     const cost = this.tries.after(wrongInARow, this.now());
     const waitUntil = cost.kind === 'WAIT' ? cost.until.toISOString() : null;
-    await this.store.change([{ shelf, id: screenId, value: { wrongInARow, waitUntil } }]);
+    await this.store.change([{ shelf, id: countIds[count], value: { wrongInARow, waitUntil } }]);
     return cost;
   }
 
-  // The count started again: a sign-in that worked, or the master passcode typed.
-  async right(): Promise<void> {
-    await this.store.change([{ shelf, id: screenId, dropped: true }]);
+  // A count started again: the screen's by a sign-in that worked or the master passcode typed;
+  // the passcode's by the passcode right.
+  async right(count: TriesCount = 'screen'): Promise<void> {
+    await this.store.change([{ shelf, id: countIds[count], dropped: true }]);
   }
 
   // How long the last sign-in the server answered on this phone lasted, in seconds: the firm's

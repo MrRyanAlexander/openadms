@@ -30,6 +30,7 @@ import { PhoneIdentity } from '../src/phone/identity.ts';
 import { PhoneLists } from '../src/phone/lists.ts';
 import { LoginList } from '../src/phone/login-list.ts';
 import { MonitorOnPhone } from '../src/phone/monitor.ts';
+import { PasscodeOnPhone } from '../src/phone/passcode.ts';
 import { PhoneReports } from '../src/phone/reports.ts';
 import { checkOpened, signInProof } from '../src/phone/offline-check.ts';
 import { SigningIn } from '../src/phone/signing-in.ts';
@@ -219,7 +220,8 @@ async function phone(clock: { now: Date } = { now: new Date('2026-10-19T11:00:00
   const monitor = new MonitorOnPhone(identity, keyring, reports, now);
   const lists = new PhoneLists(store, monitor, now);
   const loginList = new LoginList(store, SignInTries.onPhone(policy), now);
-  const signingIn = new SigningIn(monitor, lists, loginList, reports, policy);
+  const passcodeOnPhone = new PasscodeOnPhone(identity, monitor, loginList, reports);
+  const signingIn = new SigningIn(monitor, lists, loginList, passcodeOnPhone, reports, policy);
   return { clock, store, keyring, server, monitor, lists, loginList, reports, signingIn };
 }
 
@@ -398,9 +400,9 @@ describe('signing in with no connection', () => {
       kind: 'closed',
       tries: { locked: true },
     });
-    expect(await signingIn.unlock('not-the-passcode')).toBe('wrong');
+    expect(await signingIn.unlock('not-the-passcode')).toEqual({ kind: 'wrong', waitUntil: null });
     expect((await loginList.screen()).locked).toBe(true);
-    expect(await signingIn.unlock(passcode)).toBe('unlocked');
+    expect(await signingIn.unlock(passcode)).toEqual({ kind: 'unlocked' });
     expect(await loginList.screen()).toEqual({ wrongInARow: 0, waitUntil: null, locked: false });
     // AC-11-23, ADR-576: each try at the passcode is a use the phone keeps to report, naming
     // nobody, at the phone's clock; never the passcode, nor what was typed.

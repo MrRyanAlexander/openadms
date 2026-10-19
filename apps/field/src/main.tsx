@@ -12,6 +12,8 @@ import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
 import { LoginList } from './phone/login-list.ts';
 import { MonitorOnPhone } from './phone/monitor.ts';
+import { PasscodeSessions } from './phone/passcode-sessions.ts';
+import { PasscodeOnPhone } from './phone/passcode.ts';
 import { PhoneReports } from './phone/reports.ts';
 import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
@@ -32,13 +34,17 @@ const phone = BrowserStore.opened().then((store) => {
   const monitor = new MonitorOnPhone(identity, keyring, reports);
   const lists = new PhoneLists(store, monitor);
   const loginList = new LoginList(store, SignInTries.onPhone(policy));
+  const passcode = new PasscodeOnPhone(identity, monitor, loginList, reports);
+  const setup = new PhoneSetup(store, identity, monitor, lists, loginList, passcode, reports);
   return {
     identity,
     monitor,
     lists,
     loginList,
-    signingIn: new SigningIn(monitor, lists, loginList, reports, policy),
-    setup: new PhoneSetup(identity, monitor, lists, loginList, reports),
+    signingIn: new SigningIn(monitor, lists, loginList, passcode, reports, policy),
+    setup,
+    passcode,
+    sessions: new PasscodeSessions(monitor, lists, loginList, passcode, setup, reports, policy),
     inactivity: {
       lockMinutes: policy.phoneInactivityLockMinutes,
       warningSeconds: policy.phoneInactivityWarningSeconds,

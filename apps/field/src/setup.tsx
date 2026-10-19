@@ -7,6 +7,13 @@
 // **The passcode is held in this screen's memory for the act alone**, masked as it is typed, and
 // let go when the setup is made or left (AC-11-23, 63). Back goes a question back until the setup
 // is made; Cancel leaves it, nothing made.
+//
+// **Handing the phone over** (task 3.3.2; ADR-458, 464, 577; AC-02-46, AC-11-27): the same
+// questions, the monitor asked before their work. Picked somebody other than the phone's monitor,
+// it is a switch: where the phone holds their assignment for today it is handed over at once;
+// otherwise the supervisor says whether they have their own assignment (handed over, no
+// assignment made) or sets their work up here (an unplanned assignment, `MONITOR_SWITCH`). With
+// no signal the passcode's wrong tries wait and, at the tenth, lock the phone (ADR-577).
 import { useState } from 'react';
 
 import {
@@ -29,14 +36,26 @@ import type {
   SetupProject,
   SetupWork,
 } from './phone/setup.ts';
-import { refusalWords } from './refusals.ts';
+import type { ReportStanding } from './phone/reports.ts';
+import { passcodeWrong, refusalWords } from './refusals.ts';
 import { say, words } from './words.ts';
 
-type Step = 'passcode' | 'project' | 'work' | 'site' | 'payItems' | 'monitor' | 'made';
+type Step =
+  | 'passcode'
+  | 'project'
+  | 'monitor'
+  | 'handOver'
+  | 'work'
+  | 'site'
+  | 'payItems'
+  | 'made'
+  | 'handed';
 
 const said = words.setup;
 const titleId = 'setup-question';
 const noSite = 'none';
+const theirOwn = 'own';
+const setUpHere = 'setUp';
 
 const kinds = Object.keys(said.work.kinds) as (keyof typeof said.work.kinds)[];
 const forms = Object.keys(said.work.forms) as (keyof typeof said.work.forms)[];
@@ -74,14 +93,23 @@ export function Setup({
   setup,
   standing,
   forMonitor,
+  handingOver = false,
   onDone,
+  onHandedOver,
+  onLocked,
   onCancel,
 }: {
   readonly setup: PhoneSetup;
   readonly standing: Standing;
   // The monitor it is for, where that is already known; null to pick one.
   readonly forMonitor: SetupMonitor | null;
+  // Asked to hand the phone over (Settings), rather than to set it up.
+  readonly handingOver?: boolean;
   readonly onDone: (made: SetupMade, monitor: SetupMonitor) => void;
+  // Handed over to a monitor with their own assignment: no assignment made.
+  readonly onHandedOver: (monitor: SetupMonitor) => void;
+  // The phone locked by the passcode's tenth wrong try with no signal (ADR-577).
+  readonly onLocked: () => void;
   readonly onCancel: () => void;
 }) {
   const [step, setStep] = useState<Step>('passcode');
@@ -98,16 +126,20 @@ export function Setup({
   const [site, setSite] = useState<string | null>(null);
   const [payItems, setPayItems] = useState<readonly string[]>([]);
   const [monitor, setMonitor] = useState<SetupMonitor | null>(forMonitor);
+  const [switching, setSwitching] = useState(false);
+  const [handOver, setHandOver] = useState<string | null>(null);
   const [made, setMade] = useState<SetupMade | null>(null);
+  const [handed, setHanded] = useState<ReportStanding | null>(null);
 
   const unitRate = work.includes('kind:UNIT_RATE');
   const steps: Step[] = [
     'passcode',
     ...(online ? (['project'] as const) : []),
+    ...(forMonitor === null ? (['monitor'] as const) : []),
+    ...(switching ? (['handOver'] as const) : []),
     'work',
     'site',
     ...(unitRate ? (['payItems'] as const) : []),
-    ...(forMonitor === null ? (['monitor'] as const) : []),
   ];
   const last = steps.at(-1);
   const at = steps.indexOf(step) + 1;
@@ -141,11 +173,18 @@ export function Setup({
         setChoices(outcome.choices);
         setMonitors(outcome.monitors);
         setMoreAfter(null);
-        setStep('work');
+        setStep(forMonitor === null ? 'monitor' : 'work');
         return;
       case 'wrong':
         setPasscode('');
-        setProblem(words.refusals.passcode);
+        setProblem(passcodeWrong(outcome.waitUntil));
+        return;
+      case 'waiting':
+        setProblem(passcodeWrong(outcome.until));
+        return;
+      case 'locked':
+        setPasscode('');
+        onLocked();
         return;
       case 'noLists':
       case 'noCheck':
@@ -186,6 +225,34 @@ export function Setup({
     } else {
       setProblem(refusalWords(outcome, { MASTER_PASSCODE_REFUSED: words.refusals.passcode }));
     }
+  };
+
+  // The monitor picked: a switch where they are not the phone's monitor; handed over at once where
+  // the phone holds their assignment for today (AC-11-27).
+  const monitorPicked = async () => {
+    if (monitor === null) {
+      setProblem(said.monitor.none);
+      return;
+    }
+    setBusy(true);
+    setProblem(null);
+    const isSwitch = await setup.isSwitch(monitor.monitorId);
+    if (isSwitch && (await setup.holdsAssignmentFor(monitor.monitorId))) {
+      await handOverNow(monitor);
+      return;
+    }
+    setBusy(false);
+    setSwitching(isSwitch);
+    setStep(isSwitch ? 'handOver' : 'work');
+  };
+
+  const handOverNow = async (to: SetupMonitor) => {
+    setBusy(true);
+    const report = await setup.handedOver(to, online ? passcode : null);
+    setPasscode('');
+    setBusy(false);
+    setHanded(report);
+    setStep('handed');
   };
 
   // The last question answered: the assignment made, and the passcode let go.
@@ -250,8 +317,8 @@ export function Setup({
         <main data-screen="setup-passcode" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1 id={titleId}>{said.title}</h1>
-            <p>{said.needs}</p>
+            <h1 id={titleId}>{handingOver ? said.handOverTitle : said.title}</h1>
+            <p>{handingOver ? said.handOverNeeds : said.needs}</p>
             <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
             {shown}
           </div>
@@ -396,11 +463,83 @@ export function Setup({
             {shown}
           </div>
           <div className="screen-actions">
-            {next('monitor', monitor !== null, said.monitor.none)}
+            <Button main wide isDisabled={busy} onPress={() => void monitorPicked()}>
+              {busy ? said.checking : said.next}
+            </Button>
             {cancel}
           </div>
         </main>
       );
+    case 'handOver': {
+      if (monitor === null) return null;
+      const { name } = monitor;
+      return (
+        <main data-screen="setup-hand-over" className="screen">
+          <StatusStrip standing={standing} />
+          <div className="screen-body">
+            {header(say(said.handOver.title, { name }))}
+            <ListPicker
+              labelledBy={titleId}
+              choices={[
+                {
+                  key: theirOwn,
+                  label: say(said.handOver.own, { name }),
+                  detail: said.handOver.ownDetail,
+                },
+                {
+                  key: setUpHere,
+                  label: say(said.handOver.setUp, { name }),
+                  detail: said.handOver.setUpDetail,
+                },
+              ]}
+              picked={handOver}
+              onPick={setHandOver}
+            />
+            {shown}
+          </div>
+          <div className="screen-actions">
+            <Button
+              main
+              wide
+              isDisabled={busy || handOver === null}
+              onPress={() => {
+                if (handOver === theirOwn) void handOverNow(monitor);
+                else onward('handOver');
+              }}
+            >
+              {busy ? said.making : said.next}
+            </Button>
+            {cancel}
+          </div>
+        </main>
+      );
+    }
+    case 'handed': {
+      if (handed === null || monitor === null) return null;
+      return (
+        <main data-screen="setup-handed" className="screen">
+          <StatusStrip standing={standing} />
+          <div className="screen-body">
+            <h1>{said.handed.title}</h1>
+            <Banner tone="good">
+              <p>{say(said.handed.to, { name: monitor.name })}</p>
+            </Banner>
+            <p role="status">{said.made[handed]}</p>
+          </div>
+          <div className="screen-actions">
+            <Button
+              main
+              wide
+              onPress={() => {
+                onHandedOver(monitor);
+              }}
+            >
+              {said.handed.done}
+            </Button>
+          </div>
+        </main>
+      );
+    }
     case 'made': {
       if (made === null || monitor === null) return null;
       const name = monitor.name;

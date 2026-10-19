@@ -9,6 +9,11 @@
 // creates a monitor from here (AC-02-07), and sets the phone up for a monitor with no assignment,
 // online or, on the project whose lists it holds, with no connection (AC-02-38, AC-11-24; task
 // 3.3.1, ADR-576); set up, the screen says for whom, their Monitor ID filled in.
+//
+// Task 3.3.2 (ADR-577): handed over to a monitor, the screen says so the same way; the master
+// passcode signs in from here, as the phone's monitor or the temporary session; and **the phone
+// locked after ten wrong tries of the passcode with no signal** shows only the passcode, which
+// opens it once the server takes it, with signal ("phone-locked").
 import { provenPhoneEndpoint } from '@open-adms/contracts';
 import { useEffect, useState } from 'react';
 
@@ -16,24 +21,28 @@ import { Banner, Button, StatusStrip, TextEntry } from './look/index.ts';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { LoginList, ScreenTries } from './phone/login-list.ts';
 import { MonitorOnPhone, type SignedIn } from './phone/monitor.ts';
+import type { PasscodeOnPhone } from './phone/passcode.ts';
 import type { SigningIn } from './phone/signing-in.ts';
-import { refusalWords } from './refusals.ts';
+import { passcodeWrong, refusalWords } from './refusals.ts';
 import { counted, say, words } from './words.ts';
 
 type Standing = keyof typeof words.phone.standing;
 
 // Why the last sign-in ended under the monitor: the server no longer took it, it didn't take the
-// one made offline, or the phone was left alone too long.
+// one made offline, the phone was left alone too long, a temporary session ended with the day, or
+// the phone locked (its own words say so).
 export type Ended =
   | { readonly why: 'ended' }
   | { readonly why: 'offlineRefused' }
-  | { readonly why: 'inactive'; readonly minutes: number };
+  | { readonly why: 'inactive'; readonly minutes: number }
+  | { readonly why: 'temporaryEnded' }
+  | { readonly why: 'phoneLocked' };
 
-// Who the phone was just set up for, on which project.
+// Who the phone was just set up for, on which project; or handed over to, with no project.
 export interface SetUpFor {
   readonly name: string;
   readonly monitorNumber: string;
-  readonly project: string;
+  readonly project: string | null;
 }
 
 export function Phone({
@@ -41,21 +50,25 @@ export function Phone({
   identity,
   signingIn,
   loginList,
+  passcodeOnPhone,
   ended,
   setUpFor,
   onSignedIn,
   onCreateMonitor,
   onSetUp,
+  onPasscodeSession,
 }: {
   readonly enrolment: Enrolment;
   readonly identity: PhoneIdentity;
   readonly signingIn: SigningIn;
   readonly loginList: LoginList;
+  readonly passcodeOnPhone: PasscodeOnPhone;
   readonly ended: Ended | null;
   readonly setUpFor: SetUpFor | null;
   readonly onSignedIn: (signedIn: SignedIn) => void;
   readonly onCreateMonitor: () => void;
   readonly onSetUp: () => void;
+  readonly onPasscodeSession: () => void;
 }) {
   const said = words.phone;
   const [standing, setStanding] = useState<Standing>('checking');
@@ -66,6 +79,7 @@ export function Phone({
   const [problem, setProblem] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tries, setTries] = useState<ScreenTries | null>(null);
+  const [phoneLocked, setPhoneLocked] = useState<boolean | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -83,10 +97,13 @@ export function Phone({
     void loginList.screen().then((held) => {
       if (shown) setTries(held);
     });
+    void passcodeOnPhone.locked().then((locked) => {
+      if (shown) setPhoneLocked(locked);
+    });
     return () => {
       shown = false;
     };
-  }, [identity, loginList]);
+  }, [identity, loginList, passcodeOnPhone]);
 
   // While a wait is on the screen, the seconds left are counted down and the button comes back.
   const waitUntil = tries?.waitUntil ?? null;
@@ -141,25 +158,60 @@ export function Phone({
       case 'noList':
         setProblem(said.noList);
         return;
+      case 'phoneLocked':
+        setPhoneLocked(true);
+        return;
     }
   };
 
+  // The screen's lock lifted with the passcode against the phone's own check (counted, ADR-577).
   const unlock = async () => {
     setBusy(true);
     setProblem(null);
     const unlocked = await signingIn.unlock(passcode);
     setPasscode('');
     setBusy(false);
-    if (unlocked === 'unlocked') {
+    switch (unlocked.kind) {
+      case 'unlocked':
+        setTries(await loginList.screen());
+        setNotice(said.unlocked);
+        return;
+      case 'wrong':
+        setProblem(passcodeWrong(unlocked.waitUntil));
+        return;
+      case 'waiting':
+        setProblem(passcodeWrong(unlocked.until));
+        return;
+      case 'locked':
+        setPhoneLocked(true);
+        return;
+      case 'noCheck':
+        setProblem(said.noPasscodeCheck);
+    }
+  };
+
+  // The phone's lock lifted: the passcode entered with signal, the server taking it.
+  const opened = async () => {
+    setBusy(true);
+    setProblem(null);
+    const unlocked = await passcodeOnPhone.unlocked(passcode);
+    setPasscode('');
+    setBusy(false);
+    if (unlocked.kind === 'unlocked') {
+      setPhoneLocked(false);
       setTries(await loginList.screen());
       setNotice(said.unlocked);
+    } else if (unlocked.kind === 'wrong') {
+      setProblem(words.refusals.passcode);
+    } else if (unlocked.kind === 'unreachable') {
+      setProblem(said.phoneLockedNoSignal);
     } else {
-      setProblem(unlocked === 'wrong' ? words.refusals.passcode : said.noPasscodeCheck);
+      setProblem(refusalWords(unlocked));
     }
   };
 
   const endedWords =
-    ended === null
+    ended === null || ended.why === 'phoneLocked'
       ? null
       : ended.why === 'inactive'
         ? counted(said.inactive, ended.minutes)
@@ -167,6 +219,35 @@ export function Phone({
   const secondsLeft =
     waitUntil === null ? 0 : Math.ceil((waitUntil.getTime() - now.getTime()) / 1000);
   const locked = tries?.locked ?? false;
+  const problemShown =
+    problem === null ? null : (
+      <Banner tone="problem" announced>
+        <p>{problem}</p>
+      </Banner>
+    );
+
+  if (phoneLocked === null) return null;
+  if (phoneLocked) {
+    return (
+      <main data-screen="phone-locked" className="screen">
+        <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now }} />
+        <div className="screen-body">
+          <h1>{words.app.name}</h1>
+          <p>{say(said.enrolled, { name: enrolment.name })}</p>
+          <Banner tone="notice" announced>
+            <p>{said.phoneLocked}</p>
+          </Banner>
+          <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
+          {problemShown}
+        </div>
+        <div className="screen-actions">
+          <Button main wide isDisabled={busy || passcode === ''} onPress={() => void opened()}>
+            {busy ? said.unlocking : said.unlock}
+          </Button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main data-screen="phone" className="screen">
@@ -184,7 +265,11 @@ export function Phone({
         )}
         {setUpFor === null ? null : (
           <Banner tone="good">
-            <p>{say(said.setUpFor, { name: setUpFor.name, project: setUpFor.project })}</p>
+            <p>
+              {setUpFor.project === null
+                ? say(said.handedTo, { name: setUpFor.name })
+                : say(said.setUpFor, { name: setUpFor.name, project: setUpFor.project })}
+            </p>
           </Banner>
         )}
         {locked ? (
@@ -217,16 +302,24 @@ export function Phone({
             <p>{counted(words.refusals.wait, secondsLeft)}</p>
           </Banner>
         ) : null}
-        {problem === null ? null : (
-          <Banner tone="problem" announced>
-            <p>{problem}</p>
-          </Banner>
-        )}
+        {problemShown}
         {notice === null ? null : (
           <Banner tone="good" announced>
             <p>{notice}</p>
           </Banner>
         )}
+        <h2>{said.withPasscode}</h2>
+        <div className="screen-more">
+          <Button wide isDisabled={busy} onPress={onPasscodeSession}>
+            {said.passcodeSession}
+          </Button>
+          <Button wide isDisabled={busy} onPress={onSetUp}>
+            {said.setUp}
+          </Button>
+          <Button wide isDisabled={busy} onPress={onCreateMonitor}>
+            {said.createMonitor}
+          </Button>
+        </div>
       </div>
       <div className="screen-actions">
         {locked ? (
@@ -238,12 +331,6 @@ export function Phone({
             {busy ? said.signingIn : said.signIn}
           </Button>
         )}
-        <Button wide isDisabled={busy} onPress={onSetUp}>
-          {said.setUp}
-        </Button>
-        <Button wide isDisabled={busy} onPress={onCreateMonitor}>
-          {said.createMonitor}
-        </Button>
       </div>
     </main>
   );

@@ -44,6 +44,8 @@ async function created(page: Page, asked: readonly Asked[], name: string, passwo
   await page.getByLabel(english.createMonitor.passcode).fill(worldPasscode());
   await page.getByRole('button', { name: english.createMonitor.create }).click();
   await expect(page.getByRole('heading', { name: english.monitorCreated.title })).toBeVisible();
+  // The answer is recorded as it is read, which may come after the screen shows it.
+  await expect.poll(() => at(asked, '/phones/current/monitors').at(-1)?.answer).toBeDefined();
   const answer = at(asked, '/phones/current/monitors').at(-1)?.answer as { monitorNumber: string };
   return answer.monitorNumber;
 }
@@ -219,7 +221,7 @@ test('AC-11-15, AC-11-24, AC-02-38, AC-11-54, AC-11-63: Sam Grant signs in with 
   );
 });
 
-test('AC-11-24, AC-11-25, AC-11-23, AC-02-38: with no signal, P1-COL-2 holding P1’s lists is set up for Lee from the sign-in screen, a wrong passcode first: only on P1, Lee picked from its login list; he signs in from the list and works; at signal his sign-in goes first, then the unplanned assignment, then the wrong try, then the lists, which take it', async ({
+test('AC-11-24, AC-11-25, AC-11-23, AC-02-38, AC-11-27: with no signal, P1-COL-2 holding P1’s lists is set up for Lee from the sign-in screen, a wrong passcode first: only on P1, Lee picked from its login list, then his work; Ana’s phone passing to him, a switch; he signs in from the list and works; at signal his sign-in goes first, then the unplanned assignment, then the wrong try, then the lists, which take it', async ({
   page,
   context,
 }) => {
@@ -240,20 +242,25 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38: with no signal, P1-COL-2 holding P
   await expect(page.getByText(english.refusals.passcode)).toBeVisible();
   await passcodeTyped(page);
 
-  // No project to pick: the one whose lists the phone holds.
-  await expect(page.getByRole('heading', { name: said.work.title })).toBeVisible();
-  await expect(page.getByText(filled(said.offline, { project: p1 }))).toBeVisible();
-  await checkScreen(page);
-  await picked(page, said.work.kinds.COLLECTION).click();
-  await page.getByRole('button', { name: said.next }).click();
-  await page.getByRole('button', { name: said.next }).click();
-
-  // The monitors of its login list.
+  // No project to pick: the one whose lists the phone holds. The monitors of its login list.
   await expect(page.getByRole('heading', { name: said.monitor.title })).toBeVisible();
+  await expect(page.getByText(filled(said.offline, { project: p1 }))).toBeVisible();
   const names = await page.getByRole('option').locator('.list-row-label').allTextContents();
   expect(names.sort()).toEqual([ana.name, worldCast().kim.name, lee.name].sort());
   await picked(page, lee.name).click();
   await checkScreen(page);
+  await page.getByRole('button', { name: said.next }).click();
+
+  // The phone holds Ana's work: a switch, and Lee's work is set up here (AC-11-27).
+  const handOver = filled(said.handOver.title, { name: lee.name });
+  await expect(page.getByRole('heading', { name: handOver })).toBeVisible();
+  await picked(page, filled(said.handOver.setUp, { name: lee.name })).click();
+  await page.getByRole('button', { name: said.next }).click();
+
+  await expect(page.getByRole('heading', { name: said.work.title })).toBeVisible();
+  await checkScreen(page);
+  await picked(page, said.work.kinds.COLLECTION).click();
+  await page.getByRole('button', { name: said.next }).click();
   await page.getByRole('button', { name: said.make }).click();
   await expect(page.getByRole('status')).toHaveText(said.made.held);
   await checkScreen(page);
@@ -287,7 +294,10 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38: with no signal, P1-COL-2 holding P
   const { token } = signIn?.answer as { token: string };
   expect([report?.session, use?.session, lists?.session]).toEqual([token, token, token]);
   expect(report?.answer).toMatchObject({ answer: 'SAVED' });
-  expect(report?.body).toMatchObject({ fieldEventKinds: ['COLLECTION'], occasion: 'SETUP' });
+  expect(report?.body).toMatchObject({
+    fieldEventKinds: ['COLLECTION'],
+    occasion: 'MONITOR_SWITCH',
+  });
   expect(use?.body).toMatchObject({ use: 'WRONG_TRY', personId: null });
   expect(use?.answer).toMatchObject({ answer: 'SAVED' });
   for (const one of [report, use]) {

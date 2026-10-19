@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen's unlock reported, ADR-576) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577) -->
 
 > **This page states today's rules** (last changed by ADR-576, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -121,6 +121,13 @@ gets tracked on a spreadsheet."
    kept in the security log and never counts toward the server's lock. Each is kept once and
    answered saved, already saved, or not saved with why. A setup, a move and a switch that
    made an assignment are (5)'s report, never this one.**
+   **User, 2026-10-18 (ADR-577):** "ten wrong passcode tries do without signal results in the
+   phone locked until the master passcode is entered." **Built so:** every wrong try against the
+   phone's own check, whatever it was typed for, is counted (a wait from the 5th, as the sign-in
+   screen's); at the 10th whoever is signed in is signed out and nothing opens on the phone, no
+   sign-in and no check of the passcode it holds, until the passcode is entered **with signal and
+   the server takes it** (*agent default*: the phone's own check is what the ten tries were
+   against); then the wrong tries are reported at once.
 8. **Switching monitors** needs **the master passcode first**; then the next monitor signs in with
    their own Monitor ID and password, so the server knows it's them. **Shortcut:** the master passcode
    opens a **temporary session** for a monitor picked from the roster, marked on every record and
@@ -135,14 +142,22 @@ gets tracked on a spreadsheet."
    before it, by the phone's clock, never the monitor switched to (ADR-462).** A switch to a
    monitor who has their own assignment makes none: **the phone reports it as (7)'s
    `MONITOR_SWITCH`, a phone switched and a use of the passcode naming them, and their own
-   sign-in takes their assignment (ADR-464)**.
+   sign-in takes their assignment (ADR-464)**. **As built (ADR-577, agent defaults):** a setup for
+   anybody other than the phone's monitor is a switch; the setup asks the monitor first, then
+   whether they have their own assignment or their work is set up here, and asks nothing where the
+   phone holds their assignment for today; every switch signs the earlier monitor out (session and
+   offline proof dropped) and moves the phone's unsent records to the archived queues under their
+   id. A session under the passcode is as the phone's monitor where it is for them, else
+   temporary; with no signal it is a sign-in made offline of that kind, proven by the passcode, the
+   temporary one ending at the project's midnight on the phone's clock.
 9. **Moving site** is done on the phone, offline, with the master passcode, from the project's sites
    it holds, and is recorded; each record keeps the site it was made at (ADR-195). Switching and
    moving amend the phone's assignment. **A move makes a new unplanned assignment at the new
    site, reported as (5)'s is with `occasion: 'SETUP'`; the earlier assignment stands as it was,
    and nothing the dispatcher planned is changed from a phone. Where several of a monitor's
    assignments for a day name the phone they sign in on, it takes the one made on it last**
-   (ADR-458, agent defaults).
+   (ADR-458, agent defaults). **As built (ADR-577):** from Settings, with the same work and unit
+   rate pay items, the sites the server's with signal and those the phone holds without.
 10. **Data on the phone** (ADR-096; ARCHITECTURE §8): an **encrypted database** whose random key is
     held this-device-only in the Keychain / Keystore, **never backed up** (excluded from iCloud and
     Google backups); the monitor's password gates *using the app*, not *decrypting the data*, so a

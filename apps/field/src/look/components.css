@@ -98,6 +98,13 @@ h2 {
   padding: var(--space-4);
 }
 
+/* Buttons that belong to the screen's body, not its sticky actions: a group of their own. */
+.screen-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .screen-actions {
   position: sticky;
   bottom: 0;
