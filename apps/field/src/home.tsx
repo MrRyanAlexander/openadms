@@ -1,12 +1,15 @@
 // Home (ADR-561 (4)): the day's assignment, its project and its one site where the work is at one,
 // with a large button for each kind of work it allows, at the bottom in thumb reach. What the
-// assignment allows is the phone's lists' (task 3.2.3); this screen only shows it.
+// assignment allows is the one the phone took at sign-in (task 3.2.3, ADR-574); this screen only
+// shows it. Until a work's capture screens are built (3.5.x), its button is shown and can't be
+// pressed.
 import type { ReactNode } from 'react';
 
 import { Button, StatusStrip, type Standing } from './look/index.ts';
+import type { Work } from './phone/works.ts';
 import { words } from './words.ts';
 
-export type Work = keyof typeof words.home.start;
+export type { Work };
 
 export function Home({
   standing,
@@ -22,7 +25,8 @@ export function Home({
   // None for work at the curb.
   readonly site: string | null;
   readonly works: readonly Work[];
-  readonly onStart: (work: Work) => void;
+  // None until capture is built.
+  readonly onStart?: (work: Work) => void;
   // Anything the screen shows below the assignment, and below the work's buttons (none yet).
   readonly children?: ReactNode;
   readonly after?: ReactNode;
@@ -50,8 +54,9 @@ export function Home({
             key={work}
             main={place === 0}
             wide
+            isDisabled={onStart === undefined}
             onPress={() => {
-              onStart(work);
+              onStart?.(work);
             }}
           >
             {words.home.start[work]}

@@ -21,8 +21,9 @@ sync (ADR-224). The phone never refuses honest work; every problem is flagged la
    included; **a monitor never types capacity** except for a truck keyed in by hand, which is flagged
    and bills the certification's capacity (ADR-154). **The certification says whose work it is**
    (ADR-186). **Then the number**: the control ticket scanned, or the phone's next generated number
-   shown, then **re-entered by hand** to confirm (the user, ADR-571, amending ADR-209's number at the
-   end). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
+   shown, the number **typed again by hand** to confirm only where a person copied it (one shown, or
+   one typed because the barcode won't read), never after a scan (the user, ADR-571, 573, amending
+   ADR-209). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
    field event waits in the phone's **open list** while the truck loads: the monitor leaves it at
    any step and comes back to finish it, and a phone holds several, **never two for one truck**
    (the user, ADR-571).
@@ -43,7 +44,7 @@ assignment**, never picked (ADR-195, 240).
 ## Workflow A — a load (`COL` → `DIS`)
 
 **The collection event, at the curb** (the phone has no site):
-1. **New**: scan the badge, then the number, scanned or shown, re-entered. GPS at load start and
+1. **New**: scan the badge, then the number, scanned, or shown and typed again. GPS at load start and
    load end; **"Mark waypoint"** as the truck loads (Q-104, ADR-571); photos from the start of
    loading.
 2. **Complete**: the **debris type** from the load form's list, and optionally a **field tag**
@@ -58,8 +59,8 @@ assignment**, never picked (ADR-195, 240).
 **The disposal event, at the tower** (a different monitor who never saw the curb). The phone's
 assignment names the site, and its lists carry **that site's lookup** of what to ask for, per
 debris type and prime (ADR-227, 240, 243):
-1. **New**: scan the badge (it gives the prime), then **the number** the truck carries, scanned and
-   re-entered; never generated here. The tower holds no ticket list and trusts the scan (ADR-071,
+1. **New**: scan the badge (it gives the prime), then **the number** the truck carries, scanned (typed
+   twice only when the barcode won't read, ADR-573); never generated here. The tower holds no ticket list and trusts the scan (ADR-071,
    571).
 2. **Complete**: the **debris type**, picked on its own (compared later, never copied).
 3. **One quantity, never both** (ADR-223):
@@ -110,8 +111,8 @@ is paid by weight.
 ## Workflow C — unit rate (`URT`, one event, no pairing)
 
 1. **New**: scan the **crew badge**; it stays on the phone until the monitor changes crew (ADR-111).
-   A crew is its certification (ADR-228). **The number** (always generated) is shown and re-entered
-   here (ADR-571).
+   A crew is its certification (ADR-228). **The number** (always generated) is shown and typed again
+   here (ADR-571, 573).
 2. **The crew photo**, then pick the **payable type** by name (Hangers, Leaners, Stumps, White Goods,
    Crew time…; each shown once). The phone **works out the pay item** from the size bands and prints
    it; the monitor never sees a code or a rate (ADR-207, 213).

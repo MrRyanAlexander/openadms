@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575) -->
 
-> **This page states today's rules** (last changed by ADR-571, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-574, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -50,7 +50,12 @@ gets tracked on a spreadsheet."
    one that names this phone, else the only one they have; where several are left (two projects
    and a phone neither names) the phone takes none and says so, and with none that day the
    monitor is signed in all the same and told there is none. **One assignment on a phone at a time, so one project**; a tower
-   monitor working two projects carries two phones (ADR-145).
+   monitor working two projects carries two phones (ADR-145). **On the field app** (ADR-574, agent
+   defaults): their session is kept in the keyring beside the phone's token and sent beside it
+   (the browser build holds it in memory alone); `NOT_SIGNED_IN` asks them to sign in again,
+   nothing the phone holds lost; told there is none (or several), the phone says "No assignment
+   today: ask your supervisor." (or "More than one assignment today…"), keeps the lists it holds,
+   shows "Last synced: …" and asks again whenever it finds a connection.
 5. **No assignment?** The master passcode opens **setup on the phone**: project, work, site, and the
    monitor from the login list; online, or offline on the project whose lists the phone already holds
    (a new project needs a connection). It's recorded as an **unplanned assignment**, marked, not
@@ -78,6 +83,14 @@ gets tracked on a spreadsheet."
      (ADR-134);
    - a screen-lock passcode on every phone is strongly recommended.
    The app locks after inactivity. Monitors' sign-in has no two-step code (ADR-170).
+   **On the field app (ADR-575, agent defaults):** the login list is read with every read of the
+   lists and kept sealed in the store (an entry whose mark moved dropped at once); a sign-in tries
+   the server first and, with no signal, checks the password in the two slow hashes against the
+   entry; **only the phone's monitor (whose lists it holds) signs in offline**, anybody else after
+   the passcode hands the phone over; the phone's own wrong tries wait from the 5th and lock the
+   screen at the 10th until the master passcode (online refusals are the server's to count); **the
+   lock after 30 quiet minutes, warned a minute before**, signs the monitor out as at Settings; the
+   sign-in made offline is reported before anything else of theirs.
 7. **The master passcode** (one per firm, set at install, changed only when the firm chooses; the
    server and each phone keep only a slow hash) can also **sign in as the phone's monitor**; that
    session and every record in it are marked. Every use is logged on the phone and synced as a
@@ -174,8 +187,9 @@ the normal case. Every control that matters runs **after the fact**, on the serv
   a phone that synced yesterday. So a mismatch **prompts the monitor** ("this certification isn't in
   your list: continue?") and **never blocks**; blocking on stale data strands honest work in the field.
   The phone shows its own staleness ("Last synced: 2 days ago").
-- **The one check that must match before a field event saves** is the re-entered number (below):
-  data entry, not eligibility (agent default, ADR-209).
+- **The one check that must match before a field event saves** is a number typed again (below), only
+  where a person copied it: data entry, not eligibility (agent default, ADR-209; when, the user,
+  ADR-573).
 
 ### 4A.2a What a phone holds for its assignment (ADR-207, 213, 223, 227, 240, 243)
 
@@ -242,7 +256,7 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 
 | Rule | Source |
 |---|---|
-| **Badge, then the number, at New** on every phone (the user, ADR-571, amending ADR-209): **New** scans the badge (the certification loads, capacity included; **the certification says whose work it is**, ADR-186), then takes the number: the control ticket scanned, or the phone's next generated number shown, then **re-entered by hand** (when: Q-218). The ticket opens and waits in home's **open list**; **Complete** takes the details; the receipt prints at submit. **User, 2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard) and then they scan the printed ticket. If the project is generating number, they'd generate the ticket number at that time." *Agent readings (ADR-571):* the tower and the haul-out's disposal scan the driver's ticket at New; unit rate takes its generated number at New after the crew badge | ADR-209, 571 |
+| **Badge, then the number, at New** on every phone (the user, ADR-571, amending ADR-209): **New** scans the badge (the certification loads, capacity included; **the certification says whose work it is**, ADR-186), then takes the number: the control ticket scanned, or the phone's next generated number shown, then **typed again by hand only when a person copied it**: a number the phone made, or one typed because the barcode won't read; never after a scan (the user, Q-218, ADR-573; WCAG 3.3.7 allows the copy check as essential). The ticket opens and waits in home's **open list**; **Complete** takes the details; the receipt prints at submit. **User, 2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard) and then they scan the printed ticket. If the project is generating number, they'd generate the ticket number at that time." *Agent readings (ADR-571):* the tower and the haul-out's disposal scan the driver's ticket at New; unit rate takes its generated number at New after the crew badge | ADR-209, 571 |
 | **Leave it and come back** (the user, ADR-571): a ticket is left at any step and finished later from the open list, where the monitor left off, what they entered kept on the phone across sign-outs and restarts; a phone holds several open tickets, each shown by its truck and number; nothing open is sent. **User, 2026-10-18:** "tickets should absolutely have the save/pause option so you can work on it, puase and come back to finish it later. That's how work happens in reality. It's never a straight line." | ADR-477, 571 |
 | **One open ticket per truck on a phone** (the user, ADR-571): a badge, or a truck keyed in by hand, whose truck already has an open ticket opens that one rather than a second; the monitor finishes or cancels it. Data entry, never an eligibility check; across phones the server flags overlap (ADR-027). **User:** "we still want to prevent the phone from making 2 tickets for the same truck number at the same time." *Agent defaults:* a split chain is its truck's one open ticket; a unit rate crew isn't held to one | ADR-027, 571 |
 | **Waypoints** (the user, ADR-571; Q-104): **"Mark waypoint"** while a collection is open records the phone's time and whatever fix it has, in order. *Agent defaults:* collections only (each of a split's); at most a policy number; nothing in the engine reads them | ADR-083, 111, 571 |
@@ -314,18 +328,17 @@ assignment:
 
 Kept so they aren't rediscovered (`spec/FROM-BUILD-1.md` §15). Settled: the collection address
 suggested at the end of the load (Q-104), "skip barcode" with a reason (Q-105), the load call typed,
-not a stepped picker (Q-106), a crew badge that stays active (Q-107). **Phase 3 design, not yet
-decided** (`NEXT.md` lists them as later-phase): a confirmation after each captured value ("You have
+not a stepped picker (Q-106), a crew badge that stays active (Q-107). **The board's four Phase 3
+designs:** a confirmation after each captured value ("You have
 selected 55%. Is that correct?"); a monitor scorecard; a bottom menu of Time, Map, Work, Chats,
 Settings; whether to keep hand re-entry of the number (ADR-209) once the app is built. **All four
 are put to the user with task 3.1.4's prototype, each with a recommendation (ADR-561); the field
-app's look is ADR-561's.** ⚠️ **Put to the user 2026-10-18 (ADR-569): Q-215 (a confirmation after
-each value; recommended no), Q-216 (the scorecard; recommended the monitor's own count of today's
-tickets on home), Q-217 (the bottom menu; recommended Work, Time where the clock is on, Sync,
-Settings), Q-218 (typing the number again: WCAG 3.3.7 read as essential only where a person copied
-the number; recommended re-entry for a phone-made or typed number, not after a scan).** Until the
-answers, capture follows ADR-209 as amended by ADR-571 (the number at New) and none of the four is
-built. The components and tokens every
+app's look is ADR-561's.** **Answered by the user 2026-10-18, every recommendation approved
+(Q-215…Q-218, ADR-573):** **no confirmation after each value**, the review screen shows everything
+once; **the monitor's own count of today's tickets on home**, nothing ranked or compared; **the
+bottom menu is Work, Time (only where the project has the time clock on), Sync and Settings**; **the
+number is typed again only when a person copied it** (one the phone made, one typed because the
+barcode won't read), never after a scan. The components and tokens every
 screen is built from are `apps/field/src/look/` (ADR-567, 568).
 
 ---
@@ -345,6 +358,9 @@ What this page used to say, and why it changed. Never build from the left-hand s
   type by name; no pay items on a load's phone; one quantity from the site's lookup (ADR-175, 176,
   182, 185, 191 → 207, 213, 223, 227, 243).
 - Number, badge, then pick, all at the start → badge first, number last, re-entered (ADR-191 → 209).
+- The number re-entered after every scan or generation, and the four Build 1 designs open → typed
+  again only when a person copied it; no confirmation per value; today's own count on home; the menu
+  Work, Time, Sync, Settings (the user, Q-215…Q-218, ADR-209, 571 → 573).
 - The tower seeing the list of a load's stumps and confirming → the tower counts; the worker compares
   after sync (ADR-192 → 243).
 - Site options (haul-out, citizen drop-off, HHW) deciding which sites a phone lists; citizen drop-off

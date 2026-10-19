@@ -39,7 +39,7 @@ one task per response (ADR-558); read its brief before any task.
    approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
    every story still passing.
 2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
-   (`spec/acceptance/11-field-app.md`: 128).
+   (`spec/acceptance/11-field-app.md`: 132).
 3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
 4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
    control by control; the threat model's phone rows read again; `pnpm security` passing.
@@ -67,18 +67,22 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-570)
-- **Phase 3 is open (ADR-557)**: 6 of 33 tasks done (ADR-557…570). Milestone 3.1 is done: the plan,
-  the phone's scenarios (`spec/acceptance/11-field-app.md`), the security checklist
-  (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
-  chain, every screen checked by axe-core, the look and its components (`apps/field/src/look/`) and
-  a clickable prototype; **Q-215…Q-218 wait on the user** (C177). **The user's notes on the prototype
-  are recorded (ADR-571):** the number at New after the badge, tickets left and resumed (one open per
-  truck on a phone), waypoints (their server half in 3.5.1, C180), photos at any step and shown on
-  the review; 3.5.1…3.5.3 and 3.6.1 carry them. **Task 3.2.1 done (ADR-570):** the
-  phone's store, `PhoneStore` (`apps/field/src/store/`), the browser build's in IndexedDB under
-  WebCrypto keys that can't be read out, made from nothing typed. **Next: task 3.2.2.** What each
-  task did is its ADR and its `BACKLOG.md` tick.
+### Where things stand (2026-10-18, through ADR-575)
+- **Phase 3 is open (ADR-557)**: 9 of 33 tasks done (ADR-557…575). Milestone 3.1 is done (the plan,
+  the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
+  the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
+  the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
+  recommendation of Q-215…Q-218 (ADR-573):** no confirmation after each value; today's own count on
+  home; the bottom menu Work, Time (clock on), Sync, Settings; the number typed again only where a
+  person copied it. Their notes on the prototype are ADR-571 (the number at New, open tickets,
+  waypoints, photos at any step). **Milestone 3.2:** the store (3.2.1, ADR-570), enrolment and the
+  proof (3.2.2, ADR-572), **online sign-in and the assignment (3.2.3, ADR-574)**: the session in the
+  keyring beside the phone's token (the browser build's in memory alone), home from the assignment
+  under the bottom menu, the lists kept and how stale, the browser tests' world given a cast;
+  **the login list and signing in offline (3.2.4, ADR-575)**: the two slow hashes with
+  @noble/hashes, the phone's monitor alone, the screen's own 5 and 10, the lock after 30 quiet
+  minutes, the sign-in made offline reported first. Milestone 3.2 is done.
+  **Next: task 3.3.1.** What each task did is its ADR and its `BACKLOG.md` tick.
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -146,7 +150,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 6 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 9 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -156,9 +160,6 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 - **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
   settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
   candidate; `RULES.md` §7 "Is valid".
-- **Waiting on the user, with the prototype (ADR-569):** Q-215…Q-218 (a confirmation after each
-  value, a monitor scorecard, the bottom menu, the number typed again and WCAG 3.3.7). Nothing
-  blocks before the capture tasks (3.5.x), which read the answers first.
 - **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
   installation).
 
@@ -233,15 +234,17 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.2.2, enrolment and the phone's proof** (`BACKLOG.md`, Milestone 3.2; REQ-311 in part,
-REQ-311a; C110, C111, C112, C113; AC-02-07, 18, AC-11-11…13): the device key (ECDSA P-256, DER),
-enrolment under the master passcode, the token in secure storage, proving again on
-`PHONE_NOT_PROVEN`; "Create monitor". It is the first to keep anything in the phone's store
-(`apps/field/src/store/`, `PhoneStore`, ADR-570) and says where the browser build keeps the token.
-Read ARCHITECTURE §7.1, §7.4, the checklist's AUTH and CRYPTO rows and `api-tests.md`'s phones
-section first; its screens are built from `apps/field/src/look/` (ADR-568). **From 2026-10-21,
-C175** (React 19.3.1 and Playwright 1.64.1 read again). **Q-215…Q-218 wait on the user** (C177;
-nothing in 3.2 needs them).
+**Task 3.3.1, setup with no assignment** (`BACKLOG.md`, Milestone 3.3; REQ-311, 311a's rest;
+C122, C125 and the register's note from 3.2.4; AC-02-38, AC-11-23…25, 63): the master passcode
+held in memory only for the act; online, what a setup picks from (`POST
+/phones/current/setup-choices`), the project, then the work, site and monitor, paged; offline only
+on the project whose lists the phone holds; the unplanned assignment's report
+(`POST /phones/current/unplanned-assignments`) kept until saved and sent first; offered on the
+`no-assignment` screen and straight on from "Monitor created" (ADR-572); **each use of the passcode
+kept on the phone and reported** (AC-11-23; the sign-in screen's unlock among them, which
+`passcode-uses` has no kind for yet: server work, the endpoint recipe). Builds on `SigningIn` and
+`LoginList`'s passcode check (`apps/field/src/phone/`, ADR-575). **From 2026-10-21, C175** (React
+19.3.1 and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

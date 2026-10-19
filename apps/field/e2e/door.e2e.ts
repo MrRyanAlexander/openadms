@@ -1,6 +1,6 @@
 // The field app's door (BACKLOG 3.1.2; ADR-565): its browser build served over HTTPS at a name of
 // its own through Caddy, the page's policy and headers, the API reached across origins with a
-// phone's token, and the shell's first screen in the translation file's words.
+// phone's token, and the first screen, enrolment's, in the translation file's words.
 import { request } from 'node:http';
 
 import type { Page } from '@playwright/test';
@@ -17,7 +17,7 @@ function wordsOf(value: unknown): string[] {
   return [];
 }
 
-// The shell, once it has asked the server; what the page asked for, and what it was told off for.
+// The first screen, enrolment's, once it has asked the server; what the page asked for, and what it was told off for.
 async function opened(page: Page) {
   const asked: string[] = [];
   const complaints: string[] = [];
@@ -40,7 +40,7 @@ test('AC-11-01, AC-11-03: the browser build is served over HTTPS at its own name
   expect(new URL(page.url()).protocol).toBe('https:');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.app.name);
   await expect(page.getByText(english.shell.testBuild)).toBeVisible();
-  await expect(page.getByText(english.shell.notSetUp)).toBeVisible();
+  await expect(page.getByText(english.enrol.notEnrolled)).toBeVisible();
   // Its own files, then the API's health answer: no other name, and nothing outside the stack.
   expect(new Set(asked.map((url) => new URL(url).origin))).toEqual(
     new Set([fieldOrigin, apiOrigin]),
@@ -203,7 +203,7 @@ test('AC-11-02, AC-10-08: the app’s page sends a phone’s token to the API as
   }
 });
 
-test('AC-11-04: every word on the shell’s screen is the translation file’s', async ({ page }) => {
+test('AC-11-04: every word on the enrolment screen is the translation file’s', async ({ page }) => {
   await opened(page);
   const shown = await page.evaluate(() => {
     const texts: string[] = [];

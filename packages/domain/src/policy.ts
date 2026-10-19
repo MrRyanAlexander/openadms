@@ -76,6 +76,19 @@ export const policyNames = {
   // The most login-list entries the server makes for a phone in one call (ARCHITECTURE §7.2;
   // ADR-454): each is a slow hash, so one call's work is bounded and the phone asks again.
   loginListEntriesPerCall: 'LOGIN_LIST_ENTRIES_PER_CALL',
+  // The phone's own sign-in screen (ARCHITECTURE §7.2 (3); NIST SP 800-63B-4 §3.2.10; ADR-139,
+  // 575): wrong tries in a row checked against its login list before a wait is put on the screen,
+  // and before it locks until the master passcode; the first wait, in seconds, and the longest,
+  // in minutes. Read by the field app, which the build hands them to.
+  phoneSignInTriesBeforeWait: 'PHONE_SIGN_IN_TRIES_BEFORE_WAIT',
+  phoneSignInTriesBeforeLock: 'PHONE_SIGN_IN_TRIES_BEFORE_LOCK',
+  phoneSignInFirstWaitSeconds: 'PHONE_SIGN_IN_FIRST_WAIT_SECONDS',
+  phoneSignInLongestWaitMinutes: 'PHONE_SIGN_IN_LONGEST_WAIT_MINUTES',
+  // The phone's lock after inactivity (ARCHITECTURE §7.2; NIST SP 800-63B-4 §2.2.3; WCAG 2.2.1;
+  // ADR-139, 575): how long a monitor's sign-in lasts with nothing touched, in minutes, and how
+  // long before it closes the phone warns, in seconds.
+  phoneInactivityLockMinutes: 'PHONE_INACTIVITY_LOCK_MINUTES',
+  phoneInactivityWarningSeconds: 'PHONE_INACTIVITY_WARNING_SECONDS',
   // How long our address server has to answer a phone's address lookup, in seconds (ARCHITECTURE
   // §3; ADR-455): a monitor waits on it, so it is far shorter than the worker's own.
   addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
@@ -214,6 +227,15 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.phoneTokenMinutes]: { least: 1, most: 60 },
   [policyNames.monitorSessionHours]: { least: 1, most: 24 },
   [policyNames.loginListEntriesPerCall]: { least: 1, most: 500 },
+  // NIST's ten wrong tries at most for a secret checked on the device (§3.2.10).
+  [policyNames.phoneSignInTriesBeforeWait]: { least: 1, most: 9 },
+  [policyNames.phoneSignInTriesBeforeLock]: { least: 2, most: 10 },
+  [policyNames.phoneSignInFirstWaitSeconds]: { least: 1, most: 600 },
+  [policyNames.phoneSignInLongestWaitMinutes]: { least: 1, most: 60 },
+  // NIST's SHOULD of an hour at most where a second factor is used (§2.2.3): the device key.
+  [policyNames.phoneInactivityLockMinutes]: { least: 2, most: 60 },
+  // WCAG 2.2.1: at least twenty seconds to keep the session with one simple act.
+  [policyNames.phoneInactivityWarningSeconds]: { least: 20, most: 300 },
   [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
   [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.mediaFileBytesAtMost]: { least: 1048576, most: 1073741824 },
@@ -281,6 +303,12 @@ export class Policy {
   readonly phoneTokenMinutes: number;
   readonly monitorSessionHours: number;
   readonly loginListEntriesPerCall: number;
+  readonly phoneSignInTriesBeforeWait: number;
+  readonly phoneSignInTriesBeforeLock: number;
+  readonly phoneSignInFirstWaitSeconds: number;
+  readonly phoneSignInLongestWaitMinutes: number;
+  readonly phoneInactivityLockMinutes: number;
+  readonly phoneInactivityWarningSeconds: number;
   readonly addressLookupAnswerSeconds: number;
   readonly mediaStoreAnswerSeconds: number;
   readonly mediaFileBytesAtMost: number;
@@ -347,6 +375,18 @@ export class Policy {
     this.phoneTokenMinutes = Policy.read(values, policyNames.phoneTokenMinutes);
     this.monitorSessionHours = Policy.read(values, policyNames.monitorSessionHours);
     this.loginListEntriesPerCall = Policy.read(values, policyNames.loginListEntriesPerCall);
+    this.phoneSignInTriesBeforeWait = Policy.read(values, policyNames.phoneSignInTriesBeforeWait);
+    this.phoneSignInTriesBeforeLock = Policy.read(values, policyNames.phoneSignInTriesBeforeLock);
+    this.phoneSignInFirstWaitSeconds = Policy.read(values, policyNames.phoneSignInFirstWaitSeconds);
+    this.phoneSignInLongestWaitMinutes = Policy.read(
+      values,
+      policyNames.phoneSignInLongestWaitMinutes,
+    );
+    this.phoneInactivityLockMinutes = Policy.read(values, policyNames.phoneInactivityLockMinutes);
+    this.phoneInactivityWarningSeconds = Policy.read(
+      values,
+      policyNames.phoneInactivityWarningSeconds,
+    );
     this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
     this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
     this.mediaFileBytesAtMost = Policy.read(values, policyNames.mediaFileBytesAtMost);
@@ -399,6 +439,17 @@ export class Policy {
     if (this.signInTriesBeforeWait >= this.signInTriesBeforeLock) {
       throw new Error(
         `The policy value ${policyNames.signInTriesBeforeWait} must be under ${policyNames.signInTriesBeforeLock}.`,
+      );
+    }
+    if (this.phoneSignInTriesBeforeWait >= this.phoneSignInTriesBeforeLock) {
+      throw new Error(
+        `The policy value ${policyNames.phoneSignInTriesBeforeWait} must be under ${policyNames.phoneSignInTriesBeforeLock}.`,
+      );
+    }
+    // A warning as long as the quiet that closes the session would come at the moment it starts.
+    if (this.phoneInactivityWarningSeconds >= this.phoneInactivityLockMinutes * 60) {
+      throw new Error(
+        `The policy value ${policyNames.phoneInactivityWarningSeconds} must be under ${policyNames.phoneInactivityLockMinutes}.`,
       );
     }
     // The API holds at least one whole file while it comes. (A part never goes past its file's

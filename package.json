@@ -30,7 +30,7 @@
     "installer:admin": "pnpm --silent generate && tsc --build && node apps/api/dist/admin.js",
     "openapi": "pnpm generate && tsc --build && node apps/api/src/openapi.ts && prettier --write apps/api/openapi.json",
     "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
-    "e2e": "pnpm --filter @open-adms/field e2e",
+    "e2e": "pnpm generate && tsc --build && pnpm --filter @open-adms/field e2e",
     "clean": "tsc --build --clean"
   },
   "devDependencies": {

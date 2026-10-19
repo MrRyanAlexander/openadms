@@ -11,8 +11,10 @@ import {
   setPersonPasswordEndpoint,
   turnInAnswerSchema,
   type Endpoint,
+  type OfflineSignInReport,
   type PhoneAssignmentAnswer,
   type PhoneListsRecord,
+  type PhoneLoginListAnswer,
   type PhoneSetupChoicesAnswer,
   type TurnInAnswer,
   type TurnInHolds,
@@ -21,7 +23,7 @@ import {
 import type { Database } from '@open-adms/db';
 import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
 
-import { projectTime, StoryClock } from './clock.ts';
+import { projectTime, StoryClock, utcOffsetMinutes } from './clock.ts';
 import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
 import type { AskedWith } from './over-https.ts';
 import {
@@ -31,6 +33,7 @@ import {
   signedOut,
   type OfficePerson,
 } from './office-browser.ts';
+import { HeldLoginList, offlineSignInReport } from './offline-sign-in.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 import { StoryApi } from './story-api.ts';
@@ -130,6 +133,20 @@ export interface StoryContext {
       readonly assignmentId: string;
       readonly deviceId: string;
     }): Promise<PhoneListsRecord>;
+  };
+  // Signing in with no connection, as the field app does it (BACKLOG 3.2.4, C143, C151; ADR-531,
+  // 575), now by the story's clock, the phone's offset its project's.
+  readonly offline: {
+    // The phone reads its login list, the monitor signed in on it asking, saying what it holds,
+    // and asks again while there are more: each answer as it came.
+    loginList(onPhone: string): Promise<PhoneLoginListAnswer[]>;
+    // The monitor types their password with no signal: the phone checks it against the entry it
+    // holds, in the two slow hashes, and keeps the sign-in with its proof. False where the entry
+    // doesn't open, or there is none: nothing kept.
+    signIn(monitor: StoryMonitor, onPhone: string, password?: string): boolean;
+    // At signal, the phone reports the sign-in it keeps (the last one, `again` for the one before
+    // reported once more): `TAKEN`, the session it was given held, or the API's code.
+    reported(onPhone: string, again?: boolean): Promise<string>;
   };
   // Every request above on another clock, the story's API started again on it at the first one
   // sent: for field days told again on a clock of their own. Started again, it holds no part of
@@ -320,12 +337,66 @@ export class Runner {
           },
         };
       };
+      // What each phone holds for signing in offline: its login list, the sign-in it keeps, and
+      // the one it reported before.
+      const offline = new Map<
+        string,
+        {
+          readonly list: HeldLoginList;
+          kept?: OfflineSignInReport;
+          reported?: OfflineSignInReport;
+        }
+      >();
+      const offlineOf = (deviceId: string) => {
+        let held = offline.get(deviceId);
+        if (held === undefined) {
+          held = { list: new HeldLoginList() };
+          offline.set(deviceId, held);
+        }
+        return held;
+      };
+      const onClock = served.requests(clock);
       const context: StoryContext = {
         clock,
         api,
         worker,
         policy,
         ...phonesOn(clock, false),
+        offline: {
+          async loginList(onPhone) {
+            const { list } = offlineOf(onPhone);
+            const answers: PhoneLoginListAnswer[] = [];
+            for (let more = true; more;) {
+              const answer = await onClock.loginList(onPhone, list.held());
+              answers.push(answer);
+              more = list.kept(answer);
+            }
+            return answers;
+          },
+          signIn(monitor, onPhone, password = monitor.password) {
+            const held = offlineOf(onPhone);
+            const firstHash = held.list.opened(monitor.id, password);
+            if (firstHash === undefined) return false;
+            const at = clock.now();
+            held.kept = offlineSignInReport(
+              onPhone,
+              monitor.id,
+              at,
+              utcOffsetMinutes(story.timeZone, at),
+              firstHash,
+            );
+            return true;
+          },
+          async reported(onPhone, again = false) {
+            const held = offlineOf(onPhone);
+            const report = again ? held.reported : held.kept;
+            if (report === undefined) throw new Error('The phone keeps no sign-in to report.');
+            const answer = await onClock.offlineSignIn(onPhone, report);
+            held.reported = report;
+            delete held.kept;
+            return answer;
+          },
+        },
         phonesOn: (on) => phonesOn(on, true),
         media,
         at(time, what) {

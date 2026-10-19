@@ -54,3 +54,15 @@ export function sameDay(one: Date, other: Date, timeZone: string): boolean {
   const date = new Intl.DateTimeFormat(english.language, { dateStyle: 'short', timeZone });
   return date.format(one) === date.format(other);
 }
+
+// How stale the phone's lists are (adms-field-app §4A.2; AC-11-16): when they were last read, in
+// the largest whole unit that has passed, minutes, hours or days; never read, it says so.
+export function lastSynced(readAt: Date | undefined, now: Date): string {
+  const synced = english.work.synced;
+  if (readAt === undefined) return synced.never;
+  const minutes = Math.floor((now.getTime() - readAt.getTime()) / 60_000);
+  if (minutes < 1) return synced.now;
+  if (minutes < 60) return counted(synced.minutes, minutes);
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? counted(synced.hours, hours) : counted(synced.days, Math.floor(hours / 24));
+}

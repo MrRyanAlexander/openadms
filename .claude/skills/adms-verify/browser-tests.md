@@ -40,6 +40,36 @@ none is used. A radio is clicked by its words (`getByText`), React Aria hiding i
 prototype's tests: `cd apps/field && ADMS_E2E_SOME=1 node_modules/.bin/playwright test
 e2e/prototype.e2e.ts` after a prototype build.
 
+## The run's own world (ADR-572)
+
+**A browser test that writes (a phone enrolled, a monitor created) never writes the installation's
+database.** `e2e/world-setup.ts` (Playwright's global setup) has the harness make, once a run, in
+a process of its own (`node packages/scenarios/src/cli.ts world <origin>`, ended by closing its
+standard input; `apps/field` never depends on the harness, or "Who reaches Postgres" fails), a
+database as a story's is (`BrowserWorld`: migrated, seeded, the stories' made-up master passcode), serves it by the API's own process at `https://stories.adms.localhost` (the
+stories' port, so never while `pnpm scenarios` runs), and serves `dist/world` (the field app built
+with `ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost`, which `pnpm e2e` builds) from this
+machine's loopback under the app's own policy; the world's API takes that origin alone on its CORS
+list. A test reaches it by `e2e/world.ts` (`worldOrigin()`, `worldPasscode()`, `worldCast()`: handed on through
+the environment, so read inside a test, never at a module's top). **The world's cast** (ADR-574):
+P1 and its sites, monitors created at the API (Kim on disposals and the drop-off log at Marsh
+Road TDSR, Ana on collections and incidents, Lee on two assignments, Tariq on none, for the
+project's today and tomorrow), each signed in on a test's own phone with `worldCast()`'s Monitor
+ID and password; a test needing other work adds it to `BrowserWorld.cast`, never by hand in the
+test. What a page's own requests write lands after their answer: wait for it (`rawlyHeld`'s
+`storeRows` polled), never read it at the answer. The page's helpers are `e2e/phone-page.ts`; the API's error lines go to the
+run's standard error. The database is dropped then; a run stopped short leaves one for `pnpm
+scenarios clean`. The root `pnpm e2e` generates and builds the workspaces first (the world needs the
+harness's `dist`). **A loosening of the app tried on these tests rebuilds `dist/world`**:
+`"run": ["sh", "-c", "cd apps/field && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost
+node_modules/.bin/vite build --outDir dist/world >/dev/null 2>&1 && ADMS_E2E_SOME=1
+node_modules/.bin/playwright test e2e/enrolment.e2e.ts"]`. A request with no signal
+(`context.setOffline`) is still a `request` event, with no answer. **The browser build loads its
+page over the network**: a page opened again (`reload`) with no signal fails, so a test reloads with
+signal and cuts it again (ADR-575). A request's `status` is recorded before its body is read: poll
+on its `answer` before reading it. `page.clock.setFixedTime` moves the phone's clock (the screen's
+waits, the lock after inactivity) while its timers keep running.
+
 ## What earlier tasks learned
 
 - **The stack's root is trusted by checked keys, never by "take any certificate".** The config

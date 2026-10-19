@@ -22,6 +22,7 @@ export {
   type PhoneSetup,
   type RecordedEvent,
 } from './device.ts';
+export { BrowserWorld } from './browser-world.ts';
 export { localMapServers } from './map-servers.ts';
 export { builtInPolicy } from './policy.ts';
 export {

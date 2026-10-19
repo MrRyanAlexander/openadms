@@ -41,12 +41,15 @@ import {
   monitorCreatedAnswerSchema,
   monitorSessionHeader,
   monitorSignedInAnswerSchema,
+  offlineSignInTakenAnswerSchema,
   openPasscodeSessionOnPhoneEndpoint,
   passcodeSessionOpenedAnswerSchema,
   phoneChallengeAnswerSchema,
   phoneEnrolledAnswerSchema,
   phoneListsAnswerSchema,
   phoneListsEndpoint,
+  phoneLoginListAnswerSchema,
+  phoneLoginListEndpoint,
   phoneProvenAnswerSchema,
   phoneSetupChoicesAnswerSchema,
   phoneSetupChoicesEndpoint,
@@ -55,15 +58,18 @@ import {
   signInOnPhoneEndpoint,
   syncAnsweredSchema,
   syncPhoneEndpoint,
+  takeOfflineSignInOnPhoneEndpoint,
   toldToWait as waitAsked,
   turnInAnswerSchema,
   turnInPhoneEndpoint,
   type Endpoint,
   type MonitorCreatedAnswer,
   type MonitorSignedInAnswer,
+  type OfflineSignInReport,
   type PasscodeSessionOpenedAnswer,
   type PhoneEnrolledAnswer,
   type PhoneListsAnswer,
+  type PhoneLoginListAnswer,
   type PhoneSetupChoicesAnswer,
 } from '@open-adms/contracts';
 import type { MasterPasscodeSessionKind } from '@open-adms/domain';
@@ -151,6 +157,17 @@ export interface PhoneRequests {
   ): Promise<PhoneSetupChoicesAnswer>;
   // The lists of the assignment the phone takes now for the monitor signed in on it.
   lists(deviceId: string): Promise<PhoneListsAnswer>;
+  // The login list, asked by the monitor signed in on it, saying what the phone holds.
+  loginList(
+    deviceId: string,
+    held: {
+      readonly masterPasscodeVersion: number | null;
+      readonly entries: readonly { readonly monitorId: string; readonly mark: string }[];
+    },
+  ): Promise<PhoneLoginListAnswer>;
+  // A sign-in made with no connection, reported (ADR-531): taken, the phone holds the session it
+  // is given; refused, the API's one code, which stops no story.
+  offlineSignIn(deviceId: string, report: OfflineSignInReport): Promise<string>;
 }
 
 export interface StoryApiParts {
@@ -279,6 +296,25 @@ export class StoryApi {
         asked(async () =>
           phoneListsAnswerSchema.parse(await this.asMonitor(deviceId, phoneListsEndpoint, {})),
         ),
+      loginList: (deviceId, held) =>
+        asked(async () =>
+          phoneLoginListAnswerSchema.parse(
+            await this.asMonitor(deviceId, phoneLoginListEndpoint, { json: held }),
+          ),
+        ),
+      offlineSignIn: (deviceId, report) =>
+        asked(async () => {
+          const answer = await this.askedAsPhone(
+            deviceId,
+            takeOfflineSignInOnPhoneEndpoint,
+            { json: report },
+            false,
+          );
+          toldToWait(answer);
+          if (answer.status !== 200) return codeOf(answer) ?? String(answer.status);
+          holding(deviceId, offlineSignInTakenAnswerSchema.parse(answer.body));
+          return 'TAKEN';
+        }),
     };
   }
 
@@ -511,81 +547,109 @@ export class StoryApi {
     return [...this.waited];
   }
 
-  private async start(): Promise<ApiProcess> {
-    const { database, policy, media } = this.parts;
-    // The policy's pool, as an installation's API runs on (ADR-419, 524).
-    const pool = {
-      maxConnections: policy.databasePoolConnections,
-      pieceOfWork: {
-        waitMs: policy.databaseConnectionWaitMs,
-        longestMs: policy.databaseWorkLongestMs,
+  private start(): Promise<ApiProcess> {
+    return listeningApi({
+      ...this.parts,
+      clock: { now: () => this.on.now() },
+      // No browser asks a story's API.
+      corsOrigins: [],
+      log: (line) => {
+        this.kept(line);
       },
-    };
-    const api = await ApiProcess.create(
-      ApiModule,
-      {
-        host: '127.0.0.1',
-        port: storyApiPort,
-        // Over HTTPS alone, with the stack's certificate for a process on this machine: Caddy
-        // reaches it so, checking it against the stack's root (KD-78; ADR-517).
-        tls: storyApiTls(),
-        // Unread: the process is handed the story's own clients below.
-        databaseUrl: '',
-        readOnlyDatabaseUrl: '',
-        // No browser asks a story's API.
-        corsOrigins: [],
-        // No proxy is believed: a caller's address is the one that connected.
-        trustedProxies: [],
-        tokenSigningSecret: storySigningSecret,
-        passwordKey: storyPasswordKey,
-        sealingKey: storySealingKey,
-        smtpUrl: '',
-        smtpAddress: undefined,
-        smtpCaFile: null,
-        mailFrom: 'open-adms@adms.localhost',
-        addressesUrl: 'https://addresses.adms.localhost',
-        mapCaFile: null,
-        mapServersAt: undefined,
-        esriPrivateHosts: [],
-        esriCaFile: null,
-        media: {
-          url: 'https://s3.adms.localhost',
-          bucket: 'adms-media',
-          region: 'us-east-1',
-          accessKey: 'unread',
-          secretKey: 'unread',
-          caFile: null,
-          at: undefined,
-        },
-      },
-      policy,
-      {
-        // A story says what happens itself; of the API's log, only its errors are kept (C155).
-        stream: {
-          write: (line) => {
-            this.kept(line);
-          },
-        },
-        database: timed(database.open('api', pool), this.waited),
-        viewerDatabase: database.openViewer(pool),
-        mail: new NoMail(),
-        clock: { now: () => this.on.now() },
-        addresses: noAddresses,
-        media,
-      },
-    );
-    try {
-      await api.listen();
-    } catch (problem) {
-      await api.close();
-      throw new Error(
-        `The stories’ API could not listen at 127.0.0.1:${String(storyApiPort)}; another run ` +
-          `of the stories may hold it (${problem instanceof Error ? problem.message : String(problem)}).`,
-        { cause: problem },
-      );
-    }
-    return api;
+      waited: this.waited,
+    });
   }
+}
+
+// What the API's own process is started on, away from an installation (ARCHITECTURE §15;
+// ADR-491, 572): a story's database, the policy, an object store kept in memory, a clock, the
+// pages that may call it from a browser, and where its log lines go.
+export interface ListeningParts {
+  readonly database: StoryDatabase;
+  readonly policy: Policy;
+  readonly media: StoryMedia;
+  readonly clock: Clock;
+  // None for a story's phones; the field app's browser tests' own page for theirs (ADR-572).
+  readonly corsOrigins: readonly string[];
+  readonly log: (line: string) => void;
+  // How long each piece of work waited for a connection, where a story counts it (ADR-524).
+  readonly waited?: number[];
+}
+
+// The API's own process, `ApiProcess` with `ApiModule` as `apps/api/src/main.ts` starts it, on a
+// story's database, listening at 127.0.0.1:3180 over HTTPS, which the stack's proxy reaches as
+// `stories.adms.localhost` (infra/local/Caddyfile). One at a time: a second while one holds the
+// port is told so.
+export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
+  const { database, policy, media, clock, corsOrigins, log, waited } = parts;
+  // The policy's pool, as an installation's API runs on (ADR-419, 524).
+  const pool = {
+    maxConnections: policy.databasePoolConnections,
+    pieceOfWork: {
+      waitMs: policy.databaseConnectionWaitMs,
+      longestMs: policy.databaseWorkLongestMs,
+    },
+  };
+  const opened = database.open('api', pool);
+  const api = await ApiProcess.create(
+    ApiModule,
+    {
+      host: '127.0.0.1',
+      port: storyApiPort,
+      // Over HTTPS alone, with the stack's certificate for a process on this machine: Caddy
+      // reaches it so, checking it against the stack's root (KD-78; ADR-517).
+      tls: storyApiTls(),
+      // Unread: the process is handed the story's own clients below.
+      databaseUrl: '',
+      readOnlyDatabaseUrl: '',
+      corsOrigins: [...corsOrigins],
+      // No proxy is believed: a caller's address is the one that connected.
+      trustedProxies: [],
+      tokenSigningSecret: storySigningSecret,
+      passwordKey: storyPasswordKey,
+      sealingKey: storySealingKey,
+      smtpUrl: '',
+      smtpAddress: undefined,
+      smtpCaFile: null,
+      mailFrom: 'open-adms@adms.localhost',
+      addressesUrl: 'https://addresses.adms.localhost',
+      mapCaFile: null,
+      mapServersAt: undefined,
+      esriPrivateHosts: [],
+      esriCaFile: null,
+      media: {
+        url: 'https://s3.adms.localhost',
+        bucket: 'adms-media',
+        region: 'us-east-1',
+        accessKey: 'unread',
+        secretKey: 'unread',
+        caFile: null,
+        at: undefined,
+      },
+    },
+    policy,
+    {
+      // A story says what happens itself; of the API's log, only what the caller keeps.
+      stream: { write: log },
+      database: waited === undefined ? opened : timed(opened, waited),
+      viewerDatabase: database.openViewer(pool),
+      mail: new NoMail(),
+      clock,
+      addresses: noAddresses,
+      media,
+    },
+  );
+  try {
+    await api.listen();
+  } catch (problem) {
+    await api.close();
+    throw new Error(
+      `The stories’ API could not listen at 127.0.0.1:${String(storyApiPort)}; another run ` +
+        `of the stories may hold it (${problem instanceof Error ? problem.message : String(problem)}).`,
+      { cause: problem },
+    );
+  }
+  return api;
 }
 
 // A service's database whose every piece of work says how long it waited to begin: from asking

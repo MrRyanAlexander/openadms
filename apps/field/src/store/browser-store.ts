@@ -58,6 +58,11 @@ export class BrowserStore implements PhoneStore {
       asked.result.createObjectStore(rowsShelf);
     };
     const database = await answered(asked);
+    // Another hand erasing the store (the app's own, or a test's) isn't held up by this
+    // connection: it closes, and this store can't be used after.
+    database.onversionchange = () => {
+      database.close();
+    };
 
     // The keys already there, or new ones kept, in one piece of work. Rows with no key are what
     // an erase cut short left, sealed under a key that is gone: they go too.

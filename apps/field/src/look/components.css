@@ -109,6 +109,18 @@ h2 {
   border-top: var(--edge) solid var(--colour-surface);
 }
 
+/* The warning before the lock after inactivity (AC-11-20): above the menu, over what scrolls. */
+.screen-warning {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--colour-page);
+  border-top: var(--edge) solid var(--colour-surface);
+}
+
 .quiet {
   color: var(--colour-words-quiet);
 }
@@ -278,7 +290,7 @@ h2 {
   visibility: visible;
 }
 
-/* Text entry: the search, the scan field. */
+/* Text entry: a field, the search, the scan field. */
 .field {
   display: flex;
   flex-direction: column;
@@ -287,6 +299,10 @@ h2 {
 
 .field-label {
   font-weight: var(--weight-strong);
+}
+
+.field-hint {
+  color: var(--colour-words-quiet);
 }
 
 .scan-field {
@@ -479,4 +495,26 @@ h2 {
 .facts dd {
   font-weight: var(--weight-strong);
   overflow-wrap: anywhere;
+}
+
+/* The bottom menu (Q-217, ADR-573): beneath the screen's actions, at the foot of the screen. */
+.bottom-menu {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
+  background: var(--colour-surface);
+  border-top: var(--edge) solid var(--colour-edge);
+}
+
+.bottom-menu .menu-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-1);
+  font-size: var(--type-small);
+}
+
+.bottom-menu .menu-item-current {
+  border-color: var(--colour-main);
+  border-bottom-width: calc(var(--edge) * 3);
+  text-decoration: underline;
 }

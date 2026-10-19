@@ -27,6 +27,7 @@ import { p1Voided } from './p1-voided.ts';
 import { setup } from './setup.ts';
 import { sync } from './sync.ts';
 import { ticket101001 } from './ticket-101001.ts';
+import { offlineSignIn } from './offline-sign-in.ts';
 import { underThePasscode } from './under-the-passcode.ts';
 
 export const stories: readonly Story[] = [
@@ -49,6 +50,7 @@ export const stories: readonly Story[] = [
   p1Queued,
   p1Viewed,
   underThePasscode,
+  offlineSignIn,
   heldForReview,
   interruptedUpload,
   burst,

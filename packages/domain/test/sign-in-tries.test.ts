@@ -38,6 +38,12 @@ const shipped = {
   PHONE_TOKEN_MINUTES: '15',
   MONITOR_SESSION_HOURS: '12',
   LOGIN_LIST_ENTRIES_PER_CALL: '50',
+  PHONE_SIGN_IN_TRIES_BEFORE_WAIT: '5',
+  PHONE_SIGN_IN_TRIES_BEFORE_LOCK: '10',
+  PHONE_SIGN_IN_FIRST_WAIT_SECONDS: '30',
+  PHONE_SIGN_IN_LONGEST_WAIT_MINUTES: '15',
+  PHONE_INACTIVITY_LOCK_MINUTES: '30',
+  PHONE_INACTIVITY_WARNING_SECONDS: '60',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
   MEDIA_FILE_BYTES_AT_MOST: '33554432',
@@ -194,6 +200,63 @@ describe('the policy values of sign-in and sessions', () => {
     ).toBe(100);
   });
 });
+
+describe('wrong tries at a phone’s own sign-in screen', () => {
+  const tries = SignInTries.onPhone(Policy.from(shipped));
+
+  it('AC-02-40 the first four in a row checked against the login list are only counted; from the fifth each makes the screen wait twice as long: 30 s, 1, 2, 4, 8 minutes', () => {
+    for (const count of [1, 2, 3, 4]) expect(tries.after(count, now)).toEqual({ kind: 'COUNTED' });
+    expect([5, 6, 7, 8, 9].map((count) => tries.after(count, now))).toEqual(
+      [30, 60, 120, 240, 480].map((seconds) => ({ kind: 'WAIT', until: inSeconds(seconds) })),
+    );
+  });
+
+  it('AC-02-40 the tenth locks the screen until the master passcode, and so would any after it', () => {
+    expect(tries.after(10, now)).toEqual({ kind: 'LOCKED' });
+    expect(tries.locked(9)).toBe(false);
+    expect(tries.closed(10, null, now)).toBe(true);
+  });
+
+  it('AC-02-40 never more than the standard’s ten before the lock, never a wait after the lock, never a warning that comes as the quiet starts', () => {
+    const policy = Policy.from(shipped);
+    expect([
+      policy.phoneSignInTriesBeforeWait,
+      policy.phoneSignInTriesBeforeLock,
+      policy.phoneSignInFirstWaitSeconds,
+      policy.phoneSignInLongestWaitMinutes,
+      policy.phoneInactivityLockMinutes,
+      policy.phoneInactivityWarningSeconds,
+    ]).toEqual([5, 10, 30, 15, 30, 60]);
+    refused('PHONE_SIGN_IN_TRIES_BEFORE_LOCK', '11', 'from 2 to 10');
+    refused('PHONE_SIGN_IN_TRIES_BEFORE_WAIT', '10', 'from 1 to 9');
+    refused('PHONE_INACTIVITY_LOCK_MINUTES', '61', 'from 2 to 60');
+    refused('PHONE_INACTIVITY_WARNING_SECONDS', '19', 'from 20 to 300');
+    expect(() =>
+      Policy.from({
+        ...shipped,
+        PHONE_SIGN_IN_TRIES_BEFORE_WAIT: '6',
+        PHONE_SIGN_IN_TRIES_BEFORE_LOCK: '6',
+      }),
+    ).toThrow(
+      'The policy value PHONE_SIGN_IN_TRIES_BEFORE_WAIT must be under PHONE_SIGN_IN_TRIES_BEFORE_LOCK.',
+    );
+    expect(() =>
+      Policy.from({
+        ...shipped,
+        PHONE_INACTIVITY_LOCK_MINUTES: '2',
+        PHONE_INACTIVITY_WARNING_SECONDS: '120',
+      }),
+    ).toThrow(
+      'The policy value PHONE_INACTIVITY_WARNING_SECONDS must be under PHONE_INACTIVITY_LOCK_MINUTES.',
+    );
+  });
+});
+
+const refused = (name: string, written: string, range: string): void => {
+  expect(() => Policy.from({ ...shipped, [name]: written }), `${name}=${written}`).toThrow(
+    `The policy value ${name} must be a whole number, ${range}: "${written}".`,
+  );
+};
 
 describe('wrong tries at the master passcode', () => {
   it('AC-10-22 follow sign-in’s rule and numbers: a wait from the fifth in a row, twice as long each time and an hour at most, and the lock at the fiftieth', () => {

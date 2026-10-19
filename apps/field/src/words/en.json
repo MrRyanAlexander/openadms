@@ -5,12 +5,84 @@
   },
   "shell": {
     "testBuild": "Test build: for trying the app out. Real work never goes on this build.",
-    "notSetUp": "This phone isn’t set up yet.",
     "server": {
       "checking": "Looking for the server…",
       "answers": "The server answers.",
       "unreachable": "Can’t reach the server right now."
     }
+  },
+  "refusals": {
+    "passcode": "The master passcode wasn’t taken.",
+    "wait": {
+      "one": "Too many tries. Try again in 1 second.",
+      "other": "Too many tries. Try again in {count} seconds."
+    },
+    "unreachable": "Can’t reach the server. This needs a connection: find signal and try again.",
+    "outOfService": "This phone is out of service. It sends the work it holds and is turned in.",
+    "other": "The server couldn’t do that. Try again."
+  },
+  "enrol": {
+    "notEnrolled": "This phone isn’t enrolled yet. Enrolling needs the master passcode and a connection.",
+    "name": "Phone’s name",
+    "nameHint": "As the dispatch board calls it, like P1-COL-1.",
+    "passcode": "Master passcode",
+    "enrol": "Enrol this phone",
+    "enrolling": "Enrolling…",
+    "incomplete": "Give the phone’s name and the master passcode.",
+    "keyRefused": "The server didn’t take this phone’s key. Try again."
+  },
+  "phone": {
+    "enrolled": "Enrolled as {name}.",
+    "nobody": "Nobody is signed in.",
+    "standing": {
+      "checking": "Checking this phone with the server…",
+      "inService": "The server knows this phone. It is in service.",
+      "outOfService": "This phone is out of service. It sends the work it holds and is turned in.",
+      "notProven": "The server didn’t take this phone’s proof. Ask your supervisor.",
+      "unreachable": "Can’t reach the server right now. The phone works without it."
+    },
+    "createMonitor": "Create monitor",
+    "monitorNumber": "Monitor ID",
+    "monitorNumberHint": "Your username, like M004127.",
+    "passwordLabel": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "incomplete": "Give your Monitor ID and password.",
+    "refused": "That Monitor ID and password weren’t taken. Check them and try again.",
+    "ended": "Your sign-in has ended. Sign in again: nothing on this phone is lost.",
+    "offlineRefused": "The server didn’t take your sign-in made without signal. Sign in again now there’s signal: nothing on this phone is lost.",
+    "inactive": {
+      "one": "Signed out after 1 minute with nothing done. Sign in again: nothing on this phone is lost.",
+      "other": "Signed out after {count} minutes with nothing done. Sign in again: nothing on this phone is lost."
+    },
+    "noList": "Signing in with no signal needs this phone’s login list, which it reads when somebody signs in on it with signal. Find signal and try again.",
+    "anotherMonitor": "This phone holds {name}’s work. With no signal, your supervisor hands it over with the master passcode.",
+    "anotherMonitorUnnamed": "This phone holds another monitor’s work. With no signal, your supervisor hands it over with the master passcode.",
+    "locked": "Sign-in is locked after too many wrong tries. Your supervisor unlocks it with the master passcode.",
+    "passcode": "Master passcode",
+    "unlock": "Unlock",
+    "unlocking": "Unlocking…",
+    "unlocked": "Unlocked. Sign in.",
+    "noPasscodeCheck": "This phone holds no check of the master passcode yet. Ask your supervisor."
+  },
+  "createMonitor": {
+    "title": "Create monitor",
+    "needs": "Creating a monitor needs a connection and the master passcode.",
+    "name": "Monitor’s name",
+    "passwordLabel": "Their password",
+    "phone": "Their phone number",
+    "phoneHint": "Only if the firm keeps one.",
+    "passcode": "Master passcode",
+    "create": "Create monitor",
+    "creating": "Creating…",
+    "incomplete": "Give the monitor’s name, a password and the master passcode."
+  },
+  "monitorCreated": {
+    "title": "Monitor created",
+    "monitorId": "{name}’s Monitor ID is {monitorNumber}.",
+    "username": "It is their username: they sign in with it and their password.",
+    "another": "Create another",
+    "done": "Done"
   },
   "look": {
     "strip": {
@@ -70,5 +142,59 @@
       "survey": "New survey",
       "roe": "New ROE"
     }
+  },
+  "work": {
+    "noAssignment": {
+      "NONE_THAT_DAY": "No assignment today: ask your supervisor.",
+      "SEVERAL_THAT_DAY": "More than one assignment today: ask your supervisor."
+    },
+    "held": "This phone holds the lists for {project}.",
+    "checkAgain": "Check again",
+    "checking": "Checking…",
+    "synced": {
+      "never": "Never synced",
+      "now": "Last synced: just now",
+      "minutes": {
+        "one": "Last synced: 1 minute ago",
+        "other": "Last synced: {count} minutes ago"
+      },
+      "hours": {
+        "one": "Last synced: 1 hour ago",
+        "other": "Last synced: {count} hours ago"
+      },
+      "days": {
+        "one": "Last synced: 1 day ago",
+        "other": "Last synced: {count} days ago"
+      }
+    },
+    "inactivity": {
+      "warning": {
+        "one": "You’ll be signed out in 1 second with nothing done.",
+        "other": "You’ll be signed out in {count} seconds with nothing done."
+      },
+      "stay": "Stay signed in"
+    }
+  },
+  "menu": {
+    "label": "Menu",
+    "work": "Work",
+    "time": "Time",
+    "sync": "Sync",
+    "settings": "Settings"
+  },
+  "sync": {
+    "title": "Sync",
+    "lists": "Lists for {project}, as of setup version {version}.",
+    "noLists": "This phone holds no lists yet.",
+    "refresh": "Refresh lists",
+    "refreshing": "Refreshing…"
+  },
+  "settings": {
+    "title": "Settings",
+    "signedInAs": "Signed in as {name}, {monitorNumber}.",
+    "offline": "Signed in without signal. The server is told when the phone finds signal.",
+    "phone": "This phone is {name}.",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…"
   }
 }

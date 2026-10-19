@@ -7,6 +7,16 @@
 // locked the right password is refused too, so a guess made then tells nothing.
 import type { Policy } from './policy.ts';
 
+// The phone's own count at its sign-in screen (ARCHITECTURE §7.2 (3); NIST SP 800-63B-4 §3.2.10;
+// ADR-139, 575): the same rule with the phone's numbers, its lock lifted by the master passcode.
+export type PhoneSignInTriesPolicy = Pick<
+  Policy,
+  | 'phoneSignInTriesBeforeWait'
+  | 'phoneSignInTriesBeforeLock'
+  | 'phoneSignInFirstWaitSeconds'
+  | 'phoneSignInLongestWaitMinutes'
+>;
+
 export type SignInTriesPolicy = Pick<
   Policy,
   | 'signInTriesBeforeWait'
@@ -26,6 +36,16 @@ export class SignInTries {
 
   constructor(policy: SignInTriesPolicy) {
     this.policy = policy;
+  }
+
+  // Wrong tries at a phone's own sign-in screen, checked against its login list.
+  static onPhone(policy: PhoneSignInTriesPolicy): SignInTries {
+    return new SignInTries({
+      signInTriesBeforeWait: policy.phoneSignInTriesBeforeWait,
+      signInTriesBeforeLock: policy.phoneSignInTriesBeforeLock,
+      signInFirstWaitSeconds: policy.phoneSignInFirstWaitSeconds,
+      signInLongestWaitMinutes: policy.phoneSignInLongestWaitMinutes,
+    });
   }
 
   // Whether a login with that many wrong tries in a row is locked.

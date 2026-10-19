@@ -284,6 +284,7 @@ export {
 export {
   MasterPasscodeTries,
   SignInTries,
+  type PhoneSignInTriesPolicy,
   type SignInTriesPolicy,
   type WrongTry,
 } from './sign-in-tries.ts';

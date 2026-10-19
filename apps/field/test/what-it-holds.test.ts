@@ -82,11 +82,12 @@ function shipped(name: string, from: string, found = new Map<string, string>()) 
 }
 
 describe('the field app holds', () => {
-  it('AC-11-69: no outside SDK: what it ships is React, React Aria, the two workspaces of the rules and the payloads, and what they bring', () => {
+  it('AC-11-69: no outside SDK: what it ships is React, React Aria, @noble/hashes (the login list’s slow hashes, ADR-575), the two workspaces of the rules and the payloads, and what they bring', () => {
     const manifest = JSON.parse(readFileSync(join(field, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
     expect(Object.keys(manifest.dependencies).sort()).toEqual([
+      '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
       'react',
@@ -99,6 +100,7 @@ describe('the field app holds', () => {
       '@internationalized/date',
       '@internationalized/number',
       '@internationalized/string',
+      '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
       '@react-types/shared',
@@ -119,8 +121,11 @@ describe('the field app holds', () => {
     ]);
   });
 
-  it('AC-11-06: no rule of its own: it imports only React, React Aria, the rules, the payloads and its own files, and declares no name the rules use', () => {
+  it('AC-11-06: no rule of its own: it imports only React, React Aria, @noble/hashes’ Argon2id, HMAC and SHA-256, the rules, the payloads and its own files, and declares no name the rules use', () => {
     const allowed = [
+      '@noble/hashes/argon2.js',
+      '@noble/hashes/hmac.js',
+      '@noble/hashes/sha2.js',
       'react',
       'react-dom/client',
       'react-aria-components',
@@ -217,7 +222,7 @@ describe('the field app holds', () => {
     }
   });
 
-  it('AC-11-07: nothing kept in the web layer’s storage: no localStorage, sessionStorage, cookie or cache, and IndexedDB only by the store', () => {
+  it('AC-11-07, AC-11-12: nothing kept in the web layer’s storage: no localStorage, sessionStorage, cookie or cache, and IndexedDB only by the store and the keyring', () => {
     const webStorage = ['localStorage', 'sessionStorage', 'cookie', 'cookieStore', 'caches'];
     for (const { path, file } of modules) {
       const { used } = namesIn(file);
@@ -225,7 +230,7 @@ describe('the field app holds', () => {
         used.filter((name) => webStorage.includes(name)),
         path,
       ).toEqual([]);
-      if (path !== 'store/browser-store.ts') {
+      if (path !== 'store/browser-store.ts' && path !== 'store/browser-keyring.ts') {
         expect(
           used.filter((name) => name === 'indexedDB' || name === 'IDBKeyRange'),
           path,
@@ -234,16 +239,36 @@ describe('the field app holds', () => {
     }
   });
 
-  it('AC-11-08: no key made from anything typed or brought: the store’s keys are generated, never imported, derived or unwrapped', () => {
+  it('AC-11-08, AC-11-11: no key made from anything typed or brought: the store’s keys and the device key are generated, never imported, derived or unwrapped, and only the device key’s public half is ever read out', () => {
     const made = ['importKey', 'deriveKey', 'deriveBits', 'unwrapKey', 'exportKey', 'wrapKey'];
     for (const { path, file } of modules) {
       expect(
-        namesIn(file).used.filter((name) => made.includes(name)),
+        namesIn(file)
+          .used.filter((name) => made.includes(name))
+          // The device key's public half, which the server is sent at enrolment.
+          .filter((name) => !(path === 'store/web-crypto-key.ts' && name === 'exportKey')),
         path,
       ).toEqual([]);
     }
     const sealing = modules.find(({ path }) => path === 'store/sealing.ts');
     expect(sealing?.file.text).toMatch(/generateKey\(\{ name: 'AES-GCM', length: 256 \}, false,/);
+    const deviceKey = modules.find(({ path }) => path === 'store/web-crypto-key.ts')?.file.text;
+    expect(deviceKey?.match(/exportKey\(/g)).toEqual(['exportKey(']);
+    expect(deviceKey).toMatch(/crypto\.subtle\.exportKey\('spki', publicKey\)/);
+    expect(deviceKey).toMatch(
+      /generateKey\(\s*\{ name: phoneKeyKind\.algorithm, namedCurve: phoneKeyKind\.curve \},\s*false,/,
+    );
+  });
+
+  it('AC-11-13: no attestation: nothing in it asks Apple’s or Google’s services to vouch for the phone', () => {
+    const vouching = /attest|devicecheck|safetynet|playintegrity|integritymanager|integritytoken/i;
+    for (const { path, file } of modules) {
+      expect(
+        namesIn(file).used.filter((name) => vouching.test(name)),
+        path,
+      ).toEqual([]);
+      expect(file.text, path).not.toMatch(/\b(App ?Attest|DeviceCheck|SafetyNet|Play Integrity)\b/);
+    }
   });
 
   it('AC-11-10: nothing written to the console, so nothing secret reaches the phone’s logs from it', () => {
@@ -269,6 +294,14 @@ describe('the field app holds', () => {
         'store/phone-store.ts',
         'store/sealing.ts',
         'store/browser-store.ts',
+        'store/keyring.ts',
+        'store/web-crypto-key.ts',
+        'store/browser-keyring.ts',
+        'phone/identity.ts',
+        'enrol.tsx',
+        'phone.tsx',
+        'create-monitor.tsx',
+        'monitor-created.tsx',
       ]),
     );
   });

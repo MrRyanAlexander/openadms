@@ -2,9 +2,9 @@
 name: adms-ticket-workflows
 description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge, then the number, at New), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306; the number at New, open tickets, waypoints, ADR-571) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306; the number at New, open tickets, waypoints, ADR-571; the number typed again only where a person copied it, ADR-573) -->
 
-> **This page states today's rules** (last changed by ADR-571, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-573, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
@@ -153,13 +153,14 @@ pay items and their settings for unit rate work (ADR-176, 213); **no pay items f
 1. **New**: scan the **badge** (the crew badge for unit rate). The phone loads the certification:
    the container or crew, its prime and sub, its capacity. **Whose work it is comes from the
    certification, never from a pick** (ADR-186, 239). **Then the number**: the control ticket
-   scanned, or the phone's next generated number shown, then **re-entered by hand** to confirm,
-   generated numbers too (when it is typed again: Q-218). **User, 2026-09-28 (round 22):** "We'd
+   scanned, or the phone's next generated number shown, then **typed again by hand** to confirm
+   where a person copied it: a generated number, or one typed because the barcode won't read; never
+   after a scan (the user, Q-218, ADR-573). **User, 2026-09-28 (round 22):** "We'd
    want manual re-entry still on generated to confirm the logged it down correct." **User,
    2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor
    starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard)
    and then they scan the printed ticket. If the project is generating number, they'd generate the
-   ticket number at that time." *Agent default:* the re-entry must match before the ticket opens:
+   ticket number at that time." *Agent default:* a number typed again must match before the ticket opens:
    data entry, not an eligibility check (ADR-209). *Agent readings (ADR-571):* the tower and the
    haul-out's disposal scan the driver's ticket here; unit rate takes its generated number here.
    The field event opens and waits in home's **open list** while the truck loads.

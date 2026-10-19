@@ -1,6 +1,8 @@
-// What the build writes into the bundle (vite.config.ts): the API's origin, and nothing else.
+// What the build writes into the bundle (vite.config.ts): the API's origin and the policy values,
+// and nothing else.
 interface ImportMetaEnv {
   readonly ADMS_API_ORIGIN: string;
+  readonly ADMS_POLICY: Readonly<Record<string, string>>;
 }
 
 interface ImportMeta {

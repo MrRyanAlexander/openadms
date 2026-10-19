@@ -5243,7 +5243,13 @@ built from its real components, with each design below as a switch you can flip 
 until you answer. Each has the agent's recommendation; the other choice is yours to keep. Answer
 under each one, as you do.
 
-### ❓ Q-215 — A confirmation after each value the monitor enters?
+### ✅ All recommendations approved
+
+> **User, 2026-10-18,** written above the four: "✅ All recommendations approved". **In chat, the
+> same day:** "All recommendations approved" for Q-215…Q-218 in spec/QUESTIONS.md this is not
+> recorded yet. Record it." Recorded as **ADR-573**: the recommended choice of each.
+
+### ✅ Q-215 — A confirmation after each value the monitor enters?
 Your board showed "You have selected 55%. Is that correct?" after every pick. Here is a load at the
 tower, Kim Nguyen at Marsh Road TDSR, ticket 101001:
 
@@ -5258,7 +5264,9 @@ once on the review screen before the number? **Recommended: only the review scre
 confirmation is one more tap per value, on many trucks an hour, and the review screen already does
 that work. *(Prototype switch 1. ADR-561 (7), ADR-569 (1); `FROM-BUILD-1.md` §15.)*
 
-### ❓ Q-216 — A monitor scorecard on the phone?
+**Decided (ADR-573):** only the review screen; no confirmation after each value.
+
+### ✅ Q-216 — A monitor scorecard on the phone?
 Your board mentioned a monitor scorecard. The prototype shows the agent's suggestion on home:
 "Today: 6 tickets made on this phone", the monitor's own count, nothing ranked or compared with
 other monitors.
@@ -5268,7 +5276,9 @@ today's tickets on home (recommended)**, nothing, or something more (say what a 
 Reports on monitors, compared and ranked, would be the back office's (Phase 4). *(Prototype switch 2.
 ADR-561 (7), ADR-569 (2).)*
 
-### ❓ Q-217 — The bottom menu
+**Decided (ADR-573):** the monitor's own count of today's tickets on home, nothing ranked or compared.
+
+### ✅ Q-217 — The bottom menu
 Your board had a bottom menu of Time, Map, Work, Chats and Settings. No phase's requirements put a
 map or chats on the phone.
 
@@ -5276,7 +5286,9 @@ map or chats on the phone.
 on), Sync and Settings.** The other choices on the prototype: your board's five, or no menu (home
 and the status strip only). *(Prototype switch 3. ADR-561 (7), ADR-569 (3).)*
 
-### ❓ Q-218 — When is the ticket number typed again by hand?
+**Decided (ADR-573):** Work, Time (only where the project has the time clock on), Sync and Settings.
+
+### ✅ Q-218 — When is the ticket number typed again by hand?
 Today the monitor types the number again after a scan, and after a number the phone makes (your
 answer in round 22: "We'd want manual re-entry still on generated to confirm the logged it down
 correct", ADR-209). The accessibility standard you chose, WCAG 2.2 AA, has a rule against asking for
@@ -5297,3 +5309,7 @@ today? Either way the typed-again number must match before the ticket is submitt
 
 **Agent note, 2026-10-18 (ADR-571):** your notes on the prototype moved the number to **New**, right
 after the badge; the question stands as asked, and the typing again happens there.
+
+**Decided (ADR-573):** typed again only when a person copied it (a number the phone made, or one
+typed because the barcode won't read); never after a scan. Each typed-again number must match
+before the ticket opens.

@@ -774,6 +774,14 @@ So the protection can't rest on the password. It rests on these:
 > admin; the twelve hours above are superseded. The app keeps the proof, never the hash, and drops
 > it at sign-out.
 >
+⚠️ *ADR-575 (2026-10-18; agent defaults), as built in the field app:* a sign-in tries the server
+> first; with no signal the password is checked against the monitor's login-list entry in the two
+> slow hashes, **only for the phone's own monitor** (whose lists it holds; anybody else after the
+> passcode hands it over, ADR-120). The phone's own count: a wait from the 5th wrong try, the lock
+> at the 10th until the master passcode (NIST's ten, §3.2.10). **The app locks after 30 minutes
+> with nothing touched, warning a minute before** (WCAG 2.2.1), signing the monitor out; nothing
+> not yet submitted is lost. Policy values, handed to the app's build.
+
 ✅ **Approved:** **ADR-444 (2026-10-09; agent defaults, this note awaits approval, building didn't wait):
 > the phone takes the assignment at that sign-in.** The sign-in's answer carries the monitor's
 > assignment for the day, the day being the project's own (its time zone): the one that names
@@ -844,6 +852,19 @@ So the protection can't rest on the password. It rests on these:
 > check of the passcode, no lists), whatever session it still holds; the database issues it no
 > new block. A phone whose key the firm's time revoked is the same, with the passcode at its proof.
 
+> ⚠️ **ADR-572 (2026-10-18, task 3.2.2; agent defaults, this note awaits approval, building didn't
+> wait): the phone's half, as built.** The field app keeps its device key and its secrets in a
+> **keyring** beside its store (`Keyring`: the Secure Enclave or Keystore and the Keychain or
+> Keystore on the phones, 3.8.1, 3.9.1). The browser build's key is a WebCrypto key that can't be
+> exported, its signatures written again as DER (WebCrypto writes r and s side by side); its proof's
+> token is held in memory alone, never written down. Enrolment keeps what the server answered in the
+> store; a request answered `PHONE_NOT_PROVEN` proves the phone again once and is asked again, asking
+> nobody anything. No attestation is asked of Apple or Google (ADR-240).
+> ⚠️ **ADR-574 (task 3.2.3; agent defaults, awaiting approval with the note above):** the monitor's
+> session is the keyring's second secret, sent beside the phone's token in its own header; the
+> browser build holds it in memory alone too, so opened again nobody is signed in and the monitor
+> signs in again, nothing they made lost. `NOT_SIGNED_IN` drops it and asks for a sign-in.
+
 ### 7.5 The master passcode
 
 ✅ **Decided** *(ADR-106, user 2026-09-25)*:
@@ -896,7 +917,9 @@ So the protection can't rest on the password. It rests on these:
   ⚠️ *ADR-570 (agent default), as built: one interface, `PhoneStore` (`apps/field/src/store/`), that
   every build's store implements; the browser build's seals each value with AES-256-GCM and names
   it with HMAC-SHA-256, two keys WebCrypto makes non-exportable from nothing typed, so no value or
-  id is in the clear; an erase takes the keys first.*
+  id is in the clear; an erase takes the keys first.* ⚠️ *ADR-572: the device key and the phone's
+  secrets are a keyring's, beside the store (§7.4's note); the browser build holds its token in
+  memory alone, and the monitor's session (ADR-574).*
 - **Device management software** (MDM) is the firm's choice. We recommend it (a passcode on the
   phone, remote wipe), but Open ADMS doesn't require it.
 

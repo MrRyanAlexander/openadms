@@ -14,8 +14,14 @@ const tsx = (path: string, text: string) => ({ path, text });
 describe('AC-11-51: the screens of the field app', () => {
   it('AC-11-51: are read from its source and its prototype’s, each named once by a literal', () => {
     expect(screensIn()).toEqual([
+      'create-monitor',
+      'enrol',
       'home',
-      'shell',
+      'monitor-created',
+      'phone',
+      'no-assignment',
+      'sync',
+      'settings',
       'prototype-collection',
       'prototype-stop',
       'prototype-sync',
@@ -94,16 +100,18 @@ describe('AC-11-51: the run', () => {
   };
 
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
-    expect(await ran([...screensIn(), 'shell'])).toBeUndefined();
-    expect(lines.join('\n')).toBe('\nAccessibility: 7 of 7 screens checked, in 8 checks; 0 found.');
+    expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
+    expect(lines.join('\n')).toBe(
+      '\nAccessibility: 13 of 13 screens checked, in 14 checks; 0 found.',
+    );
   });
 
   it('AC-11-51: fails when a screen was reached by no browser test, a check names a screen the app lacks, or a check found anything', async () => {
     expect(await ran([])).toEqual({ status: 'failed' });
-    expect(lines).toContain('✗ the shell screen was reached by no browser test');
-    expect(await ran(['shell', 'tower'])).toEqual({ status: 'failed' });
+    expect(lines).toContain('✗ the enrol screen was reached by no browser test');
+    expect(await ran(['enrol', 'tower'])).toEqual({ status: 'failed' });
     expect(lines).toContain("✗ a check names the tower screen, which the app doesn't have");
-    expect(await ran(['shell'], [{ rule: 'button-name', help: '', where: ['button'] }])).toEqual({
+    expect(await ran(['enrol'], [{ rule: 'button-name', help: '', where: ['button'] }])).toEqual({
       status: 'failed',
     });
     expect(lines).toContain(
@@ -114,7 +122,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: a run of some tests alone, said so, lists a screen it did not reach without failing', async () => {
     vi.stubEnv('ADMS_E2E_SOME', '1');
     expect(await ran([])).toBeUndefined();
-    expect(lines).toContain('· the shell screen was reached by no browser test');
-    expect(await ran(['shell', 'tower'])).toEqual({ status: 'failed' });
+    expect(lines).toContain('· the enrol screen was reached by no browser test');
+    expect(await ran(['enrol', 'tower'])).toEqual({ status: 'failed' });
   });
 });
