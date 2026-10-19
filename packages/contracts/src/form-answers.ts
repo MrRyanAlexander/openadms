@@ -41,3 +41,16 @@ export function formAnswersSchema(
 }
 
 export type FormAnswers = Record<string, string | number | boolean>;
+
+// What a monitor still has to answer before a form made on a phone goes on (ADR-584; C69): the
+// version's required fields with no answer yet. A photograph is never one of them: the camera may
+// be refused, and the work goes on without it (AC-11-68), the server keeping the answers as sent
+// and telling the phone they don't fit (ADR-338 (9)).
+export function unansweredOf(
+  fields: FormDefinitionFields,
+  answers: Readonly<Record<string, unknown>>,
+): FormField[] {
+  return fields.filter(
+    (field) => field.required && field.type !== 'PHOTO' && answers[field.id] === undefined,
+  );
+}

@@ -3,7 +3,8 @@
 // passcode) is never shown, and no field corrects, suggests or capitalises what is typed into it.
 // A sign-in's fields name what they are, so a password manager fills them (AC-11-63); every other
 // field asks the browser to fill nothing. A number copied off paper (a scale receipt's weight)
-// opens the phone's keyboard of digits and a point.
+// opens the phone's keyboard of digits and a point. A field whose record keeps so many characters
+// takes no more (C127).
 import { Input, Label, Text, TextField } from 'react-aria-components';
 
 export function TextEntry({
@@ -14,6 +15,7 @@ export function TextEntry({
   secret = false,
   autoComplete = 'off',
   decimal = false,
+  longest,
 }: {
   readonly label: string;
   readonly value: string;
@@ -22,6 +24,7 @@ export function TextEntry({
   readonly secret?: boolean;
   readonly autoComplete?: 'off' | 'username' | 'current-password';
   readonly decimal?: boolean;
+  readonly longest?: number;
 }) {
   return (
     <TextField
@@ -35,6 +38,7 @@ export function TextEntry({
         className="field-input"
         autoComplete={autoComplete}
         {...(decimal ? { inputMode: 'decimal' as const } : {})}
+        {...(longest === undefined ? {} : { maxLength: longest })}
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}

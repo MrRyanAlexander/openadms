@@ -53,10 +53,12 @@ export interface RoeSetup {
   readonly requiresRoe: boolean;
 }
 
+// An ROE number as a survey or a ticket names it: as written, trimmed; none where nothing is.
 const named = (roeNumber: string | null): string | null => {
   const written = (roeNumber ?? '').trim();
   return written === '' ? null : written;
 };
+export { named as roeNumberNamed };
 
 export class RoeChecks<E extends RoeFieldEvent = RoeFieldEvent> {
   private readonly setup: RoeSetup;

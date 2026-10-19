@@ -18,6 +18,17 @@ describe('AC-11-51: the screens of the field app', () => {
       'complete-collection',
       'create-monitor',
       'enrol',
+      // The forms that are no ticket's (task 3.5.4, ADR-584).
+      'new-roe',
+      'new-survey',
+      'new-incident',
+      'fill-roe',
+      'fill-survey',
+      'fill-incident',
+      'fill-drop-off-log',
+      'form-photo',
+      'form-submitted',
+      'cancel-form',
       'home',
       'monitor-created',
       'move-passcode',
@@ -131,7 +142,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 37 of 37 screens checked, in 38 checks; 0 found.',
+      '\nAccessibility: 47 of 47 screens checked, in 48 checks; 0 found.',
     );
   });
 

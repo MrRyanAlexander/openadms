@@ -79,9 +79,13 @@ import {
   type TurnInAnswer,
   type TurnInReceived,
   type TurnInSent,
+  formAnswersSchema,
+  unansweredOf,
+  type PhoneListsRecord,
 } from '@open-adms/contracts';
 import type { AddressSource, FieldEventKind, NumberSeries, Workflow } from '@open-adms/db';
 import {
+  type AssignmentFormDocumentType,
   type BandedPayItem,
   type BoxShape,
   type BoxSign,
@@ -342,6 +346,9 @@ export interface PhoneLists {
   readonly contractors: readonly Named[];
   // The firm's survey work types, for a phone whose assignment makes surveys (ADR-150).
   readonly surveyWorkTypes: readonly Named[];
+  // The forms its assignment makes, each with the newest version of the firm's own fields, which
+  // a record made on it answers (C69, ADR-584); none on lists a test writes by hand.
+  readonly forms?: PhoneListsRecord['forms'];
   // The project's certifications, by number, each with its prime: a replaced one is picked from
   // them (ADR-082), and the truck's prime says which row of the site's lookup is its (ADR-243).
   readonly certifications: readonly {
@@ -496,6 +503,7 @@ export interface NewIncident {
   readonly latitude?: string;
   readonly longitude?: string;
   readonly notes?: string;
+  readonly answers?: OwnAnswers;
 }
 
 export interface NewDropOffLog {
@@ -504,6 +512,7 @@ export interface NewDropOffLog {
   readonly latitude?: string;
   readonly longitude?: string;
   readonly notes?: string;
+  readonly answers?: OwnAnswers;
 }
 
 export interface NewSurvey {
@@ -514,6 +523,7 @@ export interface NewSurvey {
   readonly latitude?: string;
   readonly longitude?: string;
   readonly notes?: string;
+  readonly answers?: OwnAnswers;
 }
 
 export interface NewRoe {
@@ -524,7 +534,11 @@ export interface NewRoe {
   readonly ownerName?: string;
   readonly signed: boolean;
   readonly signedDate?: string;
+  readonly answers?: OwnAnswers;
 }
+
+// The answers to the firm's own fields on a form, by field id, as the phone's screen takes them.
+export type OwnAnswers = Readonly<Record<string, string | number | boolean>>;
 
 // One measured box, as the sheet has it: a shape's own measurements, whole inches; the first is
 // the primary, each after it a feature, picked by name from the phone's lists or typed.
@@ -980,7 +994,7 @@ export class SimulatedDevice {
     };
     const contractor = offered('CONTRACTOR', 'a contractor', incident.contractor);
     const made: RecordedIncident = {
-      ...this.form(incident),
+      ...this.form('INCIDENT', incident),
       incidentTypeId: type.id,
       incidentSubTypeId:
         incident.subType === undefined
@@ -1001,7 +1015,7 @@ export class SimulatedDevice {
   // A citizen drop-off log, at the assignment's site: no quantity, number or cost (ADR-184, 215).
   dropOffLog(log: NewDropOffLog): RecordedDropOffLog {
     const made: RecordedDropOffLog = {
-      ...this.form(log),
+      ...this.form('DROP_OFF_LOG', log),
       siteId: this.site('A drop-off log'),
       residentName: log.residentName ?? null,
       originAddress: log.originAddress ?? null,
@@ -1014,7 +1028,7 @@ export class SimulatedDevice {
   // (ADR-149, 150).
   survey(survey: NewSurvey): RecordedSurvey {
     const made: RecordedSurvey = {
-      ...this.form(survey),
+      ...this.form('SURVEY', survey),
       workTypeId: this.pick('survey work type', this.lists.surveyWorkTypes, survey.workType).id,
       surveyNumber: survey.surveyNumber ?? null,
       roeNumber: survey.roeNumber ?? null,
@@ -1184,6 +1198,7 @@ export class SimulatedDevice {
       assignmentId: this.current.assignmentId,
       madeAt,
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, madeAt),
+      ...this.ownAnswers('ROE', roe.answers),
     };
     this.outbox.push({ record: 'ROE', roe: made });
     return made;
@@ -1787,13 +1802,48 @@ export class SimulatedDevice {
     return found;
   }
 
-  private form(form: {
-    readonly latitude?: string;
-    readonly longitude?: string;
-    readonly notes?: string;
-  }): SentForm {
+  // The firm's own fields as the phone's screen takes them (C69, ADR-584): the answers to the
+  // newest version its lists hold of the form's fields, with that version; a required one left
+  // unanswered isn't taken, a photograph's aside, and nothing is answered on a form with none.
+  private ownAnswers(
+    documentType: AssignmentFormDocumentType,
+    answers: OwnAnswers | undefined,
+  ): Pick<SentForm, 'formDefinitionId' | 'answers'> {
+    const definition = this.lists.forms?.find(
+      (form) => form.documentType === documentType,
+    )?.definition;
+    if (definition === undefined || definition === null) {
+      if (answers !== undefined) {
+        throw new Error(`${this.name}'s ${documentType} form has none of the firm's own fields.`);
+      }
+      return {};
+    }
+    const given = answers ?? {};
+    const unanswered = unansweredOf(definition.fields, given);
+    if (unanswered.length > 0) {
+      throw new Error(
+        `${this.name}: the firm's form asks for ${unanswered.map((field) => `"${field.label}"`).join(', ')}.`,
+      );
+    }
+    const optional = definition.fields.map((field) => ({ ...field, required: false }));
+    if (!formAnswersSchema(optional).safeParse(given).success) {
+      throw new Error(`${this.name}: answers its screen couldn't take: ${JSON.stringify(given)}.`);
+    }
+    return { formDefinitionId: definition.id, answers: { ...given } };
+  }
+
+  private form(
+    documentType: AssignmentFormDocumentType,
+    form: {
+      readonly latitude?: string;
+      readonly longitude?: string;
+      readonly notes?: string;
+      readonly answers?: OwnAnswers;
+    },
+  ): SentForm {
     const madeAt = this.now();
     return {
+      ...this.ownAnswers(documentType, form.answers),
       id: uuidv7(madeAt),
       projectId: this.current.projectId,
       source: 'DEVICE',

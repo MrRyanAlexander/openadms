@@ -23,6 +23,7 @@ export const noLists: PhoneListsRecord = {
   incidentOffers: [],
   contractors: [],
   surveyWorkTypes: [],
+  forms: [],
   vehicleTypes: [],
   vehicleFeatures: [],
   crewTypes: [],

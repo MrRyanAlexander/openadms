@@ -193,6 +193,7 @@ export const listsAfterwards: PhoneListsRecord = {
   incidentOffers: [],
   contractors: [],
   surveyWorkTypes: [],
+  forms: [],
   vehicleTypes: [{ id: made('f5'), name: 'Self-Loading Truck', kind: 'CONTAINER' }],
   vehicleFeatures: [{ id: dogBox, name: 'Dog Box' }],
   crewTypes: [{ id: made('f6'), name: 'Bucket Truck' }],

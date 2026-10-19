@@ -26,6 +26,7 @@ import {
 } from '@open-adms/domain';
 import { z } from 'zod';
 
+import { formDefinitionFields } from './form-definition.ts';
 import { billingUnits, dumpedForms, ticketNumberSources } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
@@ -781,7 +782,7 @@ export type PhoneMonitorAnswer = z.infer<typeof phoneMonitorAnswerSchema>;
 // without those hidden on phones, the field tags, the firm's reasons for a typed number; the
 // live sites with their place (GPS and area as it stands); every unit rate pay item with its
 // capture settings and the item names of their kinds of work; what incidents and surveys pick
-// from; the truck lists (the firm's vehicle types, features and crew types, the project's primes
+// from, and the forms that are no ticket's with the firm's own fields (C69); the truck lists (the firm's vehicle types, features and crew types, the project's primes
 // and their subs: ADR-552 (3)(e)); and what each site's phones ask for. **Never a rate, a rule,
 // a transaction or a load's pay item.** Not the certifications, the ROEs, the helpers or a
 // phone's blocks of numbers: those are records with their own history, and a new one makes no
@@ -883,6 +884,33 @@ const itemNames = z.array(
 const incidentTypes = z.array(
   z.strictObject({ id: z.uuid(), name: z.string(), subTypes: z.array(named) }),
 );
+// What a survey or ROE is for, with its built-in key (ADR-129, 149, 150, 584): a post-work survey
+// picks from the ROEs whose pre-work survey is done, and the phone tells which is which by the
+// key, never the name the firm gives it.
+const surveyWorkTypes = z.array(
+  z.strictObject({
+    id: z.uuid(),
+    name: z.string(),
+    key: z.enum(builtInKeys.surveyWorkType).nullable(),
+  }),
+);
+// The forms that are no ticket's, as the project has them (ADR-160, 181, 278, 584; C69): each
+// one's document type, "GPS required" (the ROE form's setting, false on every other), and the
+// newest version of the firm's own fields, whose id a record made on it answers; none where the
+// firm has added none.
+const ownForms = z.array(
+  z.strictObject({
+    documentType: z.enum(assignmentFormDocumentTypes),
+    gpsRequired: z.boolean(),
+    definition: z
+      .strictObject({
+        id: z.uuid(),
+        version: z.number().int().min(1),
+        fields: formDefinitionFields,
+      })
+      .nullable(),
+  }),
+);
 const quantityAsk = {
   form: z.enum(dumpedForms),
   debrisTypeId: z.uuid(),
@@ -912,7 +940,8 @@ export const setupShownSchema = z.strictObject({
   incidentTypes,
   incidentOffers: z.array(z.enum(incidentOffers)),
   contractors: z.array(named),
-  surveyWorkTypes: z.array(named),
+  surveyWorkTypes,
+  forms: ownForms,
   vehicleTypes,
   vehicleFeatures: z.array(named),
   crewTypes: z.array(named),
@@ -934,7 +963,7 @@ export type SetupShownRecord = z.infer<typeof setupShownSchema>;
 // address and parcel: never the owner); the unit rate pay items the assignment names with their
 // capture settings and their kinds of work (what each counts, its built-in key: ADR-583) and
 // those kinds' item names; what its incidents and surveys
-// pick from; for a phone that certifies or takes disposals, the truck lists, and for one that
+// pick from, and the forms it makes with the firm's own fields (C69); for a phone that certifies or takes disposals, the truck lists, and for one that
 // certifies, who may be picked as a helper (ADR-552 (3)); and, for a phone at a site, what that
 // site's phones ask for. **Never a rate, a rule, a transaction or
 // a load's pay item**: a monitor picks by name, and the only code here is a unit rate pay
@@ -984,7 +1013,9 @@ export const phoneListsSchema = z.strictObject({
   incidentTypes,
   incidentOffers: z.array(z.enum(incidentOffers)),
   contractors: z.array(named),
-  surveyWorkTypes: z.array(named),
+  surveyWorkTypes,
+  // The forms its assignment makes, each with "GPS required" and the firm's own fields (C69).
+  forms: ownForms,
   // The truck lists, for a phone that certifies or takes disposals; empty for any other.
   vehicleTypes,
   vehicleFeatures: z.array(named),

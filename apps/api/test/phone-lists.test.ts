@@ -8,6 +8,7 @@
 // (support/database.ts).
 import {
   addFieldTagEndpoint,
+  addFormDefinitionEndpoint,
   addFormDebrisTypeEndpoint,
   addPrimeEndpoint,
   addSiteShapeEndpoint,
@@ -215,6 +216,8 @@ describe('the lists a phone takes', () => {
         incidentOffers: [],
         contractors: [],
         surveyWorkTypes: [],
+        // Nor any form that is no ticket's, nor any of the firm's own fields.
+        forms: [],
         // Unit rate work neither certifies nor takes disposals: no truck list, no helper.
         vehicleTypes: [],
         vehicleFeatures: [],
@@ -545,7 +548,7 @@ describe('the lists a phone takes', () => {
       expect(first?.kept).not.toMatch(
         /"\w*(rate|rule|transaction|price|amount|fee|permit|ineligible|cert|roe|block|helper)\w*":/i,
       );
-      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(18);
+      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(19);
 
       // The board moves Lee to the curb: the sites stay, the lookup goes. The project's setup
       // is as it was, so the version is too.
@@ -716,6 +719,74 @@ describe('the lists a phone takes', () => {
       });
       const surveying = await read(served, token, session);
       expect(surveying.lists?.roes.map((one) => one.roeNumber)).toEqual(['R-0007', 'R-0008']);
+    });
+  });
+
+  it('AC-11-86, C69 a phone whose work makes forms that are no ticket’s holds each of them: "GPS required" (the ROE form’s) and the newest version of the firm’s own fields, none where the firm added none; the survey work types with their built-in keys; no other form’s fields; and a new version of the fields is a new setup version', async () => {
+    await world(async (served, tx) => {
+      const { dana, priced, token, signIn, assigned } = await leeOnP1(served, tx);
+      await priced.form('ROE', 'ROE', { gpsRequired: true });
+      await priced.form('SURVEY', 'Survey');
+      await priced.form('DROP_OFF_LOG', 'Drop-off log');
+      const incident = await priced.form('INCIDENT', 'Incident', {
+        incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
+      });
+      const fields = async (version: object[]) =>
+        saved(
+          addFormDefinitionEndpoint,
+          await ask(served, dana, addFormDefinitionEndpoint, {
+            ids: { formId: incident.id },
+            payload: { fields: version },
+          }),
+        ).record;
+      const policeReport = {
+        id: 'police-report',
+        label: 'Police report number',
+        type: 'TEXT',
+        required: false,
+      };
+      await fields([policeReport]);
+      const damage = { id: 'damage', label: 'Photo of the damage', type: 'PHOTO', required: true };
+      const second = await fields([{ ...policeReport, required: true }, damage]);
+
+      const day = await assigned({ formDocumentTypes: ['INCIDENT', 'ROE'] });
+      const session = (await signIn()).token;
+      const held = await read(served, token, session);
+      expect(held.lists?.forms).toEqual([
+        { documentType: 'ROE', gpsRequired: true, definition: null },
+        {
+          documentType: 'INCIDENT',
+          gpsRequired: false,
+          definition: {
+            id: second.id,
+            version: 2,
+            fields: [{ ...policeReport, required: true }, damage],
+          },
+        },
+      ]);
+      // No survey made here: its work types stay off the phone.
+      expect(held.lists?.surveyWorkTypes).toEqual([]);
+
+      await tx.assignment.update({
+        where: { id: day.id },
+        data: { formDocumentTypes: ['SURVEY', 'DROP_OFF_LOG'] },
+      });
+      const surveying = await read(served, token, session);
+      expect(surveying.lists?.forms).toEqual([
+        { documentType: 'SURVEY', gpsRequired: false, definition: null },
+        { documentType: 'DROP_OFF_LOG', gpsRequired: false, definition: null },
+      ]);
+      // Each work type with its built-in key, so a post-work survey is told by it, never the name.
+      expect(surveying.lists?.surveyWorkTypes.map(({ name, key }) => [name, key])).toEqual([
+        ['Pre-work survey', 'PRE_WORK'],
+        ['Post-work survey', 'POST_WORK'],
+        ['ROE', 'ROE'],
+      ]);
+      expect(surveying.lists?.setupVersion).toBe(held.lists?.setupVersion);
+
+      await fields([policeReport]);
+      const later = await read(served, token, session);
+      expect(later.lists?.setupVersion).toBe((held.lists?.setupVersion ?? 0) + 1);
     });
   });
 

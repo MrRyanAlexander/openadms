@@ -51,6 +51,14 @@
 // certified the day before by Lee Morgan, the bucket truck crew 730417 and the skid steer crew
 // 730418; and Jo Kim on P1's unit rate work today and tomorrow, every one of those pay items
 // hers, as the golden mission has her.
+//
+// **And the forms that are no ticket's** (task 3.5.4, ADR-584): P1's incident form offering the
+// contractor involved and a cert number with its "Police report number" (required here), its
+// drop-off log form with made-up fields of every type, and the firm's incident sub-type "Mailbox
+// struck" under "Property damage" (golden mission §2); and P2's ROE form, asking for the GPS, and
+// its survey form, where the golden mission makes its ROEs and surveys: an ROE made on P1 would
+// be offered on every collection and unit rate ticket there, so the tests that capture those on
+// P1 meet none.
 // Its key is handed to the test with the rest (a made-up world's, never an installation's), for
 // the browser's keyring to hold as the phone's own: the browser can't otherwise hold a key made
 // before the run, and nothing else of it is planted.
@@ -68,7 +76,7 @@ import {
   type NewPayItem,
 } from '@open-adms/api';
 import type { Database, Prisma } from '@open-adms/db';
-import { NewProjectSettings, uuidv7, type Policy } from '@open-adms/domain';
+import { NewProjectSettings, uuidv7, type IncidentOffer, type Policy } from '@open-adms/domain';
 import { PhoneKeyBackstop, WorkerLog } from '@open-adms/worker';
 
 import { storiesHostname } from './over-https.ts';
@@ -177,13 +185,13 @@ export class BrowserWorld {
 
   // P2 as the example world names it (spec/CONVENTIONS.md §6): PPDR work for the same client under
   // the same declaration event, loads alone, its numbers from 102001, and Marsh Road TDSR entered
-  // again with the same GPS and permit. Nothing else of its setup: a phone set up on it picks no
-  // more than that.
+  // again with the same GPS and permit; its ROE and survey forms are `formsSetup`'s (ADR-584).
+  // Nothing else of its setup: a phone set up on it picks no more than that.
   private static async setUpP2(
     tx: Prisma.TransactionClient,
     policy: Policy,
     p1: P1,
-  ): Promise<void> {
+  ): Promise<string> {
     const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
     const project = await tx.project.create({
       data: {
@@ -217,6 +225,49 @@ export class BrowserWorld {
         longitude: '-75.62000000',
       },
     });
+    return project.id;
+  }
+
+  // The forms that are no ticket's (task 3.5.4, ADR-584), through the setup service a story writes
+  // them with: P1's incident form offering the contractor involved and a cert number and no ROE
+  // number (AC-04-101), with its "Police report number" (golden mission §2, AC-04-87), made
+  // required here so a test meets one; P1's drop-off log form, its own fields made up so a test
+  // meets every type; and P2's ROE form asking for the GPS and its survey form, with none.
+  private static async formsSetup(
+    forms: FormSetup,
+    who: { readonly dana: string; readonly project: string; readonly p2: string },
+  ): Promise<void> {
+    const form = async (
+      projectId: string,
+      documentType: 'ROE' | 'SURVEY' | 'INCIDENT' | 'DROP_OFF_LOG',
+      name: string,
+      more: { readonly gpsRequired?: boolean; readonly incidentOffers?: IncidentOffer[] } = {},
+    ) => saved(forms.form(who.dana, { projectId, documentType, name, ...more }));
+    await form(who.p2, 'ROE', 'ROE', { gpsRequired: true });
+    await form(who.p2, 'SURVEY', 'Survey');
+    const incident = await form(who.project, 'INCIDENT', 'Incident', {
+      incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
+    });
+    await saved(
+      forms.ownFields(who.dana, incident.id, [
+        { id: 'police-report', label: 'Police report number', type: 'TEXT', required: true },
+      ]),
+    );
+    const dropOff = await form(who.project, 'DROP_OFF_LOG', 'Drop-off log');
+    await saved(
+      forms.ownFields(who.dana, dropOff.id, [
+        { id: 'bags', label: 'Bags of household trash', type: 'NUMBER', required: false },
+        { id: 'id-shown', label: 'Resident showed ID?', type: 'YES_NO', required: true },
+        {
+          id: 'load-kind',
+          label: 'What was dropped off',
+          type: 'PICK',
+          required: false,
+          choices: ['Yard waste', 'Furniture'],
+        },
+        { id: 'pile-photo', label: 'Photo of the pile', type: 'PHOTO', required: true },
+      ]),
+    );
   }
 
   // P1's load form, debris types and field tags, and two trucks certified on the yard phone the
@@ -235,6 +286,7 @@ export class BrowserWorld {
       readonly parks: string;
       readonly landfill: string;
       readonly cypress: string;
+      readonly p2: string;
     },
   ): Promise<void> {
     const forms = new FormSetup(api, clock, policy);
@@ -364,6 +416,7 @@ export class BrowserWorld {
     for (const tag of ['Mixed', 'Zone 1 pile']) {
       await saved(projects.fieldTag(who.dana, who.project, tag));
     }
+    await BrowserWorld.formsSetup(forms, who);
     const yesterday = dayIn(p1TimeZone, new Date(clock.now().getTime() - 86_400_000));
     const certifying = await assigned(api, clock, who.luis, {
       workDate: yesterday,
@@ -593,7 +646,14 @@ export class BrowserWorld {
           await tx.userPermission.create({ data: { userId: luis.id, permission } });
         }
         const p1 = await setUpP1(tx, policy);
-        await BrowserWorld.setUpP2(tx, policy, p1);
+        // The firm's own sub-type of an incident (golden mission §2).
+        const damage = await tx.incidentType.findFirstOrThrow({
+          where: { name: 'Property damage' },
+        });
+        await tx.incidentSubType.create({
+          data: { name: 'Mailbox struck', position: 1, incidentTypeId: damage.id },
+        });
+        const p2 = await BrowserWorld.setUpP2(tx, policy, p1);
         const parks = await BrowserWorld.setUpParks(tx, policy, p1);
         const landfillType = await tx.siteType.findUniqueOrThrow({
           where: { key: 'FINAL_DISPOSAL' },
@@ -621,6 +681,7 @@ export class BrowserWorld {
           project: p1.project,
           prime: p1.prime,
           cypress: cypress.id,
+          p2,
           ...(await setUpP1Sites(tx, p1.project)),
         };
       });
@@ -718,6 +779,7 @@ export class BrowserWorld {
         parks: office.parks,
         landfill: office.landfill,
         cypress: office.cypress,
+        p2: office.p2,
       });
       const handed = ({ name, monitorNumber, password }: CastMonitor): CastMonitor => ({
         name,

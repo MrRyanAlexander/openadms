@@ -16,6 +16,10 @@ export const shelves = [
   // photographs' bytes beside it; a cancelled one, kept unsent (ADR-056); and of each submitted
   // one what the phone's own duplicate check and today's count read.
   'tickets',
+  // The forms that are no ticket's begun on the phone (ADR-584): an ROE, a survey, an incident or a
+  // drop-off log, each open as its monitor left it, its photographs' bytes beside it; a cancelled
+  // one, kept unsent; and of each submitted one what a post-work survey's ROEs read.
+  'forms',
   // The photographs waiting to go: each one's record, and a note of each of its files (ARCHITECTURE
   // §11).
   'photographs',

@@ -250,7 +250,13 @@
       "ticket": "Truck {truck} · {number}",
       "started": "Started {time}",
       "split": "Truck {truck} · {number}-{suffix}",
-      "crew": "Crew {truck} · {number}"
+      "crew": "Crew {truck} · {number}",
+      "form": {
+        "ROE": "ROE {number}",
+        "SURVEY": "{workType}",
+        "INCIDENT": "Incident · {type}",
+        "DROP_OFF_LOG": "Drop-off log"
+      }
     },
     "numbersLow": "Fewer than two days’ worth of ticket numbers are left on this phone. Sync when you have signal to get more."
   },
@@ -740,5 +746,144 @@
       "eligible": "Eligible",
       "mark": "Mark it ineligible"
     }
+  },
+  "forms": {
+    "kinds": {
+      "ROE": "ROE",
+      "SURVEY": "Survey",
+      "INCIDENT": "Incident",
+      "DROP_OFF_LOG": "Drop-off log"
+    },
+    "cancel": "Cancel this form",
+    "cancelTitle": "Cancel {form}?",
+    "cancelAbout": "It stays on this phone and is never sent.",
+    "cancelAboutRoe": "It stays on this phone and is never sent. Its number is not used again.",
+    "cancelYes": "Cancel it",
+    "cancelNo": "Keep it",
+    "noSite": "This assignment has no site. A drop-off log is made at the assignment’s site.",
+    "roeNumber": {
+      "title": "The ROE number",
+      "shown": "This phone’s next ROE number",
+      "noteIt": "Write it on the paper ROE, then type its digits again below.",
+      "againTitle": "Type the ROE number again",
+      "showAgain": "Show the number again",
+      "wrong": "That doesn’t match. Type the number again.",
+      "none": "This phone holds no ROE numbers yet. Sync when you have signal to get some, or type the paper ROE’s own number.",
+      "paper": "The paper ROE has its own number",
+      "paperTitle": "Type the paper ROE’s number",
+      "paperLabel": "ROE number, as written",
+      "paperAgain": "Type it again",
+      "made": "Use this phone’s number",
+      "open": "Open the ROE"
+    },
+    "roe": {
+      "propertyTitle": "The property",
+      "parcel": "Parcel ID",
+      "owner": "Owner’s name",
+      "address": "Address",
+      "signedTitle": "Is the ROE signed?",
+      "signedToday": "Signed today",
+      "signedBefore": "Signed on another day",
+      "notSigned": "Not signed",
+      "signedDay": "The day it was signed, as 2026-10-09",
+      "notADay": "That isn’t a day. Type it as 2026-10-09.",
+      "placeTitle": "Where the property is",
+      "gpsRequired": "This ROE form asks for the GPS at the property.",
+      "photoTitle": "A photo of the signed ROE"
+    },
+    "survey": {
+      "typeTitle": "What is the survey for?",
+      "roeTitle": "Which ROE is the survey on?",
+      "postWorkAbout": "The ROEs whose pre-work survey is done.",
+      "postWorkNone": "No ROE on this phone has its pre-work survey done yet. Type the ROE number.",
+      "numberTitle": "The survey number",
+      "numberLabel": "Survey number, as written",
+      "numberNone": "No survey number"
+    },
+    "incident": {
+      "typeTitle": "What kind of incident?",
+      "subTypeTitle": "Which kind of {type}?",
+      "detailsTitle": "What happened",
+      "description": "What happened",
+      "parties": "Who was involved",
+      "contractorTitle": "The contractor involved",
+      "contractorNone": "No contractor named",
+      "certTitle": "The truck’s cert number",
+      "certLabel": "Cert number",
+      "certNone": "No cert number",
+      "roeTitle": "Which ROE is it on?",
+      "placeTitle": "Where it happened"
+    },
+    "dropOff": {
+      "residentTitle": "The resident",
+      "residentName": "Resident’s name",
+      "origin": "Where the debris came from",
+      "placeTitle": "Where the drop-off was made"
+    },
+    "place": {
+      "title": "Where it was",
+      "required": "This form asks for the GPS.",
+      "noFixSubmit": "No GPS fix yet: the phone tries once more when you submit, and the form goes without one if it can’t."
+    },
+    "own": {
+      "title": "The firm’s questions",
+      "required": "{label} (required)",
+      "needed": "Answer {fields} to go on.",
+      "yes": "Yes",
+      "no": "No",
+      "notANumber": "{label}: that isn’t a number.",
+      "photo": "Take the photo",
+      "retake": "Take it again",
+      "photoTaken": "Photo taken",
+      "photoNotTaken": "No photo yet"
+    },
+    "notes": {
+      "title": "Notes",
+      "label": "Notes"
+    },
+    "photosTitle": "Photos",
+    "review": {
+      "title": {
+        "ROE": "Check the ROE",
+        "SURVEY": "Check the survey",
+        "INCIDENT": "Check the incident",
+        "DROP_OFF_LOG": "Check the drop-off log"
+      },
+      "about": "Everything you entered, once. Change anything with Back.",
+      "roeNumber": "ROE number",
+      "parcel": "Parcel ID",
+      "owner": "Owner",
+      "address": "Address",
+      "signed": "Signed",
+      "signedOn": "Signed {day}",
+      "notSigned": "Not signed",
+      "workType": "Survey",
+      "roe": "ROE",
+      "surveyNumber": "Survey number",
+      "type": "Incident",
+      "description": "What happened",
+      "parties": "Who was involved",
+      "contractor": "Contractor",
+      "cert": "Cert number",
+      "site": "Site",
+      "resident": "Resident",
+      "origin": "Came from",
+      "place": "Where",
+      "notes": "Notes",
+      "photos": "Photos",
+      "yes": "Yes",
+      "no": "No",
+      "none": "None",
+      "submit": "Submit",
+      "submitting": "Submitting…",
+      "notKept": "It couldn’t be kept to send: {message}"
+    },
+    "submitted": {
+      "title": "{kind} saved",
+      "saved": "It is saved on this phone. It goes at the next sync.",
+      "sealed": "A submitted form can’t be changed on the phone. The back office corrects it if it needs to be.",
+      "home": "Home"
+    },
+    "photoBack": "Back to the form"
   }
 }

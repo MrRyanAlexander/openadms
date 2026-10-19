@@ -707,6 +707,41 @@ describe('a simulated phone captures the badge, then the number, at New (ADR-571
     expect(() => curb.dropOffLog({})).toThrow('this assignment has no site');
   });
 
+  it('AC-04-87, C69 answers the firm’s own fields of the newest version its lists hold, with that version; a required one unanswered isn’t taken, a photograph’s aside; a form with none takes no answer', () => {
+    const definition: NonNullable<NonNullable<PhoneLists['forms']>[number]['definition']> = {
+      id: listId('incident fields v2'),
+      version: 2,
+      fields: [
+        { id: 'police-report', label: 'Police report number', type: 'TEXT', required: true },
+        { id: 'damage-photo', label: 'Photo of the damage', type: 'PHOTO', required: true },
+        { id: 'blocked', label: 'Road blocked?', type: 'YES_NO', required: false },
+      ],
+    };
+    const held: PhoneLists = {
+      ...lists,
+      forms: [
+        { documentType: 'INCIDENT', gpsRequired: false, definition },
+        { documentType: 'DROP_OFF_LOG', gpsRequired: false, definition: null },
+      ],
+    };
+    const phone = new SimulatedDevice(
+      { ...setup, siteId: tdsr, lists: held },
+      new StoryClock('2026-10-12T11:50:00-04:00'),
+    );
+    const type = { type: 'Property damage' };
+    expect(phone.incident({ ...type, answers: { 'police-report': 'BC-2026-1187' } })).toMatchObject(
+      { formDefinitionId: definition.id, answers: { 'police-report': 'BC-2026-1187' } },
+    );
+    expect(() => phone.incident(type)).toThrow('asks for "Police report number"');
+    expect(() =>
+      phone.incident({ ...type, answers: { 'police-report': 'BC-1', blocked: 'yes' } }),
+    ).toThrow("answers its screen couldn't take");
+    expect(() => phone.dropOffLog({ answers: { bags: 3 } })).toThrow(
+      "has none of the firm's own fields",
+    );
+    expect(phone.dropOffLog({})).not.toHaveProperty('formDefinitionId');
+  });
+
   it('gives an ROE the next number of its ROE block, and a certifying phone its cert number', () => {
     const { phone } = phoneAt('08:15');
     const first = phone.roe({ address: '412 Cedar Ct', signed: true, signedDate: '2026-10-09' });

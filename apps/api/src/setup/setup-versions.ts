@@ -14,9 +14,12 @@
 // - **The database numbers and keeps them** (the guard migration): 1, 2, 3… per project with no
 //   gap, a new one only for a change, never edited, never deleted.
 // - Never a rate, a rule, a transaction or a load's pay item (invariant 20): none is read here.
+import { formDefinitionFields, type FormDefinitionFields } from '@open-adms/contracts';
 import { byDeviceKey, type Database, type Prisma } from '@open-adms/db';
 import {
+  assignmentFormDocumentTypes,
   builtInKeys,
+  type AssignmentFormDocumentType,
   type BoundingBox,
   type BuiltInKey,
   type CertificationKind,
@@ -56,6 +59,24 @@ export type SiteShown = Named & {
   readonly longitude: string;
   readonly area: SiteAreaShown;
 };
+
+// What a survey or ROE is for, with its built-in key (ADR-584): a post-work survey's ROEs are
+// told by it, never by the name.
+export interface SurveyWorkTypeShown extends Named {
+  readonly key: BuiltInKey<'surveyWorkType'> | null;
+}
+
+// A form that is no ticket's as a phone is shown it (ADR-160, 181, 278, 584; C69): "GPS required"
+// (the ROE form's setting, false on every other) and the newest version of the firm's own fields.
+export interface OwnFormShown {
+  readonly documentType: AssignmentFormDocumentType;
+  readonly gpsRequired: boolean;
+  readonly definition: {
+    readonly id: string;
+    readonly version: number;
+    readonly fields: FormDefinitionFields;
+  } | null;
+}
 
 // What a project's phones are shown of its setup: the contracts' `setupShownSchema`.
 export interface SetupShown {
@@ -100,7 +121,9 @@ export interface SetupShown {
   readonly incidentTypes: readonly (Named & { readonly subTypes: readonly Named[] })[];
   readonly incidentOffers: readonly IncidentOffer[];
   readonly contractors: readonly Named[];
-  readonly surveyWorkTypes: readonly Named[];
+  readonly surveyWorkTypes: readonly SurveyWorkTypeShown[];
+  // The forms that are no ticket's, each with "GPS required" and its newest own fields (C69).
+  readonly forms: readonly OwnFormShown[];
   // The truck lists (ADR-552 (3)(a), (b)): the firm's vehicle types, features and crew types, and
   // the project's primes, each with the subs placed under it.
   readonly vehicleTypes: readonly (Named & { readonly kind: CertificationKind })[];
@@ -293,6 +316,43 @@ export class SetupVersions {
     );
   }
 
+  // The project's forms that are no ticket's, in the assignment's order of them: each one's "GPS
+  // required" and the newest version of the firm's own fields, read as the contract has them.
+  // One saved before the contract had a field's shape is no definition a phone can answer.
+  static async ownFormsShownIn(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<SetupShown['forms']> {
+    const forms = await tx.form.findMany({
+      where: { projectId, documentType: { in: [...assignmentFormDocumentTypes] } },
+      select: {
+        documentType: true,
+        gpsRequired: true,
+        definitions: {
+          orderBy: { version: 'desc' },
+          take: 1,
+          select: { id: true, version: true, fields: true },
+        },
+      },
+    });
+    return assignmentFormDocumentTypes.flatMap((documentType) => {
+      const form = forms.find((one) => one.documentType === documentType);
+      if (form === undefined) return [];
+      const [newest] = form.definitions;
+      const fields = newest === undefined ? null : formDefinitionFields.safeParse(newest.fields);
+      return [
+        {
+          documentType,
+          gpsRequired: form.gpsRequired === true,
+          definition:
+            newest === undefined || fields?.success !== true
+              ? null
+              : { id: newest.id, version: newest.version, fields: fields.data },
+        },
+      ];
+    });
+  }
+
   // What the project's phones are shown now, inside a piece of work that is already reading.
   // One query at a time: a piece of work has one connection.
   static async shownIn(tx: Prisma.TransactionClient, projectId: string): Promise<SetupShown> {
@@ -363,6 +423,7 @@ export class SetupVersions {
       where: { archivedAt: null },
       orderBy: { position: 'asc' },
     });
+    const ownForms = await SetupVersions.ownFormsShownIn(tx, projectId);
     const trucks = await SetupVersions.truckListsShownIn(tx, projectId);
     // What each site's phones ask for, for the debris types a phone holds: one hidden on phones
     // has no row.
@@ -391,7 +452,11 @@ export class SetupVersions {
       })),
       incidentOffers,
       contractors: placed.map((place) => name(place.contractor)),
-      surveyWorkTypes: surveyWorkTypes.map(name),
+      surveyWorkTypes: surveyWorkTypes.map((type) => ({
+        ...name(type),
+        key: builtInKeys.surveyWorkType.find((key) => key === type.key) ?? null,
+      })),
+      forms: ownForms,
       ...trucks,
       quantityLookup: asks
         .filter((ask) => carried.has(ask.debrisTypeId))

@@ -16,7 +16,8 @@ export const workOfKind = {
   HAUL_OUT_DISPOSAL: 'haulOutDisposal',
   UNIT_RATE: 'unitRate',
 } as const satisfies Readonly<Record<PhoneAssignmentAnswer['fieldEventKinds'][number], Work>>;
-const formsOfWork = {
+// The work each form that is no ticket's is, as home names its button.
+export const workOfForm = {
   INCIDENT: 'incident',
   DROP_OFF_LOG: 'dropOff',
   SURVEY: 'survey',
@@ -27,6 +28,6 @@ export function worksOf(assignment: PhoneAssignmentAnswer): Work[] {
   return [
     ...assignment.fieldEventKinds.map((kind) => workOfKind[kind]),
     ...(assignment.certifying ? (['certification'] as const) : []),
-    ...assignment.formDocumentTypes.map((form) => formsOfWork[form]),
+    ...assignment.formDocumentTypes.map((form) => workOfForm[form]),
   ];
 }

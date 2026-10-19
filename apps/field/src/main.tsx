@@ -8,6 +8,7 @@ import { Policy, SignInTries } from '@open-adms/domain';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { PhoneForms } from './phone/forms.ts';
 import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
 import { LoginList } from './phone/login-list.ts';
@@ -71,9 +72,14 @@ const phone = BrowserStore.opened().then(async (store) => {
   const tickets = await PhoneTickets.opened(store, lists, outbox, {
     photoBytesAtMost: policy.mediaFileBytesAtMost,
   });
+  // The forms that are no ticket's begun on the phone (task 3.5.4, ADR-584), kept as tickets are.
+  const forms = await PhoneForms.opened(store, lists, outbox, {
+    photoBytesAtMost: policy.mediaFileBytesAtMost,
+  });
   return {
     capture: {
       tickets,
+      forms,
       lists,
       locator: new BrowserLocator(),
       lookup: new AddressLookup(monitor),

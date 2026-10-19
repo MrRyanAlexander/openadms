@@ -21,6 +21,7 @@ import { PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx'
 import { CompleteCollection } from './collection.tsx';
 import { Banner, Button, StatusStrip, type Standing } from './look/index.ts';
 import { NewTicket, nextSuffix } from './new-ticket.tsx';
+import type { PhoneForms } from './phone/forms.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
 import type { AddressLookup, Locator } from './phone/place.ts';
@@ -32,10 +33,11 @@ import { counted, say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
 
-// What the capture screens work with: the phone's tickets and lists, its place, the address
-// lookup, and the most waypoints a collection takes (the policy's).
+// What the capture screens work with: the phone's tickets, its forms (ADR-584) and its lists, its
+// place, the address lookup, and the most waypoints a collection takes (the policy's).
 export interface CaptureParts {
   readonly tickets: PhoneTickets;
+  readonly forms: PhoneForms;
   readonly lists: PhoneLists;
   readonly locator: Locator;
   readonly lookup: AddressLookup;

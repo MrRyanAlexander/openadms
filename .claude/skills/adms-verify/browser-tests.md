@@ -57,7 +57,11 @@ P1 and its sites, monitors created at the API (Kim on disposals and the drop-off
 Road TDSR, Ana on collections and incidents, Lee on two assignments, Tariq on none, for the
 project's today and tomorrow), each signed in on a test's own phone with `worldCast()`'s Monitor
 ID and password; a test needing other work adds it to `BrowserWorld.cast`, never by hand in the
-test. **And `P1-TWR-LF`** (ADR-580): lost, its key revoked by the worker's pass after the firm's
+test. **What one test writes, every other test on that project reads**: the test files run side by
+side in one world, so an ROE synced on P1 would put an ROE step into every other test's collection
+and unit rate ticket there. The forms' test makes its ROEs and surveys on **P2**, for a monitor it
+creates and sets up under the passcode as the setup tests do (ADR-584); a test that writes a
+record other phones' lists carry puts it where no other test's capture reads it. **And `P1-TWR-LF`** (ADR-580): lost, its key revoked by the worker's pass after the firm's
 hours (enrolled and marked on the cast's clock set back that long: the database holds a
 revocation to its own `now()`), its key handed on by `worldLostPhone()` for the bench's
 `plantedPhone` to put in the browser's keyring (the private half not extractable) with its

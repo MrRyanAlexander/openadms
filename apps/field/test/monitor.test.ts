@@ -65,6 +65,7 @@ const listsOf = (setupVersion: number): PhoneListsRecord => ({
   incidentOffers: [],
   contractors: [],
   surveyWorkTypes: [],
+  forms: [],
   vehicleTypes: [],
   vehicleFeatures: [],
   crewTypes: [],

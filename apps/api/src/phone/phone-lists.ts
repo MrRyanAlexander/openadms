@@ -7,7 +7,7 @@
 //   newest one (`SetupVersions`, ADR-453); the lists say which version they are.
 // - **Trimmed to the assignment:** the unit rate pay items it names now (one taken off the
 //   assignment is left out), the item names of their kinds of work, the incident and survey
-//   lists only where the assignment makes those forms, the ROEs only where its work names one,
+//   lists and each form's own fields only where the assignment makes those forms (C69), the ROEs only where its work names one,
 //   the truck lists only where it certifies or takes disposals, who may be picked as a helper
 //   only where it certifies (ADR-552 (3)), and its one site's quantity lookup.
 // - **The least a monitor needs** (ASVS 14.2.6): a certification's number, kind, capacity, prime
@@ -21,6 +21,7 @@
 //   address lookup are the later parts'.
 import type { Database } from '@open-adms/db';
 import type {
+  AssignmentFormDocumentType,
   CertificationKind,
   DumpedForm,
   IncidentOffer,
@@ -110,7 +111,10 @@ export interface PhoneListsHeld {
   readonly incidentTypes: readonly (Named & { readonly subTypes: readonly Named[] })[];
   readonly incidentOffers: readonly IncidentOffer[];
   readonly contractors: readonly Named[];
-  readonly surveyWorkTypes: readonly Named[];
+  readonly surveyWorkTypes: SetupShown['surveyWorkTypes'];
+  // The forms that are no ticket's its assignment makes, each with "GPS required" and the firm's
+  // own fields (C69).
+  readonly forms: SetupShown['forms'];
   // The truck lists, for a phone whose assignment certifies or takes disposals (ADR-552 (3)(a)):
   // what certifying picks, and what a tower finds a truck keyed in by hand from.
   readonly vehicleTypes: SetupShown['vehicleTypes'];
@@ -171,7 +175,7 @@ export class PhoneLists {
         where: { id: phone.assignmentId },
       });
       const { projectId } = assignment;
-      const makes = (documentType: 'INCIDENT' | 'SURVEY' | 'ROE') =>
+      const makes = (documentType: AssignmentFormDocumentType) =>
         assignment.formDocumentTypes.includes(documentType);
       const shown = await SetupVersions.shownIn(tx, projectId);
       const blocks = await tx.numberBlock.findMany({
@@ -287,6 +291,8 @@ export class PhoneLists {
           incidentOffers: makes('INCIDENT') ? shown.incidentOffers : [],
           contractors: makes('INCIDENT') ? shown.contractors : [],
           surveyWorkTypes: makes('SURVEY') ? shown.surveyWorkTypes : [],
+          // The forms the assignment makes, and no other's fields.
+          forms: shown.forms.filter((form) => makes(form.documentType)),
           vehicleTypes: trucks ? shown.vehicleTypes : [],
           vehicleFeatures: trucks ? shown.vehicleFeatures : [],
           crewTypes: trucks ? shown.crewTypes : [],

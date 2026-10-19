@@ -22837,9 +22837,100 @@
                                   },
                                   "name": {
                                     "type": "string"
+                                  },
+                                  "key": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string",
+                                        "enum": ["PRE_WORK", "POST_WORK", "ROE"]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
                                   }
                                 },
-                                "required": ["id", "name"],
+                                "required": ["id", "name", "key"],
+                                "additionalProperties": false
+                              }
+                            },
+                            "forms": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "documentType": {
+                                    "type": "string",
+                                    "enum": ["ROE", "SURVEY", "INCIDENT", "DROP_OFF_LOG"]
+                                  },
+                                  "gpsRequired": {
+                                    "type": "boolean"
+                                  },
+                                  "definition": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "id": {
+                                            "type": "string",
+                                            "format": "uuid",
+                                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                          },
+                                          "version": {
+                                            "type": "integer",
+                                            "minimum": 1,
+                                            "maximum": 9007199254740991
+                                          },
+                                          "fields": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "object",
+                                              "properties": {
+                                                "id": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "label": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "type": {
+                                                  "type": "string",
+                                                  "enum": [
+                                                    "TEXT",
+                                                    "NUMBER",
+                                                    "YES_NO",
+                                                    "PICK",
+                                                    "PHOTO"
+                                                  ]
+                                                },
+                                                "required": {
+                                                  "type": "boolean"
+                                                },
+                                                "choices": {
+                                                  "minItems": 1,
+                                                  "type": "array",
+                                                  "items": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  }
+                                                }
+                                              },
+                                              "required": ["id", "label", "type", "required"],
+                                              "additionalProperties": false
+                                            }
+                                          }
+                                        },
+                                        "required": ["id", "version", "fields"],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": ["documentType", "gpsRequired", "definition"],
                                 "additionalProperties": false
                               }
                             },
@@ -23019,6 +23110,7 @@
                             "incidentOffers",
                             "contractors",
                             "surveyWorkTypes",
+                            "forms",
                             "vehicleTypes",
                             "vehicleFeatures",
                             "crewTypes",

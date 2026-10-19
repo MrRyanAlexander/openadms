@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584) -->
 
 > **This page states today's rules** (last changed by ADR-576, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -259,7 +259,10 @@ settings and the site's quantity lookup; and (ADR-453, agent defaults) **the set
 the lists say which version of the project's setup they are (`setupVersion`, from 1). A version
 numbers what the project's phones are shown of its setup, never its certifications, ROEs or a
 phone's numbers; a new one is made only when a phone is first sent lists that differ; the back
-office can ask a site's quantity lookup as any version held it. **The login list and the master
+office can ask a site's quantity lookup as any version held it. **Since ADR-584** (agent defaults)
+the lists also carry **the forms the assignment makes**, each with "GPS required" (the ROE form's)
+and the newest version of the firm's own fields, and each survey work type's built-in key (a
+post-work survey is told by it); a new version of the fields is a new setup version. **The login list and the master
 passcode's check are their own call** (ADR-454; ADR-449 (5) as proposed, the rest agent
 defaults), `POST /phones/current/login-list`: the phone says what it holds (a mark for each
 entry, the passcode's version) and is made only what it lacks, a bounded number a call; on the
@@ -406,13 +409,24 @@ assignment:
   rate pay items cover, each once; then the kind of work's screen (a number, a measurement, items, or
   items with hours) (ADR-207, 213).
 - **Surveys and ROEs**: the work type (Pre-work survey · Post-work survey · ROE); a phone-made ROE
-  takes a number from the block unless the paper ROE has one (typed) (ADR-149, 181).
+  takes a number from the block unless the paper ROE has one (typed) (ADR-149, 181). *Built
+  (ADR-584, agent defaults):* home's ROE and survey buttons are separate, so the survey's list
+  leaves out the `ROE` work type; the ROE's number (`R-0007`, or the paper's) is typed again
+  before it opens; a post-work survey is offered the ROEs whose pre-work survey is done, the
+  lists' and those this phone made (`PhoneSurveys`); "GPS required" makes the ROE ask the place,
+  and an ROE without it records none; an ROE made on a phone carries no scope (the back office
+  enters it from the paper).
 - **Incident**: its type, then the firm's sub-types if any; then whichever of the contractor
   involved (picked by name), a cert number and an ROE number the project's incident form offers,
   each optional; it records and never stops work (ADR-052, 137, 328, 334).
 - **Citizen drop-off log** (a phone at a site): the site from the assignment, the resident's name and
   origin address (optional), photos (optional), notes, the firm's fields; no quantity, number or cost
-  (ADR-184, 188, 215).
+  (ADR-184, 188, 215). *Built (ADR-584):* it opens at once, nothing to pick first.
+- **The firm's own fields on any form** (ADR-160, 278; *built, ADR-584, agent defaults*): the
+  newest version the lists held when the form was begun, each field by its type (words, a number,
+  yes or no, a pick, a photograph); a required one unanswered holds Next, never a photograph's (the
+  camera may be refused); a photograph field's answer is its own photograph. Every form is left
+  and finished from home like a ticket, and sealed at submit (ADR-477).
 
 ## 4A.7 From the user's Build 1 field-app board
 

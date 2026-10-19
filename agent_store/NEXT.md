@@ -67,8 +67,8 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-583)
-- **Phase 3 is open (ADR-557)**: 17 of 33 tasks done (ADR-557…583). **Milestones 3.1…3.4 are done**:
+### Where things stand (2026-10-19, through ADR-584)
+- **Phase 3 is open (ADR-557)**: 18 of 33 tasks done (ADR-557…584). **Milestones 3.1…3.4 are done**:
   the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
   (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
   chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
@@ -80,7 +80,10 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   number at New; **the tower and the haul-out (ADR-582)**, each quantity from the site's lookup by
   one domain rule (`PhoneQuantityAsks`), the harness's tower asking the same; **unit rate
   (ADR-583)**, each kind of work's screen by the domain's `PhoneUnitRate`; **the prototype gone**,
-  its checks on every screen. **Next: task 3.5.4, forms.** What each
+  its checks on every screen; **the forms (ADR-584)**: the ROE's number from the phone's ROE
+  block, surveys (a post-work survey's ROEs by the domain's `PhoneSurveys`), the incident's offers,
+  the drop-off log, and the firm's own fields, now in the phone's lists. **Next: task 3.5.5,
+  certifying.** What each
   task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
   `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
@@ -150,7 +153,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 17 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 18 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -234,15 +237,16 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.5.4, Forms** (`BACKLOG.md`, Milestone 3.5; REQ-307; C66, C67 (c), C69's last part, C118's
-post-work part; AC-04-101). **Build on 3.5.1…3.5.3's** (ADR-581…583): `PhoneTickets`'s shelf and
-outbox, `capture.tsx` (`Step`, `TicketPhotos`, `PlaceFields`), the open-and-leave pattern. The ROE
-(a number from the phone's ROE block, written `R-0007`, or the paper's typed); pre- and post-work
-surveys (the post-work picks from ROEs whose pre-work survey is done); the incident (type, then
-sub-type, then only what the project's incident form offers); the citizen drop-off log at the
-assignment's site; the firm's own fields (C69: the phone holds the form definitions); "GPS
-required"; photo fields. Read its whole brief and the register's items first. **From 2026-10-21,
-C175** (React 19.3.1 and Playwright 1.64.1 read again).
+**Task 3.5.5, Certifying on a phone, and the truck keyed in by hand** (`BACKLOG.md`, Milestone
+3.5; REQ-322, 317; C118, C127, C129; AC-03-09, 14, 36, AC-11-42). **Build on 3.5.1…3.5.4's**
+(ADR-581…584): `PhoneTickets` and `PhoneForms` (a record begun, kept, left and finished, sealed),
+`capture.tsx` (`Step`, `TicketPhotos`, `TypeAgain`), the truck lists already in the phone's lists
+(ADR-553). The prime, the vehicle or crew type, each box's feature and the helpers picked from the
+lists, a sub typed with suggestions; the capacity from the domain's `Capacity`, shown, never typed;
+five views; the cert number from the phone's cert block or the pre-printed sheet; the boxes sent,
+every measurement a shape doesn't hold `null`; a hand-keyed truck's typed capacity. Read its whole
+brief and the register's items first. **From 2026-10-21, C175** (React 19.3.1 and Playwright
+1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

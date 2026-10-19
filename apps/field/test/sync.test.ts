@@ -20,6 +20,7 @@ import { NotSaved } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 
 import { sentPrint } from '../src/phone/outbox.ts';
+import type { Json } from '../src/store/phone-store.ts';
 import { ana, done, heldP1, kim, p1, passwords, phone, towerLists } from './phone-world.ts';
 
 const collection = (last: string, more = {}): SyncedRecord => ({
@@ -298,7 +299,7 @@ describe('the phone syncs', () => {
               { ...block, series: 'LOAD', status: 'ISSUED' },
             ],
           },
-        },
+        } as unknown as Json,
       },
     ]);
     held.server.numbers = (sync) =>

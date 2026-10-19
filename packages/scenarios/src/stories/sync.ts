@@ -1126,7 +1126,13 @@ export const sync: Story = {
       'QUARANTINED',
     );
     const incident = expecting(
-      jo.incident({ type: 'Property damage', address: '22 Elm St', certNumber: '730416' }),
+      jo.incident({
+        type: 'Property damage',
+        address: '22 Elm St',
+        certNumber: '730416',
+        // Her phone holds the form's own field, required, and asks it (C69, ADR-584).
+        answers: { 'police-report': 'BC-2026-1180' },
+      }),
     );
     story.at(
       tuesday('15:20'),
@@ -1375,8 +1381,8 @@ export const sync: Story = {
       tuesday('18:40'),
       'Two more incidents arrive with the firm’s own field, a police report number: one answered, one left blank',
     );
-    // The harness's phone holds no form definition (BACKLOG C68): the story sends the two as a
-    // phone that showed version 1 would, each its own record.
+    // Each as a phone that showed version 1 would send it, its own record: the blank one no phone
+    // of ours sends, its screen asking the required answer (ADR-584), so both go by hand.
     const another = (address: string, more: object) => {
       clock.advance(1);
       return {

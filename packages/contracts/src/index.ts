@@ -703,7 +703,7 @@ export {
   type PasscodeUseReport,
   type UnplannedAssignmentReport,
 } from './phone-reports.ts';
-export { formAnswersSchema, type FormAnswers } from './form-answers.ts';
+export { formAnswersSchema, unansweredOf, type FormAnswers } from './form-answers.ts';
 export {
   formDefinitionFields,
   formFieldTypes,

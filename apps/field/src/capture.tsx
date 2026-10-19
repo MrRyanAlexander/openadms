@@ -28,10 +28,20 @@ import {
 } from './look/index.ts';
 import { Camera } from './look/icons.tsx';
 import type { AddressLookup, Locator } from './phone/place.ts';
-import type { PhoneTickets, PhoneTicket, TicketDetails, TicketPhoto } from './phone/tickets.ts';
+import type { PhoneTicket, TicketDetails, TicketPhoto } from './phone/tickets.ts';
 import { say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
+
+// What holds a ticket's or a form's photographs' bytes (`PhoneTickets`, `PhoneForms`).
+export interface PhotoBytes {
+  photoBytes(photoId: string): Promise<Uint8Array | undefined>;
+}
+// A ticket or a form, as its photographs are shown.
+export type Photographed = Pick<PhoneTicket, 'photos' | 'timeZone'>;
+// Where a ticket or a form was, and what its place step changes.
+export type Placed = Pick<PhoneTicket, 'end' | 'address' | 'addressSource'>;
+export type PlaceChange = Partial<Pick<TicketDetails, 'end' | 'address' | 'addressSource'>>;
 
 // The work of a capture step: its question, how far through, Back, the step's own words, and its
 // actions at the bottom.
@@ -167,7 +177,7 @@ export function PhotoDrawn({
   label,
   large = false,
 }: {
-  readonly tickets: PhoneTickets;
+  readonly tickets: PhotoBytes;
   readonly photo: TicketPhoto;
   readonly label: string;
   readonly large?: boolean;
@@ -206,7 +216,7 @@ export function PhotoDrawn({
 }
 
 // What a photograph is called, to the eye and to a screen reader.
-export const photoLabel = (ticket: PhoneTicket, photo: TicketPhoto): string =>
+export const photoLabel = (ticket: Photographed, photo: TicketPhoto): string =>
   say(said.photos.taken, {
     number: ticket.photos.indexOf(photo) + 1,
     count: ticket.photos.length,
@@ -222,8 +232,8 @@ export function TicketPhotos({
   onTaken,
   onOpen,
 }: {
-  readonly tickets: PhoneTickets;
-  readonly ticket: PhoneTicket;
+  readonly tickets: PhotoBytes;
+  readonly ticket: Photographed;
   readonly atMost: number;
   readonly onTaken: (bytes: Uint8Array) => Promise<boolean>;
   readonly onOpen: (photo: TicketPhoto) => void;
@@ -300,7 +310,7 @@ export function TicketPhotos({
 }
 
 // The address typed, kept as typed where it isn't the one looked up.
-export function typedAddressChange(ticket: PhoneTicket, typed: string): Partial<TicketDetails> {
+export function typedAddressChange(ticket: Placed, typed: string): PlaceChange {
   const typedNow = typed.trim();
   return typedNow !== '' && !(ticket.addressSource === 'LOOKED_UP' && ticket.address === typedNow)
     ? { address: typedNow, addressSource: 'TYPED' }
@@ -317,10 +327,10 @@ export function PlaceFields({
   onChanged,
 }: {
   readonly parts: { readonly locator: Locator; readonly lookup: AddressLookup };
-  readonly ticket: PhoneTicket;
+  readonly ticket: Placed;
   readonly typed: string;
   readonly onTyped: (typed: string) => void;
-  readonly onChanged: (change: Partial<TicketDetails>) => Promise<unknown>;
+  readonly onChanged: (change: PlaceChange) => Promise<unknown>;
 }) {
   const [placing, setPlacing] = useState<'no' | 'fixing' | 'lookingUp'>('no');
   const [placed, setPlaced] = useState<'none' | 'refused' | 'notFound' | 'unanswered' | null>(null);

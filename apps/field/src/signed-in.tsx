@@ -39,6 +39,7 @@
 // 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { FormCapture, formBegun, formStarted, formTitle, type Filling } from './forms.tsx';
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
 import { Move } from './move.tsx';
@@ -49,7 +50,7 @@ import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { NotSavedShown, PhoneOutbox } from './phone/outbox.ts';
 import type { PhoneSetup } from './phone/setup.ts';
 import type { ListsAfter, PhoneSync, SyncRun } from './phone/sync.ts';
-import { workOfKind, worksOf, type Work } from './phone/works.ts';
+import { workOfForm, workOfKind, worksOf, type Work } from './phone/works.ts';
 import type { NotAnswered } from './server.ts';
 import { refusalWords } from './refusals.ts';
 import { Setup } from './setup.tsx';
@@ -75,6 +76,11 @@ const captured: ReadonlyMap<Work, CapturedKind> = new Map(
   (
     ['COLLECTION', 'DISPOSAL', 'HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL', 'UNIT_RATE'] as const
   ).map((kind) => [workOfKind[kind], kind]),
+);
+
+// The works that are forms that are no ticket's, each the form it starts (task 3.5.4, ADR-584).
+const formed: ReadonlyMap<Work, keyof typeof workOfForm> = new Map(
+  (['ROE', 'SURVEY', 'INCIDENT', 'DROP_OFF_LOG'] as const).map((form) => [workOfForm[form], form]),
 );
 
 // What a run came to that the screen says: nothing, where it synced and its lists were read or
@@ -152,6 +158,7 @@ export function SignedInPhone({
   const [settingUp, setSettingUp] = useState<'setUp' | 'handOver' | null>(null);
   const [moving, setMoving] = useState(false);
   const [capturing, setCapturing] = useState<Capturing | null>(null);
+  const [filling, setFilling] = useState<Filling | null>(null);
   const [numbersLow, setNumbersLow] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
@@ -419,50 +426,93 @@ export function SignedInPhone({
     );
   }
 
+  // A form's screens, for the lists held of the assignment's project (task 3.5.4).
+  if (filling !== null && signedIn.assignment !== null && heldNow !== undefined) {
+    return (
+      <FormCapture
+        parts={capture}
+        signedIn={signedIn}
+        assignment={signedIn.assignment}
+        held={heldNow}
+        standing={standing}
+        start={filling}
+        onHome={() => {
+          setFilling(null);
+          setWaiting(outbox.waiting());
+          setPlace('work');
+        }}
+        after={warning}
+      />
+    );
+  }
+
   if (place === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
-    const { tickets } = capture;
+    const { tickets, forms } = capture;
     const open = tickets
       .openOf(signedIn.userId)
       .filter((ticket) => ticket.projectId === assignment.project.id);
+    const openForms = forms
+      .openOf(signedIn.userId)
+      .filter((form) => form.projectId === assignment.project.id);
     const said = words.home.open;
+    // A drop-off log is made at the assignment's site: with none, it isn't started.
+    const startsForms = [...formed.entries()]
+      .filter(([, form]) => form !== 'DROP_OFF_LOG' || assignment.site !== null)
+      .map(([work]) => work);
     return (
       <Home
         standing={standing}
         project={assignment.project.name}
         site={assignment.site?.name ?? null}
         works={worksOf(assignment)}
-        startable={heldNow === undefined ? [] : [...captured.keys()]}
+        startable={heldNow === undefined ? [] : [...captured.keys(), ...startsForms]}
         onStart={(work) => {
           const kind = captured.get(work);
           if (kind !== undefined) setCapturing({ at: 'new', kind });
+          const form = formed.get(work);
+          if (form === undefined || heldNow === undefined) return;
+          // A drop-off log picks nothing first: it opens straight away (ADR-584).
+          if (form === 'DROP_OFF_LOG') {
+            void forms.begin(formBegun(form, signedIn, assignment, heldNow)).then((begun) => {
+              setFilling({ at: 'fill', id: begun.id });
+            });
+          } else setFilling({ at: 'new', kind: form });
         }}
         today={counted(
           words.home.today,
           tickets.todayOf(signedIn.userId, assignment.project.id, assignment.project.timeZone),
         )}
-        open={open.map((ticket) => ({
-          id: ticket.id,
-          label: say(
-            ticket.kind === 'UNIT_RATE'
-              ? said.crew
-              : ticket.splitSuffix === ''
-                ? said.ticket
-                : said.split,
-            {
-              truck: ticket.certNumber,
-              number: ticket.ticketNumber,
-              suffix: ticket.splitSuffix,
-            },
-          ),
-          detail: say(said.started, {
-            time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
-          }),
-        }))}
+        open={[
+          ...open.map((ticket) => ({
+            id: ticket.id,
+            label: say(
+              ticket.kind === 'UNIT_RATE'
+                ? said.crew
+                : ticket.splitSuffix === ''
+                  ? said.ticket
+                  : said.split,
+              {
+                truck: ticket.certNumber,
+                number: ticket.ticketNumber,
+                suffix: ticket.splitSuffix,
+              },
+            ),
+            detail: say(said.started, {
+              time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
+            }),
+          })),
+          ...openForms.map((form) => ({
+            id: form.id,
+            label: formTitle(form, heldNow),
+            detail: formStarted(form),
+          })),
+        ]}
         onOpen={(id) => {
           const ticket = tickets.ticket(id);
-          if (ticket === undefined) return;
-          setCapturing(ticket.step === 'open' ? { at: 'open', id } : { at: 'complete', id });
+          if (ticket !== undefined) {
+            setCapturing(ticket.step === 'open' ? { at: 'open', id } : { at: 'complete', id });
+          } else if (forms.form(id) !== undefined) setFilling({ at: 'fill', id });
         }}
         numbersLow={numbersLow}
         after={bottom}
