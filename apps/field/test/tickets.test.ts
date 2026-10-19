@@ -234,6 +234,121 @@ describe('a ticket submitted', () => {
   });
 });
 
+describe('the tower and the haul-out', () => {
+  const tower = {
+    workflow: 'LOAD',
+    kind: 'DISPOSAL',
+    siteId: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d43',
+    numberFrom: 'SCANNED',
+  } as const;
+  const receipt = {
+    receiptNumber: 'CCL-51310',
+    grossWeightLb: 62_800,
+    tareWeightLb: 28_600,
+    netWeightLb: 34_200,
+    netWeightTons: 17.1,
+    enteredAt: '2026-10-19T12:25:00.000Z',
+    offset: -240,
+    shared: false,
+  };
+
+  it('AC-04-38, AC-05-10 a weighed disposal keeps its scale receipt with it, before it, in one change; a tandem’s second points at it, sent once; a receipt the contract doesn’t read keeps neither', async () => {
+    const { tickets, outbox } = await phone();
+    const front = await tickets.open(begun({ ...tower, ticketNumber: '101050' }));
+    await tickets.changed(front.id, {
+      formDebrisTypeId: vegetative,
+      scaleReceipt: { ...receipt, id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44', receiptNumber: '' },
+    });
+    expect(await tickets.submit(front.id, null)).toMatchObject({ kind: 'notKept' });
+    expect(outbox.waiting()).toBe(0);
+    await tickets.changed(front.id, {
+      scaleReceipt: { ...receipt, id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44' },
+    });
+    expect((await tickets.submit(front.id, null)).kind).toBe('sealed');
+    const [kept] = tickets.receiptsAt(ana.id, tower.siteId, '2026-10-19');
+    expect(kept?.id).toBe(front.id);
+    const rear = await tickets.open(
+      begun({ ...tower, certNumber: '730422', ticketNumber: '101051' }),
+    );
+    await tickets.changed(rear.id, {
+      formDebrisTypeId: vegetative,
+      scaleReceipt: { ...receipt, id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44', shared: true },
+    });
+    expect((await tickets.submit(rear.id, null)).kind).toBe('sealed');
+    const sent = outbox.sends().records;
+    expect(sent.map((record) => record.record)).toEqual([
+      'SCALE_RECEIPT',
+      'FIELD_EVENT',
+      'FIELD_EVENT',
+    ]);
+    expect(sent[0]).toMatchObject({
+      scaleReceipt: {
+        id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44',
+        receiptNumber: 'CCL-51310',
+        siteId: tower.siteId,
+        netWeightTons: 17.1,
+        enteredById: ana.id,
+        deviceUtcOffsetMinutes: -240,
+      },
+    });
+    const events = sent.flatMap((record) =>
+      record.record === 'FIELD_EVENT' ? [record.fieldEvent] : [],
+    );
+    expect(
+      events.map((event) => [event.ticketNumber, event.loadCall, event.scaleReceiptId]),
+    ).toEqual([
+      ['101050', null, '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44'],
+      ['101051', null, '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d44'],
+    ]);
+    // A tandem's second receipt is the first's: never offered as one to point at.
+    expect(tickets.receiptsAt(ana.id, tower.siteId, '2026-10-19').map(({ id }) => id)).toEqual([
+      front.id,
+    ]);
+  });
+
+  it('AC-11-40, AC-11-41 the load call or the count of the tickets the load carries goes as the one quantity', async () => {
+    const { tickets, outbox } = await phone();
+    for (const [ticketNumber, certNumber, quantity] of [
+      ['101001', '730415', { loadCall: 0 }],
+      ['101014', '730416', { carriedCount: 1 }],
+    ] as const) {
+      const opened = await tickets.open(begun({ ...tower, ticketNumber, certNumber }));
+      await tickets.changed(opened.id, { formDebrisTypeId: vegetative, ...quantity });
+      expect((await tickets.submit(opened.id, null)).kind).toBe('sealed');
+    }
+    expect(
+      outbox
+        .sends()
+        .records.flatMap((record) => (record.record === 'FIELD_EVENT' ? [record.fieldEvent] : []))
+        .map(({ loadCall, carriedCount, scaleReceiptId }) => [
+          loadCall,
+          carriedCount,
+          scaleReceiptId,
+        ]),
+    ).toEqual([
+      [0, null, null],
+      [null, 1, null],
+    ]);
+  });
+
+  it('ADR-295 a split haul-out’s pile after the first is shown the load call so far of the pile before it, once that one is submitted', async () => {
+    const { tickets } = await phone();
+    const haulOut = {
+      workflow: 'HAUL_OUT',
+      kind: 'HAUL_OUT_COLLECTION',
+      siteId: tower.siteId,
+      certNumber: '730419',
+      ticketNumber: '201004',
+    } as const;
+    const a = await tickets.open(begun({ ...haulOut, splitSuffix: 'A' }));
+    expect(tickets.pileBefore(a)).toBeUndefined();
+    await tickets.changed(a.id, { loadCall: 10 });
+    await tickets.submit(a.id, null);
+    const b = await tickets.open(begun({ ...haulOut, splitSuffix: 'B', numberFrom: 'CHAINED' }));
+    expect(tickets.pileBefore(b)).toMatchObject({ splitSuffix: 'A', loadCall: 10 });
+  });
+});
+
 describe('the number taken', () => {
   it('AC-04-96 is said where this phone already holds it for the same kind of field event, a cancelled one left out; AC-04-08 a control ticket outside the ranges is questioned', async () => {
     const control: PhoneListsRecord = {

@@ -15,11 +15,6 @@ describe('AC-11-51: the screens of the field app', () => {
   it('AC-11-51: are read from its source and its prototype’s, each named once by a literal', () => {
     expect(screensIn()).toEqual([
       // The collection's (task 3.5.1, ADR-581).
-      'photo',
-      'submitted',
-      'new-collection',
-      'cancel-ticket',
-      'open-ticket',
       'complete-collection',
       'create-monitor',
       'enrol',
@@ -28,6 +23,10 @@ describe('AC-11-51: the screens of the field app', () => {
       'move-passcode',
       'move-site',
       'move-made',
+      // New for every kind of field event's capture (tasks 3.5.1, 3.5.2; ADR-581, 582).
+      'new-collection',
+      'new-haul-out',
+      'new-disposal',
       'session-passcode',
       'session-monitor',
       'phone-locked',
@@ -44,6 +43,14 @@ describe('AC-11-51: the screens of the field app', () => {
       'no-assignment',
       'sync',
       'settings',
+      // What every capture shares (task 3.5.1), and the tower's and the haul-out's Complete
+      // (task 3.5.2, ADR-582).
+      'photo',
+      'submitted',
+      'cancel-ticket',
+      'open-ticket',
+      'complete-disposal',
+      'complete-haul-out',
       'turned-in',
       'turn-in',
       'prototype-collection',
@@ -126,7 +133,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 36 of 36 screens checked, in 37 checks; 0 found.',
+      '\nAccessibility: 40 of 40 screens checked, in 41 checks; 0 found.',
     );
   });
 

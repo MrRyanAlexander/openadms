@@ -8,7 +8,8 @@ import type { Words } from '../words.ts';
 
 export type Work = keyof Words['home']['start'];
 
-const kindsOfWork = {
+// The work each kind of field event is, as home names its button.
+export const workOfKind = {
   COLLECTION: 'collection',
   DISPOSAL: 'disposal',
   HAUL_OUT_COLLECTION: 'haulOutCollection',
@@ -24,7 +25,7 @@ const formsOfWork = {
 
 export function worksOf(assignment: PhoneAssignmentAnswer): Work[] {
   return [
-    ...assignment.fieldEventKinds.map((kind) => kindsOfWork[kind]),
+    ...assignment.fieldEventKinds.map((kind) => workOfKind[kind]),
     ...(assignment.certifying ? (['certification'] as const) : []),
     ...assignment.formDocumentTypes.map((form) => formsOfWork[form]),
   ];

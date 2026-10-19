@@ -14,7 +14,7 @@
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
-import type { CaptureParts } from './collection.tsx';
+import type { CaptureParts } from './ticket-capture.tsx';
 import { CreateMonitor } from './create-monitor.tsx';
 import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';

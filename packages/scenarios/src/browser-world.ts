@@ -27,6 +27,17 @@
 // numbered from pre-printed control tickets, range 400001–405000, Vegetative on its load form, no
 // truck certified, and Jo Kim on its collections today and tomorrow (made up, agent default).
 //
+// **And what a tower and a haul-out ask for** (task 3.5.2, ADR-582): Cypress Creek Landfill on P1
+// as the story `setup` adds it; P1's haul-out form with Mulch; and four of P1's pay items, each
+// with Coastline's rate and its rule naming "Coastline, Bayline ROW 2026", as the golden mission §1
+// and the story `p1-left-out` set them up: Mulch hauled out to Bayline County Landfill by the CY
+// (`MULCH-HO-CY`) and to Cypress Creek Landfill by the ton (`MULCH-HO-TN`); "Vegetative to FDS"
+// on the load form paid by the ton (`VEG-HAUL-TN`) and "White Goods" by the each from the tickets
+// the load carries (`WG-HAUL-EA-60`). So the sites' lookups ask: at Cypress Creek a load of
+// Vegetative to FDS weighed and one of white goods counted, a haul-out of Mulch weighed; at
+// Bayline County Landfill a haul-out of Mulch nothing more; anything else the load call. Nobody
+// is assigned there: a test sets Lee up at a site under the master passcode.
+//
 // **And a lost tower phone whose key the firm's time revoked** (task 3.4.3, ADR-580): P1-TWR-LF,
 // enrolled at the API with a key made here and marked lost by Luis with the firm's reason, both on
 // the cast's clock set back the firm's 24 hours and a minute; then its key revoked by the worker's
@@ -36,7 +47,17 @@
 // before the run, and nothing else of it is planted.
 import { generateKeyPairSync } from 'node:crypto';
 
-import { Certifications, FormSetup, Phones, ProjectSetup, type ApiProcess } from '@open-adms/api';
+import {
+  Certifications,
+  FormSetup,
+  ListSetup,
+  PayItemSetup,
+  Phones,
+  ProjectSetup,
+  type ApiProcess,
+  type CriterionInput,
+  type NewPayItem,
+} from '@open-adms/api';
 import type { Database, Prisma } from '@open-adms/db';
 import { NewProjectSettings, uuidv7, type Policy } from '@open-adms/domain';
 import { PhoneKeyBackstop, WorkerLog } from '@open-adms/worker';
@@ -201,27 +222,132 @@ export class BrowserWorld {
       readonly lee: string;
       readonly yard: string;
       readonly parks: string;
+      readonly landfill: string;
+      readonly cypress: string;
     },
   ): Promise<void> {
     const forms = new FormSetup(api, clock, policy);
-    for (const [projectId, names] of [
-      [who.project, ['Vegetative', 'C&D']],
-      [who.parks, ['Vegetative']],
+    const lists = new ListSetup(api, clock, policy);
+    const library = async (name: string): Promise<string> =>
+      (await api.debrisType.findFirst({ where: { name } }))?.id ??
+      (await saved(lists.debrisType(who.dana, name))).id;
+    // Each form's entries, by name, as the rules pick them.
+    const entries = new Map<string, string>();
+    for (const [projectId, documentType, name, names] of [
+      [who.project, 'LOAD', 'Load', ['Vegetative', 'C&D', 'Vegetative to FDS', 'White Goods']],
+      [who.project, 'HAUL_OUT', 'Haul-out', ['Mulch']],
+      [who.parks, 'LOAD', 'Load', ['Vegetative']],
     ] as const) {
-      const loadForm = await saved(
-        forms.form(who.dana, { projectId, documentType: 'LOAD', name: 'Load' }),
-      );
-      for (const name of names) {
-        const library = await api.debrisType.findFirstOrThrow({ where: { name } });
-        await saved(
+      const form = await saved(forms.form(who.dana, { projectId, documentType, name }));
+      for (const debris of names) {
+        const entry = await saved(
           forms.debrisType(who.dana, {
-            formId: loadForm.id,
-            debrisTypeId: library.id,
-            reduced: false,
+            formId: form.id,
+            debrisTypeId: await library(debris),
+            reduced: debris === 'Mulch',
             hiddenOnPhones: false,
           }),
         );
+        if (projectId === who.project) entries.set(`${documentType} ${debris}`, entry.id);
       }
+      if (projectId === who.project) entries.set(documentType, form.id);
+    }
+    const entry = (key: string): string => {
+      const found = entries.get(key);
+      if (found === undefined) throw new Error(`No ${key} on P1 in the world.`);
+      return found;
+    };
+    const payItems = new PayItemSetup(api, clock, policy);
+    const payableType = async (name: string): Promise<string> =>
+      (await api.payableType.findFirstOrThrow({ where: { name } })).id;
+    const debrisIs = (key: string): CriterionInput => ({
+      criterion: 'DEBRIS_TYPE',
+      operator: 'EQUALS',
+      picks: [entry(key)],
+    });
+    const dumpedAt = (siteId: string): CriterionInput => ({
+      criterion: 'DISPOSAL_SITE',
+      operator: 'EQUALS',
+      picks: [siteId],
+    });
+    for (const [code, description, type, unit, rate, carried, form, criteria] of [
+      [
+        'MULCH-HO-CY',
+        'Mulch haul-out to FDS',
+        'Vegetative',
+        'CY',
+        '5.10',
+        false,
+        'HAUL_OUT',
+        [debrisIs('HAUL_OUT Mulch'), dumpedAt(who.landfill)],
+      ],
+      [
+        'MULCH-HO-TN',
+        'Mulch haul-out to FDS, by weight',
+        'Vegetative',
+        'TN',
+        '20.00',
+        false,
+        'HAUL_OUT',
+        [debrisIs('HAUL_OUT Mulch'), dumpedAt(who.cypress)],
+      ],
+      [
+        'VEG-HAUL-TN',
+        'ROW VEG haul to FDS, by weight',
+        'Vegetative',
+        'TN',
+        '21.00',
+        false,
+        'LOAD',
+        [debrisIs('LOAD Vegetative to FDS')],
+      ],
+      [
+        'WG-HAUL-EA-60',
+        'White goods haul 0–60 mi',
+        'White Goods',
+        'EA',
+        '12.00',
+        true,
+        'LOAD',
+        [debrisIs('LOAD White Goods')],
+      ],
+    ] as const satisfies readonly (readonly [
+      string,
+      string,
+      string,
+      NewPayItem['unit'],
+      string,
+      boolean,
+      'LOAD' | 'HAUL_OUT',
+      readonly CriterionInput[],
+    ])[]) {
+      const payItem = await saved(
+        payItems.payItem(who.dana, {
+          kindOfWorkId: null,
+          bandFrom: null,
+          bandTo: null,
+          countIsAlwaysOne: false,
+          gpsRequired: false,
+          measurementRequired: false,
+          decimalsAllowed: false,
+          photosRequired: false,
+          monitorMayMarkIneligible: false,
+          quantityFromCarriedTickets: carried,
+          crewTimeConversion: null,
+          crewDayHours: null,
+          projectId: who.project,
+          code,
+          description,
+          payableTypeId: await payableType(type),
+          unit,
+          rates: [{ primeId: who.prime, rate }],
+        }),
+      );
+      await saved(
+        payItems.paysWhen(who.dana, payItem.id, [
+          { formId: entry(form), slot: 1, criteria: [...criteria] },
+        ]),
+      );
     }
     const projects = new ProjectSetup(api, clock, policy);
     for (const tag of ['Mixed', 'Zone 1 pile']) {
@@ -338,11 +464,32 @@ export class BrowserWorld {
         const p1 = await setUpP1(tx, policy);
         await BrowserWorld.setUpP2(tx, policy, p1);
         const parks = await BrowserWorld.setUpParks(tx, policy, p1);
+        const landfillType = await tx.siteType.findUniqueOrThrow({
+          where: { key: 'FINAL_DISPOSAL' },
+        });
+        // Cypress Creek Landfill as the story `setup` adds it (spec/CONVENTIONS.md §6).
+        const cypress = await tx.disposalSite.create({
+          data: {
+            projectId: p1.project,
+            activationDate: new Date('2026-10-12'),
+            takesLoads: true,
+            name: 'Cypress Creek Landfill',
+            siteTypeId: landfillType.id,
+            siteTypeKey: landfillType.key,
+            haulOutsLeaveHere: false,
+            chargesTippingFee: false,
+            ineligibleSite: false,
+            permitNumber: 'FDEP-SW-0131',
+            latitude: '39.24000000',
+            longitude: '-75.60000000',
+          },
+        });
         return {
           parks,
           luis: luis.id,
           project: p1.project,
           prime: p1.prime,
+          cypress: cypress.id,
           ...(await setUpP1Sites(tx, p1.project)),
         };
       });
@@ -420,6 +567,8 @@ export class BrowserWorld {
         lee: of('Lee Morgan').id,
         yard: yard.deviceId,
         parks: office.parks,
+        landfill: office.landfill,
+        cypress: office.cypress,
       });
       const handed = ({ name, monitorNumber, password }: CastMonitor): CastMonitor => ({
         name,

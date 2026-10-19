@@ -162,7 +162,7 @@ test('AC-11-75, AC-11-76, AC-11-77, AC-11-78, AC-11-79, AC-11-80, AC-11-05, AC-0
 
   // Complete: each pick moves straight on, nothing asks "is that right?".
   await page.getByRole('button', { name: said.open.complete }).click();
-  await page.getByRole('option', { name: 'Vegetative' }).click();
+  await page.getByRole('option', { name: 'Vegetative', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.tag.title);
   await checkScreen(page);
   await page.getByRole('button', { name: said.tag.none }).click();
@@ -341,7 +341,7 @@ test('AC-04-98, AC-11-76, AC-04-91: Ana answers "split": 730416’s first proper
   const property = async (roe: string, estimate: string) => {
     await page.getByRole('button', { name: said.open.complete }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.debris.title);
-    const vegetative = page.getByRole('option', { name: 'Vegetative' });
+    const vegetative = page.getByRole('option', { name: 'Vegetative', exact: true });
     if ((await vegetative.getAttribute('aria-selected')) === 'true') {
       await page.getByRole('button', { name: said.next }).click();
     } else await vegetative.click();

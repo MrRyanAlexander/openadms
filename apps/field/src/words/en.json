@@ -464,7 +464,8 @@
       "title": "Normal or split?",
       "about": "A split load is gathered from several properties: one collection for each.",
       "normal": "Normal",
-      "split": "Split"
+      "split": "Split",
+      "piles": "A split haul-out is loaded from several piles: one haul-out collection for each pile."
     },
     "badge": {
       "title": "Scan the truck’s badge",
@@ -507,7 +508,9 @@
       "typedTitle": "Type the number",
       "typedAbout": "A typed number is flagged for the back office to check.",
       "reasonTitle": "Why was it typed?",
-      "open": "Open the ticket"
+      "open": "Open the ticket",
+      "ticketTitle": "Scan the driver’s ticket",
+      "ticketLabel": "Ticket number"
     },
     "question": {
       "title": "Check this number",
@@ -535,7 +538,8 @@
       "cancelTitle": "Cancel ticket {number}?",
       "cancelAbout": "It stays on this phone and is never sent. Its number is not used again.",
       "cancelYes": "Cancel it",
-      "cancelNo": "Keep it"
+      "cancelNo": "Keep it",
+      "turnedAway": "A load turned away gets nothing: cancel its ticket here and nothing is sent."
     },
     "debris": {
       "title": "Debris type"
@@ -554,6 +558,55 @@
     "estimate": {
       "title": "How much from this property?",
       "unit": "CY"
+    },
+    "call": {
+      "title": "Load call",
+      "about": "How full the truck arrived, as a percent of its capacity.",
+      "haulOutTitle": "Load call at loading",
+      "haulOutAbout": "How full the truck leaves, as a percent of its capacity.",
+      "pileTitle": "Load call so far",
+      "pileAbout": "How full the truck is with this pile on board, as a percent of its capacity.",
+      "pileBefore": "Pile {suffix} before it: {call}%.",
+      "unit": "%",
+      "over": "A load call is a whole number from 0 to 100."
+    },
+    "count": {
+      "title": "Tickets the load carries",
+      "about": "Count the tickets on the load: the number painted on each stump, or each white goods ticket.",
+      "unit": "tickets"
+    },
+    "weight": {
+      "title": "Scale weight",
+      "about": "A load like this at {site} is paid by its weight: copy the scale house’s receipt next. No load call is taken."
+    },
+    "nothing": {
+      "title": "Nothing more to take",
+      "about": "The load call was taken where the haul-out was loaded."
+    },
+    "quantity": {
+      "notHeldLoad": "This phone doesn’t hold what {site} asks for yet: take the load call, and add the scale receipt if the scale house hands you one. It reads what the site asks for at the next sync with signal.",
+      "notHeldHaulOut": "This phone doesn’t hold what {site} asks for yet: add the scale receipt if the scale house hands you one. It reads what the site asks for at the next sync with signal."
+    },
+    "receipt": {
+      "title": "Scale receipt",
+      "about": "Copy the receipt the scale house handed over, exactly as it is written.",
+      "number": "Receipt number",
+      "add": "Add the scale receipt",
+      "addAbout": "If the scale house handed over a receipt, you may copy it too.",
+      "leaveOut": "Leave the receipt out",
+      "same": "Same receipt as ticket {number}: {receipt}",
+      "sameAbout": "A truck and trailer weighed together share one receipt: pick it rather than copying it again.",
+      "weightsTitle": "The receipt’s weights",
+      "weightsAbout": "Type each weight the receipt shows and leave out any it doesn’t. Nothing is worked out.",
+      "gross": "Gross (lb)",
+      "tare": "Tare (lb)",
+      "net": "Net (lb)",
+      "tons": "Net (tons)",
+      "notANumber": "A weight is a number as the receipt shows it, such as 28140 or 14.07.",
+      "grossShown": "gross {lb} lb",
+      "tareShown": "tare {lb} lb",
+      "netShown": "net {lb} lb",
+      "tonsShown": "{tons} tons"
     },
     "place": {
       "title": "Where it was collected",
@@ -588,6 +641,12 @@
       "roe": "ROE",
       "estimate": "Estimate",
       "estimateCy": "{estimate} CY",
+      "site": "Site",
+      "call": "Load call",
+      "callSoFar": "Load call so far",
+      "callShown": "{call}%",
+      "count": "Tickets carried",
+      "receipt": "Scale receipt",
       "place": "Where",
       "waypoints": "Waypoints",
       "photos": "Photos",
@@ -600,8 +659,9 @@
       "title": "Ticket {number} saved",
       "saved": "Ticket {number} is saved on this phone. It goes at the next sync.",
       "sealed": "A submitted ticket can’t be changed on the phone. The back office corrects it if it needs to be.",
+      "onTheBack": "On a paper ticket you may write the load call, your name and the truck on the back of the driver’s ticket.",
       "nextProperty": "Next property of this load ({number}-{suffix})",
-      "another": "New collection",
+      "nextPile": "Next pile of this haul-out ({number}-{suffix})",
       "home": "Home"
     }
   }

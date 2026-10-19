@@ -136,3 +136,85 @@ export class QuantityLookup {
       });
   }
 }
+
+// One row of a site's lookup as a phone holds it, for its own site (the phone's lists).
+export interface HeldQuantityAsk {
+  readonly form: DumpedForm;
+  readonly debrisTypeId: string;
+  readonly primeId: string;
+  readonly asks: QuantityAskName;
+}
+
+// Where a phone's answer came from: its site's row for the truck's prime; every prime's row for
+// the debris type, where the truck's prime isn't known and they all say the same; or nothing the
+// phone holds, so the lookup's own answer where no rule pays (C182).
+export type PhoneAskFrom = 'LOOKUP' | 'EVERY_PRIME' | 'NOT_HELD';
+
+export interface PhoneAsk {
+  readonly asks: QuantityAskName;
+  readonly from: PhoneAskFrom;
+}
+
+// The kinds of field event that take a quantity at a site: a load's disposal, a haul-out's two
+// ends (adms-field-app §4A.4; adms-scale-receipts, "One quantity, never both").
+export type QuantityKind = 'DISPOSAL' | 'HAUL_OUT_COLLECTION' | 'HAUL_OUT_DISPOSAL';
+
+// What a phone asks a load or a haul-out for, from the lookup it holds for its site (ADR-013,
+// 223, 227, 243, 582; AC-04-38, AC-11-40, 41; C83, C182). One rule for the field app and the
+// scenario harness's phone, which asks as the field app does:
+//   - a haul-out's collection always takes the load call, at the loading end, whatever its
+//     site's lookup says (the lookup's haul-out rows are its disposal's);
+//   - a disposal or a haul-out's disposal asks what its site's row says for the debris type
+//     picked and the truck's prime;
+//   - where the truck's prime isn't known (a badge the phone's certifications don't hold, a
+//     truck keyed in by hand), the debris type's rows of every prime, where they agree;
+//   - where the phone holds no row that answers (lists read for another site, a debris type the
+//     lookup was worked out without), what the lookup says where no rule pays: the load call
+//     for a load, nothing more for a haul-out's disposal (*agent default*, C182). A rule that
+//     pays by weight there flags the line after sync (ADR-223), and the phone offers the scale
+//     receipt beside the load call, so the paper is never lost.
+export class PhoneQuantityAsks {
+  private readonly held: readonly HeldQuantityAsk[];
+
+  constructor(held: readonly HeldQuantityAsk[]) {
+    this.held = held;
+  }
+
+  at(kind: QuantityKind, debrisTypeId: string | null, primeId: string | null): PhoneAsk {
+    if (kind === 'HAUL_OUT_COLLECTION') return { asks: 'LOAD_CALL', from: 'LOOKUP' };
+    const form: DumpedForm = kind === 'DISPOSAL' ? 'LOAD' : 'HAUL_OUT';
+    const rows = this.held.filter(
+      (row) => row.form === form && debrisTypeId !== null && row.debrisTypeId === debrisTypeId,
+    );
+    const own = rows.find((row) => primeId !== null && row.primeId === primeId);
+    if (own !== undefined) return { asks: own.asks, from: 'LOOKUP' };
+    const [first] = rows;
+    if (primeId === null && first !== undefined && rows.every((row) => row.asks === first.asks)) {
+      return { asks: first.asks, from: 'EVERY_PRIME' };
+    }
+    return { asks: form === 'LOAD' ? 'LOAD_CALL' : 'NOTHING_MORE', from: 'NOT_HELD' };
+  }
+
+  // Whether a field event's quantity is the one asked: none other given, and a scale receipt
+  // only where the weight is asked or beside a load call or nothing more, where it is offered.
+  static gives(
+    asked: QuantityAskName,
+    given: {
+      readonly loadCall: number | null;
+      readonly carriedCount: number | null;
+      readonly scaleReceiptId: string | null;
+    },
+  ): boolean {
+    const { loadCall, carriedCount, scaleReceiptId } = given;
+    switch (asked) {
+      case 'LOAD_CALL':
+        return carriedCount === null;
+      case 'SCALE_WEIGHT':
+        return loadCall === null && carriedCount === null;
+      case 'CARRIED_COUNT':
+        return loadCall === null && scaleReceiptId === null;
+      case 'NOTHING_MORE':
+        return loadCall === null && carriedCount === null;
+    }
+  }
+}

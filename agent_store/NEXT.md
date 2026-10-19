@@ -67,8 +67,8 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-581)
-- **Phase 3 is open (ADR-557)**: 15 of 33 tasks done (ADR-557…581). **Milestones 3.1…3.4 are done**:
+### Where things stand (2026-10-19, through ADR-582)
+- **Phase 3 is open (ADR-557)**: 16 of 33 tasks done (ADR-557…582). **Milestones 3.1…3.4 are done**:
   the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
   (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
   chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
@@ -77,7 +77,9 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   the phone, the user, ADR-577); the phone's own sync, its photographs' files, and **"Sync and turn
   in" with the wipe (ADR-580)**. **Milestone 3.5 begun: the collection (ADR-581)**, with
   waypoints end to end, the phone's first block of numbers, and the harness's phone taking the
-  number at New. **Next: task 3.5.2, the tower and the haul-out.** What each
+  number at New; **the tower and the haul-out (ADR-582)**, each quantity from the site's lookup by
+  one domain rule (`PhoneQuantityAsks`), the harness's tower asking the same. **Next: task 3.5.3,
+  unit rate.** What each
   task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
   `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
@@ -147,7 +149,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 15 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 16 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -231,14 +233,15 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.5.2, The tower and the haul-out** (`BACKLOG.md`, Milestone 3.5; REQ-304, 305, 124f, 321;
-C74, C83, C97, C100, C127, C177, C182; its ACs in its brief). **Build on 3.5.1's** (ADR-581):
-`PhoneTickets` (open per truck, sealed at submit, cancel), `src/capture.tsx` and the collection's
-screens. At the tower: the site from the assignment; the badge, then the driver's ticket **scanned
-at New, never typed again**; one quantity from the site's lookup (the load call typed 0–100, the
-scale weight and receipt, or the count of tickets carried; C182 where the lookup isn't held); the
-haul-out's call at its loading end, its split piles; a load turned away gets nothing. Read its
-whole brief first. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read again).
+**Task 3.5.3, Unit rate** (`BACKLOG.md`, Milestone 3.5; REQ-306, 320, 112b; AC-04-70, AC-11-43,
+74, 76, 82; C177's last part: the prototype goes with it). **Build on 3.5.1's and 3.5.2's**
+(ADR-581, 582): `PhoneTickets`, `new-ticket.tsx`, `ticket-capture.tsx` (the router, the open
+ticket, submitted) and the tower's screens. The crew badge kept as the working crew and confirmed
+on each completion; the number generated at New right after it; open tickets, a crew not held to
+one; the crew photo; the payable type by name; each kind of work's screen (a count, a measurement,
+a stump, items, items with hours); the pay item from the domain's `SizeBands`; ineligible where the
+pay item allows; one GPS point. Read its whole brief first. **From 2026-10-21, C175** (React 19.3.1
+and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

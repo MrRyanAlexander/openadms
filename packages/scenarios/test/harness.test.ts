@@ -51,6 +51,7 @@ const nothingToPick: PhoneLists = {
   crewTypes: [],
   primes: [],
   helpers: [],
+  quantityLookup: [],
 };
 
 const setup = {
@@ -343,6 +344,7 @@ const lists: PhoneLists = {
   crewTypes: [],
   primes: [],
   helpers: [],
+  quantityLookup: [],
 };
 const tdsr = '00000000-0000-7000-8000-00000000000e';
 const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string } = {}) => {
@@ -790,6 +792,77 @@ describe('a simulated phone captures the badge, then the number, at New (ADR-571
         sameScaleReceiptAs: second.id.replace(/.$/, (last) => (last === '0' ? '1' : '0')),
       }),
     ).toThrow('recorded no scale receipt');
+  });
+
+  it('REQ-124f, AC-04-38, AC-11-41, C83 a tower asks its site’s lookup as the field app does: the weight, never a load call, where the load is weighed; the count where it is counted; a haul-out’s collection always its load call', () => {
+    const coastline = named('Coastline Haulers LLC');
+    const atCypress = new SimulatedDevice(
+      {
+        ...setup,
+        name: 'P1-TWR-CCL',
+        siteId: tdsr,
+        lists: {
+          ...lists,
+          debrisTypes: { LOAD: [named('Vegetative to FDS'), named('White Goods')] },
+          certifications: [{ id: listId('730421'), certNumber: '730421', prime: coastline }],
+          quantityLookup: [
+            {
+              form: 'LOAD',
+              debrisTypeId: listId('Vegetative to FDS'),
+              primeId: coastline.id,
+              asks: 'SCALE_WEIGHT',
+            },
+            {
+              form: 'LOAD',
+              debrisTypeId: listId('White Goods'),
+              primeId: coastline.id,
+              asks: 'CARRIED_COUNT',
+            },
+          ],
+        },
+      },
+      new StoryClock('2026-10-15T10:30:00-04:00'),
+    );
+    const weighed = atCypress.begin('LOAD', 'DISPOSAL', '730421', scanned('101050'));
+    expect(() =>
+      atCypress.complete(weighed, { debrisType: 'Vegetative to FDS', loadCall: 80 }),
+    ).toThrow('asks for SCALE_WEIGHT (LOOKUP), and a phone of ours takes no other quantity');
+    expect(
+      saved(
+        atCypress.complete(weighed, {
+          debrisType: 'Vegetative to FDS',
+          scaleReceipt: { receiptNumber: 'CCL-51310', netWeightTons: 17.1 },
+        }),
+      ).loadCall,
+    ).toBeNull();
+    const counted = atCypress.begin('LOAD', 'DISPOSAL', '730421', scanned('101014'));
+    expect(() => atCypress.complete(counted, { debrisType: 'White Goods', loadCall: 50 })).toThrow(
+      'asks for CARRIED_COUNT',
+    );
+    expect(
+      saved(atCypress.complete(counted, { debrisType: 'White Goods', carriedCount: 1 }))
+        .carriedCount,
+    ).toBe(1);
+    // A truck the lists don't hold: every prime's row, where they agree.
+    const unknown = atCypress.begin('LOAD', 'DISPOSAL', '730499', scanned('101018'));
+    expect(() =>
+      atCypress.complete(unknown, { debrisType: 'Vegetative to FDS', loadCall: 50 }),
+    ).toThrow('asks for SCALE_WEIGHT (EVERY_PRIME)');
+    // A debris type its lookup holds no row of: the load call, the receipt offered beside it.
+    const elsewhere = new SimulatedDevice(
+      { ...atCypress.setup, lists: { ...atCypress.setup.lists, quantityLookup: [] } },
+      new StoryClock('2026-10-15T11:00:00-04:00'),
+    );
+    const notHeld = elsewhere.begin('LOAD', 'DISPOSAL', '730421', scanned('101019'));
+    expect(
+      saved(
+        elsewhere.complete(notHeld, {
+          debrisType: 'Vegetative to FDS',
+          loadCall: 50,
+          scaleReceipt: { receiptNumber: 'CCL-51311' },
+        }),
+      ).loadCall,
+    ).toBe(50);
   });
 
   it('a survey picks its work type by name and carries the ROE number as picked or typed', () => {

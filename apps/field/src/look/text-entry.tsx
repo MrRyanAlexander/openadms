@@ -2,7 +2,8 @@
 // gives one, each tied to the field for a screen reader. A secret (a password, the master
 // passcode) is never shown, and no field corrects, suggests or capitalises what is typed into it.
 // A sign-in's fields name what they are, so a password manager fills them (AC-11-63); every other
-// field asks the browser to fill nothing.
+// field asks the browser to fill nothing. A number copied off paper (a scale receipt's weight)
+// opens the phone's keyboard of digits and a point.
 import { Input, Label, Text, TextField } from 'react-aria-components';
 
 export function TextEntry({
@@ -12,6 +13,7 @@ export function TextEntry({
   hint,
   secret = false,
   autoComplete = 'off',
+  decimal = false,
 }: {
   readonly label: string;
   readonly value: string;
@@ -19,6 +21,7 @@ export function TextEntry({
   readonly hint?: string;
   readonly secret?: boolean;
   readonly autoComplete?: 'off' | 'username' | 'current-password';
+  readonly decimal?: boolean;
 }) {
   return (
     <TextField
@@ -31,6 +34,7 @@ export function TextEntry({
       <Input
         className="field-input"
         autoComplete={autoComplete}
+        {...(decimal ? { inputMode: 'decimal' as const } : {})}
         autoCorrect="off"
         autoCapitalize="off"
         spellCheck={false}

@@ -38,6 +38,7 @@ const lists: PhoneLists = {
   crewTypes: [],
   primes: [],
   helpers: [],
+  quantityLookup: [],
 };
 const deviceId = syncExamples.made('97');
 // The tower's phone at 17:30 on Monday, holding what the suite hands it; on a clock of its own

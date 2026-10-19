@@ -34,10 +34,10 @@
 // Task 3.5.1 (ADR-571, 573, 581): home starts a collection where the assignment makes them, lists
 // the monitor's open tickets, each opened where it was left, and says their own count of today's
 // tickets; the capture's screens take the place of the menu until the monitor goes home. The lock
-// after inactivity watches them too; nothing a ticket holds is lost to it.
+// after inactivity watches them too; nothing a ticket holds is lost to it. Task 3.5.2 (ADR-582):
+// home starts a disposal, a haul-out's collection and a haul-out's disposal the same way.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { CollectionCapture, type CaptureParts, type Capturing } from './collection.tsx';
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
 import { Move } from './move.tsx';
@@ -48,10 +48,16 @@ import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { NotSavedShown, PhoneOutbox } from './phone/outbox.ts';
 import type { PhoneSetup } from './phone/setup.ts';
 import type { ListsAfter, PhoneSync, SyncRun } from './phone/sync.ts';
-import { worksOf } from './phone/works.ts';
+import { workOfKind, worksOf, type Work } from './phone/works.ts';
 import type { NotAnswered } from './server.ts';
 import { refusalWords } from './refusals.ts';
 import { Setup } from './setup.tsx';
+import {
+  TicketCapture,
+  type CaptureParts,
+  type CapturedKind,
+  type Capturing,
+} from './ticket-capture.tsx';
 import { counted, lastSynced, listsRead, say, timeOfDay, words } from './words.ts';
 
 // How long the phone may be left alone, in minutes, and how long before the end it warns, in
@@ -62,6 +68,14 @@ export interface Inactivity {
 }
 
 const menu: readonly MenuItem[] = ['work', 'sync', 'settings'];
+
+// The works whose capture is built, each the kind of field event it starts.
+const captured: ReadonlyMap<Work, CapturedKind> = new Map(
+  (['COLLECTION', 'DISPOSAL', 'HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL'] as const).map((kind) => [
+    workOfKind[kind],
+    kind,
+  ]),
+);
 
 // What a run came to that the screen says: nothing, where it synced and its lists were read or
 // were the same; otherwise the request it stopped at.
@@ -200,15 +214,17 @@ export function SignedInPhone({
   // Whether fewer than two days' worth of numbers are left (ADR-065): read again whenever the
   // lists are, and on coming back from the capture.
   useEffect(() => {
-    if (
-      capturing !== null ||
-      signedIn.assignment?.fieldEventKinds.includes('COLLECTION') !== true
-    ) {
-      return;
-    }
+    const kinds = signedIn.assignment?.fieldEventKinds ?? [];
+    // The series this work makes numbers of: a collection the load series, a haul-out's
+    // collection the haul-out series.
+    const madeOf = [
+      ...(kinds.includes('COLLECTION') ? (['LOAD'] as const) : []),
+      ...(kinds.includes('HAUL_OUT_COLLECTION') ? (['HAUL_OUT'] as const) : []),
+    ];
+    if (capturing !== null || madeOf.length === 0) return;
     let shown = true;
-    void capture.tickets.low('LOAD').then((low) => {
-      if (shown) setNumbersLow(low);
+    void Promise.all(madeOf.map((workflow) => capture.tickets.low(workflow))).then((low) => {
+      if (shown) setNumbersLow(low.some(Boolean));
     });
     return () => {
       shown = false;
@@ -385,7 +401,7 @@ export function SignedInPhone({
       : undefined;
   if (capturing !== null && signedIn.assignment !== null && heldNow !== undefined) {
     return (
-      <CollectionCapture
+      <TicketCapture
         parts={capture}
         signedIn={signedIn}
         assignment={signedIn.assignment}
@@ -415,9 +431,10 @@ export function SignedInPhone({
         project={assignment.project.name}
         site={assignment.site?.name ?? null}
         works={worksOf(assignment)}
-        startable={heldNow === undefined ? [] : ['collection']}
+        startable={heldNow === undefined ? [] : [...captured.keys()]}
         onStart={(work) => {
-          if (work === 'collection') setCapturing({ at: 'new' });
+          const kind = captured.get(work);
+          if (kind !== undefined) setCapturing({ at: 'new', kind });
         }}
         today={counted(
           words.home.today,

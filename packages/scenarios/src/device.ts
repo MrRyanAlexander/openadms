@@ -91,10 +91,12 @@ import {
   type CertificationKind,
   FieldEventDetails,
   type HeldBlock,
+  type HeldQuantityAsk,
   type IncidentOffer,
   IncidentOffers,
   NumberSeriesRules,
   PhoneNumbers,
+  PhoneQuantityAsks,
   SizeBands,
   type TreeMeasurement,
   uuidv7,
@@ -340,8 +342,15 @@ export interface PhoneLists {
   readonly contractors: readonly Named[];
   // The firm's survey work types, for a phone whose assignment makes surveys (ADR-150).
   readonly surveyWorkTypes: readonly Named[];
-  // The project's certifications, by number: a replaced one is picked from them (ADR-082).
-  readonly certifications: readonly { readonly id: string; readonly certNumber: string }[];
+  // The project's certifications, by number, each with its prime: a replaced one is picked from
+  // them (ADR-082), and the truck's prime says which row of the site's lookup is its (ADR-243).
+  readonly certifications: readonly {
+    readonly id: string;
+    readonly certNumber: string;
+    readonly prime: Named;
+  }[];
+  // For a phone at a site, what that site's phones ask a load or a haul-out for (ADR-227, 243).
+  readonly quantityLookup: readonly HeldQuantityAsk[];
   // The truck lists, for a phone that certifies or takes disposals (ADR-552 (3)(a), (b)): the
   // firm's vehicle types, vehicle features and crew types, and the project's primes, each with
   // the subs placed under it.
@@ -840,6 +849,7 @@ export class SimulatedDevice {
     const refusals = new FieldEventDetails(started.kind).refusals(details);
     const [refusal] = refusals;
     if (refusal !== undefined) throw new Error(`${this.name}: ${refusal.message}`);
+    this.askedAsTheFieldAppAsks(started, details, completion);
 
     const endedAt = this.now();
     const offset = utcOffsetMinutes(this.current.timeZone, endedAt);
@@ -911,6 +921,48 @@ export class SimulatedDevice {
     if (scaleReceiptId !== null) this.receipts.set(id, scaleReceiptId);
     this.outbox.push({ record: 'FIELD_EVENT', fieldEvent: event });
     return { saved: true, event };
+  }
+
+  // A disposal or a haul-out takes the one quantity its site's lookup asks, as the field app's
+  // tower does (the domain's `PhoneQuantityAsks`; REQ-124f, 304, 305; ADR-243, 582): the lookup
+  // this phone read for its site, the truck's prime from its certifications. A story that sends
+  // another quantity sends what no phone of ours would, through `handOver`.
+  private askedAsTheFieldAppAsks(
+    started: StartedEvent,
+    details: {
+      readonly formDebrisTypeId: string | null;
+      readonly loadCall: number | null;
+      readonly carriedCount: number | null;
+    },
+    completion: Completion,
+  ): void {
+    const { kind } = started;
+    if (kind !== 'DISPOSAL' && kind !== 'HAUL_OUT_COLLECTION' && kind !== 'HAUL_OUT_DISPOSAL') {
+      return;
+    }
+    const primeId =
+      this.lists.certifications.find((held) => held.certNumber === started.certNumber)?.prime.id ??
+      null;
+    const asked = new PhoneQuantityAsks(this.lists.quantityLookup).at(
+      kind,
+      details.formDebrisTypeId,
+      primeId,
+    );
+    const receipt =
+      completion.scaleReceipt !== undefined || completion.sameScaleReceiptAs !== undefined
+        ? 'receipt'
+        : null;
+    const given = {
+      loadCall: details.loadCall,
+      carriedCount: details.carriedCount,
+      scaleReceiptId: receipt,
+    };
+    if (!PhoneQuantityAsks.gives(asked.asks, given)) {
+      throw new Error(
+        `${this.name}: ticket ${started.ticketNumber}'s site asks for ${asked.asks} (${asked.from}), ` +
+          'and a phone of ours takes no other quantity.',
+      );
+    }
   }
 
   // An incident: its type, then the firm's sub-type if any, then whichever of the contractor

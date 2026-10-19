@@ -397,15 +397,20 @@ export {
 export { ViewerSettings } from './viewer-settings.ts';
 export {
   QuantityLookup,
+  PhoneQuantityAsks,
   quantityAsks,
   type DumpedForm,
+  type HeldQuantityAsk,
   type LookupForm,
   type LookupPayItem,
   type LookupSetup,
   type LookupSite,
+  type PhoneAsk,
+  type PhoneAskFrom,
   type QuantityAsk,
   type QuantityAskName,
   type QuantityAskedAt,
+  type QuantityKind,
 } from './quantity-lookup.ts';
 export {
   SetupCheck,

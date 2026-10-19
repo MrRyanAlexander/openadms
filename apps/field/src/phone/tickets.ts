@@ -26,6 +26,11 @@
 // - **Today's own count** (the user, Q-216, ADR-573; AC-11-80): the tickets this monitor submitted
 //   on this phone on the project's day. **Two days' worth of numbers left** (ADR-065): fewer unused
 //   than twice the most this phone made of a series in one day (the domain's `PhoneNumbers.low`).
+// - **The tower and the haul-out** (BACKLOG 3.5.2; ADR-223, 227, 243, 582): a ticket holds the
+//   one quantity its site's lookup asks, a load call, a count of the tickets the load carries or
+//   a scale receipt copied by hand; the receipt is kept in the outbox with its disposal, before
+//   it, in one change (ADR-034), and a tandem's second disposal points at the first's receipt,
+//   never a second copy of it (ADR-175).
 //
 // No rule lives here that the server doesn't hold too: what each kind records is the contract's
 // own refusal at `PhoneOutbox.keep`, which answers before anything is sealed.
@@ -82,6 +87,22 @@ export interface TicketPhoto {
   readonly kept: boolean;
 }
 
+// A scale receipt copied by hand at the tower (ADR-034, 038; adms-scale-receipts): its number
+// exactly as written and each weight as the paper says, none worked out. A tandem weighed once is
+// one receipt both disposals point at: `shared` where this ticket points at the receipt kept with
+// an earlier one, which is never kept twice (ADR-175, 582).
+export interface TicketReceipt {
+  readonly id: string;
+  readonly receiptNumber: string;
+  readonly grossWeightLb: number | null;
+  readonly tareWeightLb: number | null;
+  readonly netWeightLb: number | null;
+  readonly netWeightTons: number | null;
+  readonly enteredAt: string;
+  readonly offset: number;
+  readonly shared: boolean;
+}
+
 // What a ticket's monitor entered after New, each as picked or typed; null where nothing was.
 export interface TicketDetails {
   readonly formDebrisTypeId: string | null;
@@ -92,6 +113,11 @@ export interface TicketDetails {
   readonly address: string | null;
   readonly addressSource: 'LOOKED_UP' | 'TYPED' | null;
   readonly notes: string | null;
+  // The one quantity the site's lookup asks (ADR-223, 227, 243): a load call (a haul-out's at its
+  // loading end), a count of the tickets the load carries, or the scale receipt.
+  readonly loadCall: number | null;
+  readonly carriedCount: number | null;
+  readonly scaleReceipt: TicketReceipt | null;
 }
 
 export interface PhoneTicket extends TicketDetails {
@@ -357,6 +383,9 @@ export class PhoneTickets {
       address: null,
       addressSource: null,
       notes: null,
+      loadCall: null,
+      carriedCount: null,
+      scaleReceipt: null,
       waypoints: [],
       photos: [],
       endedAt: null,
@@ -462,10 +491,43 @@ export class PhoneTickets {
       closedAt: at.toISOString(),
       closedDay: new ProjectClock(ticket.timeZone).day(at),
     };
-    const notice = await this.outbox.keep(PhoneTickets.record(submitting));
+    const notice = await this.outbox.keepTogether(PhoneTickets.records(submitting));
     if (notice !== undefined) return { kind: 'notKept', notice };
     await this.put(submitting);
     return { kind: 'sealed', ticket: await this.sealed(submitting) };
+  }
+
+  // The scale receipts this monitor copied at a site on the project's day, each with the ticket
+  // it was kept with, newest first: what a tandem's second disposal may point at (ADR-175).
+  receiptsAt(monitorId: string, siteId: string, day: string): readonly PhoneTicket[] {
+    return this.tickets
+      .filter(
+        (ticket) =>
+          ticket.monitorId === monitorId &&
+          ticket.siteId === siteId &&
+          ticket.state === 'SUBMITTED' &&
+          ticket.closedDay === day &&
+          ticket.scaleReceipt !== null &&
+          !ticket.scaleReceipt.shared,
+      )
+      .reverse();
+  }
+
+  // A split haul-out's pile before this one, on this phone: the one its chain submitted under
+  // the same number with the suffix before (ADR-295), whose load call so far the next is shown.
+  pileBefore(ticket: PhoneTicket): PhoneTicket | undefined {
+    const last = ticket.splitSuffix.at(-1);
+    if (last === undefined || last === 'A') return undefined;
+    const suffix = `${ticket.splitSuffix.slice(0, -1)}${String.fromCharCode(last.charCodeAt(0) - 1)}`;
+    return this.tickets.find(
+      (one) =>
+        one.monitorId === ticket.monitorId &&
+        one.projectId === ticket.projectId &&
+        one.kind === ticket.kind &&
+        one.ticketNumber === ticket.ticketNumber &&
+        one.splitSuffix === suffix &&
+        one.state === 'SUBMITTED',
+    );
   }
 
   // Today's own count (AC-11-80): what this monitor submitted on this phone on the project's day.
@@ -516,9 +578,9 @@ export class PhoneTickets {
         fieldTagId: ticket.fieldTagId,
         roeNumber: ticket.roeNumber,
         estimateCy: ticket.estimateCy,
-        loadCall: null,
-        scaleReceiptId: null,
-        carriedCount: null,
+        loadCall: ticket.loadCall,
+        scaleReceiptId: ticket.scaleReceipt?.id ?? null,
+        carriedCount: ticket.carriedCount,
         kindOfWorkId: null,
         payableTypeId: null,
         payItemId: null,
@@ -540,12 +602,39 @@ export class PhoneTickets {
     };
   }
 
+  // What a ticket's submit keeps in the outbox, in order: the scale receipt it copied, where it
+  // copied one rather than pointing at an earlier ticket's, then its field event.
+  static records(ticket: PhoneTicket): SyncedRecord[] {
+    const receipt = ticket.scaleReceipt;
+    const event = PhoneTickets.record(ticket);
+    if (receipt === null || receipt.shared || ticket.siteId === null) return [event];
+    return [
+      {
+        record: 'SCALE_RECEIPT',
+        scaleReceipt: {
+          id: receipt.id,
+          projectId: ticket.projectId,
+          receiptNumber: receipt.receiptNumber,
+          siteId: ticket.siteId,
+          grossWeightLb: receipt.grossWeightLb,
+          tareWeightLb: receipt.tareWeightLb,
+          netWeightLb: receipt.netWeightLb,
+          netWeightTons: receipt.netWeightTons,
+          enteredById: ticket.monitorId,
+          enteredAt: receipt.enteredAt,
+          deviceUtcOffsetMinutes: receipt.offset,
+        },
+      },
+      event,
+    ];
+  }
+
   // The photographs of a ticket submitting go to the outbox, each once with its file, its bytes
   // then dropped from beside the ticket; then the ticket is submitted. A ticket opened again half
   // way through finishes here: its field event already sealed is left as it is.
   private async sealed(ticket: PhoneTicket): Promise<PhoneTicket> {
     if ((await this.store.read('records', ticket.id)) === undefined) {
-      await this.outbox.keep(PhoneTickets.record(ticket));
+      await this.outbox.keepTogether(PhoneTickets.records(ticket));
     }
     let now = ticket;
     for (const photo of ticket.photos.filter(({ kept }) => !kept)) {

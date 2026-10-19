@@ -417,23 +417,37 @@ export class PhoneOutbox {
   // A record the monitor submitted, kept now, sealed (AC-11-29): what the contract doesn't read,
   // or what weighs more than a record may, is not kept, and why is the answer.
   async keep(record: SyncedRecord): Promise<NotSavedNotice | undefined> {
-    const read = recordRead(record);
-    if (!read.read) return read.notice;
-    const id = syncedRecordId(read.record);
-    // As the store will read it back: JSON's, nothing unset.
-    const made = JSON.parse(JSON.stringify(record)) as SyncedRecord;
-    const entry: Entry<SyncedRecord> = {
-      shelf: 'records',
-      storeId: id,
-      id,
-      kept: this.next,
-      value: made,
-      told: null,
-      archived: false,
-    };
-    await this.store.change([{ shelf: 'records', id, value: this.stored(entry, 'record') }]);
-    this.next += 1;
-    this.records.push(entry);
+    return this.keepTogether([record]);
+  }
+
+  // Records kept together or not at all, in the order given: a scale receipt before the disposal
+  // that points at it (ADR-034, 582). One the contract doesn't read keeps none of them.
+  async keepTogether(records: readonly SyncedRecord[]): Promise<NotSavedNotice | undefined> {
+    const entries: Entry<SyncedRecord>[] = [];
+    for (const [place, record] of records.entries()) {
+      const read = recordRead(record);
+      if (!read.read) return read.notice;
+      const id = syncedRecordId(read.record);
+      entries.push({
+        shelf: 'records',
+        storeId: id,
+        id,
+        kept: this.next + place,
+        // As the store will read it back: JSON's, nothing unset.
+        value: JSON.parse(JSON.stringify(record)) as SyncedRecord,
+        told: null,
+        archived: false,
+      });
+    }
+    await this.store.change(
+      entries.map((entry) => ({
+        shelf: 'records',
+        id: entry.id,
+        value: this.stored(entry, 'record'),
+      })),
+    );
+    this.next += entries.length;
+    this.records.push(...entries);
     return undefined;
   }
 

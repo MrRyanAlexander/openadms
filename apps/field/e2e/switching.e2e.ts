@@ -166,10 +166,10 @@ test('AC-02-47, AC-11-27, AC-11-26, AC-02-42: Lee, with two assignments today, h
   await page.getByLabel(english.move.passcode).fill(worldPasscode());
   await page.getByRole('button', { name: english.move.next }).click();
 
-  // The sites the phone holds, but where it is now.
+  // The sites the phone holds, but where it is now: Marsh Road TDSR and Cypress Creek Landfill.
   await expect(page.getByRole('heading', { name: english.move.site.title })).toBeVisible();
   await expect(page.getByText(filled(english.move.offline, { project: p1 }))).toBeVisible();
-  await expect(page.getByRole('option')).toHaveCount(1);
+  await expect(page.getByRole('option')).toHaveCount(2);
   await checkScreen(page);
   await picked(page, marshRoad).click();
   await page.getByRole('button', { name: english.move.make }).click();
