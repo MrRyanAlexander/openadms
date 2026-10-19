@@ -61,11 +61,12 @@ export function servedPolicy(apiOrigin: string): string {
 }
 
 // The other headers the browser build is served with (infra/local/Caddyfile), beside the
-// stack's own (HSTS, nosniff, no referrer). The phone's camera, place and microphone are off
-// until the screen that needs one is built (C176).
+// stack's own (HSTS, nosniff, no referrer). The phone's camera and microphone are off until the
+// screen that needs one is built (C176); its place is the app's own page's to ask since the first
+// capture screen that stamps GPS (task 3.5.1, ADR-581; AC-11-68), and nobody else's.
 export const servedHeaders = {
   'cross-origin-opener-policy': 'same-origin',
   'cross-origin-resource-policy': 'same-origin',
-  'permissions-policy': 'camera=(), geolocation=(), microphone=(), payment=(), usb=()',
+  'permissions-policy': 'camera=(), geolocation=(self), microphone=(), payment=(), usb=()',
   'x-frame-options': 'DENY',
 } as const;

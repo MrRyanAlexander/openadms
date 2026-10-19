@@ -76,6 +76,7 @@ const shipped = {
   PHONE_HELD_RECORDS_PER_DAY: '1000',
   MAP_FILE_READ_SECONDS: '60',
   MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
+  FIELD_EVENT_WAYPOINTS_AT_MOST: '50',
 };
 const noon = new Date('2026-10-12T16:00:00Z');
 const later = (seconds: number): Date => new Date(noon.getTime() + seconds * 1000);

@@ -67,15 +67,17 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-580)
-- **Phase 3 is open (ADR-557)**: 14 of 33 tasks done (ADR-557…580). **Milestones 3.1…3.4 are done**:
+### Where things stand (2026-10-19, through ADR-581)
+- **Phase 3 is open (ADR-557)**: 15 of 33 tasks done (ADR-557…581). **Milestones 3.1…3.4 are done**:
   the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
   (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
   chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
   answers to Q-215…Q-218 ADR-573); the store, enrolment and its proof, sign-in online and offline;
   setup, switching, moving and sessions under the master passcode (its ten wrong tries offline lock
   the phone, the user, ADR-577); the phone's own sync, its photographs' files, and **"Sync and turn
-  in" with the wipe (ADR-580)**. **Next: Milestone 3.5, the capture, from task 3.5.1.** What each
+  in" with the wipe (ADR-580)**. **Milestone 3.5 begun: the collection (ADR-581)**, with
+  waypoints end to end, the phone's first block of numbers, and the harness's phone taking the
+  number at New. **Next: task 3.5.2, the tower and the haul-out.** What each
   task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
   `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
@@ -145,7 +147,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 14 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 15 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -229,14 +231,14 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.5.1, The collection, and what every capture shares** (`BACKLOG.md`, Milestone 3.5;
-REQ-303, 308a, 309, 317 in part, 318, 319; C68, C96, C121, C135, C171, C179, C180, C184; its ACs
-in its brief). **Its server half first: waypoints** (C180, by the endpoint recipe). Then the
-badge, then the number, at New (ADR-571); the open list; the debris type and field tag by name;
-GPS, waypoints, the address; photos at any step; cancel; sealed at submit; the harness's phone
-moved to the new order (C179); **the phone's first block of numbers** (C184: it asks none today).
-Read its whole brief first. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read
-again).
+**Task 3.5.2, The tower and the haul-out** (`BACKLOG.md`, Milestone 3.5; REQ-304, 305, 124f, 321;
+C74, C83, C97, C100, C127, C177, C182; its ACs in its brief). **Build on 3.5.1's** (ADR-581):
+`PhoneTickets` (open per truck, sealed at submit, cancel), `src/capture.tsx` and the collection's
+screens. At the tower: the site from the assignment; the badge, then the driver's ticket **scanned
+at New, never typed again**; one quantity from the site's lookup (the load call typed 0–100, the
+scale weight and receipt, or the count of tickets carried; C182 where the lookup isn't held); the
+haul-out's call at its loading end, its split piles; a load turned away gets nothing. Read its
+whole brief first. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

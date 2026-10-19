@@ -50,6 +50,8 @@ const towerMonday: PhoneAssignmentAnswer = {
 const listsOf = (setupVersion: number): PhoneListsRecord => ({
   setupVersion,
   blocks: [],
+  numbering: { ticketNumberSource: 'GENERATED', series: ['LOAD', 'HAUL_OUT', 'UNIT_RATE', 'ROE'] },
+  allowSplitLoads: false,
   controlRanges: [],
   debrisTypes: { LOAD: [], HAUL_OUT: [] },
   fieldTags: [],

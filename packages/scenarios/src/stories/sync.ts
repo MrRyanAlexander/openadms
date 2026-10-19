@@ -40,6 +40,7 @@ import {
   forIntake,
   heldId,
   made,
+  type NumberEntry,
   type PhoneRecord,
   type RecordedEvent,
   scanned,
@@ -88,10 +89,7 @@ export const sync: Story = {
       if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
       return outcome.record;
     };
-    const done = (completed: Completed): RecordedEvent => {
-      if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-      return completed.event;
-    };
+    const done = (completed: Completed): RecordedEvent => completed.event;
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -465,12 +463,14 @@ export const sync: Story = {
     ana.passOver('LOAD', 101019);
     const vegetative = { debrisType: 'Vegetative' } as const;
 
-    story.at(monday('09:14'), 'Ana scans Rivera’s self-loader, 730416, at 22 Elm St');
-    const col101020 = ana.begin('LOAD', 'COLLECTION', '730416');
-    story.at(monday('09:40'), 'Loaded: Ana picks Vegetative; her phone shows 101020');
+    story.at(
+      monday('09:14'),
+      'Ana scans Rivera’s self-loader, 730416, at 22 Elm St; her phone shows 101020',
+    );
+    const col101020 = ana.begin('LOAD', 'COLLECTION', '730416', made);
+    story.at(monday('09:40'), 'Loaded: Ana picks Vegetative');
     done(
       ana.complete(col101020, {
-        number: made,
         ...vegetative,
         address: '22 Elm St',
         addressSource: 'TYPED',
@@ -478,45 +478,46 @@ export const sync: Story = {
     );
     const pile = ana.photograph({ of: { kind: 'FIELD_EVENT', id: col101020 } });
     story.at(monday('09:55'), 'Jo scans the bucket truck crew, 730417, and records a hanger');
-    const hanger = { number: made, payableType: 'Hangers', count: 1 } as const;
-    const urt301001 = jo.begin('UNIT_RATE', 'UNIT_RATE', '730417');
+    const hanger = { payableType: 'Hangers', count: 1 } as const;
+    const urt301001 = jo.begin('UNIT_RATE', 'UNIT_RATE', '730417', made);
     clock.advance(5);
     done(jo.complete(urt301001, hanger));
-    // She starts another by mistake and cancels it: it stays on her phone and took no number.
-    const mistake = jo.begin('UNIT_RATE', 'UNIT_RATE');
+    // She starts another by mistake and cancels it: it stays on her phone, keeping the number it
+    // took at New, 301002, never sent and never made again (ADR-571).
+    const mistake = jo.begin('UNIT_RATE', 'UNIT_RATE', undefined, made);
     jo.cancel(mistake);
-    story.at(monday('10:10'), 'Kim scans 730416 at the Marsh Road TDSR tower');
-    const dis1022 = kim.begin('LOAD', 'DISPOSAL', '730416');
-    story.at(monday('10:22'), 'Kim calls 70% and scans 101020 off the truck’s copy');
+    story.at(
+      monday('10:10'),
+      'Kim scans 730416 at the Marsh Road TDSR tower, then 101020 off the truck’s copy',
+    );
+    const dis1022 = kim.begin('LOAD', 'DISPOSAL', '730416', scanned('101020'));
+    story.at(monday('10:22'), 'Kim calls 70%');
     const first = done(
       kim.complete(dis1022, {
-        number: scanned('101020'),
         ...vegetative,
         loadCall: 70,
         endLatitude: '39.09000000',
         endLongitude: '-75.62000000',
       }),
     );
-    story.at(monday('10:51'), 'Ana scans 730416 again, at 40 Birch Ln');
-    const col101021 = ana.begin('LOAD', 'COLLECTION', '730416');
-    story.at(monday('11:05'), 'Ana completes it: 101021');
+    story.at(monday('10:51'), 'Ana scans 730416 again, at 40 Birch Ln: 101021');
+    const col101021 = ana.begin('LOAD', 'COLLECTION', '730416', made);
+    story.at(monday('11:05'), 'Ana completes it');
     done(
       ana.complete(col101021, {
-        number: made,
         ...vegetative,
         address: '40 Birch Ln',
         addressSource: 'TYPED',
       }),
     );
-    story.at(monday('11:28'), 'The self-loader is back at the tower; Kim scans the badge');
-    const dis1140 = kim.begin('LOAD', 'DISPOSAL', '730416');
     story.at(
-      monday('11:40'),
-      'The driver hands over a stale copy: Kim calls 65% and scans 101020 again. It should have been 101021',
+      monday('11:28'),
+      'The self-loader is back at the tower; Kim scans the badge, and the driver hands over a stale copy: she scans 101020 again. It should have been 101021',
     );
+    const dis1140 = kim.begin('LOAD', 'DISPOSAL', '730416', scanned('101020'));
+    story.at(monday('11:40'), 'Kim calls 65%');
     const second = done(
       kim.complete(dis1140, {
-        number: scanned('101020'),
         ...vegetative,
         loadCall: 65,
         endLatitude: '39.09000000',
@@ -681,30 +682,30 @@ export const sync: Story = {
       'P1-COL-1 passes from Ana to Sam, Ana’s morning still on it: Sam signs in and the phone takes his assignment',
     );
     ana.signIn(await setupOf(samOnAnasPhone, mondays['P1-COL-1 Sam Grant']));
-    story.at(monday('13:20'), 'Sam scans the dump trailer, 730415');
-    const col101022 = ana.begin('LOAD', 'COLLECTION', '730415');
-    story.at(monday('13:45'), 'Sam completes it: the phone carries on, 101022');
-    done(ana.complete(col101022, { number: made, ...vegetative }));
-    story.at(monday('14:05'), 'Kim scans 730415 at the tower');
-    const dis101022 = kim.begin('LOAD', 'DISPOSAL', '730415');
-    story.at(monday('14:20'), 'Kim calls 80% and scans 101022');
-    done(kim.complete(dis101022, { number: scanned('101022'), ...vegetative, loadCall: 80 }));
+    story.at(monday('13:20'), 'Sam scans the dump trailer, 730415: the phone carries on, 101022');
+    const col101022 = ana.begin('LOAD', 'COLLECTION', '730415', made);
+    story.at(monday('13:45'), 'Sam completes it');
+    done(ana.complete(col101022, vegetative));
+    story.at(monday('14:05'), 'Kim scans 730415 at the tower, then 101022');
+    const dis101022 = kim.begin('LOAD', 'DISPOSAL', '730415', scanned('101022'));
+    story.at(monday('14:20'), 'Kim calls 80%');
+    done(kim.complete(dis101022, { ...vegetative, loadCall: 80 }));
 
     story.at(monday('14:30'), 'Jo works down Heron St: twenty-four more hangers, a ticket each');
     for (let tree = 0; tree < 24; tree += 1) {
-      const id = jo.begin('UNIT_RATE', 'UNIT_RATE');
+      const id = jo.begin('UNIT_RATE', 'UNIT_RATE', undefined, made);
       clock.advance(3);
       done(jo.complete(id, hanger));
       clock.advance(2);
     }
 
-    story.at(monday('17:10'), 'At Bayline County Landfill Tariq scans 730416 on P1-TWR-LF');
-    const lostEarly = lost.begin('LOAD', 'DISPOSAL', '730416');
     story.at(
-      monday('17:40'),
-      'Tariq calls 75% and scans 101021: the load collected at 40 Birch Ln',
+      monday('17:10'),
+      'At Bayline County Landfill Tariq scans 730416 on P1-TWR-LF, then 101021: the load collected at 40 Birch Ln',
     );
-    done(lost.complete(lostEarly, { number: scanned('101021'), ...vegetative, loadCall: 75 }));
+    const lostEarly = lost.begin('LOAD', 'DISPOSAL', '730416', scanned('101021'));
+    story.at(monday('17:40'), 'Tariq calls 75%');
+    done(lost.complete(lostEarly, { ...vegetative, loadCall: 75 }));
 
     story.at(monday('17:50'), 'At the yard the phones sync. P1-TWR-LF isn’t among them');
     const kimEvening = await syncing(kim);
@@ -864,11 +865,11 @@ export const sync: Story = {
     if (!removed.saved) throw new Error(removed.refusal.message);
     story.at(
       monday('18:20'),
-      'It is in Tariq’s truck. A late load reaches the landfill: he scans 730415',
+      'It is in Tariq’s truck. A late load reaches the landfill: he scans 730415, then 101024',
     );
-    const lostLate = lost.begin('LOAD', 'DISPOSAL', '730415');
-    story.at(monday('18:30'), 'Tariq calls 60% and scans 101024');
-    done(lost.complete(lostLate, { number: scanned('101024'), ...vegetative, loadCall: 60 }));
+    const lostLate = lost.begin('LOAD', 'DISPOSAL', '730415', scanned('101024'));
+    story.at(monday('18:30'), 'Tariq calls 60%');
+    done(lost.complete(lostLate, { ...vegetative, loadCall: 60 }));
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -940,10 +941,11 @@ export const sync: Story = {
       workflow: 'LOAD' | 'HAUL_OUT' | 'UNIT_RATE',
       kind: FieldEventKind,
       badge: string | undefined,
-      completion: Completion,
+      // The number taken at New, beside what Complete takes.
+      { number, ...completion }: Completion & { readonly number: NumberEntry },
       answer: RecordAnswer['answer'] = 'SAVED',
     ): RecordedEvent => {
-      const id = phone.begin(workflow, kind, badge);
+      const id = phone.begin(workflow, kind, badge, number);
       clock.advance(10);
       const event = done(phone.complete(id, completion));
       clock.advance(2);
@@ -963,12 +965,20 @@ export const sync: Story = {
       'QUARANTINED',
     );
     ana.passOver('LOAD', 101029);
-    const phantomA = ana.begin('LOAD', 'COLLECTION', '730415');
-    clock.advance(2);
-    const phantomB = ana.begin('LOAD', 'COLLECTION', '730415');
-    clock.advance(28);
-    const c101030 = expecting(done(ana.complete(phantomA, { number: made, ...vegetative })));
-    const c101031 = expecting(done(ana.complete(phantomB, { number: made, ...vegetative })));
+    const phantomA = ana.begin('LOAD', 'COLLECTION', '730415', made);
+    clock.advance(30);
+    const c101030 = expecting(done(ana.complete(phantomA, vegetative)));
+    // A phone opens one ticket per truck (ADR-571): a second open on 730415 is what no phone of
+    // ours makes, so it reaches the server as a phone that did would send it, handed to Ana's
+    // phone as made two minutes into the first and ended with it, 101031 of her block.
+    const c101031 = expecting({
+      ...c101030,
+      id: uuidv7(new Date(c101030.startedAt.getTime() + 120_000)),
+      ticketNumber: '101031',
+      startedAt: new Date(c101030.startedAt.getTime() + 120_000),
+    });
+    ana.handOver({ record: 'FIELD_EVENT', fieldEvent: c101031 });
+    ana.passOver('LOAD', 101031);
     story.at(tuesday('08:30'), 'A tandem: Ana collects 101032 on 730415 and 101033 on 730416');
     quick(ana, 'LOAD', 'COLLECTION', '730415', { number: made, ...vegetative });
     quick(ana, 'LOAD', 'COLLECTION', '730416', { number: made, ...vegetative });
@@ -1058,13 +1068,12 @@ export const sync: Story = {
       tuesday('11:40'),
       'The tandem crosses the scale once: receipt BCL-88241, copied by hand, for both its disposals',
     );
-    const front = tariq.begin('LOAD', 'DISPOSAL', '730415');
-    const rear = tariq.begin('LOAD', 'DISPOSAL', '730416');
+    const front = tariq.begin('LOAD', 'DISPOSAL', '730415', scanned('101032'));
+    const rear = tariq.begin('LOAD', 'DISPOSAL', '730416', scanned('101033'));
     clock.advance(12);
     const frontDisposal = expecting(
       done(
         tariq.complete(front, {
-          number: scanned('101032'),
           ...vegetative,
           scaleReceipt: {
             receiptNumber: 'BCL-88241',
@@ -1079,7 +1088,6 @@ export const sync: Story = {
     const rearDisposal = expecting(
       done(
         tariq.complete(rear, {
-          number: scanned('101033'),
           ...vegetative,
           sameScaleReceiptAs: front,
         }),
@@ -1125,11 +1133,10 @@ export const sync: Story = {
       'Kim logs a resident’s drop-off at Marsh Road TDSR, then the pup trailer, 730420, reaches her tower',
     );
     const dropOff = kim.dropOffLog({ residentName: 'Carl Jensen', originAddress: '14 Heron St' });
-    const kimTuesday = kim.begin('LOAD', 'DISPOSAL', '730420');
+    const kimTuesday = kim.begin('LOAD', 'DISPOSAL', '730420', scanned(expiredTag.ticketNumber));
     clock.advance(15);
     const kimDisposal = done(
       kim.complete(kimTuesday, {
-        number: scanned(expiredTag.ticketNumber),
         ...vegetative,
         loadCall: 55,
       }),
@@ -1474,16 +1481,15 @@ export const sync: Story = {
 
     story.at(
       wednesday('08:20'),
-      'Lee scans Rivera’s self-loader, P2’s own 730416, at 412 Cedar Ct, and answers "split"',
+      'Lee answers "split" and scans Rivera’s self-loader, P2’s own 730416, at 412 Cedar Ct; the phone shows 102001',
     );
-    const propertyA = lee.begin('LOAD', 'COLLECTION', '730416');
+    const propertyA = lee.begin('LOAD', 'COLLECTION', '730416', made);
     story.at(
       wednesday('08:40'),
-      '412 Cedar Ct: Vegetative, 12 CY by eye, ROE R-0007 typed from the paper; the phone shows 102001',
+      '412 Cedar Ct: Vegetative, 12 CY by eye, ROE R-0007 typed from the paper',
     );
     const collectionA = done(
       lee.complete(propertyA, {
-        number: made,
         splitSuffix: 'A',
         ...vegetative,
         estimateCy: 12,
@@ -1530,11 +1536,10 @@ export const sync: Story = {
       signedDate: '2026-10-09',
     });
     story.at(wednesday('08:55'), 'Split: the next property, the same badge');
-    const propertyB = lee.begin('LOAD', 'COLLECTION', '730416');
+    const propertyB = lee.begin('LOAD', 'COLLECTION', '730416', chained(propertyA));
     story.at(wednesday('09:05'), '416 Cedar Ct: 18 CY by eye, ROE R-0008');
     const collectionB = done(
       lee.complete(propertyB, {
-        number: chained(propertyA),
         splitSuffix: 'B',
         ...vegetative,
         estimateCy: 18,
@@ -1545,40 +1550,40 @@ export const sync: Story = {
       wednesday('09:20'),
       'Mistakes on Lee’s phone: 412 Cedar Ct recorded again as 102001-A; a collection on the bare number 102001; another numbered 101020; and a paper ROE typed in as R-0007',
     );
-    const again102001A = lee.begin('LOAD', 'COLLECTION', '730416');
+    const again102001A = lee.begin('LOAD', 'COLLECTION', '730416', scanned('102001'));
     clock.advance(5);
     const dupProperty = done(
       lee.complete(again102001A, {
-        number: scanned('102001'),
         splitSuffix: 'A',
         ...vegetative,
         estimateCy: 10,
       }),
     );
-    const bareId = lee.begin('LOAD', 'COLLECTION', '730416');
+    const bareId = lee.begin('LOAD', 'COLLECTION', '730416', scanned('102001'));
     clock.advance(5);
-    const bare = done(lee.complete(bareId, { number: scanned('102001'), ...vegetative }));
-    const p2s101020 = lee.begin('LOAD', 'COLLECTION', '730416');
+    const bare = done(lee.complete(bareId, vegetative));
+    const p2s101020 = lee.begin('LOAD', 'COLLECTION', '730416', scanned('101020'));
     clock.advance(5);
-    done(lee.complete(p2s101020, { number: scanned('101020'), ...vegetative }));
+    done(lee.complete(p2s101020, vegetative));
     const paperRoe = lee.roe({
       paperNumber: 'R-0007',
       address: '420 Cedar Ct',
       ownerName: 'Ida Voss',
       signed: false,
     });
-    story.at(wednesday('10:00'), 'At P2’s Marsh Road TDSR tower Kim scans P2’s 730416');
-    const dis102001 = kimP2.begin('LOAD', 'DISPOSAL', '730416');
+    story.at(
+      wednesday('10:00'),
+      'At P2’s Marsh Road TDSR tower Kim scans P2’s 730416, then 102001',
+    );
+    const dis102001 = kimP2.begin('LOAD', 'DISPOSAL', '730416', scanned('102001'));
     story.at(
       wednesday('10:10'),
-      'Kim calls 75% and scans 102001; ten minutes on the barcode is scanned a second time',
+      'Kim calls 75%; ten minutes on the barcode is scanned a second time',
     );
-    const dumped = done(
-      kimP2.complete(dis102001, { number: scanned('102001'), ...vegetative, loadCall: 75 }),
-    );
-    const twice = kimP2.begin('LOAD', 'DISPOSAL', '730416');
+    const dumped = done(kimP2.complete(dis102001, { ...vegetative, loadCall: 75 }));
+    const twice = kimP2.begin('LOAD', 'DISPOSAL', '730416', scanned('102001'));
     clock.advance(10);
-    done(kimP2.complete(twice, { number: scanned('102001'), ...vegetative, loadCall: 75 }));
+    done(kimP2.complete(twice, { ...vegetative, loadCall: 75 }));
 
     story.at(wednesday('17:30'), 'At the yard P2’s two phones sync, the tower’s first');
     const towerAnswers = await syncing(kimP2);

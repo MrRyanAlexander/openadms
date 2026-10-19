@@ -260,6 +260,73 @@ export class PhoneNumbers {
   topUp(blockSize: number): number {
     return Math.max(0, blockSize - this.unused());
   }
+
+  // Whether it holds less than two days' worth (ADR-065): fewer unused than twice the most it
+  // gave out of the series in one day, as the phone counts its own days (ADR-581, an agent
+  // reading). A phone that hasn't given any out yet isn't low.
+  low(mostInADay: number): boolean {
+    return mostInADay > 0 && this.unused() < 2 * mostInADay;
+  }
+}
+
+// The work a phone's assignment names, as far as numbers go.
+export interface NumberingWork {
+  readonly fieldEventKinds: readonly string[];
+  readonly certifying: boolean;
+  readonly formDocumentTypes: readonly string[];
+}
+
+// The series a phone makes numbers of for its work (ADR-065, 151, 581; C184): a collection makes
+// a load's number, a haul-out collection a haul-out's, unit rate work its own, certifying a cert
+// number and an ROE made on the phone an ROE number, each where the project has that series. A
+// disposal makes none: it scans the number the truck carries (ADR-021, 056). A project numbered
+// from control tickets has no load or haul-out series, so its collections take the control ticket
+// (ADR-056); one whose firm seeded no cert-number series takes the pre-printed sheet's (Q-142).
+// So a phone asks for its first block of exactly these, and of no other.
+const madeBy: Readonly<Record<string, NumberSeriesName>> = {
+  COLLECTION: 'LOAD',
+  HAUL_OUT_COLLECTION: 'HAUL_OUT',
+  UNIT_RATE: 'UNIT_RATE',
+};
+
+export class PhoneSeries {
+  private readonly work: NumberingWork;
+
+  constructor(work: NumberingWork) {
+    this.work = work;
+  }
+
+  // Of the series the project has, those this work makes numbers of, in the series' order.
+  of(projectSeries: readonly NumberSeriesName[]): NumberSeriesName[] {
+    const wanted = new Set<NumberSeriesName>();
+    for (const kind of this.work.fieldEventKinds) {
+      const series = madeBy[kind];
+      if (series !== undefined) wanted.add(series);
+    }
+    if (this.work.certifying) wanted.add('CERTIFICATION');
+    if (this.work.formDocumentTypes.includes('ROE')) wanted.add('ROE');
+    return numberSeries.filter((series) => wanted.has(series) && projectSeries.includes(series));
+  }
+}
+
+// A project's pre-printed stock as a phone holds it (ADR-056; AC-04-08): a control ticket scanned
+// outside every range of its series is questioned on the phone, never refused. A number that isn't
+// a whole number is outside every range.
+export class ControlTickets {
+  private readonly ranges: readonly (NumberRun & { readonly series: NumberSeriesName })[];
+
+  constructor(ranges: readonly (NumberRun & { readonly series: NumberSeriesName })[]) {
+    this.ranges = ranges;
+  }
+
+  holds(series: NumberSeriesName, scanned: string): boolean {
+    if (!/^\d{1,10}$/.test(scanned)) return false;
+    const number = Number(scanned);
+    return this.ranges.some(
+      (range) =>
+        range.series === series && number >= range.firstNumber && number <= range.lastNumber,
+    );
+  }
 }
 
 // A run of pre-printed control tickets as setup holds it.

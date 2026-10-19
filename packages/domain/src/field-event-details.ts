@@ -46,6 +46,11 @@ export const fieldEventDetails = {
   markedIneligible: unitRate,
 } as const satisfies Record<string, readonly FieldEventKindName[]>;
 export type FieldEventDetail = keyof typeof fieldEventDetails;
+
+// The kinds that take waypoints: a load's collection, each of a split's (ADR-571, 581; Q-104).
+// "Mark waypoint" records the phone's time and whatever fix it had, in order; nothing in the
+// engine reads them.
+export const waypointKinds: readonly FieldEventKindName[] = ['COLLECTION'];
 // Every kind-specific detail, in the order of spec/DATA-MODEL.md §4.1 (2).
 export const fieldEventDetailNames = Object.keys(fieldEventDetails) as FieldEventDetail[];
 
@@ -58,13 +63,15 @@ export type MeasuredAs = (typeof measuredAs)[number];
 export type RecordedDetails = {
   // Empty when not split.
   readonly splitSuffix: string;
+  // The waypoints marked; none, or left out, where none were.
+  readonly waypoints?: readonly unknown[];
 } & Readonly<Partial<Record<FieldEventDetail, unknown>>>;
 
 // Why a record isn't one, in plain words, and the detail it is about.
 export interface DetailRefusal {
   readonly code:
     'NOT_THIS_KINDS' | 'SUFFIX_NOT_LETTERS' | 'SPLIT_INCOMPLETE' | 'MEASUREMENT_INCOMPLETE';
-  readonly detail: FieldEventDetail | 'splitSuffix';
+  readonly detail: FieldEventDetail | 'splitSuffix' | 'waypoints';
   readonly message: string;
 }
 
@@ -119,6 +126,11 @@ export class FieldEventDetails {
     return (fieldEventDetails[detail] as readonly FieldEventKindName[]).includes(this.kind);
   }
 
+  // Whether this kind takes waypoints.
+  takesWaypoints(): boolean {
+    return waypointKinds.includes(this.kind);
+  }
+
   // Whether this kind is split: one field event per property, or per pile.
   splits(): boolean {
     return splitKinds.includes(this.kind);
@@ -142,6 +154,13 @@ export class FieldEventDetails {
           message: `${kindWords[kind]} doesn't record ${detailWords[detail]}.`,
         });
       }
+    }
+    if ((details.waypoints?.length ?? 0) > 0 && !this.takesWaypoints()) {
+      refusals.push({
+        code: 'NOT_THIS_KINDS',
+        detail: 'waypoints',
+        message: `${kindWords[kind]} doesn't record waypoints: only a load's collection does.`,
+      });
     }
     if (splitSuffix !== '') {
       if (!this.splits()) {

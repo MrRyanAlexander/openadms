@@ -202,12 +202,12 @@ describe('a simulated phone', () => {
   it('keeps what its monitor records until it syncs, then sends it in the order recorded', async () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
-    const first = phone.begin('LOAD', 'COLLECTION', '730415');
+    const first = phone.begin('LOAD', 'COLLECTION', '730415', scanned('101001'));
     clock.advance(25);
-    phone.complete(first, { number: scanned('101001') });
-    const second = phone.begin('LOAD', 'COLLECTION', '730415');
+    phone.complete(first, {});
+    const second = phone.begin('LOAD', 'COLLECTION', '730415', scanned('101002'));
     clock.advance(20);
-    phone.complete(second, { number: scanned('101002') });
+    phone.complete(second, {});
     expect(phone.waiting.map((event) => event.ticketNumber)).toEqual(['101001', '101002']);
 
     const intake = new Received();
@@ -220,11 +220,9 @@ describe('a simulated phone', () => {
   it('stamps its own clock, its offset, and an id made when the badge was scanned', () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice({ ...setup, clockErrorMinutes: -7 }, clock);
-    const id = phone.begin('LOAD', 'DISPOSAL', '730415');
+    const id = phone.begin('LOAD', 'DISPOSAL', '730415', scanned('101001'));
     clock.advance(20);
-    const completed = phone.complete(id, { number: scanned('101001'), loadCall: 80 });
-    if (!completed.saved) throw new Error('not saved');
-    const { event } = completed;
+    const { event } = phone.complete(id, { loadCall: 80 });
     expect(projectTime('America/New_York', event.startedAt)).toBe('Mon 12 Oct 08:08');
     expect(projectTime('America/New_York', event.endedAt)).toBe('Mon 12 Oct 08:28');
     expect(uuidv7Time(event.id)).toEqual(event.startedAt);
@@ -247,7 +245,7 @@ describe('a simulated phone', () => {
     const clock = new StoryClock('2026-10-12T08:15:00-04:00');
     const phone = new SimulatedDevice(setup, clock);
     for (const number of ['101001', '101002', '101003']) {
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: scanned(number) });
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', scanned(number)), {});
     }
     const intake = new Received();
     intake.refuseAfter = 1;
@@ -276,9 +274,7 @@ describe('a simulated phone', () => {
 
   it('completes only a field event it started', () => {
     const phone = new SimulatedDevice(setup, new StoryClock('2026-10-12T08:15:00-04:00'));
-    expect(() => phone.complete('not-started', { number: scanned('101001') })).toThrow(
-      'has no field event',
-    );
+    expect(() => phone.complete('not-started', {})).toThrow('has no field event');
   });
 });
 
@@ -353,49 +349,65 @@ const phoneAt = (time: string, more: Partial<typeof setup> & { siteId?: string }
   const clock = new StoryClock(`2026-10-12T${time}:00-04:00`);
   return { clock, phone: new SimulatedDevice({ ...setup, lists, ...more }, clock) };
 };
-const saved = (completed: ReturnType<SimulatedDevice['complete']>): RecordedEvent => {
-  if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-  return completed.event;
-};
+const saved = (completed: ReturnType<SimulatedDevice['complete']>): RecordedEvent =>
+  completed.event;
 
-describe('a simulated phone captures badge first, number last', () => {
-  it('AC-04-91, AC-04-17 New scans the badge: the field event waits with its id and no number', () => {
+describe('a simulated phone captures the badge, then the number, at New (ADR-571; C179)', () => {
+  it('AC-04-91, AC-04-17 New scans the badge, then takes the number: the field event waits with its id and its number', () => {
     const { phone, clock } = phoneAt('08:15');
-    const id = phone.begin('LOAD', 'COLLECTION', '730415');
-    expect(phone.open).toEqual([
+    const id = phone.begin('LOAD', 'COLLECTION', '730415', made);
+    expect(phone.opened).toEqual([
       {
         id,
         workflow: 'LOAD',
         kind: 'COLLECTION',
         certNumber: '730415',
         startedAt: new Date('2026-10-12T12:15:00Z'),
+        ticketNumber: '101001',
+        numberTyped: false,
+        numberTypedReason: null,
       },
     ]);
     expect([phone.nextNumber('LOAD'), phone.lastUsedNumber('LOAD'), phone.waiting]).toEqual([
+      101002,
       101001,
-      null,
       [],
     ]);
     clock.advance(25);
-    const event = saved(phone.complete(id, { number: made, debrisType: 'Vegetative' }));
+    const event = saved(phone.complete(id, { debrisType: 'Vegetative' }));
     expect([event.id, event.ticketNumber, event.certNumber]).toEqual([id, '101001', '730415']);
-    expect([phone.open, phone.lastUsedNumber('LOAD')]).toEqual([[], 101001]);
-    expect(() => phone.begin('LOAD', 'COLLECTION')).toThrow('starts with a badge scanned');
+    expect([phone.opened, phone.lastUsedNumber('LOAD')]).toEqual([[], 101001]);
+    expect(() => phone.begin('LOAD', 'COLLECTION', undefined, made)).toThrow(
+      'starts with a badge scanned',
+    );
+  });
+
+  it('AC-11-76 one open field event per truck: a badge whose truck has one open opens that one and takes no number; another opens once it is submitted; a crew is not held to one', () => {
+    const { phone } = phoneAt('08:15');
+    const first = phone.begin('LOAD', 'COLLECTION', '730415', made);
+    expect(phone.begin('LOAD', 'COLLECTION', '730415', made)).toBe(first);
+    expect([phone.opened.length, phone.nextNumber('LOAD')]).toEqual([1, 101002]);
+    const other = phone.begin('LOAD', 'COLLECTION', '730416', made);
+    expect(phone.opened.map((event) => event.ticketNumber)).toEqual(['101001', '101002']);
+    phone.complete(first, {});
+    const next = phone.begin('LOAD', 'COLLECTION', '730415', made);
+    expect([next === first, next === other, phone.opened.length]).toEqual([false, false, 2]);
+    const crew = phone.begin('UNIT_RATE', 'UNIT_RATE', '730417', made);
+    expect(phone.begin('UNIT_RATE', 'UNIT_RATE', '730417', made)).not.toBe(crew);
   });
 
   it('AC-04-10 the first field event makes the number, the next of its block, block after block', () => {
     const { phone } = phoneAt('08:15');
     const numbers = [1, 2, 3, 4].map(
       () =>
-        saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }))
-          .ticketNumber,
+        saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), {})).ticketNumber,
     );
     expect(numbers).toEqual(['101001', '101002', '101003', '105001']);
-    const haulOut = phone.begin('HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
-    const unitRate = phone.begin('UNIT_RATE', 'UNIT_RATE', '730417');
+    const haulOut = phone.begin('HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419', made);
+    const unitRate = phone.begin('UNIT_RATE', 'UNIT_RATE', '730417', made);
     expect([
-      saved(phone.complete(haulOut, { number: made, loadCall: 90 })).ticketNumber,
-      saved(phone.complete(unitRate, { number: made, payableType: 'Hangers' })).ticketNumber,
+      saved(phone.complete(haulOut, { loadCall: 90 })).ticketNumber,
+      saved(phone.complete(unitRate, { payableType: 'Hangers' })).ticketNumber,
     ]).toEqual(['201001', '301001']);
   });
 
@@ -405,62 +417,61 @@ describe('a simulated phone captures badge first, number last', () => {
       { ...phone.setup, lists: { ...lists, blocks: [] } },
       phoneAt('09:05').clock,
     );
-    const id = tower.begin('LOAD', 'DISPOSAL', '730415');
     expect(tower.nextNumber('LOAD')).toBeNull();
-    expect(() => tower.complete(id, { number: made, loadCall: 80 })).toThrow(
+    expect(() => tower.begin('LOAD', 'DISPOSAL', '730415', made)).toThrow(
       'P1-TWR-TDSR holds no LOAD number to give out',
     );
-    const event = saved(tower.complete(id, { number: scanned('101001'), loadCall: 80 }));
+    const id = tower.begin('LOAD', 'DISPOSAL', '730415', scanned('101001'));
+    const event = saved(tower.complete(id, { loadCall: 80 }));
     expect([event.ticketNumber, event.numberTyped, event.siteId]).toEqual(['101001', false, tdsr]);
   });
 
-  it('AC-04-11 a number entered again that doesn’t match saves nothing: the same number shows until it does', () => {
+  it('AC-04-11, AC-11-82 a copied number typed again that doesn’t match opens nothing: the same number shows until it does; a scanned one isn’t typed again', () => {
     const { phone } = phoneAt('08:15');
-    const id = phone.begin('LOAD', 'COLLECTION', '730415');
-    expect(phone.complete(id, { number: made, reentered: '101010' })).toEqual({
-      saved: false,
+    expect(phone.open('LOAD', 'COLLECTION', '730415', made, '101010')).toEqual({
+      opened: false,
       reason: 'NUMBER_MISMATCH',
       shown: '101001',
       reentered: '101010',
     });
-    expect([phone.open.length, phone.waiting.length, phone.lastUsedNumber('LOAD')]).toEqual([
-      1,
+    expect([phone.opened.length, phone.waiting.length, phone.lastUsedNumber('LOAD')]).toEqual([
+      0,
       0,
       null,
     ]);
-    expect(saved(phone.complete(id, { number: made, reentered: '101001' })).ticketNumber).toBe(
-      '101001',
-    );
-    const disposal = phone.begin('LOAD', 'DISPOSAL', '730415');
-    expect(phone.complete(disposal, { number: scanned('101001'), reentered: '101007' })).toEqual({
-      saved: false,
-      reason: 'NUMBER_MISMATCH',
-      shown: '101001',
-      reentered: '101007',
-    });
-    expect(phone.open.map((event) => event.id)).toEqual([disposal]);
+    const opened = phone.open('LOAD', 'COLLECTION', '730415', made, '101001');
+    if (!opened.opened) throw new Error('not opened');
+    expect(saved(phone.complete(opened.id, {})).ticketNumber).toBe('101001');
+    expect(
+      phone.open('LOAD', 'DISPOSAL', '730415', typed('101060', 'Barcode damaged'), '101006'),
+    ).toEqual({ opened: false, reason: 'NUMBER_MISMATCH', shown: '101060', reentered: '101006' });
+    // A scan is shown and never typed again: whatever the story says it typed, it opens.
+    const disposal = phone.open('LOAD', 'DISPOSAL', '730415', scanned('101001'), '101007');
+    expect(disposal.opened).toBe(true);
+    expect(phone.opened.map((event) => event.ticketNumber)).toEqual(['101001']);
   });
 
-  it('a field event cancelled stays on the phone, is never sent, and took no number', async () => {
+  it('AC-04-95 a field event cancelled stays on the phone and is never sent; it keeps the number it took at New, never made again', async () => {
     const { phone } = phoneAt('08:15');
-    const mistake = phone.begin('LOAD', 'COLLECTION', '730416');
+    const mistake = phone.begin('LOAD', 'COLLECTION', '730416', made);
     phone.cancel(mistake);
     expect([
-      phone.open,
-      phone.cancelled.map((event) => event.id),
+      phone.opened,
+      phone.cancelled.map((event) => [event.id, event.ticketNumber]),
       phone.nextNumber('LOAD'),
-    ]).toEqual([[], [mistake], 101001]);
-    expect(() => phone.complete(mistake, { number: made })).toThrow('has no field event');
+      phone.lastUsedNumber('LOAD'),
+    ]).toEqual([[], [[mistake, '101001']], 101002, 101001]);
+    expect(() => phone.complete(mistake, {})).toThrow('has no field event');
     expect(await phone.sync(new Received())).toBe(0);
   });
 
   it('a typed number carries its reason and is not entered twice', () => {
     const { phone } = phoneAt('12:10');
     const event = saved(
-      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
-        number: typed('101060', 'Barcode damaged'),
-        loadCall: 60,
-      }),
+      phone.complete(
+        phone.begin('LOAD', 'DISPOSAL', '730416', typed('101060', 'Barcode damaged')),
+        { loadCall: 60 },
+      ),
     );
     expect([event.ticketNumber, event.numberTyped, event.numberTypedReasonId]).toEqual([
       '101060',
@@ -468,17 +479,17 @@ describe('a simulated phone captures badge first, number last', () => {
       listId('Barcode damaged'),
     ]);
     expect(() =>
-      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
-        number: typed('101061', 'Felt like it'),
-      }),
+      phone.complete(
+        phone.begin('LOAD', 'DISPOSAL', '730416', typed('101061', 'Felt like it')),
+        {},
+      ),
     ).toThrow('no reason "Felt like it" in its lists');
   });
 
   it('AC-04-92 picks are names from its lists, each sent as the id the list holds', () => {
     const { phone } = phoneAt('08:15');
     const event = saved(
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), {
-        number: made,
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), {
         debrisType: 'C&D',
         address: '14 Heron St',
         addressSource: 'TYPED',
@@ -494,26 +505,22 @@ describe('a simulated phone captures badge first, number last', () => {
     expect(phone.payableTypes).toEqual(['Hangers', 'Leaners', 'Stumps', 'White Goods']);
     // A load's list is the load form's: Mulch is the haul-out form's.
     expect(() =>
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), {
-        number: made,
-        debrisType: 'Mulch',
-      }),
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), { debrisType: 'Mulch' }),
     ).toThrow('no debris type "Mulch" in its lists');
   });
 
   it('refuses what its kind doesn’t record, as the domain’s rule says', () => {
     const { phone } = phoneAt('08:15');
     expect(() =>
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made, loadCall: 80 }),
+      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), { loadCall: 80 }),
     ).toThrow("A collection doesn't record a load call.");
   });
 
   it('AC-04-59 works a unit rate pay item out from the payable type’s bands', () => {
     const { phone } = phoneAt('09:40');
     const ticket = (completion: Parameters<SimulatedDevice['complete']>[1]) =>
-      saved(phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', '730417'), completion));
+      saved(phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', '730417', made), completion));
     const leaner = ticket({
-      number: made,
       payableType: 'Leaners',
       count: 1,
       measurement: { inches: 56.5, measuredAs: 'CIRCUMFERENCE' },
@@ -533,7 +540,6 @@ describe('a simulated phone captures badge first, number last', () => {
     ]);
     const stump = (inches: number) =>
       ticket({
-        number: made,
         payableType: 'Stumps',
         count: 1,
         measurement: { inches, measuredAs: 'DIAMETER' },
@@ -544,7 +550,6 @@ describe('a simulated phone captures badge first, number last', () => {
       null,
     ]);
     const whiteGoods = ticket({
-      number: made,
       payableType: 'White Goods',
       items: [
         { name: 'Washer', quantity: 2 },
@@ -565,8 +570,7 @@ describe('a simulated phone captures badge first, number last', () => {
     const { phone } = phoneAt('09:40');
     const tickets = ['730417', undefined, undefined, '730418', undefined].map((badge) =>
       saved(
-        phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', badge), {
-          number: made,
+        phone.complete(phone.begin('UNIT_RATE', 'UNIT_RATE', badge, made), {
           payableType: 'Hangers',
         }),
       ),
@@ -580,16 +584,22 @@ describe('a simulated phone captures badge first, number last', () => {
     ]);
     expect(phone.workingCrew).toBe('730418');
     // A truck's badge is scanned every time.
-    expect(() => phone.begin('LOAD', 'COLLECTION')).toThrow('starts with a badge scanned');
+    expect(() => phone.begin('LOAD', 'COLLECTION', undefined, made)).toThrow(
+      'starts with a badge scanned',
+    );
   });
 
   it('a split chain carries one number: each pile after the first takes its chain’s', () => {
     const { phone } = phoneAt('15:10', { siteId: tdsr });
     const pile = (suffix: string, tag: string, loadCall: number, after?: string) => {
-      const id = phone.begin('HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+      const id = phone.begin(
+        'HAUL_OUT',
+        'HAUL_OUT_COLLECTION',
+        '730419',
+        after === undefined ? made : chained(after),
+      );
       const event = saved(
         phone.complete(id, {
-          number: after === undefined ? made : chained(after),
           splitSuffix: suffix,
           debrisType: 'Mulch',
           fieldTag: tag,
@@ -611,11 +621,9 @@ describe('a simulated phone captures badge first, number last', () => {
 
   it('keeps its count of numbers when the next day’s monitor signs in; the story may pass numbers over', () => {
     const { phone } = phoneAt('08:15');
-    saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }));
+    saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), {}));
     phone.signIn({ ...phone.setup, assignmentId: '00000000-0000-7000-8000-0000000000aa' });
-    const next = saved(
-      phone.complete(phone.begin('LOAD', 'COLLECTION', '730415'), { number: made }),
-    );
+    const next = saved(phone.complete(phone.begin('LOAD', 'COLLECTION', '730415', made), {}));
     expect([next.ticketNumber, next.assignmentId]).toEqual([
       '101002',
       '00000000-0000-7000-8000-0000000000aa',
@@ -630,8 +638,7 @@ describe('a simulated phone captures badge first, number last', () => {
   it('sends a scale receipt before the disposal that points at it, and forms in the order made', async () => {
     const { phone, clock } = phoneAt('17:00', { siteId: tdsr });
     const disposal = saved(
-      phone.complete(phone.begin('HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419'), {
-        number: scanned('201004'),
+      phone.complete(phone.begin('HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419', scanned('201004')), {
         debrisType: 'Mulch',
         scaleReceipt: {
           receiptNumber: 'CCL-51207',
@@ -715,16 +722,14 @@ describe('a simulated phone captures badge first, number last', () => {
   it('AC-05-05, AC-05-45 sends its records first and its photographs after, keeps each record’s own answer, and shows one that was not saved', async () => {
     const { phone, clock } = phoneAt('10:22', { name: 'P1-TWR-TDSR', siteId: tdsr });
     const first = saved(
-      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
-        number: scanned('101020'),
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416', scanned('101020')), {
         loadCall: 70,
       }),
     );
     const photo = phone.photograph({ of: { kind: 'FIELD_EVENT', id: first.id } });
     clock.advance(78);
     const second = saved(
-      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416'), {
-        number: scanned('101020'),
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730416', scanned('101020')), {
         loadCall: 65,
       }),
     );
@@ -763,18 +768,15 @@ describe('a simulated phone captures badge first, number last', () => {
 
   it('AC-05-10 a tandem’s second disposal points at the receipt recorded with the first: one receipt, sent once', () => {
     const { phone, clock } = phoneAt('09:30', { name: 'P1-TWR-LF', siteId: tdsr });
-    const front = phone.begin('LOAD', 'DISPOSAL', '730415');
-    const rear = phone.begin('LOAD', 'DISPOSAL', '730416');
+    const front = phone.begin('LOAD', 'DISPOSAL', '730415', scanned('101040'));
+    const rear = phone.begin('LOAD', 'DISPOSAL', '730416', scanned('101041'));
     clock.advance(10);
     const first = saved(
       phone.complete(front, {
-        number: scanned('101040'),
         scaleReceipt: { receiptNumber: 'BCL-88241', netWeightTons: 17.1 },
       }),
     );
-    const second = saved(
-      phone.complete(rear, { number: scanned('101041'), sameScaleReceiptAs: first.id }),
-    );
+    const second = saved(phone.complete(rear, { sameScaleReceiptAs: first.id }));
     expect(second.scaleReceiptId).toBe(first.scaleReceiptId);
     expect(phone.waitingRecords.map((sent) => sent.record)).toEqual([
       'SCALE_RECEIPT',
@@ -782,8 +784,7 @@ describe('a simulated phone captures badge first, number last', () => {
       'FIELD_EVENT',
     ]);
     expect(() =>
-      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730415'), {
-        number: scanned('101042'),
+      phone.complete(phone.begin('LOAD', 'DISPOSAL', '730415', scanned('101042')), {
         // An id that is no record's: the second's with its last digit changed (to '0', or to
         // '1' when it already ends in '0').
         sameScaleReceiptAs: second.id.replace(/.$/, (last) => (last === '0' ? '1' : '0')),

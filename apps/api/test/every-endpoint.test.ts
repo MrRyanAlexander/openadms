@@ -212,6 +212,7 @@ const inventory = [
   'renumberFieldEvent PUT /field-events/:fieldEventId/number SIGNED_IN ADMIN,MANAGER_ANALYST RENUMBER',
   'correctItemLine PUT /field-events/:fieldEventId/item-lines/:itemNameId SIGNED_IN ADMIN,MANAGER_ANALYST CORRECT',
   'correctCarriedTicket PUT /field-events/:fieldEventId/carried-tickets SIGNED_IN ADMIN,MANAGER_ANALYST CORRECT',
+  'correctWaypoint PATCH /field-events/:fieldEventId/waypoints/:position SIGNED_IN ADMIN,MANAGER_ANALYST CORRECT',
   'markPhotograph PATCH /photographs/:photoId SIGNED_IN ADMIN,MANAGER_ANALYST CORRECT',
   'photographFile GET /photographs/:photoId/files/:file SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
   'addPhotograph POST /photographs SIGNED_IN ADMIN,MANAGER_ANALYST CORRECT',

@@ -239,7 +239,20 @@
       "dropOff": "New drop-off log",
       "survey": "New survey",
       "roe": "New ROE"
-    }
+    },
+    "today": {
+      "none": "Today: no tickets yet",
+      "one": "Today: 1 ticket",
+      "other": "Today: {count} tickets"
+    },
+    "open": {
+      "title": "Open tickets",
+      "none": "No ticket is open.",
+      "ticket": "Truck {truck} · {number}",
+      "started": "Started {time}",
+      "split": "Truck {truck} · {number}-{suffix}"
+    },
+    "numbersLow": "Fewer than two days’ worth of ticket numbers are left on this phone. Sync when you have signal to get more."
   },
   "work": {
     "noAssignment": {
@@ -436,5 +449,160 @@
     },
     "open": "Sign in",
     "opening": "Signing in…"
+  },
+  "capture": {
+    "kinds": {
+      "COLLECTION": "Collection",
+      "DISPOSAL": "Disposal",
+      "HAUL_OUT_COLLECTION": "Haul-out collection",
+      "HAUL_OUT_DISPOSAL": "Haul-out disposal",
+      "UNIT_RATE": "Unit rate ticket"
+    },
+    "leave": "Leave it for now",
+    "next": "Next",
+    "split": {
+      "title": "Normal or split?",
+      "about": "A split load is gathered from several properties: one collection for each.",
+      "normal": "Normal",
+      "split": "Split"
+    },
+    "badge": {
+      "title": "Scan the truck’s badge",
+      "label": "Badge number",
+      "start": "Start the ticket",
+      "truck": "{number}, {capacity} CY",
+      "crew": "{number}: a crew",
+      "contractor": "Contractor",
+      "sub": "{sub}, under {prime}",
+      "open": "Truck {truck} already has ticket {number} open on this phone: it opens.",
+      "keyedTruck": "{number}: keyed in by hand"
+    },
+    "unknownBadge": {
+      "title": "Not in this phone’s certifications",
+      "warning": "{number} isn’t in this phone’s certifications. Continue?",
+      "stale": "This phone’s lists were read {when}.",
+      "refresh": "Read the lists again",
+      "refreshing": "Reading the lists…",
+      "stillNot": "The lists were read again and still don’t hold {number}.",
+      "notRead": "The lists couldn’t be read now. Carry on without them.",
+      "continue": "Continue with {number}",
+      "keyIn": "Key the truck in by hand"
+    },
+    "keyed": {
+      "title": "Capacity read off the truck",
+      "about": "Type the cubic yards written on the truck. The certification’s capacity is what bills.",
+      "unit": "CY"
+    },
+    "number": {
+      "title": "The ticket number",
+      "shown": "This phone’s next number",
+      "noteIt": "Write it on the ticket, then type it again below.",
+      "againTitle": "Type the number again",
+      "showAgain": "Show the number again",
+      "wrong": "That doesn’t match. Type the number again.",
+      "none": "This phone holds no ticket numbers yet. Sync when you have signal to get a block of them.",
+      "controlTitle": "Scan the control ticket",
+      "controlLabel": "Control ticket number",
+      "wontRead": "The barcode won’t read",
+      "typedTitle": "Type the number",
+      "typedAbout": "A typed number is flagged for the back office to check.",
+      "reasonTitle": "Why was it typed?",
+      "open": "Open the ticket"
+    },
+    "question": {
+      "title": "Check this number",
+      "onThisPhone": "Ticket {number} is already on this phone: a {kind}, started {time}. Use it again?",
+      "outsideStock": "{number} isn’t in this project’s control tickets. Use it anyway?",
+      "use": "Use {number}",
+      "back": "Go back"
+    },
+    "open": {
+      "title": "{kind} {number}",
+      "split": "{kind} {number}-{suffix}",
+      "started": "Started {time}",
+      "complete": "Complete",
+      "waypoint": "Mark waypoint",
+      "waypoints": {
+        "none": "No waypoints marked",
+        "one": "1 waypoint marked",
+        "other": "{count} waypoints marked"
+      },
+      "waypointsFull": "That’s the most waypoints a collection takes ({max}).",
+      "waypointNoFix": "Waypoint {number} marked at {time}, without GPS.",
+      "waypointFix": "Waypoint {number} marked at {time}.",
+      "placeRefused": "The phone’s place is off for this app: the ticket is kept without GPS.",
+      "cancel": "Cancel the ticket",
+      "cancelTitle": "Cancel ticket {number}?",
+      "cancelAbout": "It stays on this phone and is never sent. Its number is not used again.",
+      "cancelYes": "Cancel it",
+      "cancelNo": "Keep it"
+    },
+    "debris": {
+      "title": "Debris type"
+    },
+    "tag": {
+      "title": "Field tag",
+      "none": "No field tag"
+    },
+    "roe": {
+      "title": "Which ROE is this load for?",
+      "typeIt": "Or type the ROE number",
+      "none": "No ROE",
+      "address": "{address}",
+      "noAddress": "No address on the ROE"
+    },
+    "estimate": {
+      "title": "How much from this property?",
+      "unit": "CY"
+    },
+    "place": {
+      "title": "Where it was collected",
+      "capture": "Capture GPS",
+      "capturing": "Getting the GPS…",
+      "fix": "GPS: {latitude}, {longitude}",
+      "noFix": "No GPS fix. The ticket is kept without it.",
+      "lookUp": "Look up address",
+      "lookingUp": "Looking up the address…",
+      "found": "Address found: {address}",
+      "notFound": "No address found here. Type the street number and name.",
+      "unanswered": "The address couldn’t be looked up. Type the street number and name.",
+      "typed": "Street number and name"
+    },
+    "photos": {
+      "title": "Photos",
+      "file": "Photo from the camera",
+      "tooLarge": "That photo couldn’t be kept: it is empty or too large.",
+      "taken": "Photo {number} of {count}, {time}",
+      "open": "Open photo {number}",
+      "remove": "Remove this photo",
+      "back": "Back to the ticket"
+    },
+    "review": {
+      "title": "Check the ticket",
+      "about": "Everything you entered, once. Change anything with Back.",
+      "truck": "Truck",
+      "number": "Ticket number",
+      "typed": "Typed: {reason}",
+      "debris": "Debris type",
+      "tag": "Field tag",
+      "roe": "ROE",
+      "estimate": "Estimate",
+      "estimateCy": "{estimate} CY",
+      "place": "Where",
+      "waypoints": "Waypoints",
+      "photos": "Photos",
+      "none": "None",
+      "submit": "Submit",
+      "submitting": "Submitting…",
+      "notKept": "The ticket couldn’t be kept to send: {message}"
+    },
+    "submitted": {
+      "title": "Ticket {number} saved",
+      "saved": "Ticket {number} is saved on this phone. It goes at the next sync.",
+      "sealed": "A submitted ticket can’t be changed on the phone. The back office corrects it if it needs to be.",
+      "nextProperty": "Next property of this load ({number}-{suffix})",
+      "another": "New collection",
+      "home": "Home"
+    }
   }
 }

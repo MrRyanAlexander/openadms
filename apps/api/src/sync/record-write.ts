@@ -51,11 +51,14 @@ interface AnswersKept {
   readonly formDocumentType: FormDocumentType | null;
 }
 
-// A fix a phone sent that couldn't be one: what its sender is told.
-export function gpsNote(end: 'start' | 'end' | '', sent: SentFix): IntakeNote {
+// A fix a phone sent that couldn't be one: what its sender is told. Where: a field event's start
+// or end, a waypoint by its place in the order (ADR-581), or a form's one fix.
+export function gpsNote(end: 'start' | 'end' | '' | number, sent: SentFix): IntakeNote {
+  const where =
+    end === '' ? '' : typeof end === 'number' ? ` at waypoint ${String(end)}` : ` at the ${end}`;
   return {
     code: 'GPS_UNREADABLE',
-    message: `GPS unreadable${end === '' ? '' : ` at the ${end}`}: latitude ${quoted(sent.latitude)}, longitude ${quoted(sent.longitude)} as sent. Kept without that fix.`,
+    message: `GPS unreadable${where}: latitude ${quoted(sent.latitude)}, longitude ${quoted(sent.longitude)} as sent. Kept without that fix.`,
   };
 }
 
@@ -74,8 +77,8 @@ export class RecordWrite {
     this.receivedAt = receivedAt;
   }
 
-  // A field event with its item lines and the tickets it carries. Answers what the sender
-  // should know: a fix that couldn't be one is kept as sent, the record saved without it.
+  // A field event with its item lines, the tickets it carries and its waypoints. Answers what the
+  // sender should know: a fix that couldn't be one is kept as sent, the record saved without it.
   async fieldEvent(event: FieldEventToWrite): Promise<IntakeNote[]> {
     const { tx, receivedAt } = this;
     const notes: IntakeNote[] = [];
@@ -183,6 +186,28 @@ export class RecordWrite {
     for (const carriedTicketNumber of event.carriedTickets) {
       await tx.carriedTicket.create({
         data: { carriedTicketNumber, fieldEventId: event.id, fieldEventKind: event.kind },
+      });
+    }
+    // A collection's waypoints, in the order marked, each kept as recorded (ADR-581).
+    for (const [index, waypoint] of event.waypoints.entries()) {
+      const position = index + 1;
+      const read = new GpsFix({
+        latitude: waypoint.latitude,
+        longitude: waypoint.longitude,
+      }).read();
+      if (read.unreadable !== null) notes.push(gpsNote(position, read.unreadable));
+      await tx.fieldEventWaypoint.create({
+        data: {
+          fieldEventId: event.id,
+          fieldEventKind: event.kind,
+          position,
+          markedAt: waypoint.markedAt,
+          latitude: read.fix?.latitude ?? null,
+          longitude: read.fix?.longitude ?? null,
+          ...(read.unreadable === null
+            ? {}
+            : { unreadableGps: read.unreadable as unknown as Prisma.InputJsonObject }),
+        },
       });
     }
     return notes;

@@ -30,7 +30,16 @@ async function signedIn(page: Page, asked: Asked[], who: 'ana' | 'lee') {
   await page.getByLabel(english.phone.passwordLabel).fill(monitor.password);
   await page.getByRole('button', { name: english.phone.signIn }).click();
   await expect(page.getByText(english.work.synced.now)).toBeVisible();
-  await expect.poll(() => toApi(asked).slice(from).length).toBe(4);
+  // Ana's lists name a series her collections make numbers of: one more sync asks its first
+  // block (C184; task 3.5.1, ADR-581).
+  await expect
+    .poll(
+      () =>
+        toApi(asked)
+          .slice(from)
+          .filter(({ status }) => status !== undefined).length,
+    )
+    .toBe(who === 'ana' ? 5 : 4);
   const [answered, , lists] = toApi(asked).slice(from);
   return {
     userId: (answered?.answer as { userId: string }).userId,
@@ -121,9 +130,15 @@ test('AC-02-58, AC-11-08, AC-11-34, AC-05-56: with Ana gone home, the supervisor
     numbers: { series: string; ended: string }[];
   };
   expect([answer.turnedIn, answer.wipe]).toEqual([true, true]);
-  // The last numbers it used, from the blocks it holds: none yet, for the browser build asks for
-  // its first block with the capture's generated number (task 3.5.1), so none ended.
-  expect([(turnIn?.body as { lastUsed: unknown[] }).lastUsed, answer.numbers]).toEqual([[], []]);
+  // The last numbers it used, from the blocks it holds: the first block it asked at sign-in
+  // (C184; task 3.5.1), none of it used, is handed back.
+  expect([
+    (turnIn?.body as { lastUsed: unknown[] }).lastUsed,
+    answer.numbers.map(({ series }) => series),
+  ]).toEqual([
+    [{ projectId: assignment.project.id, series: 'LOAD', lastUsedNumber: null }],
+    ['LOAD'],
+  ]);
 
   // Erased: the keyring's database gone, the store's keys and rows with it; opened again, it is a
   // phone not yet enrolled.

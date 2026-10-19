@@ -70,6 +70,7 @@ export async function p1WithTickets(api: Served, tx: Tx, within: Database, who: 
       markedIneligible: null,
       items: [],
       carriedTickets: [],
+      waypoints: [],
       reasonId: await reasonNamed(tx, 'Device failed'),
       ...more,
     });

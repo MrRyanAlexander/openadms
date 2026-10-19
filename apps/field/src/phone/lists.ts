@@ -6,9 +6,18 @@
 // say which setup version they are; told of another (a sync's answer, task 3.4.1), the phone reads
 // them again (AC-11-17). A sync's answer also brings the blocks of numbers the phone holds of each
 // series it reported, topped up (ADR-065, 505): they take the place of that series' blocks held
-// (`toppedUp`), and the last number used of each series is reported from them (`lastUsed`). What the store keeps is read back by the contracts' own schema, with the
-// monitor they were read for: the phone's monitor, the one whose work it holds, who alone signs in
-// on it with no connection (ADR-120, 575).
+// (`toppedUp`), and the last number used of each series is reported from them (`lastUsed`). What
+// the store keeps is read back by the contracts' own schema, with the monitor they were read for:
+// the phone's monitor, the one whose work it holds, who alone signs in on it with no connection
+// (ADR-120, 575).
+//
+// **Its first block of each series its work makes numbers of** (C184; task 3.5.1, ADR-581): the
+// lists say how the project numbers its tickets and which series it has; a sync reports each
+// series the assignment makes numbers of (the domain's `PhoneSeries`) with no last number used
+// where the phone holds no block of it yet, and the server cuts it one. **A number the capture
+// gives out is marked used in its block at once** (`gaveOut`), in the same piece of work that
+// opens its ticket, so it is never made again and is reported at the next sync; a top-up never
+// marks a block's numbers less used than the phone knows them to be.
 //
 // **Handed over under the master passcode** to a monitor with their own assignment (task 3.3.2,
 // ADR-577), the phone's monitor is the one it was handed to, kept beside the lists until lists
@@ -22,10 +31,10 @@ import {
   type PhoneListsRecord,
   type SeriesHeld,
 } from '@open-adms/contracts';
-import type { NoAssignmentReason } from '@open-adms/domain';
+import { PhoneSeries, type NoAssignmentReason, type NumberSeriesName } from '@open-adms/domain';
 
 import type { NotAnswered } from '../server.ts';
-import type { Json, PhoneStore } from '../store/phone-store.ts';
+import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
 import type { MonitorOnPhone } from './monitor.ts';
 
 // The lists held, the assignment they are for, the monitor they were read for (none where lists
@@ -164,10 +173,20 @@ export class PhoneLists {
     const taken = numbers.filter(({ toppedUp, projectId }) => toppedUp && projectId === project);
     if (taken.length === 0) return;
     const series = new Set(taken.map((each) => each.series));
+    // A number given out while the sync was under way stays used: of a block the phone held, the
+    // higher of what it knew and what the server answered.
+    const knew = (one: SeriesHeld['series'], first: number): number | null =>
+      held.lists.blocks.find((block) => block.series === one && block.firstNumber === first)
+        ?.lastUsedNumber ?? null;
     const blocks = [
       ...held.lists.blocks.filter((block) => !series.has(block.series)),
       ...taken.flatMap((each) =>
-        each.blocks.map((block) => ({ ...block, series: each.series, status: 'ISSUED' as const })),
+        each.blocks.map((block) => {
+          const known = knew(each.series, block.firstNumber);
+          const lastUsedNumber =
+            known === null ? block.lastUsedNumber : Math.max(known, block.lastUsedNumber ?? known);
+          return { ...block, lastUsedNumber, series: each.series, status: 'ISSUED' as const };
+        }),
       ),
     ];
     await this.store.change([
@@ -179,12 +198,14 @@ export class PhoneLists {
     ]);
   }
 
-  // The last number used of each series the phone holds blocks of, as its blocks say: what a sync
-  // reports (ADR-065), so the server tops each up. None where it holds no lists.
+  // The last number used of each series the phone holds blocks of, as its blocks say, and of each
+  // series its work makes numbers of that it holds none of yet, none: what a sync reports
+  // (ADR-065; C184), so the server tops each up or cuts the first. None where it holds no lists.
   async lastUsed(): Promise<LastUsedReport[]> {
     const held = await this.held();
     if (held === undefined) return [];
-    const series = [...new Set(held.lists.blocks.map((block) => block.series))];
+    const makes = new PhoneSeries(held.assignment).of(held.lists.numbering.series);
+    const series = [...new Set([...held.lists.blocks.map((block) => block.series), ...makes])];
     return series.map((one) => {
       const used = held.lists.blocks
         .filter((block) => block.series === one)
@@ -196,6 +217,40 @@ export class PhoneLists {
         lastUsedNumber: used.length === 0 ? null : Math.max(...used),
       };
     });
+  }
+
+  // Whether its work makes numbers of a series it holds no block of yet (C184): a sync then asks
+  // for the first.
+  async wantsFirstBlocks(): Promise<boolean> {
+    const held = await this.held();
+    if (held === undefined) return false;
+    return new PhoneSeries(held.assignment)
+      .of(held.lists.numbering.series)
+      .some((series) => !held.lists.blocks.some((block) => block.series === series));
+  }
+
+  // The store's change that marks a number the capture gave out as used in its block (ADR-065,
+  // 571): kept with the ticket it opens, so the number is never made again. None where the phone
+  // holds no lists, or no block holds the number.
+  async gaveOut(series: NumberSeriesName, number: number): Promise<Change | null> {
+    const kept = await this.store.read(listsShelf, listsId);
+    const held = await this.held();
+    if (held === undefined || typeof kept !== 'object' || kept === null) return null;
+    if (Array.isArray(kept) || kept instanceof Uint8Array) return null;
+    const holds = (block: HeldLists['lists']['blocks'][number]) =>
+      block.series === series && number >= block.firstNumber && number <= block.lastNumber;
+    if (!held.lists.blocks.some(holds)) return null;
+    const blocks = held.lists.blocks.map((block) =>
+      holds(block)
+        ? { ...block, lastUsedNumber: Math.max(number, block.lastUsedNumber ?? number) }
+        : block,
+    );
+    const record = kept as Readonly<Record<string, Json>>;
+    return {
+      shelf: listsShelf,
+      id: listsId,
+      value: { ...record, lists: { ...held.lists, blocks } } as unknown as Json,
+    };
   }
 
   // Read again where the setup version the server named isn't the one the lists held are, or

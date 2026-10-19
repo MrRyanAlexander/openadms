@@ -122,6 +122,8 @@ async function kimOnP1(served: Served, tx: Tx, who: People) {
       address: null,
       addressSource: null,
       loadCall: 85,
+      // A disposal marks no waypoint (ADR-581).
+      waypoints: [],
       ...more,
     });
   // One sync as the phone sends it: every part, empty where there is nothing.

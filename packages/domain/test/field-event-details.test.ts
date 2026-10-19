@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FieldEventDetails,
   fieldEventKinds,
+  waypointKinds,
   type DetailRefusal,
   type FieldEventKindName,
   type RecordedDetails,
@@ -207,5 +208,23 @@ describe('a measurement', () => {
         'NOT_THIS_KINDS roeId',
       ]);
     }
+  });
+});
+
+describe('waypoints', () => {
+  it('AC-11-77 are a load collection’s, each of a split’s, and no other kind’s', () => {
+    const marked = [{ markedAt: '2026-10-05T12:41:00Z' }];
+    expect(codes({ kind: 'COLLECTION', splitSuffix: '', waypoints: marked })).toEqual([]);
+    expect(
+      codes({ kind: 'COLLECTION', splitSuffix: 'B', estimateCy: 18, waypoints: marked }),
+    ).toEqual([]);
+    for (const kind of fieldEventKinds.filter((each) => each !== 'COLLECTION')) {
+      expect(codes({ kind, splitSuffix: '', waypoints: marked }), kind).toEqual([
+        'NOT_THIS_KINDS waypoints',
+      ]);
+      // None marked is no waypoint at all.
+      expect(codes({ kind, splitSuffix: '', waypoints: [] }), kind).toEqual([]);
+    }
+    expect(waypointKinds).toEqual(['COLLECTION']);
   });
 });

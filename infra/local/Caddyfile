@@ -66,7 +66,7 @@ field.adms.localhost {
 		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src https://api.adms.localhost; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
 		Cross-Origin-Opener-Policy "same-origin"
 		Cross-Origin-Resource-Policy "same-origin"
-		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		Permissions-Policy "camera=(), geolocation=(self), microphone=(), payment=(), usb=()"
 		X-Frame-Options "DENY"
 	}
 	# The page is read again each time; a bundle's name changes with what it holds, so it is kept.

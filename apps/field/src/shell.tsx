@@ -14,6 +14,7 @@
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
+import type { CaptureParts } from './collection.tsx';
 import { CreateMonitor } from './create-monitor.tsx';
 import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';
@@ -39,6 +40,8 @@ import { TurnIn } from './turn-in.tsx';
 // lists and the login list it holds, what it holds to send and how it syncs, how a sign-in goes,
 // how long it may be left alone, how it is turned in, and how it opens again once erased.
 export interface OpenedPhone {
+  // What the capture screens work with (task 3.5.1).
+  readonly capture: CaptureParts;
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
@@ -235,6 +238,7 @@ export function Shell({
           lists={opened.lists}
           sync={opened.sync}
           outbox={opened.outbox}
+          capture={opened.capture}
           inactivity={opened.inactivity}
           setup={opened.setup}
           signedIn={seen.signedIn}

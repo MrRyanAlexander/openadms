@@ -24,7 +24,7 @@ import {
 } from '@open-adms/domain';
 import { z } from 'zod';
 
-import { billingUnits, dumpedForms } from './setup-answers.ts';
+import { billingUnits, dumpedForms, ticketNumberSources } from './setup-answers.ts';
 
 // The health answer says that the process answers, and nothing else: no version, no setting, no
 // word on the database. Anybody may ask (acceptance file 10, point 17). The readiness answer is
@@ -879,7 +879,18 @@ const quantityAsk = {
   asks: z.enum(quantityAsks),
 };
 
+// How the project numbers its tickets, from control tickets or generated (ADR-056, 065), and
+// the number series it has: a phone asks for its first block of each series its work makes
+// numbers of, and of no other (`PhoneSeries`; C184, ADR-581). And whether a collection asks
+// "normal or split?" first (ADR-137; AC-04-98).
+const numbering = z.strictObject({
+  ticketNumberSource: z.enum(ticketNumberSources),
+  series: z.array(z.enum(numberSeries)),
+});
+
 export const setupShownSchema = z.strictObject({
+  numbering,
+  allowSplitLoads: z.boolean(),
   controlRanges,
   debrisTypes,
   fieldTags: z.array(named),
@@ -928,6 +939,8 @@ export const phoneListsSchema = z.strictObject({
       status: z.literal('ISSUED'),
     }),
   ),
+  numbering,
+  allowSplitLoads: z.boolean(),
   controlRanges,
   debrisTypes,
   fieldTags: z.array(named),

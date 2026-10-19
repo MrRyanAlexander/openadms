@@ -105,6 +105,7 @@ export {
   fieldEventDetails,
   fieldEventKinds,
   measuredAs,
+  waypointKinds,
   type DetailRefusal,
   type FieldEventDetail,
   type FieldEventKindName,
@@ -158,10 +159,12 @@ export {
 } from './map-shapes.ts';
 export {
   ControlRanges,
+  ControlTickets,
   NewProjectNumbers,
   NumberSeriesBook,
   NumberSeriesRules,
   PhoneNumbers,
+  PhoneSeries,
   numberSeries,
   ticketNumberSeries,
   ticketNumbers,
@@ -170,6 +173,7 @@ export {
   type NewSeries,
   type NumberRefusal,
   type NumberRun,
+  type NumberingWork,
   type NumberSeriesName,
   type NumbersTaken,
   type SeriesPosition,
@@ -181,7 +185,13 @@ export {
   type NeighbourEvent,
   type TicketKey,
 } from './neighbours.ts';
-export { Policy, policyNames, requestBodyBytesAtLeast, type PolicyName } from './policy.ts';
+export {
+  fieldEventWaypointsAtMostEver,
+  Policy,
+  policyNames,
+  requestBodyBytesAtLeast,
+  type PolicyName,
+} from './policy.ts';
 export {
   BreachedPasswords,
   PasswordRules,
@@ -419,6 +429,7 @@ export {
   photoFileSignatureBytes,
   photoFileTypeOf,
   photoFileTypes,
+  ticketPhotosAtMost,
   type PhotoFileType,
 } from './photo-files.ts';
 export {

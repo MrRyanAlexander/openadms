@@ -290,11 +290,10 @@ export const heldForReview: Story = {
       lists: await story.lists.held({ assignmentId: collections, deviceId: phones.ana.id }),
       timeZone,
     });
-    story.at(monday('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const first = anasPhone.begin('LOAD', 'COLLECTION', '730416');
-    story.at(monday('08:40'), 'She completes the collection: 101001');
-    const completed = anasPhone.complete(first, { number: made });
-    if (!completed.saved) throw new Error('The collection was not saved on the phone.');
+    story.at(monday('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline: 101001');
+    const first = anasPhone.begin('LOAD', 'COLLECTION', '730416', made);
+    story.at(monday('08:40'), 'She completes the collection');
+    const completed = anasPhone.complete(first, {});
     const good = onTheWire({ record: 'FIELD_EVENT', fieldEvent: completed.event });
     if (good.record !== 'FIELD_EVENT') throw new Error('Not a field event.');
     story.at(

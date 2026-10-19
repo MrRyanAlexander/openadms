@@ -1406,3 +1406,168 @@ describe('an item line and a carried ticket', () => {
     expect(await columnsOf('viewer_field_event')).toEqual(await columnsOf('field_event'));
   });
 });
+
+describe('a collection’s waypoints', () => {
+  // Waypoint `position` of collection `eventId`, marked at 08:4n on 5 October, at a fix or none.
+  const waypoint = (eventId: string, position: number, more: Row = {}): Row => ({
+    field_event_id: eventId,
+    field_event_kind: 'COLLECTION',
+    position,
+    marked_at: `2026-10-05T12:4${String(position)}:00Z`,
+    ...more,
+  });
+  const heron = { latitude: '29.65123456', longitude: '-82.32456789' };
+
+  it('AC-11-77 are kept in the order marked, each the phone’s time and whatever fix it had, none at all taken; one that isn’t a waypoint of a collection is refused', async () => {
+    const { db } = tested;
+    await asThePhone();
+    const collection = await received({ ticket_number: '101040' });
+    await add('field_event_waypoint', waypoint(collection, 1, heron));
+    await add('field_event_waypoint', waypoint(collection, 2));
+    await add(
+      'field_event_waypoint',
+      waypoint(collection, 3, { latitude: '29.65200000', longitude: '-82.32500000' }),
+    );
+    expect(
+      await db.rows(
+        `SELECT "position", "marked_at", "latitude"::text, "longitude"::text
+         FROM "field_event_waypoint" WHERE "field_event_id" = $1 ORDER BY "position"`,
+        [collection],
+      ),
+    ).toEqual([
+      {
+        position: 1,
+        marked_at: new Date('2026-10-05T12:41:00Z'),
+        latitude: '29.65123456',
+        longitude: '-82.32456789',
+      },
+      { position: 2, marked_at: new Date('2026-10-05T12:42:00Z'), latitude: null, longitude: null },
+      {
+        position: 3,
+        marked_at: new Date('2026-10-05T12:43:00Z'),
+        latitude: '29.65200000',
+        longitude: '-82.32500000',
+      },
+    ]);
+    expect(await columnsOf('field_event_waypoint')).toEqual([
+      'archived_at',
+      'created_at',
+      'field_event_id',
+      'field_event_kind',
+      'id',
+      'latitude',
+      'longitude',
+      'marked_at',
+      'position',
+      'unreadable_gps',
+    ]);
+    // One place in the order once, from 1.
+    expect(await refusedRow('field_event_waypoint', waypoint(collection, 2))).toBe(
+      refusedBy.unique,
+    );
+    expect(await refusedRow('field_event_waypoint', waypoint(collection, 0))).toBe(refusedBy.check);
+    // Half a fix, a fix off the earth, an unreadable one that holds nothing.
+    for (const fix of [
+      { latitude: '29.65123456' },
+      { latitude: '91', longitude: '-82.32456789' },
+      { latitude: '29.65123456', longitude: '-181' },
+      { unreadable_gps: {} },
+    ]) {
+      expect(
+        await refusedRow('field_event_waypoint', waypoint(collection, 4, fix)),
+        JSON.stringify(fix),
+      ).toBe(refusedBy.check);
+    }
+    // A fix that couldn't be one, kept as sent beside a waypoint without it.
+    await add(
+      'field_event_waypoint',
+      waypoint(collection, 4, { unreadable_gps: { latitude: '29.65', longitude: null } }),
+    );
+    // Only a collection takes them: the tower's disposal doesn't.
+    const disposal = await received(atTheTower('101041'));
+    expect(
+      await refusedRow('field_event_waypoint', {
+        ...waypoint(disposal, 1),
+        field_event_kind: 'DISPOSAL',
+      }),
+    ).toBe(refusedBy.check);
+    expect(await refusedRow('field_event_waypoint', waypoint(disposal, 1))).toBe(
+      refusedBy.foreignKey,
+    );
+    // A collection that has waypoints can't be made another kind.
+    await asTheBackOffice();
+    expect(
+      (
+        await db.refused(`UPDATE "field_event" SET "kind" = 'DISPOSAL' WHERE "id" = $1`, [
+          collection,
+        ])
+      ).code,
+    ).toBe(refusedBy.restrict);
+  });
+
+  it('AC-11-77 are corrected in place by the API’s login and taken off by a mark, the prior value kept in the audit log under the person; the worker writes none and no login deletes one', async () => {
+    const { db, world } = tested;
+    await asThePhone();
+    const collection = await received({ ticket_number: '101040' });
+    const marked = await add('field_event_waypoint', waypoint(collection, 1, heron));
+    await asTheBackOffice();
+    expect(
+      await db.run(
+        `UPDATE "field_event_waypoint" SET "latitude" = 29.65, "longitude" = -82.32 WHERE "id" = $1`,
+        [marked],
+      ),
+    ).toBe(1);
+    expect(
+      await db.run(`UPDATE "field_event_waypoint" SET "archived_at" = now() WHERE "id" = $1`, [
+        marked,
+      ]),
+    ).toBe(1);
+    expect(
+      await db.rows(
+        `SELECT "actor_id"::text AS actor, "source"::text, "changed_fields",
+           "prior_value" ->> 'latitude' AS latitude
+         FROM "audit_record" WHERE "record_id" = $1 AND "operation" = 'UPDATE' ORDER BY "id"`,
+        [marked],
+      ),
+    ).toEqual([
+      {
+        actor: world.admin,
+        source: 'BACK_OFFICE',
+        changed_fields: ['latitude', 'longitude'],
+        latitude: '29.65123456',
+      },
+      {
+        actor: world.admin,
+        source: 'BACK_OFFICE',
+        changed_fields: ['archived_at'],
+        latitude: '29.65000000',
+      },
+    ]);
+    // Neither its id nor when it was written is corrected.
+    expect(
+      (
+        await db.refused(`UPDATE "field_event_waypoint" SET "created_at" = now() WHERE "id" = $1`, [
+          marked,
+        ])
+      ).code,
+    ).toBe(refusedBy.grant);
+    await db.as('adms_worker');
+    await db.actor(world.worker, 'SYSTEM');
+    expect(
+      (
+        await db.refused(`UPDATE "field_event_waypoint" SET "position" = 2 WHERE "id" = $1`, [
+          marked,
+        ])
+      ).code,
+    ).toBe(refusedBy.grant);
+    for (const login of ['adms_api', 'adms_worker', 'adms_readonly', 'adms_owner'] as const) {
+      await db.as(login);
+      await db.actor(world.admin, 'BACK_OFFICE');
+      await db.refused(`DELETE FROM "field_event_waypoint" WHERE "id" = $1`, [marked]);
+    }
+    await db.as('adms_owner');
+    expect(
+      await db.rows(`SELECT 1 FROM "field_event_waypoint" WHERE "id" = $1`, [marked]),
+    ).toHaveLength(1);
+  });
+});

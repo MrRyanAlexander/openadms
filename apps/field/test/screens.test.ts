@@ -14,6 +14,13 @@ const tsx = (path: string, text: string) => ({ path, text });
 describe('AC-11-51: the screens of the field app', () => {
   it('AC-11-51: are read from its source and its prototype’s, each named once by a literal', () => {
     expect(screensIn()).toEqual([
+      // The collection's (task 3.5.1, ADR-581).
+      'photo',
+      'submitted',
+      'new-collection',
+      'cancel-ticket',
+      'open-ticket',
+      'complete-collection',
       'create-monitor',
       'enrol',
       'home',
@@ -119,7 +126,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 30 of 30 screens checked, in 31 checks; 0 found.',
+      '\nAccessibility: 36 of 36 screens checked, in 37 checks; 0 found.',
     );
   });
 

@@ -15,10 +15,12 @@ import { MonitorOnPhone } from './phone/monitor.ts';
 import { PhoneOutbox } from './phone/outbox.ts';
 import { PasscodeSessions } from './phone/passcode-sessions.ts';
 import { PasscodeOnPhone } from './phone/passcode.ts';
+import { AddressLookup, BrowserLocator } from './phone/place.ts';
 import { PhoneReports } from './phone/reports.ts';
 import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
 import { PhoneSync } from './phone/sync.ts';
+import { PhoneTickets } from './phone/tickets.ts';
 import { PhoneTurnIn } from './phone/turn-in.ts';
 import { Server } from './server.ts';
 import { Shell } from './shell.tsx';
@@ -64,7 +66,19 @@ const phone = BrowserStore.opened().then(async (store) => {
     },
   });
   const sync = new PhoneSync({ store, outbox, monitor, lists, loginList });
+  // The tickets begun on the phone (task 3.5.1, ADR-581): a photograph's file the server would
+  // never take is never kept.
+  const tickets = await PhoneTickets.opened(store, lists, outbox, {
+    photoBytesAtMost: policy.mediaFileBytesAtMost,
+  });
   return {
+    capture: {
+      tickets,
+      lists,
+      locator: new BrowserLocator(),
+      lookup: new AddressLookup(monitor),
+      waypointsAtMost: policy.fieldEventWaypointsAtMost,
+    },
     identity,
     monitor,
     lists,

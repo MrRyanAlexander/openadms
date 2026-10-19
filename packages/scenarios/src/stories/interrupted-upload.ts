@@ -76,11 +76,10 @@ export const interruptedUpload: Story = {
     });
     anasPhone.sendsPartsOf(partBytes);
 
-    story.at(monday('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const started = anasPhone.begin('LOAD', 'COLLECTION', '730416');
+    story.at(monday('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline: 101001');
+    const started = anasPhone.begin('LOAD', 'COLLECTION', '730416', made);
     story.at(monday('08:40'), 'She completes 101001 and takes three photographs with it');
-    const completed = anasPhone.complete(started, { number: made });
-    if (!completed.saved) throw new Error('The collection was not saved on the phone.');
+    const completed = anasPhone.complete(started, {});
     const of = { kind: 'FIELD_EVENT', id: completed.event.id } as const;
     const pile = anasPhone.photograph({ of, bytes: fileBytes });
     const street = anasPhone.photograph({ of, bytes: fileBytes });

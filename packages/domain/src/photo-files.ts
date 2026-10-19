@@ -16,6 +16,10 @@ export const photoFileTypes = [
 
 export type PhotoFileType = (typeof photoFileTypes)[number];
 
+// The most photographs one ticket's field event takes on a phone (ADR-157): a product rule, not a
+// threshold the firm tunes. A certification takes its five set views instead (ADR-179).
+export const ticketPhotosAtMost = 8;
+
 // How many of a file's first bytes tell its kind.
 export const photoFileSignatureBytes = 12;
 

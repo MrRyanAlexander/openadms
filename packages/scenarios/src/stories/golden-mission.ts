@@ -146,10 +146,7 @@ export const goldenMission: Story = {
     const { api, worker, clock } = story;
     const office = await p1FieldDaysHeld(story);
     const { dana, luis, sam, p1, coastline, samPhone } = office;
-    const done = (completed: Completed) => {
-      if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-      return completed.event;
-    };
+    const done = (completed: Completed) => completed.event;
     const person = async (name: string): Promise<string> =>
       (await api.user.findFirstOrThrow({ where: { name } })).id;
     const ana = await person('Ana Brooks');
@@ -658,16 +655,12 @@ export const goldenMission: Story = {
     const pre412 = anaP2.survey({ workType: 'Pre-work survey', roeNumber: r0007.roeNumber });
     story.at(
       on('12', '13:15'),
-      'She scans Rivera’s self-loader, P2’s own 730416, and answers "split"',
+      'She answers "split" and scans Rivera’s self-loader, P2’s own 730416; her phone shows 102001',
     );
-    const propertyA = anaP2.begin('LOAD', 'COLLECTION', '730416');
-    story.at(
-      on('12', '13:35'),
-      '412 Cedar Ct is loaded: Vegetative, 12 CY by eye, ROE R-0007; her phone shows 102001',
-    );
+    const propertyA = anaP2.begin('LOAD', 'COLLECTION', '730416', made);
+    story.at(on('12', '13:35'), '412 Cedar Ct is loaded: Vegetative, 12 CY by eye, ROE R-0007');
     done(
       anaP2.complete(propertyA, {
-        number: made,
         splitSuffix: 'A',
         ...vegetative,
         estimateCy: 12,
@@ -693,11 +686,10 @@ export const goldenMission: Story = {
     });
     anaP2.photograph({ of: { kind: 'ROE', id: r0008.id } });
     const pre416 = anaP2.survey({ workType: 'Pre-work survey', roeNumber: r0008.roeNumber });
-    const propertyB = anaP2.begin('LOAD', 'COLLECTION', '730416');
+    const propertyB = anaP2.begin('LOAD', 'COLLECTION', '730416', chained(propertyA));
     story.at(on('12', '14:05'), '416 Cedar Ct is loaded: 18 CY by eye, ROE R-0008');
     done(
       anaP2.complete(propertyB, {
-        number: chained(propertyA),
         splitSuffix: 'B',
         ...vegetative,
         estimateCy: 18,
@@ -710,12 +702,11 @@ export const goldenMission: Story = {
     );
     story.at(on('12', '14:10'), 'The post-work survey of 416 Cedar Ct');
     const post416 = anaP2.survey({ workType: 'Post-work survey', roeNumber: r0008.roeNumber });
-    story.at(on('12', '14:40'), 'Kim scans 730416 at P2’s Marsh Road TDSR tower');
-    const tower = kimP2.begin('LOAD', 'DISPOSAL', '730416');
-    story.at(on('12', '14:55'), 'Kim picks Vegetative, calls 75% and scans 102001');
+    story.at(on('12', '14:40'), 'Kim scans 730416 at P2’s Marsh Road TDSR tower, then 102001');
+    const tower = kimP2.begin('LOAD', 'DISPOSAL', '730416', scanned('102001'));
+    story.at(on('12', '14:55'), 'Kim picks Vegetative and calls 75%');
     done(
       kimP2.complete(tower, {
-        number: scanned('102001'),
         ...vegetative,
         loadCall: 75,
         endLatitude: '39.09030000',

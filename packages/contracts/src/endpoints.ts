@@ -148,6 +148,7 @@ import {
   surveyRecordSchema,
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
+  waypointRecordSchema,
 } from './review-answers.ts';
 import {
   certificationBoxesAtMost,
@@ -2929,6 +2930,32 @@ export const correctCarriedTicketEndpoint = endpoint({
   answer: savedAnswer(carriedTicketRecordSchema),
 });
 
+// A waypoint a collection's monitor marked (ADR-571, 581; C180): evidence like any captured field,
+// corrected in place, the value before kept in the audit log, or taken off and put back. Nothing
+// in the engine reads a waypoint, so nothing is queued.
+export const correctWaypointEndpoint = endpoint({
+  name: 'correctWaypoint',
+  summary:
+    'A waypoint a collection’s monitor marked is corrected in place: when it was marked and its fix (`null` for none), only what is stated changing; or it is taken off (it stays, marked) or put back. Nothing is queued: no ticket’s conclusions read a waypoint. Refused for a waypoint the field event doesn’t have, a fix that can’t be one and a ticket locked as invoiced.',
+  ...reviewer,
+  permission: 'CORRECT',
+  method: 'PATCH',
+  path: '/field-events/:fieldEventId/waypoints/:position',
+  params: z.strictObject({
+    fieldEventId: z.uuid(),
+    // Its place in the order marked, from 1.
+    position: z.string().regex(/^[1-9][0-9]{0,2}$/),
+  }),
+  body: z.strictObject({
+    changes: z
+      .strictObject({ markedAt: instant, fix: correctedFix, takenOff: z.boolean() })
+      .partial()
+      .refine(stated),
+    note: reviewNote,
+  }),
+  answer: savedAnswer(waypointRecordSchema),
+});
+
 // The back office's two marks on a photograph (ADR-337): no phone sends either, and the worker
 // sets neither. A removed photograph counts for nothing a record must have (ADR-345).
 export const markPhotographEndpoint = endpoint({
@@ -4613,6 +4640,7 @@ export const endpoints: readonly Endpoint[] = [
   renumberFieldEventEndpoint,
   correctItemLineEndpoint,
   correctCarriedTicketEndpoint,
+  correctWaypointEndpoint,
   markPhotographEndpoint,
   photographFileEndpoint,
   addPhotographEndpoint,

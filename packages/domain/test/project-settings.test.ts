@@ -79,6 +79,7 @@ const shipped = {
   PHONE_HELD_RECORDS_PER_DAY: '1000',
   MAP_FILE_READ_SECONDS: '60',
   MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
+  FIELD_EVENT_WAYPOINTS_AT_MOST: '50',
 };
 
 // The program types of the example world: PPDR requires an ROE, ROW doesn't.
@@ -210,6 +211,7 @@ describe('the policy values', () => {
       phoneHeldRecordsPerDay: 'PHONE_HELD_RECORDS_PER_DAY',
       mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
       mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
+      fieldEventWaypointsAtMost: 'FIELD_EVENT_WAYPOINTS_AT_MOST',
     });
     expect(Object.keys(shipped).sort()).toEqual(Object.values(policyNames).sort());
   });

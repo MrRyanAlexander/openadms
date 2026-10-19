@@ -1,0 +1,604 @@
+// The tickets begun on the phone (adms-field-app §4A.2, §4A.4, §4A.5; BACKLOG 3.5.1, C68, C69,
+// C135, C139, C179; AC-02-44, 45, AC-04-08, 11, 91, 95, 96, AC-08-06, AC-11-36, 74…78, 80;
+// ADR-031, 052, 056, 065, 209, 477, 571, 573, 581). What the capture screens keep and read, in the
+// store, so a ticket left at any step is there after a sign-out and a restart (ADR-570).
+//
+// - **The badge, then the number, at New** (the user, ADR-571): a ticket opens under its number,
+//   the next of the phone's block where the project generates them (marked used in its block in
+//   the same piece of work, `PhoneLists.gaveOut`, so it is never made again), or the control
+//   ticket scanned, or a number typed because the barcode won't read, with its reason. **The
+//   number is typed again only where a person copied it** (the user, Q-218, ADR-573): that check
+//   is the screen's, before it opens anything.
+// - **Several open, one per truck** (the user, ADR-571): a badge, or a truck keyed in by hand,
+//   whose truck has a ticket open on this phone is that ticket. A ticket is its monitor's: another
+//   monitor on the phone never sees it (*agent default*, as the archived queues, ADR-577).
+// - **Nothing open is sent.** Submitted, it is made the field event the sync contract carries and
+//   handed to the outbox, sealed (ADR-477): no screen opens it again. Its photographs follow it,
+//   each with its file. A ticket half way through submitting when the phone stopped finishes when
+//   it is opened again, so nothing is kept twice and nothing is lost.
+// - **Cancelled, it stays on the phone, unsent** (ADR-056), keeping its number: a number the phone
+//   made is never made again, and a cancelled ticket is left out of the phone's own duplicate
+//   check, so a control ticket started by mistake can be scanned again (*agent default*, ADR-571).
+// - **The phone's own duplicate check** (ADR-031; AC-04-96) knows only what this phone holds: a
+//   number its tickets already hold for the same kind of field event is said before it is taken,
+//   never refused. **A control ticket outside the project's ranges** is questioned the same way
+//   (AC-04-08).
+// - **Today's own count** (the user, Q-216, ADR-573; AC-11-80): the tickets this monitor submitted
+//   on this phone on the project's day. **Two days' worth of numbers left** (ADR-065): fewer unused
+//   than twice the most this phone made of a series in one day (the domain's `PhoneNumbers.low`).
+//
+// No rule lives here that the server doesn't hold too: what each kind records is the contract's
+// own refusal at `PhoneOutbox.keep`, which answers before anything is sealed.
+import type {
+  PhoneListsRecord,
+  SyncedFieldEvent,
+  SyncedPhoto,
+  SyncedRecord,
+} from '@open-adms/contracts';
+import {
+  ControlTickets,
+  NumberSeriesRules,
+  PhoneNumbers,
+  ProjectClock,
+  ticketPhotosAtMost,
+  uuidv7,
+  type FieldEventKindName,
+  type MasterPasscodeSessionKind,
+  type NotSavedNotice,
+  type NumberSeriesName,
+} from '@open-adms/domain';
+
+import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
+import type { PhoneLists } from './lists.ts';
+import type { PhoneOutbox } from './outbox.ts';
+import { offsetOf } from './reports.ts';
+
+export type TicketState = 'OPEN' | 'SUBMITTING' | 'SUBMITTED' | 'CANCELLED';
+// Where the number came from: made by the phone, scanned, typed off a barcode that won't read, or
+// carried from the split chain's property before (adms-field-app §4A.3).
+export type NumberFrom = 'MADE' | 'SCANNED' | 'TYPED' | 'CHAINED';
+export type Workflow = SyncedFieldEvent['workflow'];
+
+// A fix as the phone had it: exact decimal text, both halves (ADR-083; invariant 15).
+export interface Fix {
+  readonly latitude: string;
+  readonly longitude: string;
+}
+
+export interface Waypoint {
+  readonly markedAt: string;
+  readonly fix: Fix | null;
+}
+
+export interface TicketPhoto {
+  readonly id: string;
+  readonly capturedAt: string;
+  readonly offset: number;
+  readonly fix: Fix | null;
+  // Its file's SHA-256, taken when it was taken (ADR-101): the browser build keeps the original.
+  readonly sha256: string;
+  readonly bytes: number;
+  // Handed to the outbox with its file, at submit.
+  readonly kept: boolean;
+}
+
+// What a ticket's monitor entered after New, each as picked or typed; null where nothing was.
+export interface TicketDetails {
+  readonly formDebrisTypeId: string | null;
+  readonly fieldTagId: string | null;
+  readonly roeNumber: string | null;
+  readonly estimateCy: number | null;
+  readonly end: Fix | null;
+  readonly address: string | null;
+  readonly addressSource: 'LOOKED_UP' | 'TYPED' | null;
+  readonly notes: string | null;
+}
+
+export interface PhoneTicket extends TicketDetails {
+  readonly id: string;
+  readonly state: TicketState;
+  readonly monitorId: string;
+  readonly projectId: string;
+  readonly timeZone: string;
+  readonly assignmentId: string;
+  readonly setupVersion: number;
+  readonly masterPasscodeSession: MasterPasscodeSessionKind | null;
+  readonly workflow: Workflow;
+  readonly kind: FieldEventKindName;
+  readonly siteId: string | null;
+  readonly certNumber: string;
+  readonly certKeyedByHand: boolean;
+  readonly typedCapacityCy: number | null;
+  readonly ticketNumber: string;
+  readonly numberFrom: NumberFrom;
+  readonly numberTypedReasonId: string | null;
+  // A split load's property: its suffix (A, B…), empty when not split.
+  readonly splitSuffix: string;
+  readonly startedAt: string;
+  readonly offset: number;
+  // The project's day it was begun.
+  readonly day: string;
+  readonly start: Fix | null;
+  // Where its monitor left it: the screen's own name for the step.
+  readonly step: string;
+  readonly waypoints: readonly Waypoint[];
+  readonly photos: readonly TicketPhoto[];
+  readonly endedAt: string | null;
+  // When it was submitted or cancelled, and the project's day it was.
+  readonly closedAt: string | null;
+  readonly closedDay: string | null;
+}
+
+// What New hands over: who, on what, the badge, the number and where it came from.
+export interface Begun {
+  readonly monitorId: string;
+  readonly projectId: string;
+  readonly timeZone: string;
+  readonly assignmentId: string;
+  readonly setupVersion: number;
+  readonly masterPasscodeSession: MasterPasscodeSessionKind | null;
+  readonly workflow: Workflow;
+  readonly kind: FieldEventKindName;
+  readonly siteId: string | null;
+  readonly certNumber: string;
+  readonly certKeyedByHand: boolean;
+  readonly typedCapacityCy: number | null;
+  readonly ticketNumber: string;
+  readonly numberFrom: NumberFrom;
+  readonly numberTypedReasonId: string | null;
+  readonly splitSuffix: string;
+  readonly start: Fix | null;
+  readonly step: string;
+  // A split's next property starts with what the one before it picked (adms-field-app §4A.3).
+  readonly carried?: Partial<TicketDetails>;
+}
+
+export interface TicketsOptions {
+  // The most bytes one photograph's file may be (`MEDIA_FILE_BYTES_AT_MOST`): one larger would
+  // never go, so it is never kept.
+  readonly photoBytesAtMost: number;
+  readonly now?: () => Date;
+}
+
+// What a submit came to: the field event sealed in the outbox, or not kept, with the contract's
+// words, the ticket still open.
+export type Submitted =
+  | { readonly kind: 'sealed'; readonly ticket: PhoneTicket }
+  | { readonly kind: 'notKept'; readonly notice: NotSavedNotice };
+
+// What New's number came to: taken, or already a ticket of this phone's (the duplicate check), or
+// a control ticket outside the project's ranges: each said, never refused.
+export type NumberSaid =
+  | { readonly kind: 'fine' }
+  | { readonly kind: 'onThisPhone'; readonly ticket: PhoneTicket }
+  | { readonly kind: 'outsideStock' };
+
+const ticketsShelf = 'tickets';
+const photoPrefix = 'photo:';
+const seriesOfWorkflow: Readonly<Record<Workflow, NumberSeriesName>> = {
+  LOAD: 'LOAD',
+  HAUL_OUT: 'HAUL_OUT',
+  UNIT_RATE: 'UNIT_RATE',
+};
+
+const hex = (bytes: ArrayBuffer): string =>
+  Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
+
+const isTicket = (value: unknown): value is PhoneTicket =>
+  typeof value === 'object' &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof Uint8Array) &&
+  typeof (value as { id?: unknown }).id === 'string' &&
+  typeof (value as { state?: unknown }).state === 'string';
+
+export class PhoneTickets {
+  private readonly store: PhoneStore;
+  private readonly lists: PhoneLists;
+  private readonly outbox: PhoneOutbox;
+  private readonly options: TicketsOptions;
+  private readonly now: () => Date;
+  private tickets: PhoneTicket[] = [];
+
+  private constructor(
+    store: PhoneStore,
+    lists: PhoneLists,
+    outbox: PhoneOutbox,
+    options: TicketsOptions,
+  ) {
+    this.store = store;
+    this.lists = lists;
+    this.outbox = outbox;
+    this.options = options;
+    this.now = options.now ?? (() => new Date());
+  }
+
+  // The tickets as the store holds them; a ticket the phone stopped submitting finishes now.
+  static async opened(
+    store: PhoneStore,
+    lists: PhoneLists,
+    outbox: PhoneOutbox,
+    options: TicketsOptions,
+  ): Promise<PhoneTickets> {
+    const tickets = new PhoneTickets(store, lists, outbox, options);
+    await tickets.read();
+    for (const ticket of [...tickets.tickets]) {
+      const submitting =
+        ticket.state === 'SUBMITTING' ||
+        (ticket.state === 'OPEN' && (await store.read('records', ticket.id)) !== undefined);
+      if (submitting) await tickets.sealed(ticket);
+    }
+    return tickets;
+  }
+
+  async read(): Promise<void> {
+    const kept = await this.store.readAll(ticketsShelf);
+    const tickets: PhoneTicket[] = [];
+    for (const { value } of kept) if (isTicket(value)) tickets.push(value);
+    this.tickets = tickets.sort((one, other) => one.startedAt.localeCompare(other.startedAt));
+  }
+
+  // A monitor's open tickets, the oldest first: home's open list.
+  openOf(monitorId: string): readonly PhoneTicket[] {
+    return this.tickets.filter(
+      (ticket) => ticket.monitorId === monitorId && ticket.state === 'OPEN',
+    );
+  }
+
+  // A monitor's cancelled tickets, kept on the phone, never sent.
+  cancelledOf(monitorId: string): readonly PhoneTicket[] {
+    return this.tickets.filter(
+      (ticket) => ticket.monitorId === monitorId && ticket.state === 'CANCELLED',
+    );
+  }
+
+  // The one open ticket of a truck on this phone, for this monitor: a unit rate crew isn't held to
+  // one (the user, ADR-571).
+  openForTruck(monitorId: string, certNumber: string): PhoneTicket | undefined {
+    return this.openOf(monitorId).find(
+      (ticket) => ticket.kind !== 'UNIT_RATE' && ticket.certNumber === certNumber,
+    );
+  }
+
+  ticket(id: string): PhoneTicket | undefined {
+    return this.tickets.find((ticket) => ticket.id === id);
+  }
+
+  // The next number the phone would make of a workflow's series, from its blocks; none where it
+  // holds no block, or has used them up.
+  async nextNumber(workflow: Workflow): Promise<string | null> {
+    const series = seriesOfWorkflow[workflow];
+    const held = await this.lists.held();
+    if (held === undefined) return null;
+    const next = new PhoneNumbers(
+      held.lists.blocks.filter((block) => block.series === series),
+    ).next();
+    return next === null ? null : new NumberSeriesRules(series).written(next);
+  }
+
+  // Whether the phone holds less than two days' worth of a workflow's numbers (ADR-065).
+  async low(workflow: Workflow): Promise<boolean> {
+    const series = seriesOfWorkflow[workflow];
+    const held = await this.lists.held();
+    if (held === undefined) return false;
+    const blocks = held.lists.blocks.filter((block) => block.series === series);
+    if (blocks.length === 0) return false;
+    const made = new Map<string, number>();
+    for (const ticket of this.tickets) {
+      if (ticket.numberFrom !== 'MADE' || seriesOfWorkflow[ticket.workflow] !== series) continue;
+      made.set(ticket.day, (made.get(ticket.day) ?? 0) + 1);
+    }
+    return new PhoneNumbers(blocks).low(Math.max(0, ...made.values()));
+  }
+
+  // What the number taken at New is to this phone: one its tickets already hold for the same kind
+  // of field event (the phone's own duplicate check, a cancelled one left out), or a control
+  // ticket outside the project's ranges; else fine.
+  said(
+    begun: Pick<Begun, 'projectId' | 'workflow' | 'kind' | 'splitSuffix' | 'numberFrom'>,
+    number: string,
+    lists: PhoneListsRecord,
+  ): NumberSaid {
+    const held = this.tickets.find(
+      (ticket) =>
+        ticket.state !== 'CANCELLED' &&
+        ticket.projectId === begun.projectId &&
+        ticket.workflow === begun.workflow &&
+        ticket.kind === begun.kind &&
+        ticket.splitSuffix === begun.splitSuffix &&
+        ticket.ticketNumber === number,
+    );
+    if (held !== undefined) return { kind: 'onThisPhone', ticket: held };
+    const series = seriesOfWorkflow[begun.workflow];
+    const stock = lists.numbering.ticketNumberSource === 'CONTROL' && begun.numberFrom !== 'MADE';
+    if (stock && (series === 'LOAD' || series === 'HAUL_OUT')) {
+      if (!new ControlTickets(lists.controlRanges).holds(series, number)) {
+        return { kind: 'outsideStock' };
+      }
+    }
+    return { kind: 'fine' };
+  }
+
+  // New: a ticket opened under its number, or the truck's open one where it has one. A number the
+  // phone made is marked used in its block in the same piece of work.
+  async open(begun: Begun): Promise<PhoneTicket> {
+    const already = this.openForTruck(begun.monitorId, begun.certNumber);
+    if (begun.kind !== 'UNIT_RATE' && already !== undefined) return already;
+    const at = this.now();
+    const ticket: PhoneTicket = {
+      id: uuidv7(at),
+      state: 'OPEN',
+      monitorId: begun.monitorId,
+      projectId: begun.projectId,
+      timeZone: begun.timeZone,
+      assignmentId: begun.assignmentId,
+      setupVersion: begun.setupVersion,
+      masterPasscodeSession: begun.masterPasscodeSession,
+      workflow: begun.workflow,
+      kind: begun.kind,
+      siteId: begun.siteId,
+      certNumber: begun.certNumber,
+      certKeyedByHand: begun.certKeyedByHand,
+      typedCapacityCy: begun.typedCapacityCy,
+      ticketNumber: begun.ticketNumber,
+      numberFrom: begun.numberFrom,
+      numberTypedReasonId: begun.numberTypedReasonId,
+      splitSuffix: begun.splitSuffix,
+      startedAt: at.toISOString(),
+      offset: offsetOf(at),
+      day: new ProjectClock(begun.timeZone).day(at),
+      start: begun.start,
+      step: begun.step,
+      formDebrisTypeId: begun.carried?.formDebrisTypeId ?? null,
+      fieldTagId: begun.carried?.fieldTagId ?? null,
+      roeNumber: null,
+      estimateCy: null,
+      end: null,
+      address: null,
+      addressSource: null,
+      notes: null,
+      waypoints: [],
+      photos: [],
+      endedAt: null,
+      closedAt: null,
+      closedDay: null,
+    };
+    const changes: Change[] = [this.kept(ticket)];
+    if (begun.numberFrom === 'MADE') {
+      const used = await this.lists.gaveOut(
+        seriesOfWorkflow[begun.workflow],
+        Number(begun.ticketNumber),
+      );
+      if (used !== null) changes.push(used);
+    }
+    await this.store.change(changes);
+    this.tickets.push(ticket);
+    return ticket;
+  }
+
+  // What its monitor entered, or where they left it: kept at once. Never a sealed ticket's.
+  async changed(id: string, change: Partial<TicketDetails> & { readonly step?: string }) {
+    const ticket = this.openTicket(id);
+    return this.put({ ...ticket, ...change });
+  }
+
+  // "Mark waypoint" (ADR-571, 581; AC-11-77): the phone's time when it was pressed and whatever
+  // fix it had, in order, at most the policy's number; none past it.
+  async markWaypoint(id: string, at: Date, fix: Fix | null, atMost: number): Promise<PhoneTicket> {
+    const ticket = this.openTicket(id);
+    if (ticket.waypoints.length >= atMost) return ticket;
+    const waypoint = { markedAt: at.toISOString(), fix };
+    return this.put({ ...ticket, waypoints: [...ticket.waypoints, waypoint] });
+  }
+
+  // A photograph taken while the ticket is open, at any step (ADR-571), at most the ticket's eight
+  // (ADR-157): fingerprinted now, its bytes kept beside the ticket. One too large to ever go is
+  // not kept: whether it was.
+  async photographed(id: string, bytes: Uint8Array, fix: Fix | null): Promise<boolean> {
+    const ticket = this.openTicket(id);
+    if (ticket.photos.length >= ticketPhotosAtMost) return false;
+    if (bytes.byteLength === 0 || bytes.byteLength > this.options.photoBytesAtMost) return false;
+    const at = this.now();
+    const sha256 = hex(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
+    const photo: TicketPhoto = {
+      id: uuidv7(at),
+      capturedAt: at.toISOString(),
+      offset: offsetOf(at),
+      fix,
+      sha256,
+      bytes: bytes.byteLength,
+      kept: false,
+    };
+    const next: PhoneTicket = { ...this.openTicket(id), photos: [...ticket.photos, photo] };
+    await this.store.change([
+      { shelf: ticketsShelf, id: `${photoPrefix}${photo.id}`, value: bytes },
+      this.kept(next),
+    ]);
+    this.replace(next);
+    return true;
+  }
+
+  // A photograph taken off before submitting: never sent (ADR-571).
+  async photoRemoved(id: string, photoId: string): Promise<PhoneTicket> {
+    const ticket = this.openTicket(id);
+    const next = { ...ticket, photos: ticket.photos.filter((photo) => photo.id !== photoId) };
+    await this.store.change([
+      { shelf: ticketsShelf, id: `${photoPrefix}${photoId}`, dropped: true },
+      this.kept(next),
+    ]);
+    this.replace(next);
+    return next;
+  }
+
+  // A photograph's file as it was taken, for the screen to draw.
+  async photoBytes(photoId: string): Promise<Uint8Array | undefined> {
+    const kept = await this.store.read(ticketsShelf, `${photoPrefix}${photoId}`);
+    return kept instanceof Uint8Array ? kept : undefined;
+  }
+
+  // Cancelled: kept on the phone with its number, never sent (ADR-056, 571).
+  async cancel(id: string): Promise<PhoneTicket> {
+    const ticket = this.openTicket(id);
+    const at = this.now();
+    return this.put({
+      ...ticket,
+      state: 'CANCELLED',
+      closedAt: at.toISOString(),
+      closedDay: new ProjectClock(ticket.timeZone).day(at),
+    });
+  }
+
+  // Submitted: the field event made from the ticket and sealed in the outbox, then its
+  // photographs, each with its file. Where the contract doesn't take the field event, nothing is
+  // sealed and the ticket stays open, the contract's words said.
+  async submit(id: string, end: Fix | null): Promise<Submitted> {
+    const ticket = this.openTicket(id);
+    const at = this.now();
+    const submitting: PhoneTicket = {
+      ...ticket,
+      end: ticket.end ?? end,
+      state: 'SUBMITTING',
+      endedAt: at.toISOString(),
+      closedAt: at.toISOString(),
+      closedDay: new ProjectClock(ticket.timeZone).day(at),
+    };
+    const notice = await this.outbox.keep(PhoneTickets.record(submitting));
+    if (notice !== undefined) return { kind: 'notKept', notice };
+    await this.put(submitting);
+    return { kind: 'sealed', ticket: await this.sealed(submitting) };
+  }
+
+  // Today's own count (AC-11-80): what this monitor submitted on this phone on the project's day.
+  todayOf(monitorId: string, projectId: string, timeZone: string): number {
+    const today = new ProjectClock(timeZone).day(this.now());
+    return this.tickets.filter(
+      (ticket) =>
+        ticket.monitorId === monitorId &&
+        ticket.projectId === projectId &&
+        ticket.state === 'SUBMITTED' &&
+        ticket.closedDay === today,
+    ).length;
+  }
+
+  // The field event a ticket is, as the sync contract carries it (ADR-236): what its kind
+  // records, nothing it doesn't, no conclusion of the server's.
+  static record(ticket: PhoneTicket): SyncedRecord {
+    return {
+      record: 'FIELD_EVENT',
+      fieldEvent: {
+        id: ticket.id,
+        projectId: ticket.projectId,
+        workflow: ticket.workflow,
+        kind: ticket.kind,
+        ticketNumber: ticket.ticketNumber,
+        splitSuffix: ticket.splitSuffix,
+        monitorId: ticket.monitorId,
+        assignmentId: ticket.assignmentId,
+        setupVersion: ticket.setupVersion,
+        masterPasscodeSession: ticket.masterPasscodeSession,
+        numberTyped: ticket.numberFrom === 'TYPED',
+        numberTypedReasonId: ticket.numberTypedReasonId,
+        certNumber: ticket.certNumber,
+        certKeyedByHand: ticket.certKeyedByHand,
+        typedCapacityCy: ticket.typedCapacityCy,
+        siteId: ticket.siteId,
+        startedAt: ticket.startedAt,
+        endedAt: ticket.endedAt ?? ticket.startedAt,
+        deviceUtcOffsetMinutes: ticket.offset,
+        startLatitude: ticket.start?.latitude ?? null,
+        startLongitude: ticket.start?.longitude ?? null,
+        endLatitude: ticket.end?.latitude ?? null,
+        endLongitude: ticket.end?.longitude ?? null,
+        address: ticket.address,
+        addressSource: ticket.addressSource,
+        notes: ticket.notes,
+        formDebrisTypeId: ticket.formDebrisTypeId,
+        fieldTagId: ticket.fieldTagId,
+        roeNumber: ticket.roeNumber,
+        estimateCy: ticket.estimateCy,
+        loadCall: null,
+        scaleReceiptId: null,
+        carriedCount: null,
+        kindOfWorkId: null,
+        payableTypeId: null,
+        payItemId: null,
+        unitCount: null,
+        measurementInches: null,
+        measuredAs: null,
+        rootBallInches: null,
+        rootBallHalfExposed: null,
+        surveyNumber: null,
+        markedIneligible: null,
+        items: [],
+        carriedTickets: [],
+        waypoints: ticket.waypoints.map(({ markedAt, fix }) => ({
+          markedAt,
+          latitude: fix?.latitude ?? null,
+          longitude: fix?.longitude ?? null,
+        })),
+      },
+    };
+  }
+
+  // The photographs of a ticket submitting go to the outbox, each once with its file, its bytes
+  // then dropped from beside the ticket; then the ticket is submitted. A ticket opened again half
+  // way through finishes here: its field event already sealed is left as it is.
+  private async sealed(ticket: PhoneTicket): Promise<PhoneTicket> {
+    if ((await this.store.read('records', ticket.id)) === undefined) {
+      await this.outbox.keep(PhoneTickets.record(ticket));
+    }
+    let now = ticket;
+    for (const photo of ticket.photos.filter(({ kept }) => !kept)) {
+      const bytes = await this.photoBytes(photo.id);
+      if (bytes !== undefined) {
+        const record: SyncedPhoto = {
+          id: photo.id,
+          projectId: ticket.projectId,
+          owner: { kind: 'FIELD_EVENT', id: ticket.id },
+          view: null,
+          takenById: ticket.monitorId,
+          capturedAt: photo.capturedAt,
+          deviceUtcOffsetMinutes: photo.offset,
+          latitude: photo.fix?.latitude ?? null,
+          longitude: photo.fix?.longitude ?? null,
+          originalSha256: photo.sha256,
+          uploadedSha256: photo.sha256,
+          depthSha256: null,
+        };
+        await this.outbox.keepPhoto(record, [{ file: 'photo', bytes }]);
+      }
+      now = {
+        ...now,
+        photos: now.photos.map((one) => (one.id === photo.id ? { ...one, kept: true } : one)),
+      };
+      await this.store.change([
+        { shelf: ticketsShelf, id: `${photoPrefix}${photo.id}`, dropped: true },
+        this.kept(now),
+      ]);
+      this.replace(now);
+    }
+    return this.put({ ...now, state: 'SUBMITTED' });
+  }
+
+  private openTicket(id: string): PhoneTicket {
+    const ticket = this.ticket(id);
+    if (ticket?.state !== 'OPEN') throw new Error('Only an open ticket changes on the phone.');
+    return ticket;
+  }
+
+  private kept(ticket: PhoneTicket): Change {
+    return { shelf: ticketsShelf, id: ticket.id, value: ticket as unknown as Json };
+  }
+
+  private async put(ticket: PhoneTicket): Promise<PhoneTicket> {
+    await this.store.change([this.kept(ticket)]);
+    this.replace(ticket);
+    return ticket;
+  }
+
+  private replace(ticket: PhoneTicket): void {
+    const at = this.tickets.findIndex(({ id }) => id === ticket.id);
+    if (at === -1) this.tickets.push(ticket);
+    else this.tickets[at] = ticket;
+  }
+}

@@ -22179,6 +22179,33 @@
                                 "additionalProperties": false
                               }
                             },
+                            "numbering": {
+                              "type": "object",
+                              "properties": {
+                                "ticketNumberSource": {
+                                  "type": "string",
+                                  "enum": ["CONTROL", "GENERATED"]
+                                },
+                                "series": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "enum": [
+                                      "LOAD",
+                                      "HAUL_OUT",
+                                      "UNIT_RATE",
+                                      "CERTIFICATION",
+                                      "ROE"
+                                    ]
+                                  }
+                                }
+                              },
+                              "required": ["ticketNumberSource", "series"],
+                              "additionalProperties": false
+                            },
+                            "allowSplitLoads": {
+                              "type": "boolean"
+                            },
                             "controlRanges": {
                               "type": "array",
                               "items": {
@@ -22962,6 +22989,8 @@
                           "required": [
                             "setupVersion",
                             "blocks",
+                            "numbering",
+                            "allowSplitLoads",
                             "controlRanges",
                             "debrisTypes",
                             "fieldTags",
@@ -31725,6 +31754,92 @@
                         "additionalProperties": false
                       }
                     },
+                    "waypoints": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "fieldEventId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "position": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                          },
+                          "markedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "fix": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "latitude": {
+                                    "type": "string"
+                                  },
+                                  "longitude": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["latitude", "longitude"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "unreadableGps": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "latitude": {},
+                                  "longitude": {}
+                                },
+                                "required": ["latitude", "longitude"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "takenOffAt": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "fieldEventId",
+                          "position",
+                          "markedAt",
+                          "fix",
+                          "unreadableGps",
+                          "takenOffAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "photographs": {
                       "type": "array",
                       "items": {
@@ -31967,6 +32082,7 @@
                     "fieldEvent",
                     "itemLines",
                     "carriedTickets",
+                    "waypoints",
                     "photographs",
                     "scaleReceipt"
                   ],
@@ -33550,6 +33666,243 @@
                         }
                       },
                       "required": ["id", "fieldEventId", "carriedTicketNumber", "takenOffAt"],
+                      "additionalProperties": false
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["code", "message"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "queued": {
+                      "type": "object",
+                      "properties": {
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "tickets": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "lockedAsInvoiced": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["jobs", "tickets", "lockedAsInvoiced"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["record", "warnings"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/field-events/{fieldEventId}/waypoints/{position}": {
+      "patch": {
+        "operationId": "correctWaypoint",
+        "summary": "A waypoint a collection’s monitor marked is corrected in place: when it was marked and its fix (`null` for none), only what is stated changing; or it is taken off (it stays, marked) or put back. Nothing is queued: no ticket’s conclusions read a waypoint. Refused for a waypoint the field event doesn’t have, a fix that can’t be one and a ticket locked as invoiced.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "CORRECT",
+        "parameters": [
+          {
+            "name": "fieldEventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "position",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,2}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "changes": {
+                    "type": "object",
+                    "properties": {
+                      "markedAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "fix": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "latitude": {
+                                "type": "string",
+                                "pattern": "^-?\\d{1,3}(\\.\\d{1,8})?$"
+                              },
+                              "longitude": {
+                                "type": "string",
+                                "pattern": "^-?\\d{1,3}(\\.\\d{1,8})?$"
+                              }
+                            },
+                            "required": ["latitude", "longitude"],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "takenOff": {
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["changes"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "fieldEventId": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "position": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "markedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        "fix": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "latitude": {
+                                  "type": "string"
+                                },
+                                "longitude": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["latitude", "longitude"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "unreadableGps": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "latitude": {},
+                                "longitude": {}
+                              },
+                              "required": ["latitude", "longitude"],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "takenOffAt": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "fieldEventId",
+                        "position",
+                        "markedAt",
+                        "fix",
+                        "unreadableGps",
+                        "takenOffAt"
+                      ],
                       "additionalProperties": false
                     },
                     "warnings": {
@@ -37689,6 +38042,45 @@
                                       "minLength": 1,
                                       "maxLength": 40
                                     }
+                                  },
+                                  "waypoints": {
+                                    "readOnly": true,
+                                    "maxItems": 200,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "properties": {
+                                        "markedAt": {
+                                          "type": "string",
+                                          "format": "date-time",
+                                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                        },
+                                        "latitude": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 40
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "longitude": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string",
+                                              "maxLength": 40
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": ["markedAt", "latitude", "longitude"],
+                                      "additionalProperties": false
+                                    }
                                   }
                                 },
                                 "required": [
@@ -37734,7 +38126,8 @@
                                   "surveyNumber",
                                   "markedIneligible",
                                   "items",
-                                  "carriedTickets"
+                                  "carriedTickets",
+                                  "waypoints"
                                 ],
                                 "additionalProperties": false
                               }

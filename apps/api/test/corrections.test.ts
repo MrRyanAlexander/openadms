@@ -17,6 +17,7 @@ import {
   correctFieldEventEndpoint,
   correctItemLineEndpoint,
   correctScaleReceiptEndpoint,
+  correctWaypointEndpoint,
   createSiteEndpoint,
   endpoints,
   errorAnswerSchema,
@@ -59,11 +60,19 @@ const corrections = [
   [renumberFieldEventEndpoint, 'RENUMBER'],
   [correctItemLineEndpoint, 'CORRECT'],
   [correctCarriedTicketEndpoint, 'CORRECT'],
+  [correctWaypointEndpoint, 'CORRECT'],
   [markPhotographEndpoint, 'CORRECT'],
   [correctScaleReceiptEndpoint, 'CORRECT'],
 ] as const;
 
-const evidence = ['field_event', 'field_event_item', 'carried_ticket', 'photo', 'scale_receipt'];
+const evidence = [
+  'field_event',
+  'field_event_item',
+  'carried_ticket',
+  'field_event_waypoint',
+  'photo',
+  'scale_receipt',
+];
 
 // The changes made to the evidence so far, by anybody.
 const changed = (tx: Tx): Promise<number> =>
@@ -105,6 +114,7 @@ describe('who may ask', () => {
       'correctFieldEvent',
       'correctItemLine',
       'correctCarriedTicket',
+      'correctWaypoint',
       'markPhotograph',
       // A photograph added in the back office to a record made there (ADR-534 (2)).
       'addPhotograph',
@@ -658,6 +668,70 @@ describe('an item line and a carried ticket', () => {
         404,
         'NOT_FOUND',
       ]);
+    });
+  });
+});
+
+describe('a collection’s waypoints', () => {
+  it('AC-11-77 Luis corrects the fix of 101031’s second waypoint and takes the first off and puts it back: corrected in place, the value before in the audit log under him, the row kept; nothing is queued, since nothing concludes from a waypoint', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      // Two waypoints as the collection's phone would have sent them, the second with no fix.
+      for (const [position, latitude, longitude] of [
+        [1, '29.65123456', '-82.32456789'],
+        [2, null, null],
+      ] as const) {
+        await tx.fieldEventWaypoint.create({
+          data: {
+            fieldEventId: p.collection.id,
+            fieldEventKind: 'COLLECTION',
+            position,
+            markedAt: new Date(`2026-10-05T12:4${String(position)}:00Z`),
+            latitude,
+            longitude,
+          },
+        });
+      }
+      const luis = await luisHolds(served, tx, who.luis, 'CORRECT');
+      const waypoint = (position: string, changes: object, note?: string) =>
+        ask(served, luis, correctWaypointEndpoint, {
+          ids: { fieldEventId: p.collection.id, position },
+          payload: { changes, ...(note === undefined ? {} : { note }) },
+        });
+
+      const fixed = saved(
+        correctWaypointEndpoint,
+        await waypoint(
+          '2',
+          { fix: { latitude: '29.65200000', longitude: '-82.32500000' } },
+          'Read off the photo',
+        ),
+      );
+      expect(fixed.record).toMatchObject({
+        position: 2,
+        markedAt: '2026-10-05T12:42:00.000Z',
+        fix: { latitude: '29.65200000', longitude: '-82.32500000' },
+        takenOffAt: null,
+      });
+      expect(fixed.queued).toMatchObject({ tickets: 0 });
+      const off = await waypoint('1', { takenOff: true });
+      expect(typeof saved(correctWaypointEndpoint, off).record.takenOffAt).toBe('string');
+      const [change] = await audited(tx, off, 'field_event_waypoint');
+      expect([change?.operation, change?.actorId === who.luis]).toEqual(['UPDATE', true]);
+      expect(
+        saved(correctWaypointEndpoint, await waypoint('1', { takenOff: false })).record,
+      ).toMatchObject({ position: 1, takenOffAt: null, fix: { latitude: '29.65123456' } });
+      expect(await tx.fieldEventWaypoint.count({ where: { fieldEventId: p.collection.id } })).toBe(
+        2,
+      );
+      expect(await jobsFor(tx, p.project.id, who.luis)).toEqual([]);
+
+      // A waypoint it doesn't have, a fix that can't be one, nothing stated.
+      expect(told(await waypoint('3', { takenOff: true }))).toEqual([404, 'NOT_FOUND']);
+      expect(
+        notSaved(await waypoint('1', { fix: { latitude: '91.5', longitude: '-82.32' } }))[0],
+      ).toBe('GPS_UNREADABLE');
+      expect(told(await waypoint('1', {}))).toEqual([400, 'BAD_REQUEST']);
     });
   });
 });

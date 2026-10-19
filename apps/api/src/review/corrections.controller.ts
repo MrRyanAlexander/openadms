@@ -1,7 +1,7 @@
 // The endpoints of corrections to a ticket's own records (spec/parts/08-review-and-corrections.md
 // steps 2…4; AC-04-102, 103; AC-10-27, 28, 37; BACKLOG 2.4.4; ADR-028, 051, 337, 364, 431): a
 // field event's captured details, its number, a line of its items, a ticket it carries, a
-// photograph's two marks and a scale receipt; and a reprocess asked for with nothing changed
+// waypoint (ADR-581), a photograph's two marks and a scale receipt; and a reprocess asked for with nothing changed
 // (ADR-498), which takes the grant to correct and only queues a job. The door has already asked
 // the caller's role and that they hold the action's own permission, correct or renumber
 // (admission.ts), and the boundary has read what was sent by the request's schema; the service
@@ -13,6 +13,7 @@ import {
   correctFieldEventEndpoint,
   correctItemLineEndpoint,
   correctScaleReceiptEndpoint,
+  correctWaypointEndpoint,
   markPhotographEndpoint,
   renumberFieldEventEndpoint,
   reprocessTicketsEndpoint,
@@ -35,6 +36,7 @@ import {
   reprocessRecord,
   reviewed,
   scaleReceiptRecord,
+  waypointRecord,
 } from './review-answered.ts';
 
 export const apiCorrections = Symbol('the API’s corrections');
@@ -161,6 +163,29 @@ export class CorrectionsController {
         outcome,
         ({ record }) => carriedTicketRecord(record),
         'A carried ticket was corrected.',
+      ),
+    );
+  }
+
+  @Serves(correctWaypointEndpoint)
+  async waypoint(
+    @Param() params: ParamsOf<typeof correctWaypointEndpoint>,
+    @Body() body: BodyOf<typeof correctWaypointEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.corrections.waypoint(
+      callerOf(request).userId,
+      params.fieldEventId,
+      Number(params.position),
+      stated(body.changes),
+      body.note,
+    );
+    return correctWaypointEndpoint.answer.parse(
+      reviewed(
+        request,
+        outcome,
+        ({ record }) => waypointRecord(record),
+        'A waypoint was corrected.',
       ),
     );
   }

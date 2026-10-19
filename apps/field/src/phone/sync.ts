@@ -205,6 +205,19 @@ export class PhoneSync {
     if (afterwards !== 'same' && (afterwards.kind === 'taken' || afterwards.kind === 'none')) {
       await this.loginList.read(this.monitor);
     }
+    // Lists that name a series the phone makes numbers of and holds no block of: one more sync
+    // asks for the first (C184; task 3.5.1, ADR-581), so a phone signed in for the first time
+    // makes its first number with no signal.
+    if (
+      afterwards !== 'same' &&
+      afterwards.kind === 'taken' &&
+      (await this.lists.wantsFirstBlocks())
+    ) {
+      // What it holds read again: the lists just taken say which series it reports.
+      await this.outbox.read();
+      const more = await this.synced(send);
+      if ('kind' in more) return more;
+    }
     const files = await this.sentFiles(send);
     return { kind: 'synced', at: at ?? this.now(), lists: afterwards, files };
   }

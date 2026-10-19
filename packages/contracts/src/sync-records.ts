@@ -28,6 +28,7 @@ import {
   type CertificationKind,
   FieldEventDetails,
   fieldEventKinds,
+  fieldEventWaypointsAtMostEver,
   masterPasscodeSessions,
   measuredAs,
   workflows,
@@ -78,6 +79,15 @@ const answered = {
 export const syncedItemSchema = z.strictObject({
   itemNameId: id,
   quantity: places(2).max(99_999_999.99),
+});
+
+// A waypoint a collection's monitor marked while it was open: the phone's clock and whatever fix
+// it had, in the order marked (ADR-083, 571, 581; AC-11-77). As many as the policy's most may be
+// (`FIELD_EVENT_WAYPOINTS_AT_MOST`): the phone offers its build's value, never more.
+export const syncedWaypointSchema = z.strictObject({
+  markedAt: instant,
+  latitude: fixHalf,
+  longitude: fixHalf,
 });
 
 // A field event: what one monitor recorded under a ticket number (ADR-236).
@@ -148,6 +158,8 @@ export const syncedFieldEventSchema = z
     items: z.array(syncedItemSchema).max(100).readonly(),
     // The numbers of the tickets a load carries, as the loading monitor added them (ADR-192).
     carriedTickets: z.array(numberAsSent).max(100).readonly(),
+    // A collection's waypoints, in the order marked; none on any other kind (ADR-581).
+    waypoints: z.array(syncedWaypointSchema).max(fieldEventWaypointsAtMostEver).readonly(),
   })
   // Which kind records which detail, a split's suffix and estimate both or neither, a
   // measurement with how it was read: the domain's one rule, in its own words.

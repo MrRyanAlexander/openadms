@@ -12,6 +12,10 @@
 export const shelves = [
   // The field events, forms and certifications made on the phone, sent or not (AC-11-07).
   'records',
+  // The tickets begun on the phone (ADR-571, 581): each one open as its monitor left it, its
+  // photographs' bytes beside it; a cancelled one, kept unsent (ADR-056); and of each submitted
+  // one what the phone's own duplicate check and today's count read.
+  'tickets',
   // The photographs waiting to go: each one's record, and a note of each of its files (ARCHITECTURE
   // §11).
   'photographs',

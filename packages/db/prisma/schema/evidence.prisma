@@ -227,6 +227,7 @@ model FieldEvent {
   roe                Roe?                @relation(fields: [projectId, roeId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
   items              FieldEventItem[]
   carriedTickets     CarriedTicket[]
+  waypoints          FieldEventWaypoint[]
   photos             Photo[]
   // The records in quarantine because this field event holds their number (ADR-022).
   quarantinedRecords QuarantinedRecord[]
@@ -248,7 +249,8 @@ model FieldEvent {
 
   // One field event per project + workflow + bare number + split suffix + kind (ARCHITECTURE §5.4).
   @@unique([projectId, workflow, ticketNumber, splitSuffix, kind])
-  // What an item line and a carried ticket point at, so each is held to the kind it belongs on.
+  // What an item line, a carried ticket and a waypoint point at, so each is held to the kind it
+  // belongs on.
   @@unique([id, kind])
   // What a photograph points at, so it is one of its own project's field events.
   @@unique([projectId, id])
@@ -304,6 +306,40 @@ model CarriedTicket {
 
   @@unique([fieldEventId, carriedTicketNumber])
   @@map("carried_ticket")
+}
+
+// A waypoint a collection's monitor marked while it was open (ADR-571, 581; Q-104; AC-11-77):
+// "Mark waypoint" records the phone's time and whatever fix it had (ADR-083), in the order marked.
+// Evidence like any captured field: kept as the phone sent it, corrected in place by permission,
+// the value before in the audit log; taken off by a correction, never deleted. Nothing in the
+// engine reads one: the zone and the mileage stay on the collection's end GPS (ADR-135, 208).
+model FieldEventWaypoint {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  fieldEventId   String         @map("field_event_id") @db.Uuid
+  // Its field event's, again: COLLECTION, held by a check and by the relation (ADR-325).
+  fieldEventKind FieldEventKind @map("field_event_kind")
+  // Its place in the order marked, from 1.
+  position       Int
+  // The phone's clock when it was marked, as a UTC instant; its field event's offset says how far
+  // that clock stood from UTC (ADR-100).
+  markedAt       DateTime       @map("marked_at") @db.Timestamptz(3)
+  // WGS84, exact decimals, both or neither: whatever fix the phone had, none where it had none
+  // (ADR-083; invariant 15).
+  latitude       Decimal?       @map("latitude") @db.Decimal(38, 8)
+  longitude      Decimal?       @map("longitude") @db.Decimal(38, 8)
+  // A fix that reached the server and couldn't be one, kept exactly as sent while the waypoint
+  // is kept without it (ADR-329 (5)), as a field event's own.
+  unreadableGps  Json?          @map("unreadable_gps")
+
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Taken off by a correction: a mark with its time, cleared to put it back. The row stays
+  // (ADR-364).
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+
+  fieldEvent FieldEvent @relation(fields: [fieldEventId, fieldEventKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([fieldEventId, position])
+  @@map("field_event_waypoint")
 }
 
 // The paper a final disposal site hands the tower: its own record, apart from any ticket, pointed

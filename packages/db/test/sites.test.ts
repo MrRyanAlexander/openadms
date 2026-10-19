@@ -279,6 +279,9 @@ describe('coordinates (REQ-104)', () => {
       'field_event.end_longitude',
       'field_event.start_latitude',
       'field_event.start_longitude',
+      // Where a collection's monitor marked each waypoint (ADR-581).
+      'field_event_waypoint.latitude',
+      'field_event_waypoint.longitude',
       'incident.latitude',
       'incident.longitude',
       'map_version.east_longitude',

@@ -76,6 +76,7 @@ const shipped = {
   PHONE_HELD_RECORDS_PER_DAY: '1000',
   MAP_FILE_READ_SECONDS: '60',
   MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
+  FIELD_EVENT_WAYPOINTS_AT_MOST: '50',
 };
 
 // Monday 12 October 2026, 10:00 in Bayline County.

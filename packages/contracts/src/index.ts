@@ -399,6 +399,7 @@ export {
   renumberFieldEventEndpoint,
   correctItemLineEndpoint,
   correctCarriedTicketEndpoint,
+  correctWaypointEndpoint,
   markPhotographEndpoint,
   photographFileEndpoint,
   correctScaleReceiptEndpoint,
@@ -536,6 +537,7 @@ export {
   surveyRecordSchema,
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
+  waypointRecordSchema,
   type CarriedTicketRecord,
   type CertificationRecord,
   type DropOffLogRecord,
@@ -555,6 +557,7 @@ export {
   type SurveyRecord,
   type TicketUnvoidRecord,
   type TicketVoidRecord,
+  type WaypointRecord,
 } from './review-answers.ts';
 export { notRead, notTaken } from './not-taken.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';

@@ -15,26 +15,26 @@
 |---|---|
 | `pnpm local:up` | eight `Healthy` services (`pnpm chain` says `10 containers Healthy`: these eight, the API's and the worker's) (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), the field app built first (ADR-565) and `https://field.adms.localhost/ → 200 <!doctype html> <html lang="en"> …`, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
 | `pnpm installer:check` | **38 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force; one since ADR-542: the API's three secrets there and apart) |
-| Migrations at head | **145** (`packages/db/prisma/migrations/` is the list) |
+| Migrations at head | **147** (`packages/db/prisma/migrations/` is the list) |
 | `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
 
 ## `pnpm test`
 
-**`Test Files 204 passed (204)`, `Tests 3494 passed (3494)`.**
+**`Test Files 205 passed (205)`, `Tests 3520 passed (3520)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 880 | 46 | nothing |
-| `packages/contracts` | 96 | 9 | nothing |
-| `apps/api` | 762 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
-| `packages/db` | 1090 | 49 | `pnpm ready` |
-| `packages/scenarios` | 160 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (28), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
+| `packages/domain` | 887 | 46 | nothing |
+| `packages/contracts` | 97 | 9 | nothing |
+| `apps/api` | 763 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1093 | 49 | `pnpm ready` |
+| `packages/scenarios` | 161 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (28), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
 | `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 199 | 16 | nothing ("Sync and turn in", the wipe, a key the firm's time revoked, a lost answer, a record it can't read 13, ADR-580; its photographs' files sent, asked after on reopening and sized by the signal 8, ADR-579; the field app's own sync client held to the sync contract's suite over its store, twice 42, and its sync runs 9, ADR-578; the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+| `apps/field` | 212 | 17 | nothing (the tickets begun on the phone, the duplicate check, today's count and its first block 11, ADR-581; "Sync and turn in", the wipe, a key the firm's time revoked, a lost answer, a record it can't read 13, ADR-580; its photographs' files sent, asked after on reopening and sized by the signal 8, ADR-579; the field app's own sync client held to the sync contract's suite over its store, twice 42, and its sync runs 9, ADR-578; the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -44,7 +44,7 @@
 
 ## `pnpm scenarios`
 
-`This run’s template, adms_story_template_…: 145 migrations applied`, then **`Stories: 24 passed, 0
+`This run’s template, adms_story_template_…: 147 migrations applied`, then **`Stories: 24 passed, 0
 failed.`** Each story `passed: N checks, N passed, 0 failed`:
 
 | Story | Checks | | Story | Checks |
@@ -54,7 +54,7 @@ failed.`** Each story `passed: N checks, N passed, 0 failed`:
 | `setup` | 52 | | `p1-voided` | 32 |
 | `certification` | 29 | | `p1-invoiced` | 27 |
 | `numbering` | 16 | | `golden-mission` | 32 |
-| `p1-field-days` | 35 | | `p1-left-out` | 31 |
+| `p1-field-days` | 36 | | `p1-left-out` | 31 |
 | `sync` | 51 | | `first-admin` | 32 |
 | `p1-any-order` | 4 | | `p1-queued` | 20 |
 | `p1-reconciled` | 39 | | `p1-viewed` | 26 |
@@ -68,7 +68,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**43 browser tests**, `43 passed (32.5s)` alone: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577), the sync contract's suite in Chromium over the browser build's store 1 (`e2e/sync-client.e2e.ts`) and the phone's sync against the world's API 1 (`e2e/sync.e2e.ts`, ADR-578), its photographs' files against the world's media endpoint 1 (`e2e/photo-files.e2e.ts`, ADR-579), and "Sync and turn in" 3 (`e2e/turn-in.e2e.ts`, ADR-580: Ana's phone turned in and erased, one answered not turned in, the world's lost `P1-TWR-LF` turned in with the passcode). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 30 of 30 screens checked, in 157 checks; 0 found.`, **30 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync`, `settings`, `turn-in` and `turned-in`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
+**47 browser tests**, `47 passed (2.5m)` in the chain: the collection's 4 (`e2e/collection.e2e.ts`, ADR-581: the number shown and typed again, two tickets open and resumed, completed offline and synced, the split chain, the PARKS project's control tickets), the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577), the sync contract's suite in Chromium over the browser build's store 1 (`e2e/sync-client.e2e.ts`) and the phone's sync against the world's API 1 (`e2e/sync.e2e.ts`, ADR-578), its photographs' files against the world's media endpoint 1 (`e2e/photo-files.e2e.ts`, ADR-579), and "Sync and turn in" 3 (`e2e/turn-in.e2e.ts`, ADR-580: Ana's phone turned in and erased, one answered not turned in, the world's lost `P1-TWR-LF` turned in with the passcode). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 36 of 36 screens checked, in 183 checks; 0 found.`, **36 screens of the app**, its prototype's among them: the app's `new-collection`, `open-ticket`, `cancel-ticket`, `complete-collection`, `photo`, `submitted`, `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync`, `settings`, `turn-in` and `turned-in`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
 
 ## `pnpm security`
 
@@ -77,8 +77,8 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); **the built field app's four scans `0 found`** (`Secrets scan of the built field app (3 files in apps/field/dist/web)`, ADR-565: the page, its script and its stylesheet); env files
 `✓ every one ignored by git and untracked`; who reaches Postgres: `of 14 workspaces, the
 product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `596 source files
-read`, `15 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530; who signs in with an address, ADR-547), `prisma migrate diff: no difference`; the grant tests **`49 files, 1090
-tests: 1090 passed, 0 failed`**; ending **`Security checks: 16 passed, 0 failed.`**
+read`, `15 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530; who signs in with an address, ADR-547), `prisma migrate diff: no difference`; the grant tests **`49 files, 1093
+tests: 1093 passed, 0 failed`**; ending **`Security checks: 16 passed, 0 failed.`**
 
 ## What the installation holds after a run
 

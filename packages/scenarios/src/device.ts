@@ -22,12 +22,12 @@
 // passcode's check and the project its lists are of. It takes in what comes back: the blocks
 // it holds now, the passcode's version, and whether its lists are of an older setup version.
 //
-// It captures as a phone does (adms-field-app §4A.4–§4A.6; BACKLOG 1.3.7): New scans the badge and
-// the field event waits; Complete takes the details, picked by name from its lists, then the
-// number last: the next of its own block shown, or the truck's copy scanned, and entered again by
-// hand. A unit rate pay item is worked out from the size bands by packages/domain's rule, the one
-// the server uses. Its screens, its printing and its own duplicate check are the field app's
-// (Phase 3).
+// It captures as a phone does (adms-field-app §4A.4–§4A.6; BACKLOG 1.3.7, 3.5.1; C179): New scans
+// the badge, then takes the number (ADR-571): the next of its own block shown and typed again by
+// hand, or the truck's copy scanned; the field event waits, one open per truck; Complete takes the
+// details, picked by name from its lists. A cancelled field event keeps its number, unsent. A
+// unit rate pay item is worked out from the size bands by packages/domain's rule, the one the
+// server uses. Its screens, its printing and its own duplicate check are the field app's.
 import { createHash } from 'node:crypto';
 
 import type {
@@ -377,11 +377,12 @@ export interface PhoneSetup {
   readonly masterPasscodeVersion?: number;
 }
 
-// The number, last (ADR-209). The first field event of a ticket makes it: the next of the phone's
-// block, shown (`made`). The second scans it off the truck's copy, as a control-ticket project's
-// first does off its stock (`scanned`). Either is then entered again by hand. A barcode that
-// won't read is typed, with a reason picked. The next property or pile of a split carries its
-// chain's number, from the field event before it.
+// The number, at New, right after the badge (ADR-571). The first field event of a ticket makes
+// it: the next of the phone's block, shown (`made`), and typed again by hand, since a person
+// copied it. The second scans it off the truck's copy, as a control-ticket project's first does
+// off its stock (`scanned`): a scan is never typed again (the user, Q-218, ADR-573). A barcode
+// that won't read is typed, with a reason picked, and typed again. The next property or pile of
+// a split carries its chain's number, from the field event before it.
 export type NumberEntry =
   | { readonly from: 'BLOCK' }
   | { readonly from: 'SCAN'; readonly number: string }
@@ -397,13 +398,9 @@ export const typed = (number: string, reason: string): NumberEntry => ({
 });
 export const chained = (after: string): NumberEntry => ({ from: 'CHAIN', after });
 
-// Filled in on Complete: badge first, number last (ADR-209). Everything picked is picked by its
-// name, from the phone's lists.
+// Filled in on Complete: the details (ADR-571). Everything picked is picked by its name, from the
+// phone's lists.
 export interface Completion {
-  readonly number: NumberEntry;
-  // What the monitor enters by hand after a shown or scanned number; the same number when the
-  // story doesn't say.
-  readonly reentered?: string;
   readonly splitSuffix?: string;
   readonly endLatitude?: string;
   readonly endLongitude?: string;
@@ -437,27 +434,44 @@ export interface Completion {
   readonly surveyNumber?: string;
   readonly markedIneligible?: boolean;
   readonly items?: readonly { readonly name: string; readonly quantity: number }[];
+  // A collection's waypoints, in the order marked: the phone's time, and the fix it had if any
+  // (ADR-581). Marked while it was open; the story says when.
+  readonly waypoints?: readonly {
+    readonly markedAt: Date;
+    readonly latitude?: string;
+    readonly longitude?: string;
+  }[];
 }
 
-// What Complete answers: saved, or not yet. The one check a phone makes before it saves is that
-// the number entered again matches (ADR-209): the field event stays open, the same number
-// showing, until it does.
-export type Completed =
-  | { readonly saved: true; readonly event: RecordedEvent }
+// What Complete answers: saved, with the field event as the phone holds it to send.
+export interface Completed {
+  readonly saved: true;
+  readonly event: RecordedEvent;
+}
+
+// What New answers: the field event opened under its number, or, where a person copied the
+// number, not until it is typed again to match (ADR-209, 573): the one check a phone makes before
+// a field event opens. Data entry, never eligibility.
+export type Opened =
+  | { readonly opened: true; readonly id: string }
   | {
-      readonly saved: false;
+      readonly opened: false;
       readonly reason: 'NUMBER_MISMATCH';
       readonly shown: string;
       readonly reentered: string;
     };
 
-// A field event started and not finished: no number yet.
+// A field event started and not finished: its number taken at New (ADR-571), whether it was
+// typed, and the reason picked.
 export interface StartedEvent {
   readonly id: string;
   readonly workflow: Workflow;
   readonly kind: FieldEventKind;
   readonly certNumber: string;
   readonly startedAt: Date;
+  readonly ticketNumber: string;
+  readonly numberTyped: boolean;
+  readonly numberTypedReason: string | null;
 }
 
 export interface NewIncident {
@@ -694,19 +708,78 @@ export class SimulatedDevice {
     return this.setupVersionNow !== null && this.setupVersionNow !== this.lists.setupVersion;
   }
 
-  // New: the monitor starts a field event by scanning the badge (badge first, ADR-209); its id is
-  // made now, on the phone. On unit rate work the crew scanned stays the working crew until
-  // another is: a field event started without a badge is that crew's (ADR-111).
-  begin(workflow: Workflow, kind: FieldEventKind, certNumber?: string): string {
+  // New: the monitor starts a field event by scanning the badge, then takes the number (ADR-571);
+  // its id is made now, on the phone. On unit rate work the crew scanned stays the working crew
+  // until another is: a field event started without a badge is that crew's (ADR-111). A truck
+  // that already has an open field event on this phone opens that one, taking no number: one
+  // open ticket per truck (the user, ADR-571); a crew isn't held to one. Where the monitor typed a
+  // copied number again wrong, nothing opens (`typedAgain`: the same number where not said).
+  open(
+    workflow: Workflow,
+    kind: FieldEventKind,
+    certNumber: string | undefined,
+    number: NumberEntry,
+    typedAgain?: string,
+  ): Opened {
     const badge = certNumber ?? (kind === 'UNIT_RATE' ? this.crew : undefined);
     if (badge === undefined) {
       throw new Error(`${this.name}: a field event starts with a badge scanned.`);
     }
     if (kind === 'UNIT_RATE') this.crew = badge;
+    else {
+      const already = [...this.started.values()].find(
+        (open) => open.kind !== 'UNIT_RATE' && open.certNumber === badge,
+      );
+      if (already !== undefined) return { opened: true, id: already.id };
+    }
+    const series = seriesOf[workflow];
+    let ticketNumber: string;
+    if (number.from === 'BLOCK') {
+      const next = this.nextNumber(series);
+      if (next === null) throw new Error(`${this.name} holds no ${series} number to give out.`);
+      ticketNumber = new NumberSeriesRules(series).written(next);
+    } else if (number.from === 'CHAIN') {
+      const chain = this.numbers.get(number.after);
+      if (chain === undefined) throw new Error(`${this.name} has no field event before.`);
+      ticketNumber = chain;
+    } else {
+      ticketNumber = number.number;
+    }
+    // A number a person copied is typed again: one the phone made, one typed off a barcode that
+    // won't read. A scan, and a chain's number carried over, are not (ADR-573).
+    if (number.from === 'BLOCK' || number.from === 'TYPED') {
+      const reentered = typedAgain ?? ticketNumber;
+      if (reentered !== ticketNumber) {
+        return { opened: false, reason: 'NUMBER_MISMATCH', shown: ticketNumber, reentered };
+      }
+    }
+    if (number.from === 'BLOCK') this.lastUsed.set(series, Number(ticketNumber));
     const startedAt = this.now();
     const id = uuidv7(startedAt);
-    this.started.set(id, { id, workflow, kind, certNumber: badge, startedAt });
-    return id;
+    this.started.set(id, {
+      id,
+      workflow,
+      kind,
+      certNumber: badge,
+      startedAt,
+      ticketNumber,
+      numberTyped: number.from === 'TYPED',
+      numberTypedReason: number.from === 'TYPED' ? number.reason : null,
+    });
+    this.numbers.set(id, ticketNumber);
+    return { opened: true, id };
+  }
+
+  // New, as `open`, where the story types nothing wrong: the field event's id.
+  begin(
+    workflow: Workflow,
+    kind: FieldEventKind,
+    certNumber: string | undefined,
+    number: NumberEntry,
+  ): string {
+    const opened = this.open(workflow, kind, certNumber, number);
+    if (!opened.opened) throw new Error(`${this.name}: the number typed again didn't match.`);
+    return opened.id;
   }
 
   // The crew a unit rate field event started now would record.
@@ -714,13 +787,13 @@ export class SimulatedDevice {
     return this.crew;
   }
 
-  // What is started and not finished: each waits, with no number.
-  get open(): readonly StartedEvent[] {
+  // What is started and not finished: each waits under its number.
+  get opened(): readonly StartedEvent[] {
     return [...this.started.values()];
   }
 
-  // A field event started by mistake: never synced; it stays on the phone (ADR-056). It took no
-  // number: the number comes last.
+  // A field event started by mistake: never synced; it stays on the phone (ADR-056), keeping the
+  // number it took at New: a number the phone made is never made again (ADR-571).
   cancel(id: string): void {
     this.dropped.push(this.startedEvent(id));
     this.started.delete(id);
@@ -757,31 +830,11 @@ export class SimulatedDevice {
     return new NumberSeriesRules('CERTIFICATION').written(this.take('CERTIFICATION'));
   }
 
-  // Complete: the details and the number last. Saved, the field event waits on the phone for
-  // signal.
+  // Complete: the details, under the number taken at New. Saved, the field event waits on the
+  // phone for signal, sealed for its monitor (ADR-477).
   complete(id: string, completion: Completion): Completed {
     const started = this.startedEvent(id);
-    const series = seriesOf[started.workflow];
-    const entry = completion.number;
-    let number: string;
-    if (entry.from === 'BLOCK') {
-      const next = this.nextNumber(series);
-      if (next === null) throw new Error(`${this.name} holds no ${series} number to give out.`);
-      number = new NumberSeriesRules(series).written(next);
-    } else if (entry.from === 'CHAIN') {
-      const chain = this.numbers.get(entry.after);
-      if (chain === undefined) throw new Error(`${this.name} has no finished field event before.`);
-      number = chain;
-    } else {
-      number = entry.number;
-    }
-    // A typed number is the hand's own entry; a chain's is carried over.
-    if (entry.from === 'BLOCK' || entry.from === 'SCAN') {
-      const reentered = completion.reentered ?? number;
-      if (reentered !== number) {
-        return { saved: false, reason: 'NUMBER_MISMATCH', shown: number, reentered };
-      }
-    }
+    const number = started.ticketNumber;
 
     const details = this.details(started, completion);
     const refusals = new FieldEventDetails(started.kind).refusals(details);
@@ -829,11 +882,11 @@ export class SimulatedDevice {
       assignmentId: this.current.assignmentId,
       setupVersion: this.lists.setupVersion,
       masterPasscodeSession: null,
-      numberTyped: entry.from === 'TYPED',
+      numberTyped: started.numberTyped,
       numberTypedReasonId:
-        entry.from === 'TYPED'
-          ? this.pick('reason', this.lists.typedNumberReasons, entry.reason).id
-          : null,
+        started.numberTypedReason === null
+          ? null
+          : this.pick('reason', this.lists.typedNumberReasons, started.numberTypedReason).id,
       certNumber: started.certNumber,
       certKeyedByHand: false,
       typedCapacityCy: null,
@@ -848,10 +901,13 @@ export class SimulatedDevice {
       notes: completion.notes ?? null,
       ...details,
       scaleReceiptId,
+      waypoints: (completion.waypoints ?? []).map((marked) => ({
+        markedAt: marked.markedAt,
+        latitude: marked.latitude ?? null,
+        longitude: marked.longitude ?? null,
+      })),
     };
-    if (entry.from === 'BLOCK') this.lastUsed.set(series, Number(number));
     this.started.delete(id);
-    this.numbers.set(id, number);
     if (scaleReceiptId !== null) this.receipts.set(id, scaleReceiptId);
     this.outbox.push({ record: 'FIELD_EVENT', fieldEvent: event });
     return { saved: true, event };
@@ -1150,6 +1206,13 @@ export class SimulatedDevice {
       passcodeUses: [...this.reports.passcodeUses, ...more.passcodeUses],
       lastUsed: [...more.lastUsed],
     };
+  }
+
+  // The harness's own: a record no phone of ours makes, as a phone that did would send it (a
+  // second open field event for one truck, ADR-571), kept after what it holds.
+  handOver(record: HeldRecord): void {
+    this.handed.add(heldId(record));
+    this.outbox.push(record);
   }
 
   // The last number it used of each series it reports: what the suite handed it, or of each

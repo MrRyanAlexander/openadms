@@ -8,12 +8,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   ControlRanges,
+  ControlTickets,
   type ControlRangeEntry,
   type HeldBlock,
   NewProjectNumbers,
   NumberSeriesBook,
   NumberSeriesRules,
   PhoneNumbers,
+  PhoneSeries,
   Policy,
   numberSeries,
   ticketNumbers,
@@ -90,6 +92,7 @@ const policy = Policy.from({
   PHONE_HELD_RECORDS_PER_DAY: '1000',
   MAP_FILE_READ_SECONDS: '60',
   MAP_FILE_READ_MEMORY_MEBIBYTES: '512',
+  FIELD_EVENT_WAYPOINTS_AT_MOST: '50',
 });
 
 const block = (
@@ -435,5 +438,59 @@ describe('a control range', () => {
         range(400001, 405000),
       ),
     ).toBeNull();
+  });
+});
+
+describe('the series a phone makes numbers of', () => {
+  const generated = ['LOAD', 'HAUL_OUT', 'UNIT_RATE', 'ROE'] as const;
+  const control = ['UNIT_RATE', 'ROE'] as const;
+  const work = (
+    fieldEventKinds: readonly string[],
+    certifying = false,
+    formDocumentTypes: readonly string[] = [],
+  ) => ({ fieldEventKinds, certifying, formDocumentTypes });
+
+  it('C184 AC-04-10 a collection’s phone asks for a load block where the project generates its numbers, and none on control tickets', () => {
+    expect(new PhoneSeries(work(['COLLECTION'])).of(generated)).toEqual(['LOAD']);
+    expect(new PhoneSeries(work(['COLLECTION'])).of(control)).toEqual([]);
+  });
+
+  it('C184 AC-04-10 a tower makes no number; unit rate work always does; certifying and ROEs only where the project has the series', () => {
+    expect(new PhoneSeries(work(['DISPOSAL', 'HAUL_OUT_DISPOSAL'])).of(generated)).toEqual([]);
+    expect(new PhoneSeries(work(['UNIT_RATE'])).of(control)).toEqual(['UNIT_RATE']);
+    expect(new PhoneSeries(work(['HAUL_OUT_COLLECTION'], true, ['ROE'])).of(generated)).toEqual([
+      'HAUL_OUT',
+      'ROE',
+    ]);
+    expect(new PhoneSeries(work([], true)).of([...generated, 'CERTIFICATION'])).toEqual([
+      'CERTIFICATION',
+    ]);
+  });
+});
+
+describe('two days’ worth', () => {
+  const block = {
+    firstNumber: 101_001,
+    lastNumber: 102_000,
+    lastUsedNumber: 101_850,
+    status: 'ISSUED',
+  } as const;
+
+  it('C184 a phone is low under twice the most it gave out in one day, never before it gave any', () => {
+    expect(new PhoneNumbers([block]).low(80)).toBe(true);
+    expect(new PhoneNumbers([block]).low(75)).toBe(false);
+    expect(new PhoneNumbers([block]).low(0)).toBe(false);
+  });
+});
+
+describe('a control ticket scanned', () => {
+  it('AC-04-08 is inside the project’s ranges of its series, or questioned', () => {
+    const stock = new ControlTickets([
+      { series: 'LOAD', firstNumber: 400_001, lastNumber: 405_000 },
+    ]);
+    expect(stock.holds('LOAD', '400001')).toBe(true);
+    expect(stock.holds('LOAD', '405001')).toBe(false);
+    expect(stock.holds('HAUL_OUT', '400001')).toBe(false);
+    expect(stock.holds('LOAD', '40000A')).toBe(false);
   });
 });

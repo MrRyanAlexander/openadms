@@ -525,3 +525,35 @@ h2 {
   border-bottom-width: calc(var(--edge) * 3);
   text-decoration: underline;
 }
+
+/* A screen's list of rows that go somewhere: home's open tickets (task 3.5.1). */
+.list-rows {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A ticket's photographs, drawn from their own bytes (task 3.5.1, ADR-581): a press opens one. */
+.photo-open {
+  display: block;
+  padding: 0;
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: var(--radius);
+  background: var(--colour-surface);
+  cursor: pointer;
+}
+
+.photo-thumb {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.photo-large {
+  display: block;
+  width: 100%;
+  height: auto;
+}

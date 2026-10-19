@@ -49,6 +49,10 @@ export interface PhoneListsHeld {
     readonly lastUsedNumber: number | null;
     readonly status: 'ISSUED';
   }[];
+  // How the project numbers its tickets and the series it has; whether a collection asks
+  // "normal or split?" (C184, ADR-137, 581).
+  readonly numbering: SetupShown['numbering'];
+  readonly allowSplitLoads: boolean;
   // The project's pre-printed stock, for a project that numbers from it.
   readonly controlRanges: readonly {
     readonly series: NumberSeriesName;
@@ -246,6 +250,8 @@ export class PhoneLists {
             lastUsedNumber,
             status: 'ISSUED' as const,
           })),
+          numbering: shown.numbering,
+          allowSplitLoads: shown.allowSplitLoads,
           controlRanges: shown.controlRanges,
           debrisTypes: shown.debrisTypes,
           fieldTags: shown.fieldTags,

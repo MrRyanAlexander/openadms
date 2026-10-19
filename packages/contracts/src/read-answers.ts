@@ -38,6 +38,7 @@ import {
   surveyRecordSchema,
   ticketUnvoidRecordSchema,
   ticketVoidRecordSchema,
+  waypointRecordSchema,
 } from './review-answers.ts';
 import {
   billingUnits,
@@ -181,12 +182,14 @@ export const fieldEventReadSchema = fieldEventRecordSchema.extend({
 
 export type FieldEventRead = z.infer<typeof fieldEventReadSchema>;
 
-// One field event with what is recorded beside it: its item lines and the tickets it carries
-// (those taken off kept, marked), its photographs' records and the scale receipt it names.
+// One field event with what is recorded beside it: its item lines, the tickets it carries and
+// its waypoints in order (those taken off kept, marked), its photographs' records and the scale
+// receipt it names.
 export const fieldEventAnswerSchema = z.strictObject({
   fieldEvent: fieldEventReadSchema,
   itemLines: z.array(itemLineRecordSchema),
   carriedTickets: z.array(carriedTicketRecordSchema),
+  waypoints: z.array(waypointRecordSchema),
   photographs: z.array(photographRecordSchema),
   scaleReceipt: scaleReceiptRecordSchema.nullable(),
 });

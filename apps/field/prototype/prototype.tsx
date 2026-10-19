@@ -172,6 +172,7 @@ export function Prototype() {
             project={world.project}
             site={who === 'tower' ? world.site : null}
             works={works[who]}
+            startable={works[who]}
             onStart={(work) => {
               const to = capture[work];
               if (to === undefined) stop(appWords.home.start[work]);

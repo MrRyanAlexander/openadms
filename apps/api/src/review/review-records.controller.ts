@@ -252,6 +252,8 @@ export class ReviewRecordsController {
       markedIneligible: body.markedIneligible ?? null,
       items: body.items ?? [],
       carriedTickets: body.carriedTickets ?? [],
+      // Paper keeps no waypoint: a field event created in the back office has none (ADR-581).
+      waypoints: [],
       reasonId: body.reasonId,
     });
     return createFieldEventEndpoint.answer.parse(

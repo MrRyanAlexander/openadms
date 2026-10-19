@@ -103,6 +103,8 @@ describe('the lists a phone takes', () => {
     const whole = {
       setupVersion: 1,
       blocks: [],
+      numbering: { ticketNumberSource: 'GENERATED', series: ['LOAD', 'UNIT_RATE', 'ROE'] },
+      allowSplitLoads: true,
       controlRanges: [],
       debrisTypes: { LOAD: [], HAUL_OUT: [] },
       fieldTags: [],
@@ -142,7 +144,11 @@ describe('the lists a phone takes', () => {
     expect(keys.filter((key) => /prime|code/i.test(key))).toEqual(['code', 'primes', 'primeId']);
     // Who may be picked as a helper is a record of the day's board, never a version's.
     expect(keys.filter((key) => /helper/i.test(key))).toEqual([]);
+    // How the project numbers its tickets and its series, and whether it asks "normal or split?"
+    // (C184, ADR-137, 581): its setup, never a phone's numbers.
     const shown = {
+      numbering: { ticketNumberSource: 'GENERATED', series: ['LOAD', 'UNIT_RATE', 'ROE'] },
+      allowSplitLoads: true,
       controlRanges: [],
       debrisTypes: { LOAD: [], HAUL_OUT: [] },
       fieldTags: [],

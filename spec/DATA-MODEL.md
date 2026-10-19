@@ -41,7 +41,7 @@ one line saying what kind of record it is (§1) and what it is for, then one tab
 | 1 | Conventions every model follows | |
 | 2 | Shared, firm-wide records | `Client` · `DeclarationEvent` · `Contractor` · `ProjectContractor` · `User` · `UserCredential` · `Session` · `SecurityEvent` · `UserPermission` · `ViewerProject` · `Device` · `MasterPasscode` · `MasterPasscodeTries` · `Assignment` · `AssignmentPayItem` · the firm's lists |
 | 3 | A project and its setup | `Project` · `ProjectKindOfWork` · `Contract` · `Form` · `FormDebrisType` · `FormDefinition` · `PayItem` · `PayItemCrewDayStep` · `PayItemRate` · `Rule` · `RuleCriterion` · `RuleCriterionPick` · `RuleAction` · `RuleActionItem` · `DisposalSite` · `DisposalSiteLabel` · `SiteAreaVersion` · `MapVersion` · `Zone` · `ProjectNumberSeries` · `ControlRange` · `NumberBlock` · `Certification` · `CertificationBox` · `CertificationHelper` · `Roe` · `RoeScopeItem` · `ClockEntry` · `ClockActivityLine` · `ApprovedDay` |
-| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `SetupManifest` |
+| 4 | Evidence: what monitors saw | `FieldEvent` · `FieldEventItem` · `CarriedTicket` · `FieldEventWaypoint` · `ScaleReceipt` · `Survey` · `Incident` · `DropOffLog` · `Photo` · `Sync` · `SyncedRecord` · `QuarantinedRecord` · `SetupManifest` |
 | 5 | Derived: the worker's conclusions | `CompletedLoad` · `CompletedLoadCollection` · `CompletedHaulOut` · `CompletedHaulOutCollection` · `Transaction` · `Flag` · `ReconciliationRun` · `ReconciliationDecision` · the job queue: `ReconciliationJob` · `ReconciliationJobTicket` |
 | 6 | Marks: what people set | `QcMark` · `InvoiceLock` · `InvoiceBatch` · `FlagAcceptance` · `TicketVoid` · `TicketUnvoid` · `ApprovedDay` |
 | 7 | Audit | `AuditRecord` |
@@ -1211,6 +1211,29 @@ and created time, corrected in place, audited in the records domain, seen with i
 | **carriedTicketNumber** | text | The number as written, never a link: one that matches no ticket is taken and flagged later |
 | archivedAt | instant | Taken off by a correction; empty while the ticket is listed (ADR-364) |
 
+#### `FieldEventWaypoint`
+
+*Evidence, built (ADR-581; C180).* A waypoint a collection's monitor marked while it was open:
+"Mark waypoint" records the phone's time and whatever fix it had (ADR-083, 571; Q-104), in the
+order marked, at most the policy's number a collection (`FIELD_EVENT_WAYPOINTS_AT_MOST`, fifty
+as shipped; the sync contract reads at most the policy's most, two hundred). As `CarriedTicket`:
+its own id and created time, sent inside its field event, corrected in place by permission
+(`PATCH /field-events/:fieldEventId/waypoints/:position`, *correct*: its time, its fix, taken off
+and put back), audited in the records domain, seen by a client user and an auditor with its field
+event, on a closed project and a ticket locked as invoiced unchanged as its field event is.
+**Nothing in the engine reads a waypoint**: the zone and the mileage stay on the collection's end
+GPS (ADR-135, 208), and a correction queues no ticket.
+
+| Field | Type | Notes |
+|---|---|---|
+| **fieldEventId** | → `FieldEvent` | The collection; unique with `position` |
+| **fieldEventKind** | enum `FieldEventKind` | Always `COLLECTION` (a check), held to the field event's own by the foreign key (ADR-325) |
+| **position** | int | Its place in the order marked, from 1 (a check) |
+| **markedAt** | instant | The phone's clock when it was marked; its field event's offset says how far that clock stood from UTC (ADR-100) |
+| latitude, longitude | decimal(38,8) | Whatever fix the phone had: both or neither, on the earth (a check); none where it had none (ADR-083) |
+| unreadableGps | json | A fix that reached the server and couldn't be one, kept as sent while the waypoint is kept without it (ADR-329 (5)); an object that holds something, or empty (a check) |
+| archivedAt | instant | Taken off by a correction; empty while it stands (ADR-364) |
+
 ### 4.2 Scale receipts (ADR-034, 038)
 
 #### `ScaleReceipt`
@@ -1591,7 +1614,8 @@ The numbered lists a phone was sent, kept so a reviewer sees what the phone show
 | **builtAt** | instant | |
 
 **As built (ADR-453, task 2.5.3 part 3; agent defaults).** **A version numbers the project's
-setup as its phones are shown it**, whole for the project: the control ranges, the load and
+setup as its phones are shown it**, whole for the project: how it numbers its tickets and the
+series it has, whether it allows split loads (ADR-581, task 3.5.1), the control ranges, the load and
 haul-out forms' debris types without those *Hidden on phones*, the field tags, the reasons for a
 typed number, the live sites, every unit rate pay item with its capture settings, the item
 names, the incident and survey lists, and every live site's quantity lookup. `content` is that,

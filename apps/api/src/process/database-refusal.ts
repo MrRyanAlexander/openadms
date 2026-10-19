@@ -193,6 +193,10 @@ const words: Readonly<Record<string, string>> = {
   field_event_monitor_check: 'Not saved: a field event’s monitor is a person.',
   field_event_item_kind_check: 'Not saved: only unit rate work has item lines.',
   carried_ticket_kind_check: 'Not saved: only a load’s collection lists the tickets it carries.',
+  // A collection's waypoints (ADR-581).
+  field_event_waypoint_kind_check: 'Not saved: only a load’s collection has waypoints.',
+  field_event_waypoint_gps_check:
+    'Not saved: a waypoint’s fix is a latitude and a longitude together, on the earth, or none.',
   // An ROE and the forms corrected, a quarantined record resolved, a field event created in the
   // back office (task 2.4.4, part 3).
   field_event_kind_in_workflow_check:

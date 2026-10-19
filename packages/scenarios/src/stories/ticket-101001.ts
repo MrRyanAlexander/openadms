@@ -93,23 +93,24 @@ export const ticket101001: Story = {
       timeZone,
     });
 
-    story.at(at('08:15'), 'Ana scans the truck’s badge at 14 Heron St, offline');
-    const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415');
     story.at(
-      at('08:40'),
-      'Ana completes the collection; her phone shows 101001, the first of its block, last',
+      at('08:15'),
+      'Ana scans the truck’s badge at 14 Heron St, offline; her phone shows 101001, the first of its block',
     );
+    const collection = anaPhone.begin('LOAD', 'COLLECTION', '730415', made);
+    story.at(at('08:40'), 'Ana completes the collection');
     anaPhone.complete(collection, {
-      number: made,
       endLatitude: '39.13850000',
       endLongitude: '-75.55370000',
     });
 
-    story.at(at('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower, offline');
-    const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415');
-    story.at(at('09:25'), 'Kim calls the load 80% and scans 101001 last');
+    story.at(
+      at('09:05'),
+      'Kim scans the badge at the Marsh Road TDSR tower, offline, then 101001 off the truck’s copy',
+    );
+    const disposal = kimPhone.begin('LOAD', 'DISPOSAL', '730415', scanned('101001'));
+    story.at(at('09:25'), 'Kim calls the load 80%');
     kimPhone.complete(disposal, {
-      number: scanned('101001'),
       endLatitude: '39.09030000',
       endLongitude: '-75.62020000',
       loadCall: 80,

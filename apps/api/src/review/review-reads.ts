@@ -47,6 +47,7 @@ import {
   surveyRecord,
   ticketUnvoidRecord,
   ticketVoidRecord,
+  waypointRecord,
 } from './review-answered.ts';
 import { SetAside } from './set-aside.ts';
 
@@ -530,15 +531,17 @@ export class ReviewReads {
         include: {
           items: { orderBy: { id: 'asc' } },
           carriedTickets: { orderBy: { id: 'asc' } },
+          waypoints: { orderBy: { position: 'asc' } },
           scaleReceipt: true,
         },
       });
       if (event === null) throw notFound();
-      const { items, carriedTickets, scaleReceipt, ...recorded } = event;
+      const { items, carriedTickets, waypoints, scaleReceipt, ...recorded } = event;
       return {
         fieldEvent: fieldEventRead(recorded),
         itemLines: items.map(itemLineRecord),
         carriedTickets: carriedTickets.map(carriedTicketRecord),
+        waypoints: waypoints.map(waypointRecord),
         photographs: await ReviewReads.photographs(tx, 'fieldEventId', fieldEventId),
         scaleReceipt: scaleReceipt === null ? null : scaleReceiptRecord(scaleReceipt),
       };

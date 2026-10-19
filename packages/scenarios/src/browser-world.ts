@@ -18,6 +18,15 @@
 // master passcode put the monitors they create, so that P1's login list, which other tests read
 // whole, stays the cast's.
 //
+// **And what a collection picks from and scans** (task 3.5.1, ADR-581): P1's load form with
+// Vegetative and C&D, its field tags, and two trucks certified the day before by Lee Morgan on the
+// yard phone, the dump trailer 730415 (65 CY) and Rivera's self-loader 730416 (48 CY), as the
+// golden mission §1 has them, through the setup and certification services as the stories write
+// them. A badge of any other number is one the phone's lists don't hold. **And the PARKS project**
+// (spec/CONVENTIONS.md §6, ADR-322): "Bayline County PARKS, Hurricane Delphine", its loads
+// numbered from pre-printed control tickets, range 400001–405000, Vegetative on its load form, no
+// truck certified, and Jo Kim on its collections today and tomorrow (made up, agent default).
+//
 // **And a lost tower phone whose key the firm's time revoked** (task 3.4.3, ADR-580): P1-TWR-LF,
 // enrolled at the API with a key made here and marked lost by Luis with the firm's reason, both on
 // the cast's clock set back the firm's 24 hours and a minute; then its key revoked by the worker's
@@ -27,14 +36,15 @@
 // before the run, and nothing else of it is planted.
 import { generateKeyPairSync } from 'node:crypto';
 
-import { Phones, type ApiProcess } from '@open-adms/api';
-import type { Prisma } from '@open-adms/db';
+import { Certifications, FormSetup, Phones, ProjectSetup, type ApiProcess } from '@open-adms/api';
+import type { Database, Prisma } from '@open-adms/db';
 import { NewProjectSettings, uuidv7, type Policy } from '@open-adms/domain';
 import { PhoneKeyBackstop, WorkerLog } from '@open-adms/worker';
 
 import { storiesHostname } from './over-https.ts';
 import { builtInPolicy } from './policy.ts';
 import { assigned } from './stories/board.ts';
+import { primaryBox, saved } from './stories/p1-office.ts';
 import { p1TimeZone, setUpP1, setUpP1Sites, startSeries, type P1 } from './stories/p1.ts';
 import { listeningApi, StoryApi, type PhoneRequests } from './story-api.ts';
 import { StoryDatabase, storyMasterPasscode } from './story-database.ts';
@@ -53,6 +63,8 @@ export interface WorldCast {
   readonly ana: CastMonitor;
   readonly lee: CastMonitor;
   readonly tariq: CastMonitor;
+  // On the PARKS project's collections (task 3.5.1).
+  readonly jo: CastMonitor;
 }
 
 // The lost tower phone, as a browser test plants it: its id and name as enrolled, the passcode
@@ -175,6 +187,132 @@ export class BrowserWorld {
     });
   }
 
+  // P1's load form, debris types and field tags, and two trucks certified on the yard phone the
+  // day before, each through the service a story writes it with.
+  private static async collectionSetup(
+    api: Database,
+    clock: { now(): Date },
+    policy: Policy,
+    who: {
+      readonly dana: string;
+      readonly luis: string;
+      readonly project: string;
+      readonly prime: string;
+      readonly lee: string;
+      readonly yard: string;
+      readonly parks: string;
+    },
+  ): Promise<void> {
+    const forms = new FormSetup(api, clock, policy);
+    for (const [projectId, names] of [
+      [who.project, ['Vegetative', 'C&D']],
+      [who.parks, ['Vegetative']],
+    ] as const) {
+      const loadForm = await saved(
+        forms.form(who.dana, { projectId, documentType: 'LOAD', name: 'Load' }),
+      );
+      for (const name of names) {
+        const library = await api.debrisType.findFirstOrThrow({ where: { name } });
+        await saved(
+          forms.debrisType(who.dana, {
+            formId: loadForm.id,
+            debrisTypeId: library.id,
+            reduced: false,
+            hiddenOnPhones: false,
+          }),
+        );
+      }
+    }
+    const projects = new ProjectSetup(api, clock, policy);
+    for (const tag of ['Mixed', 'Zone 1 pile']) {
+      await saved(projects.fieldTag(who.dana, who.project, tag));
+    }
+    const yesterday = dayIn(p1TimeZone, new Date(clock.now().getTime() - 86_400_000));
+    const certifying = await assigned(api, clock, who.luis, {
+      workDate: yesterday,
+      projectId: who.project,
+      personId: who.lee,
+      certifying: true,
+      deviceId: who.yard,
+    });
+    const certifications = new Certifications(api, clock, policy);
+    const vehicle = async (name: string) =>
+      (await api.vehicleType.findFirstOrThrow({ where: { name } })).id;
+    const feature = async (name: string) =>
+      (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
+    for (const truck of [
+      {
+        certNumber: '730415',
+        vehicleTypeId: await vehicle('Hydraulic Dump Trailer'),
+        boxes: [
+          primaryBox(360, 96, 72),
+          { ...primaryBox(360, 96, 16), featureId: await feature('Sideboards') },
+        ],
+      },
+      {
+        certNumber: '730416',
+        firstTierSub: 'Rivera Trucking',
+        vehicleTypeId: await vehicle('Self-Loading Truck'),
+        boxes: [
+          primaryBox(264, 92, 96),
+          {
+            shape: 'TRIANGLE',
+            sign: 'SUBTRACT',
+            length: 36,
+            width: 92,
+            height: 48,
+            featureId: await feature('Dog Box'),
+          } as const,
+        ],
+      },
+    ]) {
+      const at = clock.now();
+      await saved(
+        certifications.certify({
+          ...truck,
+          id: uuidv7(at),
+          projectId: who.project,
+          kind: 'CONTAINER',
+          primeId: who.prime,
+          certifiedById: who.lee,
+          deviceId: who.yard,
+          assignmentId: certifying,
+          certifiedAt: at,
+          deviceUtcOffsetMinutes: 0 - at.getTimezoneOffset(),
+        }),
+      );
+    }
+  }
+
+  // The PARKS project: its loads from control tickets, 400001–405000; its unit rate tickets from
+  // 100001, as every project's are generated (ADR-056).
+  private static async setUpParks(
+    tx: Prisma.TransactionClient,
+    policy: Policy,
+    p1: P1,
+  ): Promise<string> {
+    const parks = await tx.programType.findFirstOrThrow({ where: { name: 'PARKS' } });
+    const project = await tx.project.create({
+      data: {
+        name: 'Bayline County PARKS, Hurricane Delphine',
+        clientId: p1.client,
+        declarationEventId: p1.declarationEvent,
+        programTypeId: parks.id,
+        timeZone: p1TimeZone,
+        activeFrom: new Date('2026-10-12'),
+        activeTo: new Date('2027-01-31'),
+        ticketNumberSource: 'CONTROL',
+        workflows: ['LOAD'],
+        ...new NewProjectSettings(policy).for(parks),
+      },
+    });
+    await startSeries(tx, project.id, { UNIT_RATE: 100001 });
+    await tx.controlRange.create({
+      data: { projectId: project.id, series: 'LOAD', firstNumber: 400001, lastNumber: 405000 },
+    });
+    return project.id;
+  }
+
   // The cast, written as the stories write theirs: setup by Dana Reyes through `$write`, the yard
   // phone and the monitors at the API's own endpoints (its process, on the real clock, stopped
   // before the world's own starts on the same port), the board through `Assignments`.
@@ -199,7 +337,14 @@ export class BrowserWorld {
         }
         const p1 = await setUpP1(tx, policy);
         await BrowserWorld.setUpP2(tx, policy, p1);
-        return { luis: luis.id, project: p1.project, ...(await setUpP1Sites(tx, p1.project)) };
+        const parks = await BrowserWorld.setUpParks(tx, policy, p1);
+        return {
+          parks,
+          luis: luis.id,
+          project: p1.project,
+          prime: p1.prime,
+          ...(await setUpP1Sites(tx, p1.project)),
+        };
       });
       const asked = served.requests(clock);
       const key = new SoftwareKey();
@@ -209,7 +354,7 @@ export class BrowserWorld {
         publicKey: key.publicKey,
       });
       served.enrolled(yard.deviceId, key);
-      const people = ['Kim Nguyen', 'Ana Brooks', 'Lee Morgan', 'Tariq Patel'];
+      const people = ['Kim Nguyen', 'Ana Brooks', 'Lee Morgan', 'Tariq Patel', 'Jo Kim'];
       const created = new Map<string, CastMonitor & { readonly id: string }>();
       for (const [place, name] of people.entries()) {
         // A made-up phone number without its area code, as the stories' monitors have.
@@ -249,6 +394,12 @@ export class BrowserWorld {
           fieldEventKinds: ['COLLECTION'],
           formDocumentTypes: ['INCIDENT'],
         });
+        await assigned(api, clock, office.luis, {
+          workDate,
+          projectId: office.parks,
+          personId: of('Jo Kim').id,
+          fieldEventKinds: ['COLLECTION'],
+        });
         for (const [kind, site] of [
           ['COLLECTION', null],
           ['DISPOSAL', office.landfill],
@@ -261,6 +412,15 @@ export class BrowserWorld {
           });
         }
       }
+      await BrowserWorld.collectionSetup(api, clock, policy, {
+        dana,
+        luis: office.luis,
+        project: office.project,
+        prime: office.prime,
+        lee: of('Lee Morgan').id,
+        yard: yard.deviceId,
+        parks: office.parks,
+      });
       const handed = ({ name, monitorNumber, password }: CastMonitor): CastMonitor => ({
         name,
         monitorNumber,
@@ -272,6 +432,7 @@ export class BrowserWorld {
           ana: handed(of('Ana Brooks')),
           lee: handed(of('Lee Morgan')),
           tariq: handed(of('Tariq Patel')),
+          jo: handed(of('Jo Kim')),
         },
         lostPhone: await BrowserWorld.lostPhone(made, asked, office.luis, (ms) => {
           behindMs = ms;

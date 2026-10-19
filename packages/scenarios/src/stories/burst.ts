@@ -230,10 +230,7 @@ export const burst: Story = {
     // The day, offline: in each hour from 07:00 each monitor's first truck is loaded on the hour
     // and dumped at twenty past, the second loaded at half past and dumped at ten to. Every
     // field event is photographed as it is completed; at a tower, with the depth file beside it.
-    const done = (completed: Completed): RecordedEvent => {
-      if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
-      return completed.event;
-    };
+    const done = (completed: Completed): RecordedEvent => completed.event;
     story.at(thursday('07:00'), 'The day: every phone offline, every field event photographed');
     const start = Date.parse(thursday('07:00'));
     const at = (minutes: number): void => {
@@ -246,10 +243,8 @@ export const burst: Story = {
         collectors.forEach((phone, n) => {
           const truck = n * trucksAMonitor + second;
           const point = points[truck % points.length] ?? points[0];
-          const id = phone.begin('LOAD', 'COLLECTION', certOf(truck));
-          const event = done(
-            phone.complete(id, { number: made, debrisType: 'Vegetative', ...point }),
-          );
+          const id = phone.begin('LOAD', 'COLLECTION', certOf(truck), made);
+          const event = done(phone.complete(id, { debrisType: 'Vegetative', ...point }));
           phone.photograph({
             of: { kind: 'FIELD_EVENT', id: event.id },
             latitude: point.endLatitude,
@@ -261,10 +256,9 @@ export const burst: Story = {
         for (const { truck, number } of loaded) {
           const tower = towerPhones[truck % towerPhones.length];
           if (tower === undefined) throw new Error('No tower.');
-          const id = tower.begin('LOAD', 'DISPOSAL', certOf(truck));
+          const id = tower.begin('LOAD', 'DISPOSAL', certOf(truck), scanned(number));
           const event = done(
             tower.complete(id, {
-              number: scanned(number),
               debrisType: 'Vegetative',
               loadCall: 70 + 5 * ((truck + hour) % 4),
               ...(tower.setup.siteId === office.tdsr ? tdsrTower : {}),

@@ -237,6 +237,7 @@ const disposal = async (
   markedIneligible: null,
   items: [],
   carriedTickets: [],
+  waypoints: [],
 });
 
 describe('who may ask', () => {

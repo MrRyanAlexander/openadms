@@ -209,6 +209,21 @@ export const carriedTicketRecordSchema = z.strictObject({
 
 export type CarriedTicketRecord = z.infer<typeof carriedTicketRecordSchema>;
 
+// A waypoint a collection's monitor marked (ADR-571, 581): its place in the order, the phone's
+// time and the fix it had, or none; a fix the phone sent that couldn't be one, as sent. One taken
+// off stays, marked with the time.
+export const waypointRecordSchema = z.strictObject({
+  id,
+  fieldEventId: id,
+  position: z.int().min(1),
+  markedAt: at,
+  fix,
+  unreadableGps: z.strictObject({ latitude: z.unknown(), longitude: z.unknown() }).nullable(),
+  takenOffAt: at.nullable(),
+});
+
+export type WaypointRecord = z.infer<typeof waypointRecordSchema>;
+
 // A photograph's record with the back office's two marks: removed from the record (its row, its
 // file and its fingerprints stay) and its label. It belongs to exactly one of the seven.
 export const photographRecordSchema = z.strictObject({

@@ -72,6 +72,11 @@ export const collection: SyncedFieldEvent = {
   markedIneligible: null,
   items: [],
   carriedTickets: [],
+  // Marked twice as the truck loaded along Oak St, once with no fix.
+  waypoints: [
+    { markedAt: '2026-10-12T13:12:00.000Z', latitude: '39.15640000', longitude: '-75.52310000' },
+    { markedAt: '2026-10-12T13:25:00.000Z', latitude: null, longitude: null },
+  ],
 };
 
 // Kim's disposal on it at the tower.
@@ -86,6 +91,7 @@ export const disposal: SyncedFieldEvent = {
   address: null,
   addressSource: null,
   loadCall: 85,
+  waypoints: [],
 };
 
 export const form = {
@@ -172,6 +178,8 @@ export const certification: SyncedCertification = {
 export const listsAfterwards: PhoneListsRecord = {
   setupVersion: 4,
   blocks: [],
+  numbering: { ticketNumberSource: 'GENERATED', series: ['LOAD', 'HAUL_OUT', 'UNIT_RATE', 'ROE'] },
+  allowSplitLoads: false,
   controlRanges: [],
   debrisTypes: { LOAD: [], HAUL_OUT: [] },
   fieldTags: [],

@@ -12,6 +12,7 @@ import type {
   DropOffLog,
   FieldEvent,
   FieldEventItem,
+  FieldEventWaypoint,
   FlagAcceptance,
   Incident,
   InvoiceBatch,
@@ -47,6 +48,7 @@ import type {
   SurveyRecord,
   TicketUnvoidRecord,
   TicketVoidRecord,
+  WaypointRecord,
 } from '@open-adms/contracts';
 import type { FastifyRequest } from 'fastify';
 
@@ -234,6 +236,20 @@ export const carriedTicketRecord = (carried: CarriedTicket): CarriedTicketRecord
   fieldEventId: carried.fieldEventId,
   carriedTicketNumber: carried.carriedTicketNumber,
   takenOffAt: time(carried.archivedAt),
+});
+
+// A waypoint as its collection's monitor marked it and a reviewer corrected it (ADR-581).
+export const waypointRecord = (waypoint: FieldEventWaypoint): WaypointRecord => ({
+  id: waypoint.id,
+  fieldEventId: waypoint.fieldEventId,
+  position: waypoint.position,
+  markedAt: waypoint.markedAt.toISOString(),
+  fix: fix(waypoint.latitude, waypoint.longitude),
+  unreadableGps:
+    waypoint.unreadableGps === null
+      ? null
+      : (waypoint.unreadableGps as { latitude: unknown; longitude: unknown }),
+  takenOffAt: time(waypoint.archivedAt),
 });
 
 // Never where its file is kept.

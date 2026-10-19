@@ -2,6 +2,7 @@
 // AC-05-11, 14, 36…39; spec/acceptance/10-api-and-sync.md AC-10-35, 36; AC-04-26, 37, 46;
 // T-12; BACKLOG 2.6.1 parts 1 and 3; ADR-052, 329, 466, 469; REQ-004): what each kind of record
 // can be at all, and that nothing else is refused.
+import { fieldEventWaypointsAtMostEver } from '@open-adms/domain';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -264,6 +265,7 @@ describe('the records a phone sends', () => {
         formDebrisTypeId: null,
         kindOfWorkId: null,
         payableTypeId: null,
+        waypoints: [],
       }),
     ).toBe(true);
   });
@@ -310,6 +312,37 @@ describe('the records a phone sends', () => {
     expect(taken({ ...collection, splitSuffix: 'A', estimateCy: 12.55 })).toBe(false);
   });
 
+  it('AC-11-77 a collection carries its waypoints in the order marked, each the phone’s time and whatever fix it had; no other kind carries one; the most is the policy’s most', () => {
+    expect(syncedFieldEventSchema.parse(collection).waypoints).toEqual([
+      {
+        markedAt: new Date('2026-10-12T13:12:00.000Z'),
+        latitude: '39.15640000',
+        longitude: '-75.52310000',
+      },
+      { markedAt: new Date('2026-10-12T13:25:00.000Z'), latitude: null, longitude: null },
+    ]);
+    expect(
+      refusals(syncedFieldEventSchema, { ...disposal, waypoints: collection.waypoints }),
+    ).toEqual(["waypoints: A disposal doesn't record waypoints: only a load's collection does."]);
+    const marked = (count: number) =>
+      Array.from({ length: count }, () => ({
+        markedAt: '2026-10-12T13:12:00.000Z',
+        latitude: null,
+        longitude: null,
+      }));
+    expect(taken({ ...collection, waypoints: marked(fieldEventWaypointsAtMostEver) })).toBe(true);
+    expect(taken({ ...collection, waypoints: marked(fieldEventWaypointsAtMostEver + 1) })).toBe(
+      false,
+    );
+    expect(
+      taken({
+        ...collection,
+        waypoints: [{ markedAt: 'Monday', latitude: null, longitude: null }],
+      }),
+    ).toBe(false);
+    expect(taken({ ...collection, waypoints: [{ ...marked(1)[0], heading: 90 }] })).toBe(false);
+  });
+
   it('every value is bounded: an id is an id, words, lines and numbers have an end, and an offset is one a clock can have', () => {
     const tooFar: Partial<Record<keyof SyncedFieldEvent, unknown>>[] = [
       { id: '101001' },
@@ -336,7 +369,12 @@ describe('the records a phone sends', () => {
       { items: [{ itemNameId: made('aa'), quantity: -1 }] },
       { items: [{ itemNameId: made('aa'), quantity: 1, rate: 85 }] },
     ];
-    const crewTime = { ...collection, workflow: 'UNIT_RATE', kind: 'UNIT_RATE' } as const;
+    const crewTime = {
+      ...collection,
+      workflow: 'UNIT_RATE',
+      kind: 'UNIT_RATE',
+      waypoints: [],
+    } as const;
     expect(taken({ ...crewTime, formDebrisTypeId: null })).toBe(true);
     for (const value of tooFar) {
       expect(taken({ ...crewTime, formDebrisTypeId: null, ...value }), JSON.stringify(value)).toBe(

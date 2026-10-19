@@ -109,6 +109,7 @@ export const viewerSights: Record<string, Sight> = {
   certification_helper: partOf('certification_helper', 'certification', 'certification_id'),
   field_event_item: partOf('field_event_item', 'field_event', 'field_event_id'),
   carried_ticket: partOf('carried_ticket', 'field_event', 'field_event_id'),
+  field_event_waypoint: partOf('field_event_waypoint', 'field_event', 'field_event_id'),
   // A project's scale receipts; and its photographs' records, without where the files are kept
   // (ADR-326).
   // A contractor user: a receipt one of its field events points at, and the photographs of its

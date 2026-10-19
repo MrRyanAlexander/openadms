@@ -36,6 +36,7 @@ import {
   chained,
   type Completed,
   made,
+  type NumberEntry,
   type PhoneLists,
   type RecordedEvent,
   scanned,
@@ -88,7 +89,6 @@ export const p1FieldDays: Story = {
       return outcome.record;
     };
     const done = (completed: Completed): RecordedEvent => {
-      if (!completed.saved) throw new Error(`Not saved: ${completed.reason}`);
       // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as she
       // completes it; it goes in her sync, after the ticket (ADR-481).
       const { event } = completed;
@@ -479,7 +479,8 @@ export const p1FieldDays: Story = {
     );
 
     // ------------------------------------------------------------------------------------------
-    // Monday. Each `begin` is New, the badge scanned; each `complete` is Complete, the number last.
+    // Monday. Each `begin` is New, the badge scanned and then the number taken (ADR-571); each
+    // `complete` is Complete, the details.
     const vegetative = { debrisType: 'Vegetative' } as const;
     const started: Record<string, string> = {};
     const ids: string[] = [];
@@ -487,9 +488,10 @@ export const p1FieldDays: Story = {
       who: SimulatedDevice,
       workflow: 'LOAD' | 'HAUL_OUT' | 'UNIT_RATE',
       kind: FieldEventKind,
-      badge?: string,
+      badge: string | undefined,
+      number: NumberEntry,
     ): string => {
-      const id = who.begin(workflow, kind, badge);
+      const id = who.begin(workflow, kind, badge, number);
       ids.push(id);
       return id;
     };
@@ -501,26 +503,46 @@ export const p1FieldDays: Story = {
     const heronSt = { endLatitude: '39.13850000', endLongitude: '-75.55370000' };
     const elmSt = { endLatitude: '39.15000000', endLongitude: '-75.54000000' };
 
-    story.at(monday('08:15'), 'Ana scans the dump trailer’s badge, 730415, at 14 Heron St');
-    started['101001'] = begin(ana, 'LOAD', 'COLLECTION', '730415');
+    story.at(
+      monday('08:15'),
+      'Ana scans the dump trailer’s badge, 730415, at 14 Heron St; her phone shows 101001, the next of its block, and she types it again',
+    );
+    started['101001'] = begin(ana, 'LOAD', 'COLLECTION', '730415', made);
     story.check(
-      'AC-04-91, AC-04-17 badge first: the field event is on her phone from the scan, with its id and the badge, and no number yet; her block is untouched',
+      'AC-04-91, AC-04-17 the badge, then the number, at New: the field event is on her phone from the scan, with its id, the badge and 101001, open while the truck loads; nothing waits to go',
       [
-        ana.open.map((event) => [event.id === started['101001'], event.kind, event.certNumber]),
+        ana.opened.map((event) => [
+          event.id === started['101001'],
+          event.kind,
+          event.certNumber,
+          event.ticketNumber,
+        ]),
         uuidv7Time(started['101001']).getTime() === clock.now().getTime(),
         ana.lastUsedNumber('LOAD'),
         ana.waiting.length,
       ],
-      [[[true, 'COLLECTION', '730415']], true, null, 0],
+      [[[true, 'COLLECTION', '730415', '101001']], true, 101001, 0],
     );
     story.at(
       monday('08:40'),
-      'The truck is loaded. Ana picks Vegetative; her phone shows 101001, the next of its block, and she enters it again',
+      'The truck is loaded along Heron St, Ana pressing "Mark waypoint" three times as it went (the second with no fix); she picks Vegetative',
     );
     const first = done(
       ana.complete(started['101001'], {
-        number: made,
         ...vegetative,
+        waypoints: [
+          {
+            markedAt: new Date(monday('08:20')),
+            latitude: '39.13820000',
+            longitude: '-75.55410000',
+          },
+          { markedAt: new Date(monday('08:27')) },
+          {
+            markedAt: new Date(monday('08:33')),
+            latitude: '39.13850000',
+            longitude: '-75.55370000',
+          },
+        ],
         address: '14 Heron St',
         addressSource: 'TYPED',
         endLatitude: '39.13850000',
@@ -528,20 +550,19 @@ export const p1FieldDays: Story = {
       }),
     );
     story.check(
-      'AC-04-10 number last: 101001 was made by the collection; the id is the one made at the scan',
-      [first.ticketNumber, first.id === started['101001'], ana.lastUsedNumber('LOAD'), ana.open],
+      'AC-04-10 101001 was made by the collection, at New; the id is the one made at the scan',
+      [first.ticketNumber, first.id === started['101001'], ana.lastUsedNumber('LOAD'), ana.opened],
       ['101001', true, 101001, []],
     );
 
-    story.at(monday('09:05'), 'Kim scans the badge at the Marsh Road TDSR tower');
-    started['dis101001'] = begin(kim, 'LOAD', 'DISPOSAL', '730415');
     story.at(
-      monday('09:25'),
-      'Kim picks Vegetative, calls 80%, and scans 101001 off the truck’s copy',
+      monday('09:05'),
+      'Kim scans the badge at the Marsh Road TDSR tower, then 101001 off the truck’s copy',
     );
+    started['dis101001'] = begin(kim, 'LOAD', 'DISPOSAL', '730415', scanned('101001'));
+    story.at(monday('09:25'), 'Kim picks Vegetative and calls 80%');
     done(
       kim.complete(started['dis101001'], {
-        number: scanned('101001'),
         ...vegetative,
         loadCall: 80,
         endLatitude: '39.09030000',
@@ -550,32 +571,32 @@ export const p1FieldDays: Story = {
     );
 
     story.at(monday('09:40'), 'Jo scans the bucket truck crew’s badge, 730417');
-    started['301001'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730417');
-    story.at(monday('09:50'), 'Ana scans Rivera’s self-loader, 730416');
-    started['101002'] = begin(ana, 'LOAD', 'COLLECTION', '730416');
+    started['301001'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730417', made);
+    story.at(monday('09:50'), 'Ana scans Rivera’s self-loader, 730416; her phone shows 101002');
+    started['101002'] = begin(ana, 'LOAD', 'COLLECTION', '730416', made);
     story.at(monday('09:55'), 'Jo picks Hangers: one tree, a 3 in limb');
     const hanger = {
-      number: made,
       payableType: 'Hangers',
       count: 1,
       measurement: { inches: 3, measuredAs: 'DIAMETER' },
     } as const;
     done(jo.complete(started['301001'], hanger));
-    story.at(monday('10:10'), 'Ana picks C&D; her phone shows 101002');
+    story.at(monday('10:10'), 'Ana picks C&D');
     done(
       ana.complete(started['101002'], {
-        number: made,
         debrisType: 'C&D',
         endLatitude: '39.15000000',
         endLongitude: '-75.52000000',
       }),
     );
-    story.at(monday('10:35'), 'Tariq scans 730416 at the Bayline County Landfill tower');
-    started['dis101002'] = begin(tariq, 'LOAD', 'DISPOSAL', '730416');
-    story.at(monday('10:50'), 'Tariq picks C&D, calls 75%, scans 101002');
+    story.at(
+      monday('10:35'),
+      'Tariq scans 730416 at the Bayline County Landfill tower, then 101002',
+    );
+    started['dis101002'] = begin(tariq, 'LOAD', 'DISPOSAL', '730416', scanned('101002'));
+    story.at(monday('10:50'), 'Tariq picks C&D and calls 75%');
     done(
       tariq.complete(started['dis101002'], {
-        number: scanned('101002'),
         debrisType: 'C&D',
         loadCall: 75,
       }),
@@ -585,74 +606,59 @@ export const p1FieldDays: Story = {
       monday('10:55'),
       'Jo starts the next tree without a scan: 730417 is still her working crew',
     );
-    started['301002'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE');
+    started['301002'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', undefined, made);
     story.at(monday('11:10'), 'Jo picks Leaners and measures 56.5 in around');
     done(
       jo.complete(started['301002'], {
-        number: made,
         payableType: 'Leaners',
         count: 1,
         measurement: { inches: 56.5, measuredAs: 'CIRCUMFERENCE' },
       }),
     );
-    story.at(monday('11:12'), 'Ana scans 730415 again');
-    started['101003'] = begin(ana, 'LOAD', 'COLLECTION', '730415');
-    story.at(monday('11:30'), 'Ana’s phone shows 101003; she enters 101030 by mistake');
+    story.at(
+      monday('11:12'),
+      'Ana scans 730415 again; her phone shows 101003 and she types 101030 by mistake',
+    );
     story.check(
-      'AC-04-11 the number entered again doesn’t match: nothing is saved, the field event stays open and 101003 isn’t used up',
+      'AC-04-11 the number typed again doesn’t match: nothing opens, and 101003 isn’t used up',
       [
-        ana.complete(started['101003'], { number: made, ...vegetative, reentered: '101030' }),
-        ana.open.length,
+        ana.open('LOAD', 'COLLECTION', '730415', made, '101030'),
+        ana.opened.length,
         ana.waiting.length,
         ana.lastUsedNumber('LOAD'),
       ],
       [
-        { saved: false, reason: 'NUMBER_MISMATCH', shown: '101003', reentered: '101030' },
-        1,
+        { opened: false, reason: 'NUMBER_MISMATCH', shown: '101003', reentered: '101030' },
+        0,
         2,
         101002,
       ],
     );
+    const opened = ana.open('LOAD', 'COLLECTION', '730415', made, '101003');
+    if (!opened.opened) throw new Error('101003 typed again didn’t open.');
+    started['101003'] = opened.id;
+    ids.push(opened.id);
     story.check(
-      'AC-04-11 she enters 101003: the two match, and it is saved',
-      done(
-        ana.complete(started['101003'], {
-          number: made,
-          ...vegetative,
-          ...heronSt,
-          reentered: '101003',
-        }),
-      ).ticketNumber,
-      '101003',
+      'AC-04-11 she types 101003: the two match, and the collection opens under it',
+      ana.opened.map((event) => event.ticketNumber),
+      ['101003'],
     );
-    story.at(monday('11:50'), 'Kim scans 730415 at the tower');
-    started['dis101003'] = begin(kim, 'LOAD', 'DISPOSAL', '730415');
-    story.at(monday('12:05'), 'Kim calls it 96%, heaped, and scans 101003');
+    story.at(monday('11:30'), 'The truck is loaded: Vegetative');
+    done(ana.complete(started['101003'], { ...vegetative, ...heronSt }));
+    story.at(monday('11:50'), 'Kim scans 730415 at the tower, then 101003');
+    started['dis101003'] = begin(kim, 'LOAD', 'DISPOSAL', '730415', scanned('101003'));
+    story.at(monday('12:05'), 'Kim calls it 96%, heaped');
     done(
       kim.complete(started['dis101003'], {
-        number: scanned('101003'),
         ...vegetative,
         loadCall: 96,
       }),
     );
 
     story.at(monday('13:00'), 'Jo starts a third ticket, still crew 730417');
-    started['301003'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE');
+    started['301003'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', undefined, made);
     story.at(monday('13:10'), 'Jo records Hangers again: the same tree as 301001');
     done(jo.complete(started['301003'], hanger));
-    story.at(monday('13:20'), 'Jo starts a fourth by mistake and cancels it');
-    const mistake = jo.begin('UNIT_RATE', 'UNIT_RATE');
-    jo.cancel(mistake);
-    story.check(
-      'a cancelled field event stays on the phone, waits for no sync and took no number: 301004 is still next',
-      [
-        jo.cancelled.map((event) => event.id === mistake),
-        jo.open,
-        jo.waiting.length,
-        jo.nextNumber('UNIT_RATE'),
-      ],
-      [[true], [], 3, 301004],
-    );
     story.check(
       'AC-04-70 Jo scanned crew 730417 once: it stayed her working crew for 301002 and 301003',
       jo.waiting.map((event) => [event.ticketNumber, event.certNumber]),
@@ -678,10 +684,10 @@ export const p1FieldDays: Story = {
       ],
     );
 
-    story.at(monday('17:30'), 'Ana scans 730416 for the day’s last load');
-    started['101004'] = begin(ana, 'LOAD', 'COLLECTION', '730416');
+    story.at(monday('17:30'), 'Ana scans 730416 for the day’s last load: 101004');
+    started['101004'] = begin(ana, 'LOAD', 'COLLECTION', '730416', made);
     story.at(monday('17:50'), 'Ana completes 101004; the truck parks loaded for the night');
-    done(ana.complete(started['101004'], { number: made, ...vegetative, ...elmSt }));
+    done(ana.complete(started['101004'], { ...vegetative, ...elmSt }));
     story.check(
       'every record is still on its phone, and the server has none',
       [
@@ -731,6 +737,25 @@ export const p1FieldDays: Story = {
         '301003 UNIT_RATE PENDING',
       ],
     );
+    story.check(
+      'AC-11-77 101001’s collection reached the server with its three waypoints, in order, each the phone’s time and the fix it had, the second none',
+      (
+        await api.fieldEventWaypoint.findMany({
+          where: { fieldEventId: started['101001'] ?? '' },
+          orderBy: { position: 'asc' },
+        })
+      ).map((marked) => [
+        marked.position,
+        projectTime(timeZone, marked.markedAt),
+        marked.latitude?.toFixed(8) ?? null,
+        marked.longitude?.toFixed(8) ?? null,
+      ]),
+      [
+        [1, 'Mon 12 Oct 08:20', '39.13820000', '-75.55410000'],
+        [2, 'Mon 12 Oct 08:27', null, null],
+        [3, 'Mon 12 Oct 08:33', '39.13850000', '-75.55370000'],
+      ],
+    );
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -745,24 +770,26 @@ export const p1FieldDays: Story = {
     }
     const lee = phone('P1-TWR-CCL');
 
-    story.at(tuesday('06:45'), 'Yesterday’s loaded truck, 730416, reaches the TDSR tower');
-    started['dis101004'] = begin(kim, 'LOAD', 'DISPOSAL', '730416');
-    story.at(tuesday('07:15'), 'Kim calls it 50% and scans 101004');
+    story.at(
+      tuesday('06:45'),
+      'Yesterday’s loaded truck, 730416, reaches the TDSR tower; Kim scans 101004',
+    );
+    started['dis101004'] = begin(kim, 'LOAD', 'DISPOSAL', '730416', scanned('101004'));
+    story.at(tuesday('07:15'), 'Kim calls it 50%');
     done(
       kim.complete(started['dis101004'], {
-        number: scanned('101004'),
         ...vegetative,
         loadCall: 50,
       }),
     );
 
     story.at(tuesday('08:30'), 'Jo scans the skid steer crew’s badge, 730418');
-    started['301004'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730418');
+    started['301004'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730418', made);
     story.at(
       tuesday('08:50'),
       'Jo picks Stumps: 30 in across two feet up, a 96 in root ball, half or more exposed, the survey number typed',
     );
-    const stump = { number: made, payableType: 'Stumps', count: 1 } as const;
+    const stump = { payableType: 'Stumps', count: 1 } as const;
     done(
       jo.complete(started['301004'], {
         ...stump,
@@ -773,7 +800,7 @@ export const p1FieldDays: Story = {
       }),
     );
     story.at(tuesday('09:10'), 'Jo starts another stump, the same crew');
-    started['301005'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE');
+    started['301005'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', undefined, made);
     story.at(tuesday('09:20'), 'This one is 20 in across');
     done(
       jo.complete(started['301005'], {
@@ -790,37 +817,34 @@ export const p1FieldDays: Story = {
       ],
     );
 
-    story.at(tuesday('09:45'), 'Ana scans 730415');
-    started['101005'] = begin(ana, 'LOAD', 'COLLECTION', '730415');
-    story.at(tuesday('10:05'), 'Ana completes it: her phone carries on from yesterday, 101005');
+    story.at(tuesday('09:45'), 'Ana scans 730415: her phone carries on from yesterday, 101005');
+    started['101005'] = begin(ana, 'LOAD', 'COLLECTION', '730415', made);
+    story.at(tuesday('10:05'), 'Ana completes it');
     story.check(
       'the phone kept its own count of numbers through the sign-in',
-      done(ana.complete(started['101005'], { number: made, ...vegetative, ...heronSt }))
-        .ticketNumber,
+      done(ana.complete(started['101005'], { ...vegetative, ...heronSt })).ticketNumber,
       '101005',
     );
-    story.at(tuesday('10:25'), 'Kim scans 730415 at the tower');
-    started['dis101005'] = begin(kim, 'LOAD', 'DISPOSAL', '730415');
-    story.at(tuesday('10:40'), 'Kim calls it 70% and scans 101005');
+    story.at(tuesday('10:25'), 'Kim scans 730415 at the tower, then 101005');
+    started['dis101005'] = begin(kim, 'LOAD', 'DISPOSAL', '730415', scanned('101005'));
+    story.at(tuesday('10:40'), 'Kim calls it 70%');
     done(
       kim.complete(started['dis101005'], {
-        number: scanned('101005'),
         ...vegetative,
         loadCall: 70,
       }),
     );
 
     story.at(tuesday('10:50'), 'Jo scans crew 730417 at 40 Birch Ln');
-    started['301006'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730417');
-    story.at(tuesday('11:10'), 'Ana scans 730416');
-    started['101006'] = begin(ana, 'LOAD', 'COLLECTION', '730416');
+    started['301006'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730417', made);
+    story.at(tuesday('11:10'), 'Ana scans 730416: 101006');
+    started['101006'] = begin(ana, 'LOAD', 'COLLECTION', '730416', made);
     story.at(
       tuesday('11:15'),
       'Jo picks White Goods: two washers, a dryer and three fridges, freon recovered from two',
     );
     done(
       jo.complete(started['301006'], {
-        number: made,
         payableType: 'White Goods',
         address: '40 Birch Ln',
         addressSource: 'TYPED',
@@ -833,7 +857,7 @@ export const p1FieldDays: Story = {
       }),
     );
     story.at(tuesday('11:30'), 'Ana completes 101006');
-    done(ana.complete(started['101006'], { number: made, ...vegetative, ...elmSt }));
+    done(ana.complete(started['101006'], { ...vegetative, ...elmSt }));
     story.at(
       tuesday('11:50'),
       'Jo records an incident at 22 Elm St: a mailbox struck by truck 730416',
@@ -844,15 +868,20 @@ export const p1FieldDays: Story = {
       address: '22 Elm St',
       certNumber: '730416',
     });
-    story.at(tuesday('11:55'), 'Kim scans 730416 at the tower');
-    started['dis101006'] = begin(kim, 'LOAD', 'DISPOSAL', '730416');
     story.at(
-      tuesday('12:10'),
-      'The barcode won’t scan. Kim types the number, 101060 by mistake, picks “Barcode damaged”, and calls 60%',
+      tuesday('11:55'),
+      'Kim scans 730416 at the tower. The ticket’s barcode won’t scan: she types the number, 101060 by mistake, twice alike, and picks “Barcode damaged”',
     );
+    started['dis101006'] = begin(
+      kim,
+      'LOAD',
+      'DISPOSAL',
+      '730416',
+      typed('101060', 'Barcode damaged'),
+    );
+    story.at(tuesday('12:10'), 'Kim calls 60%');
     const typedDisposal = done(
       kim.complete(started['dis101006'], {
-        number: typed('101060', 'Barcode damaged'),
         ...vegetative,
         loadCall: 60,
       }),
@@ -867,29 +896,34 @@ export const p1FieldDays: Story = {
       ['101060', true, true],
     );
 
-    story.at(tuesday('12:40'), 'Sam scans the walking floor, 730419, at Marsh Road TDSR');
-    started['201001'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+    story.at(
+      tuesday('12:40'),
+      'Sam scans the walking floor, 730419, at Marsh Road TDSR; his phone shows 201001',
+    );
+    started['201001'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419', made);
     story.at(
       tuesday('13:00'),
-      'Loaded with mulch: Sam picks Mulch and calls 90% at the loading end; his phone shows 201001',
+      'Loaded with mulch: Sam picks Mulch and calls 90% at the loading end',
     );
     // Where a haul-out is loaded at Marsh Road TDSR: by its tower.
     const atTheTdsr = { endLatitude: '39.09030000', endLongitude: '-75.62020000' } as const;
     done(
       sam.complete(started['201001'], {
-        number: made,
         debrisType: 'Mulch',
         loadCall: 90,
         ...atTheTdsr,
       }),
     );
-    story.at(tuesday('13:55'), 'Tariq scans 730419 at the Landfill');
-    started['hod201001'] = begin(tariq, 'HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419');
-    story.at(
-      tuesday('14:10'),
-      'Tariq picks Mulch and scans 201001: a haul-out’s disposal takes no load call',
+    story.at(tuesday('13:55'), 'Tariq scans 730419 at the Landfill, then 201001');
+    started['hod201001'] = begin(
+      tariq,
+      'HAUL_OUT',
+      'HAUL_OUT_DISPOSAL',
+      '730419',
+      scanned('201001'),
     );
-    done(tariq.complete(started['hod201001'], { number: scanned('201001'), debrisType: 'Mulch' }));
+    story.at(tuesday('14:10'), 'Tariq picks Mulch: a haul-out’s disposal takes no load call');
+    done(tariq.complete(started['hod201001'], { debrisType: 'Mulch' }));
 
     story.at(
       tuesday('15:10'),
@@ -898,13 +932,12 @@ export const p1FieldDays: Story = {
     // 201002 and 201003 are the flag catalogue's examples, not tickets of this story (golden
     // mission §2: gaps in a series are normal). The harness moves Sam's phone past them.
     sam.passOver('HAUL_OUT', 201003);
-    started['201004-A'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+    started['201004-A'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419', made);
     story.at(tuesday('15:20'), 'Kim logs a resident’s drop-off at Marsh Road TDSR');
     const dropOff = kim.dropOffLog({ residentName: 'Carl Jensen', originAddress: '14 Heron St' });
-    const pile = (suffix: string, tag: string, loadCall: number, after?: string) =>
+    const pile = (suffix: string, tag: string, loadCall: number) =>
       done(
         sam.complete(started[`201004-${suffix}`] ?? '', {
-          number: after === undefined ? made : chained(after),
           splitSuffix: suffix,
           debrisType: 'Mulch',
           fieldTag: tag,
@@ -912,16 +945,28 @@ export const p1FieldDays: Story = {
           ...atTheTdsr,
         }),
       );
-    story.at(tuesday('15:30'), 'Zone 1 pile is on: Mulch, 10% so far; his phone shows 201004');
+    story.at(tuesday('15:30'), 'Zone 1 pile is on: Mulch, 10% so far; his phone showed 201004');
     pile('A', 'Zone 1 pile', 10);
     story.at(tuesday('15:35'), 'Sam taps split: the next pile, the same badge');
-    started['201004-B'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+    started['201004-B'] = begin(
+      sam,
+      'HAUL_OUT',
+      'HAUL_OUT_COLLECTION',
+      '730419',
+      chained(started['201004-A']),
+    );
     story.at(tuesday('15:45'), 'Zone 2 pile: 35% so far');
-    pile('B', 'Zone 2 pile', 35, started['201004-A']);
+    pile('B', 'Zone 2 pile', 35);
     story.at(tuesday('15:50'), 'Split again');
-    started['201004-C'] = begin(sam, 'HAUL_OUT', 'HAUL_OUT_COLLECTION', '730419');
+    started['201004-C'] = begin(
+      sam,
+      'HAUL_OUT',
+      'HAUL_OUT_COLLECTION',
+      '730419',
+      chained(started['201004-B']),
+    );
     story.at(tuesday('16:05'), 'Zone 3 pile: 85%, the haul-out’s call');
-    pile('C', 'Zone 3 pile', 85, started['201004-B']);
+    pile('C', 'Zone 3 pile', 85);
     story.check(
       'AC-04-10 the first pile made the number and the chain carried it: one number, three piles, and 201005 is next',
       [
@@ -934,16 +979,15 @@ export const p1FieldDays: Story = {
     );
 
     story.at(tuesday('16:50'), 'Jo scans the skid steer crew, 730418, at the end of its day');
-    started['301007'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730418');
+    started['301007'] = begin(jo, 'UNIT_RATE', 'UNIT_RATE', '730418', made);
     story.at(
       tuesday('17:00'),
-      'The walking floor has crossed the scale at Cypress Creek Landfill; Lee scans 730419',
+      'The walking floor has crossed the scale at Cypress Creek Landfill; Lee scans 730419, then 201004',
     );
-    started['hod201004'] = begin(lee, 'HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419');
+    started['hod201004'] = begin(lee, 'HAUL_OUT', 'HAUL_OUT_DISPOSAL', '730419', scanned('201004'));
     story.at(tuesday('17:05'), 'Jo picks Crew time: Skid Steer 9.75 h, Truck 8.50 h');
     done(
       jo.complete(started['301007'], {
-        number: made,
         payableType: 'Crew time',
         items: [
           { name: 'Skid Steer', quantity: 9.75 },
@@ -951,13 +995,25 @@ export const p1FieldDays: Story = {
         ],
       }),
     );
+    story.at(tuesday('17:08'), 'Jo starts another ticket by mistake and cancels it');
+    const mistake = jo.begin('UNIT_RATE', 'UNIT_RATE', undefined, made);
+    jo.cancel(mistake);
+    story.check(
+      'AC-04-95 a cancelled field event stays on the phone and waits for no sync; it keeps 301008, the number it took at New, which the phone never makes again: 301009 is next',
+      [
+        jo.cancelled.map((event) => [event.id === mistake, event.ticketNumber]),
+        jo.opened,
+        jo.waiting.map((event) => event.ticketNumber),
+        jo.nextNumber('UNIT_RATE'),
+      ],
+      [[[true, '301008']], [], ['301004', '301005', '301006', '301007'], 301009],
+    );
     story.at(
       tuesday('17:15'),
       'Lee picks Mulch, copies scale receipt CCL-51207 by hand (79,600 lb gross, 31,600 tare, 48,000 net, 24.00 tons) and scans 201004',
     );
     done(
       lee.complete(started['hod201004'], {
-        number: scanned('201004'),
         debrisType: 'Mulch',
         scaleReceipt: {
           receiptNumber: 'CCL-51207',
@@ -1292,7 +1348,8 @@ export const p1FieldDays: Story = {
         'P1-TWR-TDSR': [],
         'P1-TWR-LF': [],
         'P1-HO-TDSR': [201004],
-        'P1-UR-1': [301007],
+        // The cancelled 301008 is used: a number the phone made is never made again (ADR-571).
+        'P1-UR-1': [301008],
         'P1-TWR-CCL': [],
       },
     );

@@ -170,6 +170,13 @@ describe('the lists a phone takes', () => {
       expect(held.lists).toEqual({
         setupVersion: 1,
         blocks: [],
+        // P1 generates its numbers in a series for each workflow and its ROEs; ROW allows no
+        // split loads unless the firm says so (C184, ADR-137, 581).
+        numbering: {
+          ticketNumberSource: 'GENERATED',
+          series: ['LOAD', 'HAUL_OUT', 'UNIT_RATE', 'ROE'],
+        },
+        allowSplitLoads: false,
         controlRanges: [],
         debrisTypes: { LOAD: [{ id: vegetative.id, name: 'Vegetative' }], HAUL_OUT: [] },
         fieldTags: [{ id: mixed.id, name: 'Mixed' }],
@@ -533,7 +540,7 @@ describe('the lists a phone takes', () => {
       expect(first?.kept).not.toMatch(
         /"\w*(rate|rule|transaction|price|amount|fee|permit|ineligible|cert|roe|block|helper)\w*":/i,
       );
-      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(16);
+      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(18);
 
       // The board moves Lee to the curb: the sites stay, the lookup goes. The project's setup
       // is as it was, so the version is too.

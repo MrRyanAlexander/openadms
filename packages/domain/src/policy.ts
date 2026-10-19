@@ -162,6 +162,8 @@ export const policyNames = {
   // hold, in mebibytes, apart from the API's own work (ADR-548).
   mapFileReadSeconds: 'MAP_FILE_READ_SECONDS',
   mapFileReadMemoryMebibytes: 'MAP_FILE_READ_MEMORY_MEBIBYTES',
+  // The most waypoints a phone offers on one collection (ADR-571, 581): the field app's build.
+  fieldEventWaypointsAtMost: 'FIELD_EVENT_WAYPOINTS_AT_MOST',
 } as const;
 
 export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
@@ -170,6 +172,10 @@ export type PolicyName = (typeof policyNames)[keyof typeof policyNames];
 // value. A sync is never heavier (the contracts' `syncBytesAtMost`), so a phone's sync always fits
 // whatever an installation states (ADR-504).
 export const requestBodyBytesAtLeast = 1_048_576;
+
+// The most waypoints any installation may let a collection take: what the sync contract reads at
+// most, so a phone built with an installation's own value is always read (ADR-581).
+export const fieldEventWaypointsAtMostEver = 200;
 
 // What each value may be: a whole number in the range the database's own checks hold a project's
 // setting to. A load call is 0 to 100; a size is at least one; a crew day is 1 to 24 hours; a block
@@ -270,6 +276,7 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.phoneHeldRecordsPerDay]: { least: 10, most: 100000 },
   [policyNames.mapFileReadSeconds]: { least: 5, most: 600 },
   [policyNames.mapFileReadMemoryMebibytes]: { least: 64, most: 4096 },
+  [policyNames.fieldEventWaypointsAtMost]: { least: 1, most: fieldEventWaypointsAtMostEver },
 };
 
 export class Policy {
@@ -343,6 +350,7 @@ export class Policy {
   readonly phoneHeldRecordsPerDay: number;
   readonly mapFileReadSeconds: number;
   readonly mapFileReadMemoryMebibytes: number;
+  readonly fieldEventWaypointsAtMost: number;
 
   private constructor(values: Readonly<Record<string, string | undefined>>) {
     this.loadCallLowLimit = Policy.read(values, policyNames.loadCallLowLimit);
@@ -427,6 +435,7 @@ export class Policy {
     this.phoneHeldRecordsPerDay = Policy.read(values, policyNames.phoneHeldRecordsPerDay);
     this.mapFileReadSeconds = Policy.read(values, policyNames.mapFileReadSeconds);
     this.mapFileReadMemoryMebibytes = Policy.read(values, policyNames.mapFileReadMemoryMebibytes);
+    this.fieldEventWaypointsAtMost = Policy.read(values, policyNames.fieldEventWaypointsAtMost);
     // Three pairs hold only together: an access token that outlasted the session's quiet time would
     // keep a session nobody uses alive; a lock that came no later than the first wait would
     // leave no wait at all; and one address allowed as many wrong tries at a login as put a wait

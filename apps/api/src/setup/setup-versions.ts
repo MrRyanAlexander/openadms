@@ -49,6 +49,14 @@ export type SiteShown = Named & {
 
 // What a project's phones are shown of its setup: the contracts' `setupShownSchema`.
 export interface SetupShown {
+  // How the project numbers its tickets and the series it has: what a phone asks its first
+  // blocks of (C184, ADR-581).
+  readonly numbering: {
+    readonly ticketNumberSource: 'CONTROL' | 'GENERATED';
+    readonly series: readonly NumberSeriesName[];
+  };
+  // Whether a collection asks "normal or split?" (ADR-137).
+  readonly allowSplitLoads: boolean;
   // The project's pre-printed stock, for a project that numbers from it.
   readonly controlRanges: readonly {
     readonly series: NumberSeriesName;
@@ -274,6 +282,15 @@ export class SetupVersions {
   // What the project's phones are shown now, inside a piece of work that is already reading.
   // One query at a time: a piece of work has one connection.
   static async shownIn(tx: Prisma.TransactionClient, projectId: string): Promise<SetupShown> {
+    const project = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { ticketNumberSource: true, allowSplitLoads: true },
+    });
+    const series = await tx.projectNumberSeries.findMany({
+      where: { projectId },
+      select: { series: true },
+      orderBy: { series: 'asc' },
+    });
     const controlRanges = await tx.controlRange.findMany({
       where: { projectId, archivedAt: null },
       orderBy: [{ series: 'asc' }, { firstNumber: 'asc' }],
@@ -338,6 +355,11 @@ export class SetupVersions {
     const carried = new Set(entries.map((entry) => entry.id));
     const asks = await SetupStanding.quantityLookupOf(tx, projectId);
     return {
+      numbering: {
+        ticketNumberSource: project.ticketNumberSource,
+        series: series.map((each) => each.series),
+      },
+      allowSplitLoads: project.allowSplitLoads,
       controlRanges: controlRanges.map(({ series, firstNumber, lastNumber }) => ({
         series,
         firstNumber,

@@ -32,6 +32,7 @@ import type {
   DropOffLog,
   FieldEvent,
   FieldEventItem,
+  FieldEventWaypoint,
   Incident,
   Photo,
   Roe,
@@ -61,6 +62,13 @@ import { ReviewService, type Reviewed, ticketOf, type Tx } from './review-servic
 
 // A fix as a reviewer corrects one: both halves as exact decimal text, or none.
 export type CorrectedFix = { readonly latitude: string; readonly longitude: string } | null;
+
+// What a reviewer may change on a waypoint (ADR-581): only what is stated changes.
+export interface WaypointChanges {
+  readonly markedAt?: string;
+  readonly fix?: CorrectedFix;
+  readonly takenOff?: boolean;
+}
 
 // What a reviewer may correct on a field event; each is changed only where it is stated. Its
 // number and split suffix are a renumber's.
@@ -377,6 +385,41 @@ export class Corrections extends ReviewService {
             data: { archivedAt: this.clock.now() },
           });
       return { record, projectId: event.projectId, tickets: [ticketOf(event)] };
+    });
+  }
+
+  // A waypoint a collection's monitor marked (ADR-581): when it was marked and its fix corrected
+  // in place, or taken off (the row stays, marked) and put back. Nothing in the engine reads a
+  // waypoint, so no ticket is queued; a ticket locked as invoiced is refused all the same.
+  waypoint(
+    person: string,
+    fieldEventId: string,
+    position: number,
+    changes: WaypointChanges,
+    note?: string,
+  ): Promise<Outcome<Reviewed<FieldEventWaypoint>>> {
+    return this.review(person, 'CORRECT', note, async (tx) => {
+      const fix = changes.fix === undefined ? undefined : fixOf(null, changes.fix);
+      const event = await tx.fieldEvent.findUniqueOrThrow({ where: { id: fieldEventId } });
+      await ReviewService.refusedIfLocked(tx, event.projectId, [ticketOf(event)]);
+      const record = await tx.fieldEventWaypoint.update({
+        where: { fieldEventId_position: { fieldEventId, position } },
+        data: {
+          ...(changes.markedAt === undefined ? {} : { markedAt: new Date(changes.markedAt) }),
+          ...(fix === undefined
+            ? {}
+            : {
+                latitude: fix?.latitude ?? null,
+                longitude: fix?.longitude ?? null,
+                // A fix stated takes the place of one that couldn't be read.
+                unreadableGps: Prisma.DbNull,
+              }),
+          ...(changes.takenOff === undefined
+            ? {}
+            : { archivedAt: changes.takenOff ? this.clock.now() : null }),
+        },
+      });
+      return { record, projectId: event.projectId, tickets: [] };
     });
   }
 

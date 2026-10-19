@@ -4,7 +4,7 @@
 // row, append-only, its actor real), and this reads it back.
 //
 // - **A ticket's history** is every change to the records it is made of: its field events and
-//   what is recorded beside them (item lines, carried tickets, photographs' records), the completed
+//   what is recorded beside them (item lines, carried tickets, waypoints, photographs' records), the completed
 //   record and its rows (those dissolved too), its lines (the ones the worker removed included:
 //   each was copied whole into the log first, so it is found by the log's own copy), its flags
 //   and their acceptances, and its QC marks, locks, voids and unvoids. Which records those are is
@@ -48,6 +48,7 @@ const reviewTables = new Set([
   'field_event',
   'field_event_item',
   'carried_ticket',
+  'field_event_waypoint',
   'photo',
   'completed_load',
   'completed_load_collection',
@@ -242,6 +243,15 @@ export class AuditTrail {
         table: 'carried_ticket',
         ids: ids(
           await tx.carriedTicket.findMany({
+            where: { fieldEventId: { in: events } },
+            select: { id: true },
+          }),
+        ),
+      },
+      {
+        table: 'field_event_waypoint',
+        ids: ids(
+          await tx.fieldEventWaypoint.findMany({
             where: { fieldEventId: { in: events } },
             select: { id: true },
           }),

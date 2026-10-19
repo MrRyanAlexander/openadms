@@ -30,8 +30,14 @@
 // Task 3.4.3 (ADR-580): Settings offers "Sync and turn in" under the master passcode, the monitor
 // still signed in; so does Sync, where the server no longer takes the phone's key alone (revoked by
 // the firm's time, AC-11-35).
+//
+// Task 3.5.1 (ADR-571, 573, 581): home starts a collection where the assignment makes them, lists
+// the monitor's open tickets, each opened where it was left, and says their own count of today's
+// tickets; the capture's screens take the place of the menu until the monitor goes home. The lock
+// after inactivity watches them too; nothing a ticket holds is lost to it.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CollectionCapture, type CaptureParts, type Capturing } from './collection.tsx';
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
 import { Move } from './move.tsx';
@@ -46,7 +52,7 @@ import { worksOf } from './phone/works.ts';
 import type { NotAnswered } from './server.ts';
 import { refusalWords } from './refusals.ts';
 import { Setup } from './setup.tsx';
-import { counted, lastSynced, listsRead, say, words } from './words.ts';
+import { counted, lastSynced, listsRead, say, timeOfDay, words } from './words.ts';
 
 // How long the phone may be left alone, in minutes, and how long before the end it warns, in
 // seconds (the policy's).
@@ -93,6 +99,7 @@ export function SignedInPhone({
   lists,
   sync,
   outbox,
+  capture,
   inactivity,
   setup,
   signedIn: first,
@@ -105,6 +112,7 @@ export function SignedInPhone({
   readonly lists: PhoneLists;
   readonly sync: PhoneSync;
   readonly outbox: PhoneOutbox;
+  readonly capture: CaptureParts;
   readonly inactivity: Inactivity;
   readonly setup: PhoneSetup;
   readonly signedIn: SignedIn;
@@ -129,6 +137,8 @@ export function SignedInPhone({
   const [warned, setWarned] = useState(false);
   const [settingUp, setSettingUp] = useState<'setUp' | 'handOver' | null>(null);
   const [moving, setMoving] = useState(false);
+  const [capturing, setCapturing] = useState<Capturing | null>(null);
+  const [numbersLow, setNumbersLow] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
   // after the lock, says nothing.
@@ -186,6 +196,24 @@ export function SignedInPhone({
       theirs.current = false;
     };
   }, []);
+
+  // Whether fewer than two days' worth of numbers are left (ADR-065): read again whenever the
+  // lists are, and on coming back from the capture.
+  useEffect(() => {
+    if (
+      capturing !== null ||
+      signedIn.assignment?.fieldEventKinds.includes('COLLECTION') !== true
+    ) {
+      return;
+    }
+    let shown = true;
+    void capture.tickets.low('LOAD').then((low) => {
+      if (shown) setNumbersLow(low);
+    });
+    return () => {
+      shown = false;
+    };
+  }, [capture, capturing, held, signedIn]);
 
   // The lock after inactivity: a touch or a key anywhere is something done; past the warning's
   // moment the warning shows, and at the end the monitor is signed out.
@@ -350,14 +378,68 @@ export function SignedInPhone({
     );
   }
 
+  // The capture's screens, for the lists held of the assignment's project (task 3.5.1).
+  const heldNow =
+    held !== undefined && held.assignment.project.id === signedIn.assignment?.project.id
+      ? held
+      : undefined;
+  if (capturing !== null && signedIn.assignment !== null && heldNow !== undefined) {
+    return (
+      <CollectionCapture
+        parts={capture}
+        signedIn={signedIn}
+        assignment={signedIn.assignment}
+        held={heldNow}
+        standing={standing}
+        start={capturing}
+        onHome={() => {
+          setCapturing(null);
+          setWaiting(outbox.waiting());
+          setPlace('work');
+        }}
+        after={warning}
+      />
+    );
+  }
+
   if (place === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
+    const { tickets } = capture;
+    const open = tickets
+      .openOf(signedIn.userId)
+      .filter((ticket) => ticket.projectId === assignment.project.id);
+    const said = words.home.open;
     return (
       <Home
         standing={standing}
         project={assignment.project.name}
         site={assignment.site?.name ?? null}
         works={worksOf(assignment)}
+        startable={heldNow === undefined ? [] : ['collection']}
+        onStart={(work) => {
+          if (work === 'collection') setCapturing({ at: 'new' });
+        }}
+        today={counted(
+          words.home.today,
+          tickets.todayOf(signedIn.userId, assignment.project.id, assignment.project.timeZone),
+        )}
+        open={open.map((ticket) => ({
+          id: ticket.id,
+          label: say(ticket.splitSuffix === '' ? said.ticket : said.split, {
+            truck: ticket.certNumber,
+            number: ticket.ticketNumber,
+            suffix: ticket.splitSuffix,
+          }),
+          detail: say(said.started, {
+            time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
+          }),
+        }))}
+        onOpen={(id) => {
+          const ticket = tickets.ticket(id);
+          if (ticket === undefined) return;
+          setCapturing(ticket.step === 'open' ? { at: 'open', id } : { at: 'complete', id });
+        }}
+        numbersLow={numbersLow}
         after={bottom}
       >
         <p>{synced}</p>

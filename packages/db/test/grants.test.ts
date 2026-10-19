@@ -103,6 +103,8 @@ const tableGrants: Record<string, Record<string, string>> = {
   // An itemised unit rate event's lines and the tickets a load carries: evidence (ADR-325).
   field_event_item: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   carried_ticket: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // A collection's waypoints: evidence (ADR-581).
+  field_event_waypoint: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   // A scale receipt and a photograph's record: evidence (ADR-326).
   scale_receipt: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   photo: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
@@ -276,6 +278,16 @@ const correctable: Record<string, string[]> = {
     'archived_at',
   ],
   carried_ticket: ['field_event_id', 'field_event_kind', 'carried_ticket_number', 'archived_at'],
+  field_event_waypoint: [
+    'field_event_id',
+    'field_event_kind',
+    'position',
+    'marked_at',
+    'latitude',
+    'longitude',
+    'unreadable_gps',
+    'archived_at',
+  ],
   scale_receipt: [
     'project_id',
     'receipt_number',

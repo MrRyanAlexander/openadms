@@ -91,6 +91,8 @@ const domains: Record<string, string> = {
   // domain (ADR-325).
   field_event_item: 'RECORDS',
   carried_ticket: 'RECORDS',
+  // A collection's waypoints: the field event's own domain too (ADR-581).
+  field_event_waypoint: 'RECORDS',
   // A scale receipt and a photograph's record: evidence beside the field event (ADR-326).
   scale_receipt: 'RECORDS',
   photo: 'RECORDS',
@@ -205,6 +207,7 @@ export const closedProjectChildren: readonly (readonly [string, string, string])
   ['certification_helper', 'certification', 'certification_id'],
   ['disposal_site_label', 'disposal_site', 'site_id'],
   ['field_event_item', 'field_event', 'field_event_id'],
+  ['field_event_waypoint', 'field_event', 'field_event_id'],
   ['form_debris_type', 'form', 'form_id'],
   ['form_definition', 'form', 'form_id'],
   ['pay_item_crew_day_step', 'pay_item', 'pay_item_id'],
@@ -277,6 +280,8 @@ const triggers = [
   `CREATE TRIGGER field_event_locked_ticket BEFORE UPDATE ON public.field_event FOR EACH ROW EXECUTE FUNCTION field_event_locked_ticket_guard()`,
   `CREATE TRIGGER field_event_item_locked_ticket BEFORE INSERT OR UPDATE ON public.field_event_item FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
   `CREATE TRIGGER carried_ticket_locked_ticket BEFORE INSERT OR UPDATE ON public.carried_ticket FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
+  // A collection's waypoints, as its other lines (ADR-581).
+  `CREATE TRIGGER field_event_waypoint_locked_ticket BEFORE INSERT OR UPDATE ON public.field_event_waypoint FOR EACH ROW EXECUTE FUNCTION field_event_line_locked_ticket_guard()`,
   `CREATE TRIGGER ticket_void_refuse_void_edit BEFORE UPDATE OF id, project_id, workflow, ticket_number, voided_by_id, voided_at ON public.ticket_void FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
   `CREATE TRIGGER ticket_void_refuse_edit_once_lifted BEFORE UPDATE ON public.ticket_void FOR EACH ROW WHEN ((old.lifted_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unvoid, once written, is history (ADR-366).
@@ -772,6 +777,26 @@ describe('the guards in the catalog', () => {
       // A record waiting in quarantine, and a fix kept as sent (ADR-338).
       {
         name: 'field_event_unreadable_gps_check',
+        definition:
+          "CHECK ((((unreadable_gps IS NULL) OR ((jsonb_typeof(unreadable_gps) = 'object'::text) AND (unreadable_gps <> '{}'::jsonb))) IS TRUE))",
+      },
+      // A collection's waypoints: on a collection, in order from 1, a fix both or neither and on
+      // the earth, an unreadable one kept as sent (ADR-581).
+      {
+        name: 'field_event_waypoint_gps_check',
+        definition:
+          "CHECK ((((num_nonnulls(latitude, longitude) = ANY (ARRAY[0, 2])) AND ((latitude IS NULL) OR ((latitude >= ('-90'::integer)::numeric) AND (latitude <= (90)::numeric))) AND ((longitude IS NULL) OR ((longitude >= ('-180'::integer)::numeric) AND (longitude <= (180)::numeric)))) IS TRUE))",
+      },
+      {
+        name: 'field_event_waypoint_kind_check',
+        definition: "CHECK ((field_event_kind = 'COLLECTION'::field_event_kind))",
+      },
+      {
+        name: 'field_event_waypoint_position_check',
+        definition: 'CHECK (("position" >= 1))',
+      },
+      {
+        name: 'field_event_waypoint_unreadable_gps_check',
         definition:
           "CHECK ((((unreadable_gps IS NULL) OR ((jsonb_typeof(unreadable_gps) = 'object'::text) AND (unreadable_gps <> '{}'::jsonb))) IS TRUE))",
       },

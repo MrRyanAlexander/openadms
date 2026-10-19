@@ -79,9 +79,11 @@ export class SetupStanding {
         select: { content: true },
       });
       if (kept === null) return null;
-      return setupShownSchema
-        .parse(kept.content)
-        .quantityLookup.filter((ask) => ask.siteId === site.id);
+      // Its lookup alone: a version kept before the lists said more is read the same (ADR-581).
+      const { quantityLookup } = kept.content as { readonly quantityLookup?: unknown };
+      return setupShownSchema.shape.quantityLookup
+        .parse(quantityLookup)
+        .filter((ask) => ask.siteId === site.id);
     });
   }
 
