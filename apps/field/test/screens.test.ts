@@ -12,7 +12,7 @@ import { rules, wcagLevels } from '../e2e/wcag.ts';
 const tsx = (path: string, text: string) => ({ path, text });
 
 describe('AC-11-51: the screens of the field app', () => {
-  it('AC-11-51: are read from its source and its prototype’s, each named once by a literal', () => {
+  it('AC-11-51: are read from its source, each named once by a literal', () => {
     expect(screensIn()).toEqual([
       // The collection's (task 3.5.1, ADR-581).
       'complete-collection',
@@ -23,10 +23,11 @@ describe('AC-11-51: the screens of the field app', () => {
       'move-passcode',
       'move-site',
       'move-made',
-      // New for every kind of field event's capture (tasks 3.5.1, 3.5.2; ADR-581, 582).
+      // New for every kind of field event's capture (tasks 3.5.1…3.5.3; ADR-581…583).
       'new-collection',
       'new-haul-out',
       'new-disposal',
+      'new-unit-rate',
       'session-passcode',
       'session-monitor',
       'phone-locked',
@@ -53,11 +54,8 @@ describe('AC-11-51: the screens of the field app', () => {
       'complete-haul-out',
       'turned-in',
       'turn-in',
-      'prototype-collection',
-      'prototype-stop',
-      'prototype-sync',
-      'prototype-tower',
-      'prototype-unit-rate',
+      // Unit rate's Complete (task 3.5.3, ADR-583); the prototype's screens went with it.
+      'complete-unit-rate',
     ]);
     expect(
       screensIn([
@@ -133,7 +131,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 40 of 40 screens checked, in 41 checks; 0 found.',
+      '\nAccessibility: 37 of 37 screens checked, in 38 checks; 0 found.',
     );
   });
 

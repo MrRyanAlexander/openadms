@@ -36,8 +36,8 @@ async function anasPhone(page: Page): Promise<CastMonitor> {
   await signedIn(page, ana);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
   // Kept: the enrolment, when it last synced and the passcode's check the sync brought, then the
-  // lists, how long a sign-in lasts and the login list's three entries.
-  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(8);
+  // lists, how long a sign-in lasts and the login list's four entries.
+  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(9);
   await signedOut(page);
   return ana;
 }
@@ -52,12 +52,12 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   context,
 }) => {
   const asked = recorded(page);
-  const { ana, kim, lee } = worldCast();
+  const { ana, kim, lee, jo } = worldCast();
   await enrolled(page, 'P1-COL-1');
   await signedIn(page, ana);
   await expect(page.getByText(p1)).toBeVisible();
 
-  // The login list read beside the lists, as hers: Ana, Kim and Lee have assignments on P1; each
+  // The login list read beside the lists, as hers: Ana, Kim, Lee and Jo have assignments on P1; each
   // entry is kept sealed in the store, nobody's name or Monitor ID in the clear. The master
   // passcode's check came with the sync before it (task 3.4.1), so the phone says it holds it.
   await expect.poll(() => at(asked, '/phones/current/login-list')[0]?.answer).toBeDefined();
@@ -69,7 +69,7 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
     loginList: { monitors: { monitorId: string; name: string; check: unknown }[] };
   };
   expect(list.loginList.monitors.map(({ name }) => name).sort()).toEqual(
-    [ana.name, kim.name, lee.name].sort(),
+    [ana.name, kim.name, lee.name, jo.name].sort(),
   );
   const [first] = at(asked, '/phones/current/syncs');
   expect(

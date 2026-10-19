@@ -192,7 +192,12 @@ describe('the lists a phone takes', () => {
             bandTo: null,
             archived: false,
             payableType: { id: await priced.payableType('Hangers'), name: 'Hangers' },
-            kindOfWork: { id: await priced.kindOfWork('Hangers'), name: 'Hangers' },
+            kindOfWork: {
+              id: await priced.kindOfWork('Hangers'),
+              name: 'Hangers',
+              key: null,
+              countShape: 'NUMBER',
+            },
             // Its capture settings, each as Dana stated it.
             countIsAlwaysOne: true,
             gpsRequired: false,

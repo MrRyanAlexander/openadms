@@ -246,7 +246,8 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38, AC-11-27: with no signal, P1-COL-2
   await expect(page.getByRole('heading', { name: said.monitor.title })).toBeVisible();
   await expect(page.getByText(filled(said.offline, { project: p1 }))).toBeVisible();
   const names = await page.getByRole('option').locator('.list-row-label').allTextContents();
-  expect(names.sort()).toEqual([ana.name, worldCast().kim.name, lee.name].sort());
+  const { kim, jo } = worldCast();
+  expect(names.sort()).toEqual([ana.name, kim.name, lee.name, jo.name].sort());
   await picked(page, lee.name).click();
   await checkScreen(page);
   await page.getByRole('button', { name: said.next }).click();

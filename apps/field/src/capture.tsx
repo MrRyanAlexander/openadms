@@ -11,6 +11,8 @@
 //   (AC-11-61), with words a screen reader says ("Photo 1 of 2, 8:41 AM", WCAG 1.1.1); a press
 //   opens one full size. Taken from the phone's camera by the browser's own file input (the
 //   camera's own screen is task 3.6.1's), at any step while the ticket is open.
+// - **Where it was**: "Capture GPS", then the address looked up where there is signal, or typed
+//   (ADR-111, 119): a collection's place and a unit rate ticket's one point (REQ-306).
 import type { PhoneListsRecord } from '@open-adms/contracts';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button as Pressable } from 'react-aria-components';
@@ -21,10 +23,12 @@ import {
   NumberKeypad,
   ProgressHeader,
   StatusStrip,
+  TextEntry,
   type Standing,
 } from './look/index.ts';
 import { Camera } from './look/icons.tsx';
-import type { PhoneTickets, PhoneTicket, TicketPhoto } from './phone/tickets.ts';
+import type { AddressLookup, Locator } from './phone/place.ts';
+import type { PhoneTickets, PhoneTicket, TicketDetails, TicketPhoto } from './phone/tickets.ts';
 import { say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
@@ -91,7 +95,7 @@ export function TruckFacts({
   const sub = found.secondTierSub ?? found.firstTierSub;
   return (
     <dl className="facts">
-      <dt>{said.review.truck}</dt>
+      <dt>{found.kind === 'CREW' ? said.review.crew : said.review.truck}</dt>
       <dd>
         {found.kind === 'CREW' || found.capacityCy === null
           ? say(said.badge.crew, { number: found.certNumber })
@@ -292,5 +296,90 @@ export function TicketPhotos({
         {words.look.photos.take}
       </Button>
     </div>
+  );
+}
+
+// The address typed, kept as typed where it isn't the one looked up.
+export function typedAddressChange(ticket: PhoneTicket, typed: string): Partial<TicketDetails> {
+  const typedNow = typed.trim();
+  return typedNow !== '' && !(ticket.addressSource === 'LOOKED_UP' && ticket.address === typedNow)
+    ? { address: typedNow, addressSource: 'TYPED' }
+    : {};
+}
+
+// Where it was: the phone's GPS captured, then the address looked up where there is signal, or
+// the street number and name typed. Nothing waits on the server (ADR-030).
+export function PlaceFields({
+  parts,
+  ticket,
+  typed,
+  onTyped,
+  onChanged,
+}: {
+  readonly parts: { readonly locator: Locator; readonly lookup: AddressLookup };
+  readonly ticket: PhoneTicket;
+  readonly typed: string;
+  readonly onTyped: (typed: string) => void;
+  readonly onChanged: (change: Partial<TicketDetails>) => Promise<unknown>;
+}) {
+  const [placing, setPlacing] = useState<'no' | 'fixing' | 'lookingUp'>('no');
+  const [placed, setPlaced] = useState<'none' | 'refused' | 'notFound' | 'unanswered' | null>(null);
+  return (
+    <>
+      <Button
+        wide
+        isDisabled={placing !== 'no'}
+        onPress={() => {
+          setPlacing('fixing');
+          void parts.locator.where().then(async (where) => {
+            setPlacing('no');
+            if (where.kind === 'fix') {
+              setPlaced(null);
+              await onChanged({ end: where.fix });
+            } else setPlaced(where.kind);
+          });
+        }}
+      >
+        {placing === 'fixing' ? said.place.capturing : said.place.capture}
+      </Button>
+      {ticket.end === null ? null : (
+        <p>
+          {say(said.place.fix, { latitude: ticket.end.latitude, longitude: ticket.end.longitude })}
+        </p>
+      )}
+      {placed === 'none' ? <p role="status">{said.place.noFix}</p> : null}
+      {placed === 'refused' ? (
+        <Banner tone="notice" announced>
+          <p>{said.open.placeRefused}</p>
+        </Banner>
+      ) : null}
+      {ticket.end === null || !navigator.onLine ? null : (
+        <Button
+          wide
+          isDisabled={placing !== 'no'}
+          onPress={() => {
+            const { end } = ticket;
+            if (end === null) return;
+            setPlacing('lookingUp');
+            void parts.lookup.at(end).then(async (found) => {
+              setPlacing('no');
+              if (found.kind === 'found') {
+                setPlaced(null);
+                onTyped(found.address);
+                await onChanged({ address: found.address, addressSource: 'LOOKED_UP' });
+              } else setPlaced(found.kind === 'none' ? 'notFound' : 'unanswered');
+            });
+          }}
+        >
+          {placing === 'lookingUp' ? said.place.lookingUp : said.place.lookUp}
+        </Button>
+      )}
+      {ticket.addressSource === 'LOOKED_UP' && ticket.address !== null ? (
+        <p role="status">{say(said.place.found, { address: ticket.address })}</p>
+      ) : null}
+      {placed === 'notFound' ? <p role="status">{said.place.notFound}</p> : null}
+      {placed === 'unanswered' ? <p role="status">{said.place.unanswered}</p> : null}
+      <TextEntry label={said.place.typed} value={typed} onChange={onTyped} />
+    </>
   );
 }

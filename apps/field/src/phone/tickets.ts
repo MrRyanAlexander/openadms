@@ -31,6 +31,13 @@
 //   a scale receipt copied by hand; the receipt is kept in the outbox with its disposal, before
 //   it, in one change (ADR-034), and a tandem's second disposal points at the first's receipt,
 //   never a second copy of it (ADR-175).
+// - **Unit rate** (BACKLOG 3.5.3; REQ-306, 320; ADR-111, 207, 213, 583): a ticket holds the
+//   payable type picked by name, its kind of work and the pay item the phone worked out from the
+//   bands (what prints, never shown); the count, the measurement and how it was read, a stump's
+//   root ball, "half or more exposed" and survey number, or the items with a count or hours each;
+//   and "ineligible" where the monitor marked it. **The working crew** is the crew of the newest
+//   unit rate ticket this monitor began on the project on this phone: a crew badge scanned once
+//   stays theirs until they scan another (AC-04-70), and the server keeps no "current crew".
 //
 // No rule lives here that the server doesn't hold too: what each kind records is the contract's
 // own refusal at `PhoneOutbox.keep`, which answers before anything is sealed.
@@ -49,6 +56,7 @@ import {
   uuidv7,
   type FieldEventKindName,
   type MasterPasscodeSessionKind,
+  type MeasuredAs,
   type NotSavedNotice,
   type NumberSeriesName,
 } from '@open-adms/domain';
@@ -103,6 +111,12 @@ export interface TicketReceipt {
   readonly shared: boolean;
 }
 
+// An itemised unit rate ticket's line: the item picked, and its count or its hours.
+export interface TicketItem {
+  readonly itemNameId: string;
+  readonly quantity: number;
+}
+
 // What a ticket's monitor entered after New, each as picked or typed; null where nothing was.
 export interface TicketDetails {
   readonly formDebrisTypeId: string | null;
@@ -118,6 +132,21 @@ export interface TicketDetails {
   readonly loadCall: number | null;
   readonly carriedCount: number | null;
   readonly scaleReceipt: TicketReceipt | null;
+  // Unit rate work (ADR-207, 213): the payable type picked, its kind of work, and the pay item the
+  // phone worked out; the count, or the items; a tree's measurement and how it was read, or a
+  // stump's diameter two feet up with its root ball, whether half or more is exposed and its
+  // survey number; and whether the monitor marked it ineligible, where the pay item allows it.
+  readonly payableTypeId: string | null;
+  readonly kindOfWorkId: string | null;
+  readonly payItemId: string | null;
+  readonly unitCount: number | null;
+  readonly measurementInches: number | null;
+  readonly measuredAs: MeasuredAs | null;
+  readonly rootBallInches: number | null;
+  readonly rootBallHalfExposed: boolean | null;
+  readonly surveyNumber: string | null;
+  readonly markedIneligible: boolean | null;
+  readonly items: readonly TicketItem[];
 }
 
 export interface PhoneTicket extends TicketDetails {
@@ -290,6 +319,17 @@ export class PhoneTickets {
     return this.tickets.find((ticket) => ticket.id === id);
   }
 
+  // The working crew (ADR-111; AC-04-70): the crew of the newest unit rate ticket this monitor
+  // began on the project on this phone, whatever became of it; none before their first.
+  workingCrew(monitorId: string, projectId: string): string | undefined {
+    return this.tickets.findLast(
+      (ticket) =>
+        ticket.monitorId === monitorId &&
+        ticket.projectId === projectId &&
+        ticket.kind === 'UNIT_RATE',
+    )?.certNumber;
+  }
+
   // The next number the phone would make of a workflow's series, from its blocks; none where it
   // holds no block, or has used them up.
   async nextNumber(workflow: Workflow): Promise<string | null> {
@@ -386,6 +426,17 @@ export class PhoneTickets {
       loadCall: null,
       carriedCount: null,
       scaleReceipt: null,
+      payableTypeId: null,
+      kindOfWorkId: null,
+      payItemId: null,
+      unitCount: null,
+      measurementInches: null,
+      measuredAs: null,
+      rootBallInches: null,
+      rootBallHalfExposed: null,
+      surveyNumber: null,
+      markedIneligible: null,
+      items: [],
       waypoints: [],
       photos: [],
       endedAt: null,
@@ -545,6 +596,7 @@ export class PhoneTickets {
   // The field event a ticket is, as the sync contract carries it (ADR-236): what its kind
   // records, nothing it doesn't, no conclusion of the server's.
   static record(ticket: PhoneTicket): SyncedRecord {
+    const measured = ticket.measurementInches !== null && ticket.measuredAs !== null;
     return {
       record: 'FIELD_EVENT',
       fieldEvent: {
@@ -581,17 +633,19 @@ export class PhoneTickets {
         loadCall: ticket.loadCall,
         scaleReceiptId: ticket.scaleReceipt?.id ?? null,
         carriedCount: ticket.carriedCount,
-        kindOfWorkId: null,
-        payableTypeId: null,
-        payItemId: null,
-        unitCount: null,
-        measurementInches: null,
-        measuredAs: null,
-        rootBallInches: null,
-        rootBallHalfExposed: null,
-        surveyNumber: null,
-        markedIneligible: null,
-        items: [],
+        kindOfWorkId: ticket.kindOfWorkId,
+        payableTypeId: ticket.payableTypeId,
+        payItemId: ticket.payItemId,
+        unitCount: ticket.unitCount,
+        // A measurement goes with how it was read, or not at all: a way picked and no inches
+        // typed yet is no measurement.
+        measurementInches: measured ? ticket.measurementInches : null,
+        measuredAs: measured ? ticket.measuredAs : null,
+        rootBallInches: ticket.rootBallInches,
+        rootBallHalfExposed: ticket.rootBallHalfExposed,
+        surveyNumber: ticket.surveyNumber,
+        markedIneligible: ticket.markedIneligible,
+        items: ticket.items.map(({ itemNameId, quantity }) => ({ itemNameId, quantity })),
         carriedTickets: [],
         waypoints: ticket.waypoints.map(({ markedAt, fix }) => ({
           markedAt,

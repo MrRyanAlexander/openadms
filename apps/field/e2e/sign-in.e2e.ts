@@ -83,11 +83,11 @@ test('AC-11-14, AC-02-35, AC-11-18, AC-11-81, AC-11-54, AC-11-63: Kim signs in o
   expect(loginList?.session).toBe(token);
 
   // Written down nowhere: not the store, the keyring or the web layer. Kept: the enrolment, the
-  // lists, the login list's three entries (Kim, Ana and Lee have assignments on P1), the master
+  // lists, the login list's four entries (Kim, Ana, Lee and Jo have assignments on P1), the master
   // passcode's check, how long a sign-in lasts and when the phone last synced.
   const held = await rawlyHeld(page, [token, kim.password]);
   expect(held.foundInStore).toEqual([]);
-  expect(held.storeRows).toBe(8);
+  expect(held.storeRows).toBe(9);
   expect(held.webStorage).toEqual([0, 0, '']);
 
   // Sync: the lists held and how stale they are; synced and read again on asking.
@@ -133,7 +133,7 @@ test('AC-11-14: a sign-in the server no longer takes sends Ana back to sign in, 
     english.home.start.incident,
   ]);
   // The enrolment, the lists, the login list and when the phone last synced, kept.
-  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(8);
+  await expect.poll(async () => (await rawlyHeld(page, [])).storeRows).toBe(9);
 
   // The server stops taking her session (as one ended elsewhere): the next request of hers is
   // refused, and the phone asks her to sign in again.
@@ -147,7 +147,7 @@ test('AC-11-14: a sign-in the server no longer takes sends Ana back to sign in, 
   await expect(page.getByText(english.phone.ended)).toBeVisible();
   await expect.poll(() => listsRead(asked).at(-1)?.answer).toMatchObject({ code: 'NOT_SIGNED_IN' });
   await checkScreen(page);
-  expect((await rawlyHeld(page, [])).storeRows).toBe(8);
+  expect((await rawlyHeld(page, [])).storeRows).toBe(9);
   await page.unroute(`${worldApiOrigin}/phones/current/lists`);
 
   // Signed in again, then the page opened again: her session was in memory alone.

@@ -377,7 +377,7 @@ describe('what a phone being set up picks from', () => {
           bandTo: null,
           archived: false,
           payableType: await named('Hangers'),
-          kindOfWork: { id: kind.id, name: 'Hangers' },
+          kindOfWork: { id: kind.id, name: 'Hangers', key: null, countShape: 'NUMBER' },
           countIsAlwaysOne: true,
           gpsRequired: false,
           measurementRequired: false,

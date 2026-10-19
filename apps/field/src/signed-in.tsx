@@ -35,7 +35,8 @@
 // the monitor's open tickets, each opened where it was left, and says their own count of today's
 // tickets; the capture's screens take the place of the menu until the monitor goes home. The lock
 // after inactivity watches them too; nothing a ticket holds is lost to it. Task 3.5.2 (ADR-582):
-// home starts a disposal, a haul-out's collection and a haul-out's disposal the same way.
+// home starts a disposal, a haul-out's collection and a haul-out's disposal the same way. Task
+// 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Home } from './home.tsx';
@@ -71,10 +72,9 @@ const menu: readonly MenuItem[] = ['work', 'sync', 'settings'];
 
 // The works whose capture is built, each the kind of field event it starts.
 const captured: ReadonlyMap<Work, CapturedKind> = new Map(
-  (['COLLECTION', 'DISPOSAL', 'HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL'] as const).map((kind) => [
-    workOfKind[kind],
-    kind,
-  ]),
+  (
+    ['COLLECTION', 'DISPOSAL', 'HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL', 'UNIT_RATE'] as const
+  ).map((kind) => [workOfKind[kind], kind]),
 );
 
 // What a run came to that the screen says: nothing, where it synced and its lists were read or
@@ -216,10 +216,11 @@ export function SignedInPhone({
   useEffect(() => {
     const kinds = signedIn.assignment?.fieldEventKinds ?? [];
     // The series this work makes numbers of: a collection the load series, a haul-out's
-    // collection the haul-out series.
+    // collection the haul-out series, unit rate work its own.
     const madeOf = [
       ...(kinds.includes('COLLECTION') ? (['LOAD'] as const) : []),
       ...(kinds.includes('HAUL_OUT_COLLECTION') ? (['HAUL_OUT'] as const) : []),
+      ...(kinds.includes('UNIT_RATE') ? (['UNIT_RATE'] as const) : []),
     ];
     if (capturing !== null || madeOf.length === 0) return;
     let shown = true;
@@ -442,11 +443,18 @@ export function SignedInPhone({
         )}
         open={open.map((ticket) => ({
           id: ticket.id,
-          label: say(ticket.splitSuffix === '' ? said.ticket : said.split, {
-            truck: ticket.certNumber,
-            number: ticket.ticketNumber,
-            suffix: ticket.splitSuffix,
-          }),
+          label: say(
+            ticket.kind === 'UNIT_RATE'
+              ? said.crew
+              : ticket.splitSuffix === ''
+                ? said.ticket
+                : said.split,
+            {
+              truck: ticket.certNumber,
+              number: ticket.ticketNumber,
+              suffix: ticket.splitSuffix,
+            },
+          ),
           detail: say(said.started, {
             time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
           }),

@@ -1,6 +1,6 @@
 // Which screens the field app has, and which the browser tests reached (BACKLOG 3.1.3; ADR-566;
 // AC-11-51). A screen is the element that names itself with `data-screen="…"` in the app's
-// source or its prototype's (task 3.1.4, ADR-568: the components on the screens not yet built),
+// source (its prototype's too until task 3.5.3 built the last screens it showed, ADR-568, 583),
 // by a literal, once; `accessible.ts` checks each one a test shows. This reporter reads
 // every check the run attached, prints the run's line, and fails the run when a screen of the
 // app's was never checked, a check found anything (a second guard on the test's own failure), or
@@ -17,12 +17,9 @@ import ts from 'typescript';
 export const screenAttribute = 'data-screen';
 export const attachmentName = 'accessibility';
 export const reporterFile = fileURLToPath(import.meta.url);
-const sources = ['../src', '../prototype'].map((folder) =>
-  fileURLToPath(new URL(folder, import.meta.url)),
-);
+const sources = ['../src'].map((folder) => fileURLToPath(new URL(folder, import.meta.url)));
 
-// Every screen named in the given TSX modules (by default the app's own, then its prototype's),
-// in order.
+// Every screen named in the given TSX modules (by default the app's own), in order.
 export function screensIn(
   modules: readonly { path: string; text: string }[] = sources.flatMap((source) =>
     readdirSync(source, { recursive: true, encoding: 'utf8' })

@@ -119,7 +119,7 @@ export async function anotherOrigin(): Promise<{ origin: string; close: () => Pr
 }
 
 // A built folder served from this machine's loopback, with the headers given, for a page the stack
-// doesn't serve (the prototype, built into dist/prototype): plain HTTP on `127.0.0.1`, a made-up
+// doesn't serve (the field app built for the run's own world, dist/world): plain HTTP on `127.0.0.1`, a made-up
 // port; a path naming no file is "not found", and nothing outside the folder is served.
 export async function servedFolder(
   folder: string,

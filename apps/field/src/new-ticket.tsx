@@ -1,7 +1,7 @@
-// New, on the phone, for a load's two field events and a haul-out's (adms-field-app §4A.2…§4A.6;
-// adms-ticket-workflows; BACKLOG 3.5.1, 3.5.2; C68, C96, C114…C117; AC-02-44, AC-04-08, 11, 91,
-// 95, 96, 98, AC-11-38, 39, 74, 76, 82; ADR-030, 031, 052, 056, 137, 154, 209, 295, 421, 571, 573,
-// 581, 582).
+// New, on the phone, for a load's two field events, a haul-out's and a unit rate ticket
+// (adms-field-app §4A.2…§4A.6; adms-ticket-workflows; BACKLOG 3.5.1…3.5.3; C68, C96, C114…C117;
+// AC-02-44, AC-04-08, 11, 70, 91, 95, 96, 98, AC-11-38, 39, 74, 76, 82; ADR-030, 031, 052, 056,
+// 111, 137, 154, 209, 295, 421, 571, 573, 581…583).
 //
 // - **The badge, then the number** (the user, ADR-571): "normal or split?" first where the project
 //   allows split loads, for a collection (its properties) and a haul-out's collection (its piles,
@@ -11,6 +11,11 @@
 //   disposal, a haul-out's disposal): the driver's ticket scanned, never typed again, and never a
 //   number made there (ADR-019; REQ-308a). Either way a barcode that won't read is typed, with a
 //   reason from the firm's list, and typed again (Q-218, ADR-573).
+// - **Unit rate** (ADR-111, 571, 583; AC-04-70, AC-11-74): the crew's badge, then the phone's next
+//   number of the unit rate series, always made there (ADR-056), shown and typed again. **The
+//   working crew stays**: where the monitor has one, New offers it first, "Same crew" or "Change
+//   crew", so it is confirmed on every ticket. A crew isn't held to one open ticket (the user's
+//   rule is one per truck), and a crew is never keyed in by hand: it has no capacity to type.
 // - **A badge whose truck has a ticket open on this phone opens that ticket.** A badge the lists
 //   don't hold is warned, with how stale they are; the lists are read again where there is signal;
 //   the monitor carries on, or keys the truck in by hand, the capacity read off it typed (the user,
@@ -42,6 +47,7 @@ const said = words.capture;
 
 type NewStep =
   | 'split'
+  | 'crew'
   | 'badge'
   | 'unknown'
   | 'keyed'
@@ -67,16 +73,21 @@ export const nextSuffix = (suffix: string): string => {
     : `${suffix.slice(0, -1)}${String.fromCharCode(last.charCodeAt(0) + 1)}`;
 };
 
-export const workflowOf = (kind: CapturedKind): Workflow =>
-  kind === 'COLLECTION' || kind === 'DISPOSAL' ? 'LOAD' : 'HAUL_OUT';
+export const workflowOf = (kind: CapturedKind): Workflow => {
+  if (kind === 'UNIT_RATE') return 'UNIT_RATE';
+  return kind === 'COLLECTION' || kind === 'DISPOSAL' ? 'LOAD' : 'HAUL_OUT';
+};
 
 // Whether this kind makes the ticket's number: a load's collection and a haul-out's (the truck
-// carries it to the other end). A disposal of either takes the number off the driver's ticket.
+// carries it to the other end), and a unit rate ticket. A disposal of either takes the number off
+// the driver's ticket.
 const makesNumber = (kind: CapturedKind): boolean =>
-  kind === 'COLLECTION' || kind === 'HAUL_OUT_COLLECTION';
+  kind === 'COLLECTION' || kind === 'HAUL_OUT_COLLECTION' || kind === 'UNIT_RATE';
 
-// Whether the phone makes the number from its blocks, rather than taking a control ticket.
+// Whether the phone makes the number from its blocks, rather than taking a control ticket: a unit
+// rate ticket's always is (ADR-056).
 function generates(kind: CapturedKind, lists: PhoneListsRecord): boolean {
+  if (kind === 'UNIT_RATE') return true;
   const series = workflowOf(kind) === 'LOAD' ? 'LOAD' : 'HAUL_OUT';
   return (
     makesNumber(kind) &&
@@ -113,6 +124,12 @@ function NewScreen({
           {children}
         </main>
       );
+    case 'UNIT_RATE':
+      return (
+        <main data-screen="new-unit-rate" className="screen">
+          {children}
+        </main>
+      );
   }
 }
 
@@ -146,8 +163,15 @@ export function NewTicket({
   const { lists } = held;
   const workflow = workflowOf(kind);
   const generated = generates(kind, lists);
-  const splits = lists.allowSplitLoads && makesNumber(kind);
-  const [step, setStep] = useState<NewStep>(splits ? 'split' : 'badge');
+  const unitRate = kind === 'UNIT_RATE';
+  const splits = lists.allowSplitLoads && (kind === 'COLLECTION' || kind === 'HAUL_OUT_COLLECTION');
+  // The monitor's working crew on this project, where they have one (AC-04-70).
+  const crew = unitRate
+    ? parts.tickets.workingCrew(signedIn.userId, assignment.project.id)
+    : undefined;
+  const [step, setStep] = useState<NewStep>(
+    splits ? 'split' : crew === undefined ? 'badge' : 'crew',
+  );
   const [split, setSplit] = useState(false);
   const [badge, setBadge] = useState('');
   const [keyed, setKeyed] = useState(false);
@@ -255,9 +279,9 @@ export function NewTicket({
     setStep('made');
   }, [generated, parts.tickets, workflow]);
 
-  const badged = () => {
-    if (certNumber === '') return;
-    const already = parts.tickets.openForTruck(signedIn.userId, certNumber);
+  const badged = (cert = certNumber) => {
+    if (cert === '') return;
+    const already = unitRate ? undefined : parts.tickets.openForTruck(signedIn.userId, cert);
     if (already !== undefined) {
       onOpened(already, true);
       return;
@@ -265,7 +289,7 @@ export function NewTicket({
     void parts.locator.where().then((placed) => {
       if (placed.kind === 'fix') fix.current = placed.fix;
     });
-    if (known) void toNumber();
+    if (lists.certifications.some((one) => one.certNumber === cert)) void toNumber();
     else {
       setReading('no');
       setStep('unknown');
@@ -274,6 +298,7 @@ export function NewTicket({
 
   const order: NewStep[] = [
     ...(splits ? (['split'] as const) : []),
+    ...(crew === undefined ? [] : (['crew'] as const)),
     'badge',
     ...(step === 'unknown' || step === 'keyed' ? (['unknown'] as const) : []),
     ...(keyed ? (['keyed'] as const) : []),
@@ -287,6 +312,7 @@ export function NewTicket({
   const back = () => {
     const before = order[place - 1];
     if (before === undefined) onCancel();
+    else if (before === 'badge' && crew !== undefined && badge === crew) setStep('crew');
     else setStep(before === 'unknown' && known ? 'badge' : before);
   };
   const frame = (title: string, actions: ReactNode, children?: ReactNode) => (
@@ -335,11 +361,48 @@ export function NewTicket({
         </>,
         <p>{kind === 'COLLECTION' ? said.split.about : said.split.piles}</p>,
       );
+    case 'crew':
+      if (crew === undefined) return null;
+      return frame(
+        said.crew.title,
+        <>
+          <Button
+            main
+            wide
+            onPress={() => {
+              setBadge(crew);
+              badged(crew);
+            }}
+          >
+            {say(said.crew.same, { number: crew })}
+          </Button>
+          <Button
+            wide
+            onPress={() => {
+              setBadge('');
+              setStep('badge');
+            }}
+          >
+            {said.crew.change}
+          </Button>
+        </>,
+        <>
+          <p>{said.crew.about}</p>
+          <TruckFacts certNumber={crew} lists={lists} />
+        </>,
+      );
     case 'badge':
       return frame(
-        said.badge.title,
-        <Button main wide isDisabled={certNumber === ''} onPress={badged}>
-          {said.badge.start}
+        unitRate ? said.badge.crewTitle : said.badge.title,
+        <Button
+          main
+          wide
+          isDisabled={certNumber === ''}
+          onPress={() => {
+            badged();
+          }}
+        >
+          {unitRate ? said.badge.crewStart : said.badge.start}
         </Button>,
         <>
           <ScanField
@@ -349,7 +412,9 @@ export function NewTicket({
             onScan={() => {
               document.querySelector<HTMLInputElement>('.scan-field input')?.focus();
             }}
-            onEnter={badged}
+            onEnter={() => {
+              badged();
+            }}
           />
           {known ? <TruckFacts certNumber={certNumber} lists={lists} /> : null}
         </>,
@@ -361,15 +426,17 @@ export function NewTicket({
           <Button main wide onPress={() => void toNumber()}>
             {say(said.unknownBadge.continue, { number: certNumber })}
           </Button>
-          <Button
-            wide
-            onPress={() => {
-              setKeyed(true);
-              setStep('keyed');
-            }}
-          >
-            {said.unknownBadge.keyIn}
-          </Button>
+          {unitRate ? null : (
+            <Button
+              wide
+              onPress={() => {
+                setKeyed(true);
+                setStep('keyed');
+              }}
+            >
+              {said.unknownBadge.keyIn}
+            </Button>
+          )}
           {navigator.onLine ? (
             <Button
               wide

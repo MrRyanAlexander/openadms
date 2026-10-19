@@ -15,14 +15,17 @@
 //   gap, a new one only for a change, never edited, never deleted.
 // - Never a rate, a rule, a transaction or a load's pay item (invariant 20): none is read here.
 import { byDeviceKey, type Database, type Prisma } from '@open-adms/db';
-import type {
-  BoundingBox,
-  CertificationKind,
-  DumpedForm,
-  IncidentOffer,
-  MapGeometry,
-  NumberSeriesName,
-  QuantityAskName,
+import {
+  builtInKeys,
+  type BoundingBox,
+  type BuiltInKey,
+  type CertificationKind,
+  type CountShapeName,
+  type DumpedForm,
+  type IncidentOffer,
+  type MapGeometry,
+  type NumberSeriesName,
+  type QuantityAskName,
 } from '@open-adms/domain';
 
 import { SetupStanding } from './setup-standing.ts';
@@ -30,6 +33,13 @@ import { SetupStanding } from './setup-standing.ts';
 interface Named {
   readonly id: string;
   readonly name: string;
+}
+
+// A unit rate pay item's kind of work as a phone is shown it (ADR-583): its screen is picked by
+// what its monitor counts and, for Stumps, by its built-in key.
+export interface KindOfWorkShown extends Named {
+  readonly key: BuiltInKey<'kindOfWork'> | null;
+  readonly countShape: CountShapeName;
 }
 
 // A site's area as it stands (ADR-346): the project's circle round its GPS, or its newest own
@@ -77,7 +87,7 @@ export interface SetupShown {
     readonly bandTo: number | null;
     readonly archived: boolean;
     readonly payableType: Named;
-    readonly kindOfWork: Named;
+    readonly kindOfWork: KindOfWorkShown;
     readonly countIsAlwaysOne: boolean;
     readonly gpsRequired: boolean;
     readonly measurementRequired: boolean;
@@ -244,7 +254,7 @@ export class SetupVersions {
         bandTo: true,
         archivedAt: true,
         payableType: { select: { id: true, name: true } },
-        kindOfWork: { select: { id: true, name: true } },
+        kindOfWork: { select: { id: true, name: true, key: true, countShape: true } },
         countIsAlwaysOne: true,
         gpsRequired: true,
         measurementRequired: true,
@@ -266,7 +276,11 @@ export class SetupVersions {
               bandTo: payItem.bandTo?.toNumber() ?? null,
               archived: payItem.archivedAt !== null,
               payableType: name(payItem.payableType),
-              kindOfWork: name(payItem.kindOfWork),
+              kindOfWork: {
+                ...name(payItem.kindOfWork),
+                key: builtInKeys.kindOfWork.find((key) => key === payItem.kindOfWork?.key) ?? null,
+                countShape: payItem.kindOfWork.countShape,
+              },
               countIsAlwaysOne: payItem.countIsAlwaysOne,
               gpsRequired: payItem.gpsRequired,
               measurementRequired: payItem.measurementRequired,

@@ -219,7 +219,6 @@
         "one": "1 photo of at most {max}",
         "other": "{count} photos of at most {max}"
       },
-      "photo": "Photo {number}",
       "take": "Take a photo",
       "full": "That’s the most photos a ticket takes."
     }
@@ -250,7 +249,8 @@
       "none": "No ticket is open.",
       "ticket": "Truck {truck} · {number}",
       "started": "Started {time}",
-      "split": "Truck {truck} · {number}-{suffix}"
+      "split": "Truck {truck} · {number}-{suffix}",
+      "crew": "Crew {truck} · {number}"
     },
     "numbersLow": "Fewer than two days’ worth of ticket numbers are left on this phone. Sync when you have signal to get more."
   },
@@ -476,7 +476,9 @@
       "contractor": "Contractor",
       "sub": "{sub}, under {prime}",
       "open": "Truck {truck} already has ticket {number} open on this phone: it opens.",
-      "keyedTruck": "{number}: keyed in by hand"
+      "keyedTruck": "{number}: keyed in by hand",
+      "crewTitle": "Scan the crew’s badge",
+      "crewStart": "Start the unit rate ticket"
     },
     "unknownBadge": {
       "title": "Not in this phone’s certifications",
@@ -553,7 +555,8 @@
       "typeIt": "Or type the ROE number",
       "none": "No ROE",
       "address": "{address}",
-      "noAddress": "No address on the ROE"
+      "noAddress": "No address on the ROE",
+      "workTitle": "Which ROE is this work for?"
     },
     "estimate": {
       "title": "How much from this property?",
@@ -619,7 +622,8 @@
       "found": "Address found: {address}",
       "notFound": "No address found here. Type the street number and name.",
       "unanswered": "The address couldn’t be looked up. Type the street number and name.",
-      "typed": "Street number and name"
+      "typed": "Street number and name",
+      "workTitle": "Where the work was done"
     },
     "photos": {
       "title": "Photos",
@@ -653,7 +657,27 @@
       "none": "None",
       "submit": "Submit",
       "submitting": "Submitting…",
-      "notKept": "The ticket couldn’t be kept to send: {message}"
+      "notKept": "The ticket couldn’t be kept to send: {message}",
+      "crew": "Crew",
+      "work": "Work",
+      "howMany": "Count",
+      "measured": "Measured",
+      "around": "{inches} in around",
+      "across": "{inches} in across",
+      "stump": "Stump",
+      "stumpAcross": "{inches} in across, two feet up",
+      "rootBall": "Root ball",
+      "exposed": "Root ball exposed",
+      "halfOrMore": "Half or more",
+      "lessThanHalf": "Less than half",
+      "survey": "Survey number",
+      "items": "Items",
+      "itemCount": "{item}: {count}",
+      "itemHours": "{item}: {hours} h",
+      "eligibility": "Eligible?",
+      "eligible": "Eligible",
+      "ineligible": "Marked ineligible",
+      "submitCrew": "Submit for crew {number}"
     },
     "submitted": {
       "title": "Ticket {number} saved",
@@ -663,6 +687,58 @@
       "nextProperty": "Next property of this load ({number}-{suffix})",
       "nextPile": "Next pile of this haul-out ({number}-{suffix})",
       "home": "Home"
+    },
+    "crew": {
+      "title": "The working crew",
+      "about": "Your working crew stays until you scan another crew’s badge.",
+      "same": "Same crew: {number}",
+      "change": "Change crew",
+      "photoTitle": "Photo of the crew",
+      "photoAbout": "Take a photo of the crew at work, with its truck or machine."
+    },
+    "work": {
+      "title": "What work is it?"
+    },
+    "howMany": {
+      "title": "How many?",
+      "unit": "each",
+      "notWhole": "A count is a whole number here."
+    },
+    "measure": {
+      "howTitle": "How was it measured?",
+      "about": "At chest height, before it’s cut.",
+      "around": "Around the trunk (circumference)",
+      "across": "Across the trunk (diameter)",
+      "inchesTitle": "How many inches?",
+      "unit": "in"
+    },
+    "stump": {
+      "title": "The stump’s diameter",
+      "about": "Across the stump, two feet up.",
+      "rootBallTitle": "The root ball’s diameter",
+      "rootBallAbout": "Across the root ball. Leave it empty where there is no root ball.",
+      "exposedTitle": "Is half or more of the root ball exposed?",
+      "halfOrMore": "Half or more exposed",
+      "lessThanHalf": "Less than half exposed",
+      "surveyTitle": "The survey number",
+      "surveyLabel": "Survey number",
+      "surveyNone": "No survey number"
+    },
+    "items": {
+      "countsTitle": "How many of each?",
+      "countsAbout": "Leave an item empty where there is none.",
+      "hoursTitle": "Hours for each",
+      "hoursAbout": "To the quarter hour: 9.75 is nine and three quarters. Leave an item empty where it didn’t work.",
+      "hours": "{item}, hours",
+      "notANumber": "Each is a number, or left empty.",
+      "notWhole": "Counts are whole numbers here.",
+      "notQuarter": "Hours go to the quarter hour (.25, .5, .75)."
+    },
+    "ineligible": {
+      "title": "Is the work eligible?",
+      "about": "Mark it ineligible only where you believe it isn’t: the back office is told.",
+      "eligible": "Eligible",
+      "mark": "Mark it ineligible"
     }
   }
 }

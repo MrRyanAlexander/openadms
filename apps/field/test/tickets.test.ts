@@ -3,7 +3,8 @@
 // truck, kept in the store across a restart, cancelled kept unsent with its number, submitted
 // sealed in the outbox with its waypoints and photographs, a submit cut short finished on opening
 // again; the phone's own duplicate check, a control ticket outside the ranges, today's own count,
-// two days' worth of numbers, and the first block of each series the work makes numbers of. Here
+// two days' worth of numbers, and the first block of each series the work makes numbers of; unit
+// rate work as it goes, and the working crew (BACKLOG 3.5.3; ADR-583). Here
 // over a store in memory; through the screens against the real API, e2e/collection.e2e.ts.
 import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contracts';
 import { describe, expect, it } from 'vitest';
@@ -346,6 +347,115 @@ describe('the tower and the haul-out', () => {
     await tickets.submit(a.id, null);
     const b = await tickets.open(begun({ ...haulOut, splitSuffix: 'B', numberFrom: 'CHAINED' }));
     expect(tickets.pileBefore(b)).toMatchObject({ splitSuffix: 'A', loadCall: 10 });
+  });
+});
+
+describe('unit rate work', () => {
+  const crew = {
+    workflow: 'UNIT_RATE',
+    kind: 'UNIT_RATE',
+    certNumber: '730417',
+    numberFrom: 'MADE',
+  } as const;
+  const leaners = '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d51';
+  const leanerKind = '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d52';
+  const leaner24 = '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d53';
+  const washer = '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d54';
+
+  it('AC-04-70 the working crew is the crew of the monitor’s newest unit rate ticket on the project, whatever became of it, until another crew’s badge is scanned; another monitor’s is theirs', async () => {
+    const { tickets } = await phone();
+    expect(tickets.workingCrew(ana.id, p1.id)).toBeUndefined();
+    const first = await tickets.open(begun({ ...crew, ticketNumber: '301001' }));
+    await tickets.cancel(first.id);
+    expect(tickets.workingCrew(ana.id, p1.id)).toBe('730417');
+    await tickets.open(begun({ ...crew, ticketNumber: '301002' }));
+    await tickets.open(begun({ ...crew, certNumber: '730418', ticketNumber: '301003' }));
+    expect(tickets.workingCrew(ana.id, p1.id)).toBe('730418');
+    expect(tickets.workingCrew('0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d5f', p1.id)).toBeUndefined();
+    expect(tickets.workingCrew(ana.id, '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d5e')).toBeUndefined();
+  });
+
+  it('AC-11-43, REQ-306 a leaner goes as the contract carries it: the payable type, its kind of work and the pay item the phone worked out, the count and the measurement with how it was read; a way picked with no inches is no measurement', async () => {
+    const { tickets, outbox } = await phone();
+    const tree = await tickets.open(begun({ ...crew, ticketNumber: '301002' }));
+    await tickets.changed(tree.id, {
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      payItemId: leaner24,
+      unitCount: 1,
+      measurementInches: 56.5,
+      measuredAs: 'CIRCUMFERENCE',
+      markedIneligible: null,
+    });
+    expect((await tickets.submit(tree.id, null)).kind).toBe('sealed');
+    const unmeasured = await tickets.open(begun({ ...crew, ticketNumber: '301003' }));
+    await tickets.changed(unmeasured.id, {
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      unitCount: 1,
+      measuredAs: 'DIAMETER',
+    });
+    expect((await tickets.submit(unmeasured.id, null)).kind).toBe('sealed');
+    const sent = outbox
+      .sends()
+      .records.flatMap((record) => (record.record === 'FIELD_EVENT' ? [record.fieldEvent] : []));
+    expect(sent[0]).toMatchObject({
+      workflow: 'UNIT_RATE',
+      kind: 'UNIT_RATE',
+      ticketNumber: '301002',
+      certNumber: '730417',
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      payItemId: leaner24,
+      unitCount: 1,
+      measurementInches: 56.5,
+      measuredAs: 'CIRCUMFERENCE',
+      formDebrisTypeId: null,
+      loadCall: null,
+      items: [],
+      waypoints: [],
+    });
+    expect([sent[1]?.measurementInches, sent[1]?.measuredAs, sent[1]?.payItemId]).toEqual([
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it('REQ-306, REQ-320 a stump goes with its root ball, "half or more exposed" and survey number; white goods with their items, no count; work marked ineligible says so', async () => {
+    const { tickets, outbox } = await phone();
+    const stump = await tickets.open(
+      begun({ ...crew, certNumber: '730418', ticketNumber: '301004' }),
+    );
+    await tickets.changed(stump.id, {
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      unitCount: 1,
+      measurementInches: 30,
+      measuredAs: 'DIAMETER',
+      rootBallInches: 96,
+      rootBallHalfExposed: true,
+      surveyNumber: 'APN 14-0321-007',
+      markedIneligible: true,
+    });
+    expect((await tickets.submit(stump.id, null)).kind).toBe('sealed');
+    const goods = await tickets.open(begun({ ...crew, ticketNumber: '301006' }));
+    await tickets.changed(goods.id, {
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      items: [{ itemNameId: washer, quantity: 2 }],
+    });
+    expect((await tickets.submit(goods.id, null)).kind).toBe('sealed');
+    const [one, two] = outbox
+      .sends()
+      .records.flatMap((record) => (record.record === 'FIELD_EVENT' ? [record.fieldEvent] : []));
+    expect(one).toMatchObject({
+      rootBallInches: 96,
+      rootBallHalfExposed: true,
+      surveyNumber: 'APN 14-0321-007',
+      markedIneligible: true,
+    });
+    expect([two?.unitCount, two?.items]).toEqual([null, [{ itemNameId: washer, quantity: 2 }]]);
   });
 });
 

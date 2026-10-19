@@ -366,12 +366,16 @@ h2 {
 
 .keypad-keys {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Three columns that share the width, never wider than it: a key's padding gives way first,
+     so the keypad holds 320 CSS px with text at 200% (WCAG 1.4.10, 1.4.4; AC-11-56). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
 .keypad-key {
   position: relative;
+  min-width: 0;
+  padding-inline: var(--space-1);
   min-height: var(--height-key);
   font-family: var(--font-number);
   font-size: var(--type-title);
@@ -396,26 +400,6 @@ h2 {
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.photo {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  aspect-ratio: 1;
-  padding: var(--space-2);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-surface);
-  font-size: var(--type-small);
-  text-align: center;
-}
-
-.photo .icon {
-  width: 2rem;
-  height: 2rem;
 }
 
 /* The progress header: back, how far through, the one question this screen asks. */

@@ -2,7 +2,7 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583) -->
 
 > **This page states today's rules** (last changed by ADR-576, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -353,6 +353,22 @@ copy. A load call past 100 is said and held; a split haul-out's pile is shown th
 one before, carries its debris type and never its field tag. A load turned away: its disposal
 cancelled. On a control-ticket project the submitted disposal says the back of the driver's ticket
 may be written on until the receipt prints (3.6.2).
+
+⚠️ *ADR-583 (task 3.5.3, agent defaults), unit rate as built:* **the working crew is the crew of
+the monitor's newest unit rate ticket on the project on that phone** (whatever became of it), so
+New offers it first, "Same crew" or "Change crew", and the review submits "for crew 730417": its
+confirmation on each completion; a crew isn't held to one open ticket and is never keyed in by hand.
+The number is the phone's next of the unit rate series, always made there, typed again. Complete:
+the crew shown with its photo, **the payable types each once, by name**, a field tag where the
+project has them, then **what the domain's `PhoneUnitRate` says the kind of work asks**: a count
+unless every pay item of the payable type is always one; a tree measured around or across where one
+of them asks for it or has a band; Stumps (by its key) the diameter two feet up, the root ball,
+"half or more exposed" and the survey number; items with a count each, whole unless decimals are
+allowed; items with hours each, to the quarter hour. **The pay item is worked out from the bands as
+the work is entered, kept for the receipt and never shown**; "ineligible" is asked only where the
+pay item worked out allows it (none worked out: any of the payable type's); an ROE where the phone
+holds them; one point, "Capture GPS" then the address. **The phone's lists say each kind of work's
+count shape and built-in key** (they named it only before), so the screen is never told by a name.
 
 ## 4A.5 Numbers, printing and scanning
 

@@ -116,7 +116,7 @@ export const payItem = (id: string, name: string, archived = false) => ({
   bandTo: null,
   archived,
   payableType: { id: `${id.slice(0, -2)}aa`, name },
-  kindOfWork: { id: `${id.slice(0, -2)}bb`, name },
+  kindOfWork: { id: `${id.slice(0, -2)}bb`, name, key: null, countShape: 'NUMBER' as const },
   countIsAlwaysOne: true,
   gpsRequired: false,
   measurementRequired: false,

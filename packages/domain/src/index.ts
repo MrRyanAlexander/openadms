@@ -423,6 +423,13 @@ export {
   type SetupGapCode,
 } from './setup-check.ts';
 export {
+  PhoneUnitRate,
+  type PhoneKindOfWork,
+  type PhoneUnitRatePayItem,
+  type UnitRateAsked,
+  type UnitRateScreen,
+} from './phone-unit-rate.ts';
+export {
   SizeBands,
   type BandCheck,
   type BandedPayItem,

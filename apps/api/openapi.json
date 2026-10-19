@@ -22680,9 +22680,24 @@
                                       },
                                       "name": {
                                         "type": "string"
+                                      },
+                                      "key": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": ["STUMPS"]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "countShape": {
+                                        "type": "string",
+                                        "enum": ["NUMBER", "ITEM_COUNTS", "ITEM_HOURS"]
                                       }
                                     },
-                                    "required": ["id", "name"],
+                                    "required": ["id", "name", "key", "countShape"],
                                     "additionalProperties": false
                                   },
                                   "countIsAlwaysOne": {
@@ -23689,9 +23704,24 @@
                                       },
                                       "name": {
                                         "type": "string"
+                                      },
+                                      "key": {
+                                        "anyOf": [
+                                          {
+                                            "type": "string",
+                                            "enum": ["STUMPS"]
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "countShape": {
+                                        "type": "string",
+                                        "enum": ["NUMBER", "ITEM_COUNTS", "ITEM_HOURS"]
                                       }
                                     },
-                                    "required": ["id", "name"],
+                                    "required": ["id", "name", "key", "countShape"],
                                     "additionalProperties": false
                                   },
                                   "countIsAlwaysOne": {

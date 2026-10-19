@@ -2,7 +2,8 @@
 // for the light theme on the bare root and redefined, the same in both places, for the dark one
 // (the phone's setting, and `data-theme` overriding it either way); every pair of colours a
 // component puts together holds WCAG 2.2 AA in each theme; the main button and a row are 56 px
-// tall. The browser tests check the same on the screens themselves (e2e/prototype.e2e.ts).
+// tall. The browser tests check the same on the screens themselves, in both themes
+// (e2e/accessible.ts).
 import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';

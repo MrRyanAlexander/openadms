@@ -29,7 +29,12 @@ import type {
   QuantityAskName,
 } from '@open-adms/domain';
 
-import { SetupVersions, type SetupShown, type SiteShown } from '../setup/setup-versions.ts';
+import {
+  SetupVersions,
+  type KindOfWorkShown,
+  type SetupShown,
+  type SiteShown,
+} from '../setup/setup-versions.ts';
 import type { PhoneAssignment, PhoneAssignments } from './phone-assignments.ts';
 
 interface Named {
@@ -92,7 +97,7 @@ export interface PhoneListsHeld {
     readonly bandTo: number | null;
     readonly archived: boolean;
     readonly payableType: Named;
-    readonly kindOfWork: Named;
+    readonly kindOfWork: KindOfWorkShown;
     readonly countIsAlwaysOne: boolean;
     readonly gpsRequired: boolean;
     readonly measurementRequired: boolean;

@@ -51,9 +51,6 @@ export function pagePolicy(apiOrigin: string): string {
   ].join('; ');
 }
 
-// The prototype's page (task 3.1.4, prototype/): the app's own policy, with no server to talk to.
-export const prototypePolicy = pagePolicy("'none'");
-
 // The policy a server sends with the page: the same, and nothing may frame it, which only a
 // header can say.
 export function servedPolicy(apiOrigin: string): string {

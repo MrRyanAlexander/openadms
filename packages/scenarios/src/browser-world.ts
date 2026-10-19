@@ -25,7 +25,8 @@
 // them. A badge of any other number is one the phone's lists don't hold. **And the PARKS project**
 // (spec/CONVENTIONS.md §6, ADR-322): "Bayline County PARKS, Hurricane Delphine", its loads
 // numbered from pre-printed control tickets, range 400001–405000, Vegetative on its load form, no
-// truck certified, and Jo Kim on its collections today and tomorrow (made up, agent default).
+// truck certified, and Sam Grant on its collections today and tomorrow (made up, agent default;
+// Jo Kim's until task 3.5.3 put her on P1's unit rate work, ADR-583).
 //
 // **And what a tower and a haul-out ask for** (task 3.5.2, ADR-582): Cypress Creek Landfill on P1
 // as the story `setup` adds it; P1's haul-out form with Mulch; and four of P1's pay items, each
@@ -42,6 +43,14 @@
 // enrolled at the API with a key made here and marked lost by Luis with the firm's reason, both on
 // the cast's clock set back the firm's 24 hours and a minute; then its key revoked by the worker's
 // own pass as the system actor, on the real clock, which the database holds it to.
+//
+// **And what unit rate work picks from** (task 3.5.3, ADR-583): P1's unit rate pay items as the
+// story `p1-field-days` enters them (golden mission §1), each with its payable type and kind of
+// work and Coastline's rate, two settings made up so a test meets them: the hanger is measured
+// (its limb), and the leaner of 24.1–99 in may be marked ineligible by the monitor. Its two crews
+// certified the day before by Lee Morgan, the bucket truck crew 730417 and the skid steer crew
+// 730418; and Jo Kim on P1's unit rate work today and tomorrow, every one of those pay items
+// hers, as the golden mission has her.
 // Its key is handed to the test with the rest (a made-up world's, never an installation's), for
 // the browser's keyring to hold as the phone's own: the browser can't otherwise hold a key made
 // before the run, and nothing else of it is planted.
@@ -84,8 +93,10 @@ export interface WorldCast {
   readonly ana: CastMonitor;
   readonly lee: CastMonitor;
   readonly tariq: CastMonitor;
-  // On the PARKS project's collections (task 3.5.1).
+  // On P1's unit rate work (task 3.5.3).
   readonly jo: CastMonitor;
+  // On the PARKS project's collections (task 3.5.1; ADR-583).
+  readonly sam: CastMonitor;
 }
 
 // The lost tower phone, as a browser test plants it: its id and name as enrolled, the passcode
@@ -408,6 +419,126 @@ export class BrowserWorld {
         }),
       );
     }
+    // The two crews, as Sam Grant certifies them in the golden mission §1.
+    for (const [certNumber, crewType] of [
+      ['730417', 'Bucket Truck'],
+      ['730418', 'Skid Steer'],
+    ] as const) {
+      const at = clock.now();
+      await saved(
+        certifications.certify({
+          certNumber,
+          crewTypeId: (await api.crewType.findFirstOrThrow({ where: { name: crewType } })).id,
+          boxes: [],
+          id: uuidv7(at),
+          projectId: who.project,
+          kind: 'CREW',
+          primeId: who.prime,
+          certifiedById: who.lee,
+          deviceId: who.yard,
+          assignmentId: certifying,
+          certifiedAt: at,
+          deviceUtcOffsetMinutes: 0 - at.getTimezoneOffset(),
+        }),
+      );
+    }
+  }
+
+  // P1's unit rate pay items as the story `p1-field-days` enters them, each with Coastline's
+  // rate: their ids, for Jo Kim's assignment. Made up for the browser tests: the hanger measured,
+  // the larger leaner one the monitor may mark ineligible.
+  private static async unitRatePayItems(
+    api: Database,
+    clock: { now: () => Date },
+    policy: Policy,
+    who: { readonly dana: string; readonly project: string; readonly prime: string },
+  ): Promise<string[]> {
+    const payItems = new PayItemSetup(api, clock, policy);
+    const ids: string[] = [];
+    for (const [code, description, work, unit, rate, more] of [
+      ['HNG-RMV-EA', 'Hanger removal', 'Hangers', 'EA', '68.00', { measurementRequired: true }],
+      [
+        'LNR-RMV-EA-24',
+        'Leaner removal 6–24 in',
+        'Leaners',
+        'EA',
+        '95.00',
+        { measurementRequired: true, bandFrom: 6, bandTo: 24 },
+      ],
+      [
+        'LNR-RMV-EA-99',
+        'Leaner removal 24.1–99 in',
+        'Leaners',
+        'EA',
+        '185.00',
+        { measurementRequired: true, bandFrom: 24.1, bandTo: 99, monitorMayMarkIneligible: true },
+      ],
+      [
+        'STP-RMV-EA-36',
+        'Stump removal 24–36 in',
+        'Stumps',
+        'EA',
+        '110.00',
+        { measurementRequired: true, bandFrom: 24, bandTo: 36 },
+      ],
+      [
+        'STP-RMV-EA-48',
+        'Stump removal 36.1–48 in',
+        'Stumps',
+        'EA',
+        '175.00',
+        { measurementRequired: true, bandFrom: 36.1, bandTo: 48 },
+      ],
+      [
+        'WG-RMV-EA',
+        'White good removed',
+        'White Goods',
+        'EA',
+        '40.00',
+        { countIsAlwaysOne: false },
+      ],
+      [
+        'CREW-TIME-HR',
+        'Crew time, skid steer crew',
+        'Crew time',
+        'HR',
+        '150.00',
+        { countIsAlwaysOne: false, decimalsAllowed: true, crewTimeConversion: 'PER_HOUR' },
+      ],
+    ] as const satisfies readonly (readonly [
+      string,
+      string,
+      string,
+      NewPayItem['unit'],
+      string,
+      Partial<NewPayItem>,
+    ])[]) {
+      const payItem = await saved(
+        payItems.payItem(who.dana, {
+          projectId: who.project,
+          code,
+          description,
+          payableTypeId: (await api.payableType.findFirstOrThrow({ where: { name: work } })).id,
+          kindOfWorkId: (await api.kindOfWork.findFirstOrThrow({ where: { name: work } })).id,
+          unit,
+          bandFrom: null,
+          bandTo: null,
+          countIsAlwaysOne: true,
+          gpsRequired: false,
+          measurementRequired: false,
+          decimalsAllowed: false,
+          photosRequired: true,
+          monitorMayMarkIneligible: false,
+          quantityFromCarriedTickets: false,
+          crewTimeConversion: null,
+          crewDayHours: null,
+          rates: [{ primeId: who.prime, rate }],
+          ...more,
+        }),
+      );
+      ids.push(payItem.id);
+    }
+    return ids;
   }
 
   // The PARKS project: its loads from control tickets, 400001–405000; its unit rate tickets from
@@ -501,7 +632,14 @@ export class BrowserWorld {
         publicKey: key.publicKey,
       });
       served.enrolled(yard.deviceId, key);
-      const people = ['Kim Nguyen', 'Ana Brooks', 'Lee Morgan', 'Tariq Patel', 'Jo Kim'];
+      const people = [
+        'Kim Nguyen',
+        'Ana Brooks',
+        'Lee Morgan',
+        'Tariq Patel',
+        'Jo Kim',
+        'Sam Grant',
+      ];
       const created = new Map<string, CastMonitor & { readonly id: string }>();
       for (const [place, name] of people.entries()) {
         // A made-up phone number without its area code, as the stories' monitors have.
@@ -523,6 +661,11 @@ export class BrowserWorld {
         if (monitor === undefined) throw new Error(`No monitor ${name} in the world.`);
         return monitor;
       };
+      const unitRate = await BrowserWorld.unitRatePayItems(api, clock, policy, {
+        dana,
+        project: office.project,
+        prime: office.prime,
+      });
       const now = clock.now();
       for (const workDate of [now, new Date(now.getTime() + 86_400_000)].map((at) =>
         dayIn(p1TimeZone, at),
@@ -542,9 +685,15 @@ export class BrowserWorld {
           formDocumentTypes: ['INCIDENT'],
         });
         await assigned(api, clock, office.luis, {
+          ...planned,
+          personId: of('Jo Kim').id,
+          fieldEventKinds: ['UNIT_RATE'],
+          payItemIds: unitRate,
+        });
+        await assigned(api, clock, office.luis, {
           workDate,
           projectId: office.parks,
-          personId: of('Jo Kim').id,
+          personId: of('Sam Grant').id,
           fieldEventKinds: ['COLLECTION'],
         });
         for (const [kind, site] of [
@@ -582,6 +731,7 @@ export class BrowserWorld {
           lee: handed(of('Lee Morgan')),
           tariq: handed(of('Tariq Patel')),
           jo: handed(of('Jo Kim')),
+          sam: handed(of('Sam Grant')),
         },
         lostPhone: await BrowserWorld.lostPhone(made, asked, office.luis, (ms) => {
           behindMs = ms;

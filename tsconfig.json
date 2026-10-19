@@ -23,9 +23,6 @@
       "path": "apps/field/test"
     },
     {
-      "path": "apps/field/prototype"
-    },
-    {
       "path": "packages/db"
     },
     {

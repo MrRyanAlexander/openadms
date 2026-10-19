@@ -1,6 +1,6 @@
 // The collection, through the field app's screens (BACKLOG 3.5.1; ADR-571, 573, 581), in the run's
 // own world (e2e/world-setup.ts) against the real API: Ana Brooks on P1, which generates its
-// numbers and allows split loads; Jo Kim on the PARKS project, which numbers its loads from
+// numbers and allows split loads; Sam Grant on the PARKS project, which numbers its loads from
 // pre-printed control tickets 400001–405000. Each ticket opens at New, under the badge and then
 // its number; it waits in home's open list, kept across a sign-out and the app opened again; it
 // is completed with the network off; it goes at the next sync, sealed.
@@ -250,14 +250,14 @@ test('AC-11-75, AC-11-76, AC-11-77, AC-11-78, AC-11-79, AC-11-80, AC-11-05, AC-0
   await expect(page.getByText(english.sync.nothingWaits)).toBeVisible();
 });
 
-test('AC-11-39, AC-11-82, AC-04-08, AC-04-96, AC-11-38, AC-02-44: on PARKS, Jo scans a badge her lists don’t hold and carries on; a control ticket outside the range is questioned; a barcode that won’t read is typed, with its reason, and typed again; a number already on her phone is questioned before it is taken; nothing is refused', async ({
+test('AC-11-39, AC-11-82, AC-04-08, AC-04-96, AC-11-38, AC-02-44: on PARKS, Sam scans a badge his lists don’t hold and carries on; a control ticket outside the range is questioned; a barcode that won’t read is typed, with its reason, and typed again; a number already on his phone is questioned before it is taken; nothing is refused', async ({
   page,
   context,
 }) => {
-  const { jo } = worldCast();
+  const { sam } = worldCast();
   await placed(context);
   await enrolled(page, 'PARKS-COL-E2E');
-  await signedIn(page, jo);
+  await signedIn(page, sam);
   await expect(page.getByText('Bayline County PARKS, Hurricane Delphine')).toBeVisible();
 
   const start = async (badge: string) => {
@@ -268,7 +268,7 @@ test('AC-11-39, AC-11-82, AC-04-08, AC-04-96, AC-11-38, AC-02-44: on PARKS, Jo s
     }
     await page.getByLabel(said.badge.label).fill(badge);
     await page.getByRole('button', { name: said.badge.start }).click();
-    // No truck is certified on PARKS: warned, with how stale the lists are; she carries on.
+    // No truck is certified on PARKS: warned, with how stale the lists are; he carries on.
     await expect(
       page.getByText(filled(said.unknownBadge.warning, { number: badge })),
     ).toBeVisible();
@@ -304,7 +304,7 @@ test('AC-11-39, AC-11-82, AC-04-08, AC-04-96, AC-11-38, AC-02-44: on PARKS, Jo s
     filled(said.open.title, { kind: said.kinds.COLLECTION, number: '400007' }),
   );
 
-  // Another truck, the same number: her phone already holds 400007, and says so first.
+  // Another truck, the same number: his phone already holds 400007, and says so first.
   await page.getByRole('button', { name: said.leave }).click();
   await start('730499');
   await page.getByLabel(said.number.controlLabel).fill('400007');

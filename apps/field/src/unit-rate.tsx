@@ -1,0 +1,751 @@
+// A unit rate ticket's Complete, on the phone (adms-field-app §4A.4, §4A.6; adms-ticket-workflows
+// §4.5; BACKLOG 3.5.3; REQ-112b, 306, 320; AC-04-70, AC-11-43, 78, 79; ADR-111, 157, 177, 198,
+// 207, 210, 213, 477, 571, 573, 583). New, the open ticket and submitted are every capture's
+// (`new-ticket.tsx`, `ticket-capture.tsx`).
+//
+// **Complete**: the working crew shown, and its photo; **the work picked by its payable type, by
+// name**, each once (ADR-207, 213); its field tag; then **the kind of work's own screen** (the
+// domain's `PhoneUnitRate`, REQ-112b): a count where it isn't always one; a tree measured, around
+// or across, in inches to a tenth (ADR-177); a stump's diameter two feet up, its root ball, whether
+// half or more is exposed and its survey number (ADR-198); items with a count each, or with hours
+// each to the quarter hour (ADR-084). **The pay item is worked out from the bands as the work is
+// entered** and kept on the ticket to print: **never shown, nor any rate** (invariant 20;
+// AC-11-43). "Ineligible" is offered where that pay item allows the monitor to mark it (ADR-210);
+// an ROE where the phone holds the project's; **one point**, where the work was done (REQ-306);
+// photos; **the review, every value once, the crew first, and submitted for that crew**: its
+// confirmation on each completion (REQ-320; the user, Q-215, ADR-573).
+//
+// Nothing here waits on the server (ADR-030; AC-11-05), and nothing is refused (ADR-052): a value
+// left out is flagged after sync. Every value entered is kept on the phone at once.
+import type { PhoneListsRecord } from '@open-adms/contracts';
+import { PhoneUnitRate, ticketPhotosAtMost, type UnitRateAsked } from '@open-adms/domain';
+import { useId, useState, type ReactNode } from 'react';
+
+import { PlaceFields, Step, TicketPhotos, TruckFacts, typedAddressChange } from './capture.tsx';
+import {
+  Banner,
+  Button,
+  ListPicker,
+  NumberKeypad,
+  TextEntry,
+  type Standing,
+} from './look/index.ts';
+import type { HeldLists } from './phone/lists.ts';
+import type { PhoneTicket, TicketDetails, TicketItem } from './phone/tickets.ts';
+import type { CaptureParts } from './ticket-capture.tsx';
+import { say, words } from './words.ts';
+
+const said = words.capture;
+
+type UnitRateStep =
+  | 'crew'
+  | 'work'
+  | 'tag'
+  | 'count'
+  | 'how'
+  | 'inches'
+  | 'stump'
+  | 'rootBall'
+  | 'exposed'
+  | 'survey'
+  | 'items'
+  | 'ineligible'
+  | 'roe'
+  | 'place'
+  | 'photos'
+  | 'review';
+
+// What the measurement typed is: inches to a tenth, or not one yet.
+const inchesOf = (typed: string): number | null => {
+  if (!/^\d+(\.\d?)?$/.test(typed)) return null;
+  return Math.round(Number(typed) * 10) / 10;
+};
+
+const shown = (value: number | null): string => (value === null ? '' : String(value));
+
+// The steps this ticket takes, by the work picked and what was entered.
+function stepsOf(
+  asked: UnitRateAsked | null,
+  ineligible: boolean,
+  lists: PhoneListsRecord,
+): UnitRateStep[] {
+  const kind: UnitRateStep[] = [];
+  if (asked !== null) {
+    if (asked.count === 'ASKED') kind.push('count');
+    if (asked.measured === 'TREE') kind.push('how', 'inches');
+    if (asked.screen === 'STUMP') kind.push('stump', 'rootBall', 'exposed', 'survey');
+    if (asked.screen === 'ITEM_COUNTS' || asked.screen === 'ITEM_HOURS') kind.push('items');
+  }
+  return [
+    'crew',
+    'work',
+    ...(lists.fieldTags.length === 0 ? [] : (['tag'] as const)),
+    ...kind,
+    ...(ineligible ? (['ineligible'] as const) : []),
+    ...(lists.roes.length === 0 ? [] : (['roe'] as const)),
+    'place',
+    'photos',
+    'review',
+  ];
+}
+
+// An item's quantity as typed: none where empty, a number, or not a number at all.
+const quantityOf = (typed: string): number | null | 'not' => {
+  const plain = typed.trim();
+  if (plain === '') return null;
+  if (!/^\d+(\.\d*)?$/.test(plain)) return 'not';
+  return Math.round(Number(plain) * 100) / 100;
+};
+
+export function CompleteUnitRate({
+  parts,
+  ticket,
+  held,
+  standing,
+  onBackToTicket,
+  onPhoto,
+  onSubmitted,
+  onLeave,
+  below,
+}: {
+  readonly parts: CaptureParts;
+  readonly ticket: PhoneTicket;
+  readonly held: HeldLists;
+  readonly standing: Standing;
+  readonly onBackToTicket: () => void;
+  readonly onPhoto: (photoId: string) => void;
+  readonly onSubmitted: () => void;
+  readonly onLeave: () => void;
+  readonly below?: ReactNode;
+}) {
+  const titleId = useId();
+  const { lists } = held;
+  const phone = new PhoneUnitRate(lists.payItems);
+  const [now, setNow] = useState(ticket);
+  const asked = now.payableTypeId === null ? null : phone.asks(now.payableTypeId);
+  const measurement =
+    now.measurementInches === null || now.measuredAs === null
+      ? null
+      : { inches: now.measurementInches, measuredAs: now.measuredAs };
+  const ineligible =
+    now.payableTypeId !== null && phone.mayMarkIneligible(now.payableTypeId, measurement);
+  const steps = stepsOf(asked, ineligible, lists);
+  const left = steps.find((step) => step === ticket.step);
+  const [step, setStep] = useState<UnitRateStep>(left ?? 'crew');
+  const [count, setCount] = useState(shown(now.unitCount));
+  const [inches, setInches] = useState(shown(now.measurementInches));
+  const [rootBall, setRootBall] = useState(shown(now.rootBallInches));
+  const [survey, setSurvey] = useState(now.surveyNumber ?? '');
+  const [quantities, setQuantities] = useState<ReadonlyMap<string, string>>(
+    new Map(now.items.map(({ itemNameId, quantity }) => [itemNameId, String(quantity)])),
+  );
+  const [roeTyped, setRoeTyped] = useState(now.roeNumber ?? '');
+  const [typedAddress, setTypedAddress] = useState(
+    now.addressSource === 'TYPED' ? (now.address ?? '') : '',
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [notKept, setNotKept] = useState<string | null>(null);
+  const place = Math.max(0, steps.indexOf(step));
+  const itemNames = lists.itemNames.filter(
+    ({ kindOfWorkId }) => kindOfWorkId === asked?.kindOfWork.id,
+  );
+
+  // Kept at once: the pay item worked out again from what the ticket holds now on the phone (never
+  // this screen's copy, which a change just kept may have moved past), and "ineligible" dropped
+  // where it is no longer the monitor's to mark.
+  const changed = async (change: Partial<TicketDetails> & { readonly step?: string }) => {
+    const merged = { ...(parts.tickets.ticket(now.id) ?? now), ...change };
+    const measured =
+      merged.measurementInches === null || merged.measuredAs === null
+        ? null
+        : { inches: merged.measurementInches, measuredAs: merged.measuredAs };
+    const payItemId =
+      merged.payableTypeId === null
+        ? null
+        : (phone.payItemFor(merged.payableTypeId, measured)?.id ?? null);
+    const mayMark =
+      merged.payableTypeId !== null && phone.mayMarkIneligible(merged.payableTypeId, measured);
+    const next = await parts.tickets.changed(now.id, {
+      ...change,
+      payItemId,
+      markedIneligible: mayMark ? merged.markedIneligible : null,
+    });
+    setNow(next);
+    return next;
+  };
+  const go = (to: UnitRateStep | undefined) => {
+    if (to === undefined) return;
+    setStep(to);
+    void changed({ step: to });
+  };
+  // On to the step after this one, among the steps as they stand once a change is kept.
+  const onward = (after: PhoneTicket = now) => {
+    const askedNow = after.payableTypeId === null ? null : phone.asks(after.payableTypeId);
+    const measuredNow =
+      after.measurementInches === null || after.measuredAs === null
+        ? null
+        : { inches: after.measurementInches, measuredAs: after.measuredAs };
+    const stepsNow = stepsOf(
+      askedNow,
+      after.payableTypeId !== null && phone.mayMarkIneligible(after.payableTypeId, measuredNow),
+      lists,
+    );
+    go(stepsNow[stepsNow.indexOf(step) + 1]);
+  };
+  const back = () => {
+    const before = steps[place - 1];
+    if (before === undefined) onBackToTicket();
+    else go(before);
+  };
+  const frame = (title: string, actions: ReactNode, children?: ReactNode) => (
+    <main data-screen="complete-unit-rate" className="screen">
+      <Step
+        standing={standing}
+        title={title}
+        titleId={titleId}
+        step={place + 1}
+        steps={steps.length}
+        onBack={back}
+        actions={
+          <>
+            {actions}
+            <Button wide onPress={onLeave}>
+              {said.leave}
+            </Button>
+          </>
+        }
+      >
+        {children}
+      </Step>
+      {below}
+    </main>
+  );
+  const next = (enabled: boolean, onPress: () => void) => (
+    <Button main wide isDisabled={!enabled} onPress={onPress}>
+      {said.next}
+    </Button>
+  );
+  const photos = (
+    <TicketPhotos
+      tickets={parts.tickets}
+      ticket={now}
+      atMost={ticketPhotosAtMost}
+      onTaken={async (bytes) => {
+        const where = await parts.locator.where();
+        const kept = await parts.tickets.photographed(
+          now.id,
+          bytes,
+          where.kind === 'fix' ? where.fix : null,
+        );
+        const after = parts.tickets.ticket(now.id);
+        if (after !== undefined) setNow(after);
+        return kept;
+      }}
+      onOpen={(photo) => {
+        onPhoto(photo.id);
+      }}
+    />
+  );
+
+  // The work picked: what its kind of work records starts afresh, a count of one recorded where
+  // its pay items are always one.
+  const picked = (payableTypeId: string) => {
+    const work = phone.asks(payableTypeId);
+    if (work === null) return;
+    const same = payableTypeId === now.payableTypeId;
+    if (!same) {
+      setCount('');
+      setInches('');
+      setRootBall('');
+      setSurvey('');
+      setQuantities(new Map());
+    }
+    const fresh: Partial<TicketDetails> = same
+      ? {}
+      : {
+          unitCount: work.count === 'ONE' ? 1 : null,
+          measurementInches: null,
+          measuredAs: null,
+          rootBallInches: null,
+          rootBallHalfExposed: null,
+          surveyNumber: null,
+          markedIneligible: null,
+          items: [],
+        };
+    void changed({ payableTypeId, kindOfWorkId: work.kindOfWork.id, ...fresh }).then(onward);
+  };
+
+  // The items as typed, each a number or empty; whole counts where decimals aren't allowed, hours
+  // to the quarter hour.
+  const typedItems = itemNames.map((item) => ({
+    item,
+    quantity: quantityOf(quantities.get(item.id) ?? ''),
+  }));
+  const hours = asked?.screen === 'ITEM_HOURS';
+  const itemProblem = typedItems.some(({ quantity }) => quantity === 'not')
+    ? said.items.notANumber
+    : hours &&
+        typedItems.some(
+          ({ quantity }) => typeof quantity === 'number' && !PhoneUnitRate.quarterHour(quantity),
+        )
+      ? said.items.notQuarter
+      : !hours &&
+          asked?.decimals !== true &&
+          typedItems.some(
+            ({ quantity }) => typeof quantity === 'number' && !Number.isInteger(quantity),
+          )
+        ? said.items.notWhole
+        : null;
+  const countTyped = quantityOf(count);
+  const countProblem =
+    countTyped === 'not'
+      ? said.items.notANumber
+      : typeof countTyped === 'number' && asked?.decimals !== true && !Number.isInteger(countTyped)
+        ? said.howMany.notWhole
+        : null;
+
+  const named = (list: readonly { id: string; name: string }[], id: string | null) =>
+    list.find((one) => one.id === id)?.name ?? said.review.none;
+
+  switch (step) {
+    case 'crew':
+      return frame(
+        said.crew.photoTitle,
+        next(true, () => {
+          onward();
+        }),
+        <>
+          <Banner tone="info">
+            <p>{say(words.home.open.crew, { truck: now.certNumber, number: now.ticketNumber })}</p>
+          </Banner>
+          <TruckFacts certNumber={now.certNumber} lists={lists} />
+          <p>{said.crew.photoAbout}</p>
+          {photos}
+        </>,
+      );
+    case 'work':
+      return frame(
+        said.work.title,
+        now.payableTypeId === null
+          ? null
+          : next(true, () => {
+              onward();
+            }),
+        <ListPicker
+          labelledBy={titleId}
+          choices={phone.payableTypes().map(({ id, name }) => ({ key: id, label: name }))}
+          picked={now.payableTypeId}
+          onPick={picked}
+        />,
+      );
+    case 'tag':
+      return frame(
+        said.tag.title,
+        <>
+          {now.fieldTagId === null
+            ? null
+            : next(true, () => {
+                onward();
+              })}
+          <Button
+            main={now.fieldTagId === null}
+            wide
+            onPress={() => {
+              void changed({ fieldTagId: null }).then(onward);
+            }}
+          >
+            {said.tag.none}
+          </Button>
+        </>,
+        <ListPicker
+          labelledBy={titleId}
+          choices={lists.fieldTags.map(({ id, name }) => ({ key: id, label: name }))}
+          picked={now.fieldTagId}
+          onPick={(tag) => {
+            void changed({ fieldTagId: tag }).then(onward);
+          }}
+        />,
+      );
+    case 'count':
+      return frame(
+        said.howMany.title,
+        next(typeof countTyped === 'number' && countProblem === null, () => {
+          void changed({ unitCount: typeof countTyped === 'number' ? countTyped : null }).then(
+            onward,
+          );
+        }),
+        <>
+          <NumberKeypad
+            labelledBy={titleId}
+            value={count}
+            onChange={setCount}
+            digitsAtMost={6}
+            decimal={asked?.decimals === true}
+            unit={said.howMany.unit}
+          />
+          {countProblem === null ? null : (
+            <Banner tone="problem" announced>
+              <p>{countProblem}</p>
+            </Banner>
+          )}
+        </>,
+      );
+    case 'how':
+      return frame(
+        said.measure.howTitle,
+        now.measuredAs === null
+          ? null
+          : next(true, () => {
+              onward();
+            }),
+        <>
+          <p>{said.measure.about}</p>
+          <ListPicker
+            labelledBy={titleId}
+            choices={[
+              { key: 'CIRCUMFERENCE', label: said.measure.around },
+              { key: 'DIAMETER', label: said.measure.across },
+            ]}
+            picked={now.measuredAs}
+            onPick={(way) => {
+              void changed({
+                measuredAs: way === 'CIRCUMFERENCE' ? 'CIRCUMFERENCE' : 'DIAMETER',
+              }).then(onward);
+            }}
+          />
+        </>,
+      );
+    case 'inches':
+    case 'stump':
+      return frame(
+        step === 'stump' ? said.stump.title : said.measure.inchesTitle,
+        next(inchesOf(inches) !== null, () => {
+          void changed({
+            measurementInches: inchesOf(inches),
+            ...(step === 'stump' ? { measuredAs: 'DIAMETER' as const } : {}),
+          }).then(onward);
+        }),
+        <>
+          {step === 'stump' ? <p>{said.stump.about}</p> : null}
+          <NumberKeypad
+            labelledBy={titleId}
+            value={inches}
+            onChange={setInches}
+            digitsAtMost={5}
+            decimal
+            unit={said.measure.unit}
+          />
+        </>,
+      );
+    case 'rootBall':
+      return frame(
+        said.stump.rootBallTitle,
+        next(rootBall === '' || inchesOf(rootBall) !== null, () => {
+          void changed({ rootBallInches: inchesOf(rootBall) }).then(onward);
+        }),
+        <>
+          <p>{said.stump.rootBallAbout}</p>
+          <NumberKeypad
+            labelledBy={titleId}
+            value={rootBall}
+            onChange={setRootBall}
+            digitsAtMost={5}
+            decimal
+            unit={said.measure.unit}
+          />
+        </>,
+      );
+    case 'exposed':
+      return frame(
+        said.stump.exposedTitle,
+        now.rootBallHalfExposed === null
+          ? null
+          : next(true, () => {
+              onward();
+            }),
+        <ListPicker
+          labelledBy={titleId}
+          choices={[
+            { key: 'yes', label: said.stump.halfOrMore },
+            { key: 'no', label: said.stump.lessThanHalf },
+          ]}
+          picked={now.rootBallHalfExposed === null ? null : now.rootBallHalfExposed ? 'yes' : 'no'}
+          onPick={(answer) => {
+            void changed({ rootBallHalfExposed: answer === 'yes' }).then(onward);
+          }}
+        />,
+      );
+    case 'survey':
+      return frame(
+        said.stump.surveyTitle,
+        <Button
+          main
+          wide
+          onPress={() => {
+            void changed({ surveyNumber: survey.trim() === '' ? null : survey.trim() }).then(
+              onward,
+            );
+          }}
+        >
+          {survey.trim() === '' ? said.stump.surveyNone : said.next}
+        </Button>,
+        <TextEntry label={said.stump.surveyLabel} value={survey} onChange={setSurvey} />,
+      );
+    case 'items':
+      return frame(
+        hours ? said.items.hoursTitle : said.items.countsTitle,
+        next(itemProblem === null, () => {
+          const items: TicketItem[] = typedItems.flatMap(({ item, quantity }) =>
+            typeof quantity === 'number' && quantity > 0 ? [{ itemNameId: item.id, quantity }] : [],
+          );
+          void changed({ items, unitCount: null }).then(onward);
+        }),
+        <>
+          <p>{hours ? said.items.hoursAbout : said.items.countsAbout}</p>
+          {itemNames.map((item) => (
+            <TextEntry
+              key={item.id}
+              label={hours ? say(said.items.hours, { item: item.name }) : item.name}
+              value={quantities.get(item.id) ?? ''}
+              onChange={(typed) => {
+                setQuantities(new Map([...quantities, [item.id, typed]]));
+              }}
+              decimal
+            />
+          ))}
+          {itemProblem === null ? null : (
+            <Banner tone="problem" announced>
+              <p>{itemProblem}</p>
+            </Banner>
+          )}
+        </>,
+      );
+    case 'ineligible':
+      return frame(
+        said.ineligible.title,
+        now.markedIneligible === null
+          ? null
+          : next(true, () => {
+              onward();
+            }),
+        <>
+          <p>{said.ineligible.about}</p>
+          <ListPicker
+            labelledBy={titleId}
+            choices={[
+              { key: 'eligible', label: said.ineligible.eligible },
+              { key: 'ineligible', label: said.ineligible.mark },
+            ]}
+            picked={
+              now.markedIneligible === null
+                ? null
+                : now.markedIneligible
+                  ? 'ineligible'
+                  : 'eligible'
+            }
+            onPick={(answer) => {
+              void changed({ markedIneligible: answer === 'ineligible' }).then(onward);
+            }}
+          />
+        </>,
+      );
+    case 'roe':
+      return frame(
+        said.roe.workTitle,
+        <Button
+          main
+          wide
+          onPress={() => {
+            void changed({ roeNumber: roeTyped.trim() === '' ? null : roeTyped.trim() }).then(
+              onward,
+            );
+          }}
+        >
+          {roeTyped.trim() === '' ? said.roe.none : said.next}
+        </Button>,
+        <>
+          <ListPicker
+            labelledBy={titleId}
+            choices={lists.roes.map((roe) => ({
+              key: roe.roeNumber,
+              label: roe.roeNumber,
+              detail: roe.address ?? said.roe.noAddress,
+            }))}
+            picked={lists.roes.some(({ roeNumber }) => roeNumber === roeTyped) ? roeTyped : null}
+            onPick={setRoeTyped}
+          />
+          <TextEntry label={said.roe.typeIt} value={roeTyped} onChange={setRoeTyped} />
+        </>,
+      );
+    case 'place':
+      return frame(
+        said.place.workTitle,
+        next(true, () => {
+          void changed(typedAddressChange(now, typedAddress)).then(onward);
+        }),
+        <PlaceFields
+          parts={parts}
+          ticket={now}
+          typed={typedAddress}
+          onTyped={setTypedAddress}
+          onChanged={changed}
+        />,
+      );
+    case 'photos':
+      return frame(
+        said.photos.title,
+        next(true, () => {
+          onward();
+        }),
+        photos,
+      );
+    case 'review': {
+      const reason = lists.typedNumberReasons.find(({ id }) => id === now.numberTypedReasonId);
+      const itemized = asked?.screen === 'ITEM_COUNTS' || asked?.screen === 'ITEM_HOURS';
+      return frame(
+        said.review.title,
+        <Button
+          main
+          wide
+          isDisabled={submitting}
+          onPress={() => {
+            setSubmitting(true);
+            setNotKept(null);
+            void (async () => {
+              const end =
+                now.end ??
+                (await parts.locator
+                  .where()
+                  .then((where) => (where.kind === 'fix' ? where.fix : null)));
+              const outcome = await parts.tickets.submit(now.id, end);
+              setSubmitting(false);
+              if (outcome.kind === 'sealed') onSubmitted();
+              else setNotKept(outcome.notice.message);
+            })();
+          }}
+        >
+          {submitting
+            ? said.review.submitting
+            : say(said.review.submitCrew, { number: now.certNumber })}
+        </Button>,
+        <>
+          <p>{said.review.about}</p>
+          {notKept === null ? null : (
+            <Banner tone="problem" announced>
+              <p>{say(said.review.notKept, { message: notKept })}</p>
+            </Banner>
+          )}
+          <TruckFacts certNumber={now.certNumber} lists={lists} />
+          <dl className="facts">
+            <dt>{said.review.number}</dt>
+            <dd>
+              {now.ticketNumber}
+              {reason === undefined
+                ? null
+                : ` · ${say(said.review.typed, { reason: reason.name })}`}
+            </dd>
+            <dt>{said.review.work}</dt>
+            <dd>{named(phone.payableTypes(), now.payableTypeId)}</dd>
+            {lists.fieldTags.length === 0 ? null : (
+              <>
+                <dt>{said.review.tag}</dt>
+                <dd>{named(lists.fieldTags, now.fieldTagId)}</dd>
+              </>
+            )}
+            {itemized ? null : (
+              <>
+                <dt>{said.review.howMany}</dt>
+                <dd>{now.unitCount ?? said.review.none}</dd>
+              </>
+            )}
+            {asked?.measured === 'TREE' ? (
+              <>
+                <dt>{said.review.measured}</dt>
+                <dd>
+                  {now.measurementInches === null || now.measuredAs === null
+                    ? said.review.none
+                    : say(
+                        now.measuredAs === 'CIRCUMFERENCE'
+                          ? said.review.around
+                          : said.review.across,
+                        { inches: now.measurementInches },
+                      )}
+                </dd>
+              </>
+            ) : null}
+            {asked?.screen === 'STUMP' ? (
+              <>
+                <dt>{said.review.stump}</dt>
+                <dd>
+                  {now.measurementInches === null
+                    ? said.review.none
+                    : say(said.review.stumpAcross, { inches: now.measurementInches })}
+                </dd>
+                <dt>{said.review.rootBall}</dt>
+                <dd>
+                  {now.rootBallInches === null
+                    ? said.review.none
+                    : say(said.review.across, { inches: now.rootBallInches })}
+                </dd>
+                <dt>{said.review.exposed}</dt>
+                <dd>
+                  {now.rootBallHalfExposed === null
+                    ? said.review.none
+                    : now.rootBallHalfExposed
+                      ? said.review.halfOrMore
+                      : said.review.lessThanHalf}
+                </dd>
+                <dt>{said.review.survey}</dt>
+                <dd>{now.surveyNumber ?? said.review.none}</dd>
+              </>
+            ) : null}
+            {itemized ? (
+              <>
+                <dt>{said.review.items}</dt>
+                <dd>
+                  {now.items.length === 0
+                    ? said.review.none
+                    : now.items
+                        .map(({ itemNameId, quantity }) =>
+                          say(hours ? said.review.itemHours : said.review.itemCount, {
+                            item: named(lists.itemNames, itemNameId),
+                            count: quantity,
+                            hours: quantity,
+                          }),
+                        )
+                        .join(' · ')}
+                </dd>
+              </>
+            ) : null}
+            {ineligible ? (
+              <>
+                <dt>{said.review.eligibility}</dt>
+                <dd>
+                  {now.markedIneligible === true ? said.review.ineligible : said.review.eligible}
+                </dd>
+              </>
+            ) : null}
+            {lists.roes.length === 0 ? null : (
+              <>
+                <dt>{said.review.roe}</dt>
+                <dd>{now.roeNumber ?? said.review.none}</dd>
+              </>
+            )}
+            <dt>{said.review.place}</dt>
+            <dd>
+              {now.address ??
+                (now.end === null
+                  ? said.review.none
+                  : say(said.place.fix, {
+                      latitude: now.end.latitude,
+                      longitude: now.end.longitude,
+                    }))}
+            </dd>
+          </dl>
+          <h2>{said.review.photos}</h2>
+          {now.photos.length === 0 ? <p>{said.review.none}</p> : photos}
+        </>,
+      );
+    }
+  }
+}

@@ -15,7 +15,7 @@ import type { PhoneListsRecord } from '@open-adms/contracts';
 import { ticketPhotosAtMost } from '@open-adms/domain';
 import { useId, useState, type ReactNode } from 'react';
 
-import { Step, TicketPhotos } from './capture.tsx';
+import { PlaceFields, Step, TicketPhotos, typedAddressChange } from './capture.tsx';
 import {
   Banner,
   Button,
@@ -72,8 +72,6 @@ export function CompleteCollection({
   const [estimate, setEstimate] = useState(
     ticket.estimateCy === null ? '' : String(ticket.estimateCy),
   );
-  const [placing, setPlacing] = useState<'no' | 'fixing' | 'lookingUp'>('no');
-  const [placed, setPlaced] = useState<'none' | 'refused' | 'notFound' | 'unanswered' | null>(null);
   const [typedAddress, setTypedAddress] = useState(
     ticket.addressSource === 'TYPED' ? (ticket.address ?? '') : '',
   );
@@ -234,72 +232,18 @@ export function CompleteCollection({
           main
           wide
           onPress={() => {
-            const typedNow = typedAddress.trim();
-            const change =
-              typedNow !== '' && !(now.addressSource === 'LOOKED_UP' && now.address === typedNow)
-                ? { address: typedNow, addressSource: 'TYPED' as const }
-                : {};
-            void changed(change).then(onward);
+            void changed(typedAddressChange(now, typedAddress)).then(onward);
           }}
         >
           {said.next}
         </Button>,
-        <>
-          <Button
-            wide
-            isDisabled={placing !== 'no'}
-            onPress={() => {
-              setPlacing('fixing');
-              void parts.locator.where().then(async (where) => {
-                setPlacing('no');
-                if (where.kind === 'fix') {
-                  setPlaced(null);
-                  await changed({ end: where.fix });
-                } else setPlaced(where.kind);
-              });
-            }}
-          >
-            {placing === 'fixing' ? said.place.capturing : said.place.capture}
-          </Button>
-          {now.end === null ? null : (
-            <p>
-              {say(said.place.fix, { latitude: now.end.latitude, longitude: now.end.longitude })}
-            </p>
-          )}
-          {placed === 'none' ? <p role="status">{said.place.noFix}</p> : null}
-          {placed === 'refused' ? (
-            <Banner tone="notice" announced>
-              <p>{said.open.placeRefused}</p>
-            </Banner>
-          ) : null}
-          {now.end === null || !navigator.onLine ? null : (
-            <Button
-              wide
-              isDisabled={placing !== 'no'}
-              onPress={() => {
-                const { end } = now;
-                if (end === null) return;
-                setPlacing('lookingUp');
-                void parts.lookup.at(end).then(async (found) => {
-                  setPlacing('no');
-                  if (found.kind === 'found') {
-                    setPlaced(null);
-                    setTypedAddress(found.address);
-                    await changed({ address: found.address, addressSource: 'LOOKED_UP' });
-                  } else setPlaced(found.kind === 'none' ? 'notFound' : 'unanswered');
-                });
-              }}
-            >
-              {placing === 'lookingUp' ? said.place.lookingUp : said.place.lookUp}
-            </Button>
-          )}
-          {now.addressSource === 'LOOKED_UP' && now.address !== null ? (
-            <p role="status">{say(said.place.found, { address: now.address })}</p>
-          ) : null}
-          {placed === 'notFound' ? <p role="status">{said.place.notFound}</p> : null}
-          {placed === 'unanswered' ? <p role="status">{said.place.unanswered}</p> : null}
-          <TextEntry label={said.place.typed} value={typedAddress} onChange={setTypedAddress} />
-        </>,
+        <PlaceFields
+          parts={parts}
+          ticket={now}
+          typed={typedAddress}
+          onTyped={setTypedAddress}
+          onChanged={changed}
+        />,
       );
     case 'photos':
       return frame(

@@ -1,8 +1,8 @@
 // A ticket's capture on the phone, from New to submitted (adms-field-app §4A.2…§4A.6;
-// adms-ticket-workflows; BACKLOG 3.5.1, 3.5.2; AC-04-44, AC-11-05, 74…79; ADR-030, 056, 155, 477,
-// 571, 573, 581, 582): New (`new-ticket.tsx`), the open ticket, its Complete (the collection's,
-// `collection.tsx`; the tower's and the haul-out's, `tower.tsx`), a photograph shown full size,
-// and submitted.
+// adms-ticket-workflows; BACKLOG 3.5.1…3.5.3; AC-04-44, AC-11-05, 74…79; ADR-030, 056, 155, 477,
+// 571, 573, 581…583): New (`new-ticket.tsx`), the open ticket, its Complete (the collection's,
+// `collection.tsx`; the tower's and the haul-out's, `tower.tsx`; unit rate's, `unit-rate.tsx`), a
+// photograph shown full size, and submitted.
 //
 // - **The open ticket**: its truck, its number, when it was begun, "Mark waypoint" on a
 //   collection (ADR-581), its photographs; Complete, leave it for now (it waits on home, where the
@@ -27,6 +27,7 @@ import type { AddressLookup, Locator } from './phone/place.ts';
 import type { PhoneTickets, PhoneTicket } from './phone/tickets.ts';
 import { workOfKind } from './phone/works.ts';
 import { CompleteDisposal, CompleteHaulOut } from './tower.tsx';
+import { CompleteUnitRate } from './unit-rate.tsx';
 import { counted, say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
@@ -41,8 +42,8 @@ export interface CaptureParts {
   readonly waypointsAtMost: number;
 }
 
-// The kinds of field event captured here: a load's two, a haul-out's two.
-export type CapturedKind = 'COLLECTION' | 'DISPOSAL' | 'HAUL_OUT_COLLECTION' | 'HAUL_OUT_DISPOSAL';
+// The kinds of field event captured here: a load's two, a haul-out's two, and unit rate work.
+export type CapturedKind = PhoneTicket['kind'];
 
 // Where the capture is: New, a ticket open, being completed, a photograph shown, or submitted.
 export type Capturing =
@@ -60,8 +61,6 @@ export type Capturing =
       readonly from: 'open' | 'complete';
     }
   | { readonly at: 'submitted'; readonly id: string };
-
-const isCaptured = (kind: PhoneTicket['kind']): kind is CapturedKind => kind !== 'UNIT_RATE';
 
 export function TicketCapture({
   parts,
@@ -187,7 +186,7 @@ export function TicketCapture({
       );
     }
     case 'submitted': {
-      if (ticket === undefined || !isCaptured(ticket.kind)) return null;
+      if (ticket === undefined) return null;
       const { kind } = ticket;
       const disposal = kind === 'DISPOSAL' || kind === 'HAUL_OUT_DISPOSAL';
       const onPaper = lists.lists.numbering.ticketNumberSource === 'CONTROL';
@@ -265,7 +264,7 @@ function Complete({
     case 'HAUL_OUT_DISPOSAL':
       return <CompleteDisposal {...completing} ticket={ticket} held={held} />;
     case 'UNIT_RATE':
-      return null;
+      return <CompleteUnitRate {...completing} ticket={ticket} held={held} />;
   }
 }
 

@@ -2,7 +2,9 @@
 // Every answer's shape lives here, never in a controller.
 import {
   assignmentFormDocumentTypes,
+  builtInKeys,
   certificationViews,
+  countShapes,
   fieldEventKinds,
   flagCodes,
   incidentOffers,
@@ -848,6 +850,15 @@ const primes = z.array(
     ),
   }),
 );
+// A unit rate pay item's kind of work, as the phone picks its screen by it (REQ-112b; ADR-583):
+// what its monitor counts (a number, items with a count each, items with hours each) and its
+// built-in key, Stumps' screen being told by the key, never the name (ADR-194, 198).
+const kindOfWork = z.strictObject({
+  id: z.uuid(),
+  name: z.string(),
+  key: z.enum(builtInKeys.kindOfWork).nullable(),
+  countShape: z.enum(countShapes),
+});
 const payItems = z.array(
   z.strictObject({
     id: z.uuid(),
@@ -856,7 +867,7 @@ const payItems = z.array(
     bandTo: z.number().nullable(),
     archived: z.boolean(),
     payableType: named,
-    kindOfWork: named,
+    kindOfWork,
     countIsAlwaysOne: z.boolean(),
     gpsRequired: z.boolean(),
     measurementRequired: z.boolean(),
@@ -921,7 +932,8 @@ export type SetupShownRecord = z.infer<typeof setupShownSchema>;
 // certifications (number, kind, capacity, prime and subs by name: never the driver) and its
 // sites with their place; its ROEs, each with whether its pre-work survey is done (number,
 // address and parcel: never the owner); the unit rate pay items the assignment names with their
-// capture settings and the item names of their kinds of work; what its incidents and surveys
+// capture settings and their kinds of work (what each counts, its built-in key: ADR-583) and
+// those kinds' item names; what its incidents and surveys
 // pick from; for a phone that certifies or takes disposals, the truck lists, and for one that
 // certifies, who may be picked as a helper (ADR-552 (3)); and, for a phone at a site, what that
 // site's phones ask for. **Never a rate, a rule, a transaction or

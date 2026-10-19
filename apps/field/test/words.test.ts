@@ -1,8 +1,7 @@
 // Every word a screen shows comes from the translation file (ADR-172; AC-11-04): no screen's
 // words are written into its code. Read from every TSX module: no text between its tags, and no
 // text written into an attribute a person reads or hears. The words themselves are English, in
-// US units. The browser test reads what the screen shows (e2e/door.e2e.ts). The prototype's
-// screens (task 3.1.4) are held to the same, their words in its own file.
+// US units. The browser test reads what the screen shows (e2e/door.e2e.ts).
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,11 +9,10 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import prototypeWords from '../prototype/words.json' with { type: 'json' };
 import english from '../src/words/en.json' with { type: 'json' };
 
 const field = join(dirname(fileURLToPath(import.meta.url)), '..');
-const screens = ['src', 'prototype'].flatMap((folder) =>
+const screens = ['src'].flatMap((folder) =>
   readdirSync(join(field, folder), { recursive: true, encoding: 'utf8' })
     .filter((path) => path.endsWith('.tsx'))
     .sort()
@@ -89,8 +87,7 @@ describe('AC-11-04 the words on a screen', () => {
         'src/shell.tsx',
         'src/home.tsx',
         'src/look/keypad.tsx',
-        'prototype/collection.tsx',
-        'prototype/prototype.tsx',
+        'src/unit-rate.tsx',
       ]),
     );
   });
@@ -125,19 +122,19 @@ describe('AC-11-04 the words on a screen', () => {
     ]);
   });
 
-  it.each([
-    ['the app’s', english],
-    ['the prototype’s', prototypeWords],
-  ] as const)('%s are English first, every one given, and in US units', (_whose, file) => {
-    expect(file.language).toBe('en');
-    const words = wordsOf(file);
-    expect(words.filter((word) => word.trim() === '')).toEqual([]);
-    expect(
-      words.filter((word) =>
-        /\b(km|cm|mm|(kilo|centi|milli)?met(er|re)s?|kg|kilograms?|lit(er|re)s?|celsius|°C|hectares?)\b/i.test(
-          word,
+  it.each([['the app’s', english]] as const)(
+    '%s are English first, every one given, and in US units',
+    (_whose, file) => {
+      expect(file.language).toBe('en');
+      const words = wordsOf(file);
+      expect(words.filter((word) => word.trim() === '')).toEqual([]);
+      expect(
+        words.filter((word) =>
+          /\b(km|cm|mm|(kilo|centi|milli)?met(er|re)s?|kg|kilograms?|lit(er|re)s?|celsius|°C|hectares?)\b/i.test(
+            word,
+          ),
         ),
-      ),
-    ).toEqual([]);
-  });
+      ).toEqual([]);
+    },
+  );
 });
