@@ -236,7 +236,7 @@ the layer its own row names; the field app's part by the task below, under a tes
    says whether this case is essential and, if it isn't, puts the choice to the user. The user
    already listed whether to keep hand re-entry as a Phase 3 design question (`adms-field-app`
    §4A.7).
-3. ✅ **Answered by the user (ADR-577): the phone locked until the master passcode is entered (with signal, the server taking it: the agent's reading); AC-11-83.** **What the phone does after ten wrong tries of the master passcode offline** (3.3.2; NIST SP
+3. ✅ **Answered by the user (ADR-577): the phone locked until the master passcode is entered (with signal, the server taking it: confirmed by the user, "A is right"); AC-11-83.** **What the phone does after ten wrong tries of the master passcode offline** (3.3.2; NIST SP
    800-63B §3.2.10; C126).
 4. **When a kept record is sent again**: by itself, by the monitor, or only at turn-in (3.4.1;
    ADR-470 (3)).

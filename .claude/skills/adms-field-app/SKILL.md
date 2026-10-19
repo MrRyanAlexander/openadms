@@ -126,8 +126,8 @@ gets tracked on a spreadsheet."
    phone's own check, whatever it was typed for, is counted (a wait from the 5th, as the sign-in
    screen's); at the 10th whoever is signed in is signed out and nothing opens on the phone, no
    sign-in and no check of the passcode it holds, until the passcode is entered **with signal and
-   the server takes it** (*agent default*: the phone's own check is what the ten tries were
-   against); then the wrong tries are reported at once.
+   the server takes it** (confirmed by the user, "A is right": the phone's own check is what
+   the ten tries were against); then the wrong tries are reported at once.
 8. **Switching monitors** needs **the master passcode first**; then the next monitor signs in with
    their own Monitor ID and password, so the server knows it's them. **Shortcut:** the master passcode
    opens a **temporary session** for a monitor picked from the roster, marked on every record and
