@@ -12,6 +12,8 @@ import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
 import { LoginList } from './phone/login-list.ts';
 import { MonitorOnPhone } from './phone/monitor.ts';
+import { PhoneReports } from './phone/reports.ts';
+import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
 import { Server } from './server.ts';
 import { Shell } from './shell.tsx';
@@ -26,7 +28,8 @@ const policy = Policy.from(import.meta.env.ADMS_POLICY);
 const phone = BrowserStore.opened().then((store) => {
   const keyring = new BrowserKeyring();
   const identity = new PhoneIdentity(store, keyring, server);
-  const monitor = new MonitorOnPhone(identity, keyring);
+  const reports = new PhoneReports(store);
+  const monitor = new MonitorOnPhone(identity, keyring, reports);
   const lists = new PhoneLists(store, monitor);
   const loginList = new LoginList(store, SignInTries.onPhone(policy));
   return {
@@ -34,7 +37,8 @@ const phone = BrowserStore.opened().then((store) => {
     monitor,
     lists,
     loginList,
-    signingIn: new SigningIn(monitor, lists, loginList, policy),
+    signingIn: new SigningIn(monitor, lists, loginList, reports, policy),
+    setup: new PhoneSetup(identity, monitor, lists, loginList, reports),
     inactivity: {
       lockMinutes: policy.phoneInactivityLockMinutes,
       warningSeconds: policy.phoneInactivityWarningSeconds,

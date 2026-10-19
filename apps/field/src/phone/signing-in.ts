@@ -15,6 +15,7 @@ import type { PhoneLists } from './lists.ts';
 import type { LoginList, ScreenTries } from './login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './monitor.ts';
 import { checkOpened } from './offline-check.ts';
+import type { PhoneReports } from './reports.ts';
 
 export type SignInOutcome =
   // Signed in: online, or offline from the login list.
@@ -34,17 +35,20 @@ export class SigningIn {
   private readonly monitor: MonitorOnPhone;
   private readonly lists: PhoneLists;
   private readonly loginList: LoginList;
+  private readonly reports: PhoneReports;
   private readonly policy: Pick<Policy, 'monitorSessionHours'>;
 
   constructor(
     monitor: MonitorOnPhone,
     lists: PhoneLists,
     loginList: LoginList,
+    reports: PhoneReports,
     policy: Pick<Policy, 'monitorSessionHours'>,
   ) {
     this.monitor = monitor;
     this.lists = lists;
     this.loginList = loginList;
+    this.reports = reports;
     this.policy = policy;
   }
 
@@ -63,12 +67,18 @@ export class SigningIn {
   }
 
   // The lock lifted (AC-02-40): the master passcode checked against the phone's own check of it,
-  // held only for this call. Nothing where the phone holds no check.
+  // held only for this call. Each try is a use of the passcode the phone keeps and reports
+  // (AC-11-23; ADR-576): the unlock, or a wrong try, naming nobody. Nothing where the phone holds
+  // no check.
   async unlock(passcode: string): Promise<'unlocked' | 'wrong' | 'noCheck'> {
     const held = await this.loginList.passcode();
     if (held === undefined) return 'noCheck';
-    if ((await checkOpened(passcode, held.check)) === undefined) return 'wrong';
+    if ((await checkOpened(passcode, held.check)) === undefined) {
+      await this.reports.keepUse('WRONG_TRY', null);
+      return 'wrong';
+    }
     await this.loginList.right();
+    await this.reports.keepUse('SIGN_IN_UNLOCK', null);
     return 'unlocked';
   }
 

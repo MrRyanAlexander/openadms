@@ -87,6 +87,41 @@ export class PhoneLists {
     return { kind: 'taken', held: { assignment, lists, monitorId, readAt: asked } };
   }
 
+  // Set up under the master passcode on the project these lists are (ADR-240, 576; AC-02-38,
+  // AC-11-24): the assignment made on the phone takes the place of the one held, for the monitor
+  // it was made for, who becomes the phone's monitor. The lists stay as read, but for the unit
+  // rate pay items, only those it names, and the site's quantity lookup, kept only at the same
+  // site; when they were read stays too, so the phone still says how stale they are. Nothing is
+  // changed where the phone holds no lists, or holds another project's: whether it was.
+  async setUp(
+    assignment: PhoneAssignmentAnswer,
+    monitorId: string,
+    payItemIds: readonly string[],
+  ): Promise<boolean> {
+    const held = await this.held();
+    if (held?.assignment.project.id !== assignment.project.id) return false;
+    const sameSite = held.assignment.site?.id === assignment.site?.id;
+    const lists: PhoneListsRecord = {
+      ...held.lists,
+      payItems: held.lists.payItems.filter(({ id }) => payItemIds.includes(id)),
+      quantityLookup: sameSite ? held.lists.quantityLookup : [],
+    };
+    await this.store.change([
+      {
+        shelf: listsShelf,
+        id: listsId,
+        value: {
+          assignment,
+          noAssignment: null,
+          lists,
+          monitorId,
+          readAt: held.readAt.toISOString(),
+        } as unknown as Json,
+      },
+    ]);
+    return true;
+  }
+
   // Read again where the setup version the server named isn't the one the lists held are, or
   // the phone holds none (AC-11-17). Nothing is asked where they are the same.
   async readUnless(setupVersion: number): Promise<ListsRead | 'same'> {

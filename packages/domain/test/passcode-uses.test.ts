@@ -13,11 +13,12 @@ import {
 const rules = new PasscodeLogRules();
 
 describe('a use of the master passcode a phone logged', () => {
-  it('is one of four, a closed set, and can’t be kept for two reasons only', () => {
+  it('is one of five, a closed set, and can’t be kept for two reasons only', () => {
     expect(loggedPasscodeUses).toEqual([
       'MONITOR_SWITCH',
       'SESSION_AS_MONITOR',
       'TEMPORARY_SESSION',
+      'SIGN_IN_UNLOCK',
       'WRONG_TRY',
     ]);
     expect(loggedPasscodeUseRefusals).toEqual(['NOT_A_MONITOR', 'ID_ALREADY_HELD']);
@@ -54,13 +55,21 @@ describe('a use of the master passcode a phone logged', () => {
       ['MONITOR_SWITCH', true],
       ['SESSION_AS_MONITOR', true],
       ['TEMPORARY_SESSION', true],
+      ['SIGN_IN_UNLOCK', false],
       ['WRONG_TRY', false],
     ]);
     expect(loggedPasscodeUses.map((use) => [use, rules.endsEarlierSessions(use)])).toEqual([
       ['MONITOR_SWITCH', true],
       ['SESSION_AS_MONITOR', true],
       ['TEMPORARY_SESSION', true],
+      ['SIGN_IN_UNLOCK', false],
       ['WRONG_TRY', false],
+    ]);
+  });
+
+  it('AC-11-23, ADR-576 the sign-in screen unlocked on the phone is one use of the master passcode, about nobody, ending nothing', () => {
+    expect(rules.securityEventsOf('SIGN_IN_UNLOCK')).toEqual([
+      { kind: 'MASTER_PASSCODE_USE', masterPasscodeSession: null },
     ]);
   });
 

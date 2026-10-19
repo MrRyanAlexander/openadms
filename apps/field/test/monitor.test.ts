@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { PhoneIdentity } from '../src/phone/identity.ts';
 import { PhoneLists } from '../src/phone/lists.ts';
 import { MonitorOnPhone } from '../src/phone/monitor.ts';
+import { PhoneReports } from '../src/phone/reports.ts';
 import { Server, type Asking, type Reply } from '../src/server.ts';
 import { worksOf } from '../src/phone/works.ts';
 import { lastSynced } from '../src/words.ts';
@@ -145,7 +146,8 @@ async function phone(now = () => new Date('2026-10-19T12:00:00Z')) {
   const server = new TestServer();
   const identity = new PhoneIdentity(store, keyring, server, now);
   await identity.enrol('P1-TWR-TDSR', 'heron-marsh-delphine');
-  const monitor = new MonitorOnPhone(identity, keyring, now);
+  const reports = new PhoneReports(store, now);
+  const monitor = new MonitorOnPhone(identity, keyring, reports, now);
   server.sent.length = 0;
   return { store, keyring, server, monitor, lists: new PhoneLists(store, monitor, now) };
 }

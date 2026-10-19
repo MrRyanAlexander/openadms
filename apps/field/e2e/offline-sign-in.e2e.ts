@@ -155,10 +155,11 @@ test('AC-11-21, AC-11-64: the server refuses Ana’s sign-in made with no signal
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
 });
 
-test('AC-02-40, ADR-120: with no signal, wrong tries against the login list back off from the fifth and lock the screen at the tenth until the master passcode; the count outlasts the page; Kim’s own password signs nobody in on Ana’s phone', async ({
+test('AC-02-40, ADR-120, AC-11-23: with no signal, wrong tries against the login list back off from the fifth and lock the screen at the tenth until the master passcode; the count outlasts the page; Kim’s own password signs nobody in on Ana’s phone; the unlock and the wrong try at the passcode are reported at signal', async ({
   page,
   context,
 }) => {
+  const asked = recorded(page);
   const { kim } = worldCast();
   let now = Date.now();
   await page.clock.setFixedTime(now);
@@ -212,6 +213,33 @@ test('AC-02-40, ADR-120: with no signal, wrong tries against the login list back
 
   await signedIn(page, ana);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
+
+  // AC-11-23, ADR-576: each try at the passcode the phone checked itself was kept, and goes at
+  // signal with Ana's session, after her sign-in and before her lists; never the passcode.
+  await context.setOffline(false);
+  await expect
+    .poll(() => at(asked, '/phones/current/passcode-uses').filter(({ status }) => status === 200))
+    .toHaveLength(2);
+  const uses = at(asked, '/phones/current/passcode-uses');
+  expect(uses.map(({ body }) => (body as { use: string }).use).sort()).toEqual([
+    'SIGN_IN_UNLOCK',
+    'WRONG_TRY',
+  ]);
+  expect(uses.map(({ body }) => (body as { personId: unknown }).personId)).toEqual([null, null]);
+  expect(uses.map(({ answer }) => (answer as { answer: string }).answer)).toEqual([
+    'SAVED',
+    'SAVED',
+  ]);
+  expect(JSON.stringify(uses.map(({ body }) => body))).not.toContain(worldPasscode());
+  const order = toApi(asked)
+    .map(({ path }) => path)
+    .filter((path) => /offline-sign-ins|passcode-uses|\/lists$/.test(path));
+  expect(order.slice(-4)).toEqual([
+    '/phones/current/offline-sign-ins',
+    '/phones/current/passcode-uses',
+    '/phones/current/passcode-uses',
+    '/phones/current/lists',
+  ]);
 });
 
 test('AC-11-20, AC-11-64, AC-02-40: left alone, the phone warns a minute before the lock and one tap keeps Kim signed in; left alone again it signs her out, tells the server, and loses nothing it holds', async ({

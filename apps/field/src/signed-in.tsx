@@ -2,7 +2,8 @@
 // ADR-240, 444, 450, 573, 574): the bottom menu (Q-217: Work, Time where the project has the time
 // clock on, Sync, Settings) over three places. **Work** is home for the assignment the phone took
 // (its project, its one site, a button for each work it allows, AC-11-18), or the words for why
-// there is none, offering the master passcode's setup (AC-11-15; the setup itself is 3.3.1's).
+// there is none, offering the master passcode's setup for the monitor signed in (AC-11-15, 24;
+// task 3.3.1, ADR-576): set up, the lists are read again and home is the assignment made.
 // **Sync** says how stale the lists are and refreshes them; **Settings** says who is signed in on
 // which phone and signs them out. The lists are read on signing in, and again whenever the phone
 // finds a connection or comes back to the front (AC-11-16); told there is no assignment, the
@@ -24,8 +25,10 @@ import type { Enrolment } from './phone/identity.ts';
 import type { HeldLists, ListsRead, PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
+import type { PhoneSetup } from './phone/setup.ts';
 import { worksOf } from './phone/works.ts';
 import { refusalWords } from './refusals.ts';
+import { Setup } from './setup.tsx';
 import { counted, lastSynced, say, words } from './words.ts';
 
 // How long the phone may be left alone, in minutes, and how long before the end it warns, in
@@ -43,6 +46,7 @@ export function SignedInPhone({
   lists,
   loginList,
   inactivity,
+  setup,
   signedIn: first,
   onSignedOut,
 }: {
@@ -51,6 +55,7 @@ export function SignedInPhone({
   readonly lists: PhoneLists;
   readonly loginList: LoginList;
   readonly inactivity: Inactivity;
+  readonly setup: PhoneSetup;
   readonly signedIn: SignedIn;
   // Signed out by the monitor (nothing to say), or why the sign-in ended under them.
   readonly onSignedOut: (ended: Ended | null) => void;
@@ -63,6 +68,7 @@ export function SignedInPhone({
   const [signingOut, setSigningOut] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [warned, setWarned] = useState(false);
+  const [settingUp, setSettingUp] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
   // after the lock, says nothing.
@@ -183,6 +189,30 @@ export function SignedInPhone({
     </>
   );
 
+  if (settingUp) {
+    return (
+      <>
+        <Setup
+          setup={setup}
+          standing={standing}
+          forMonitor={{
+            monitorId: signedIn.userId,
+            monitorNumber: signedIn.monitorNumber,
+            name: signedIn.name,
+          }}
+          onDone={() => {
+            setSettingUp(false);
+            void read();
+          }}
+          onCancel={() => {
+            setSettingUp(false);
+          }}
+        />
+        {warning}
+      </>
+    );
+  }
+
   if (place === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
     return (
@@ -217,6 +247,15 @@ export function SignedInPhone({
         <div className="screen-actions">
           <Button main wide isDisabled={reading} onPress={() => void read()}>
             {reading ? said.checking : said.checkAgain}
+          </Button>
+          <Button
+            wide
+            isDisabled={reading}
+            onPress={() => {
+              setSettingUp(true);
+            }}
+          >
+            {said.setUp}
           </Button>
         </div>
         {bottom}

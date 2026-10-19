@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen's unlock reported, ADR-576) -->
 
-> **This page states today's rules** (last changed by ADR-574, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-576, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -71,6 +71,18 @@ gets tracked on a spreadsheet."
    picked) and `monitorsAfter`; answered the open projects, the monitors in service (asked on
    from `moreMonitorsAfter` while it isn't null) and the picked project's live sites and unit
    rate pay items in service. Never a rate. Each read is a use of the master passcode.
+   **On the field app (ADR-576, agent defaults):** offered on the sign-in screen, on "No
+   assignment today" (for the monitor signed in; another monitor is a switch, (8)) and straight on
+   from "Monitor created" (for the monitor just created); the passcode held in the screen's memory
+   for the act alone, masked; online the project first, then the work, the site (or none, at the
+   curb), the unit rate work where it is unit rate work, and the monitor, paged; with no signal
+   only on the project whose lists the phone holds, the passcode checked against the phone's own
+   check (a wrong try kept as a use), its sites, the unit rate pay items it holds and the monitors
+   of its login list. The report is kept until saved: online the master user sends it at once
+   (the passcode beside the phone's proof, that token kept nowhere); otherwise it goes before
+   anything else of the monitor's once somebody is signed in with signal (ADR-531). Set up on the
+   project whose lists it holds, the phone takes the assignment at once and its monitor is the one
+   it was made for, who may then sign in offline from the login list (ADR-575).
 6. **Offline sign-in** checks the phone's **login list**, a sign-in check for each monitor enabled on
    its project (ADR-105). The safeguards, because a phone-number password is easy to guess
    (ARCHITECTURE §7.2, ADR-139):
@@ -102,7 +114,8 @@ gets tracked on a spreadsheet."
    with no connection it reports by `POST /phones/current/passcode-uses` (ADR-464, agent
    defaults), once it has proved itself, with nobody signed in and no passcode sent: an id the
    phone made, `use` (`MONITOR_SWITCH`, `SESSION_AS_MONITOR`, `TEMPORARY_SESSION`,
-   `WRONG_TRY`), the monitor it was for (nobody, for a wrong try), and when by the phone's
+   `SIGN_IN_UNLOCK` (the sign-in screen's lock lifted, ADR-576), `WRONG_TRY`), the monitor it
+   was for (nobody, for an unlock or a wrong try), and when by the phone's
    clock with its offset. A session opened offline is a use of the passcode that says which
    way, never a sign-in, and the server opens none for it. A wrong try typed on a phone is
    kept in the security log and never counts toward the server's lock. Each is kept once and

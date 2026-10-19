@@ -5,7 +5,7 @@
 // its lock until the master passcode; the sign-in kept with its proof and reported before anything
 // else of the monitor's is asked. Here against a server of the test's own; against the real API,
 // in a real browser, e2e/offline-sign-in.e2e.ts.
-import { argon2Sync, createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 
@@ -21,7 +21,6 @@ import {
   type Endpoint,
   type OfflineCheckRecord,
   type PhoneAssignmentAnswer,
-  type PhoneListsRecord,
   type PhoneLoginListAnswer,
 } from '@open-adms/contracts';
 import { OfflineSignInRules, Policy, SignInTries } from '@open-adms/domain';
@@ -31,9 +30,11 @@ import { PhoneIdentity } from '../src/phone/identity.ts';
 import { PhoneLists } from '../src/phone/lists.ts';
 import { LoginList } from '../src/phone/login-list.ts';
 import { MonitorOnPhone } from '../src/phone/monitor.ts';
+import { PhoneReports } from '../src/phone/reports.ts';
 import { checkOpened, signInProof } from '../src/phone/offline-check.ts';
 import { SigningIn } from '../src/phone/signing-in.ts';
 import { Server, type Asking, type Reply } from '../src/server.ts';
+import { checkOf, noLists } from './checks.ts';
 import { HeldKeyring, HeldStore } from './held.ts';
 
 const deviceId = '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d11';
@@ -61,66 +62,6 @@ const collections: PhoneAssignmentAnswer = {
   formDocumentTypes: ['INCIDENT'],
   site: null,
 };
-
-const noLists: PhoneListsRecord = {
-  setupVersion: 3,
-  blocks: [],
-  controlRanges: [],
-  debrisTypes: { LOAD: [], HAUL_OUT: [] },
-  fieldTags: [],
-  typedNumberReasons: [],
-  certifications: [],
-  sites: [],
-  roes: [],
-  payItems: [],
-  itemNames: [],
-  incidentTypes: [],
-  incidentOffers: [],
-  contractors: [],
-  surveyWorkTypes: [],
-  vehicleTypes: [],
-  vehicleFeatures: [],
-  crewTypes: [],
-  primes: [],
-  helpers: [],
-  quantityLookup: [],
-};
-
-// The server's making of a check (apps/api's OfflineChecks): Argon2id of what is typed in NFC
-// under a salt of its own, then Argon2id of those bytes under a salt for this phone. Cheap
-// settings here but where a test says otherwise; the phone reads them from the check.
-const cheap = { memory: 64, passes: 1, parallelism: 1 };
-const unpadded = (bytes: Buffer) => bytes.toString('base64').replace(/=+$/, '');
-function firstOf(typed: string, salt: Buffer, cost = cheap): Buffer {
-  return argon2Sync('argon2id', {
-    message: Buffer.from(typed.normalize('NFC')),
-    nonce: salt,
-    memory: cost.memory,
-    passes: cost.passes,
-    parallelism: cost.parallelism,
-    tagLength: 32,
-  });
-}
-function checkOf(typed: string, cost = cheap): { check: OfflineCheckRecord; first: Buffer } {
-  const [firstSalt, secondSalt] = [randomBytes(16), randomBytes(16)];
-  const first = firstOf(typed, firstSalt, cost);
-  const second = argon2Sync('argon2id', {
-    message: first,
-    nonce: secondSalt,
-    memory: cost.memory,
-    passes: cost.passes,
-    parallelism: cost.parallelism,
-    tagLength: 32,
-  });
-  const settings = `m=${String(cost.memory)},t=${String(cost.passes)},p=${String(cost.parallelism)}`;
-  return {
-    first,
-    check: {
-      first: { salt: unpadded(firstSalt), ...cost, bytes: 32 },
-      check: `$argon2id$v=19$${settings}$${unpadded(secondSalt)}$${unpadded(second)}`,
-    },
-  };
-}
 
 interface Sent {
   readonly endpoint: string;
@@ -274,11 +215,12 @@ async function phone(clock: { now: Date } = { now: new Date('2026-10-19T11:00:00
   const server = new TestServer();
   const identity = new PhoneIdentity(store, keyring, server, now);
   await identity.enrol('P1-COL-1', passcode);
-  const monitor = new MonitorOnPhone(identity, keyring, now);
+  const reports = new PhoneReports(store, now);
+  const monitor = new MonitorOnPhone(identity, keyring, reports, now);
   const lists = new PhoneLists(store, monitor, now);
   const loginList = new LoginList(store, SignInTries.onPhone(policy), now);
-  const signingIn = new SigningIn(monitor, lists, loginList, policy);
-  return { clock, store, keyring, server, monitor, lists, loginList, signingIn };
+  const signingIn = new SigningIn(monitor, lists, loginList, reports, policy);
+  return { clock, store, keyring, server, monitor, lists, loginList, reports, signingIn };
 }
 
 // Ana signed in online on the phone, which read her lists and its login list, then signed out:
@@ -428,7 +370,7 @@ describe('signing in with no connection', () => {
 
   it('AC-02-40: wrong tries against the list are counted on the phone: the first four only counted, from the fifth a wait twice as long each time in which nothing is checked, at the tenth the screen locked until the master passcode; the passcode starts it again', async () => {
     const clock = { now: new Date('2026-10-19T11:00:00Z') };
-    const { server, signingIn, loginList } = await setUp(clock);
+    const { server, signingIn, loginList, reports, store } = await setUp(clock);
     server.signal = false;
     const costs: string[] = [];
     for (let nth = 1; nth <= 10; nth += 1) {
@@ -460,6 +402,16 @@ describe('signing in with no connection', () => {
     expect((await loginList.screen()).locked).toBe(true);
     expect(await signingIn.unlock(passcode)).toBe('unlocked');
     expect(await loginList.screen()).toEqual({ wrongInARow: 0, waitUntil: null, locked: false });
+    // AC-11-23, ADR-576: each try at the passcode is a use the phone keeps to report, naming
+    // nobody, at the phone's clock; never the passcode, nor what was typed.
+    const uses = (await reports.held()).passcodeUses;
+    expect(uses.map(({ use, personId, loggedAt }) => [use, personId, loggedAt]).sort()).toEqual([
+      ['SIGN_IN_UNLOCK', null, clock.now.toISOString()],
+      ['WRONG_TRY', null, clock.now.toISOString()],
+    ]);
+    const kept = JSON.stringify([...store.shelves.values()]);
+    expect(kept).not.toContain(passcode);
+    expect(kept).not.toContain('not-the-passcode');
     expect(await signingIn.signIn(ana.number, passwords[ana.id] ?? '')).toMatchObject({
       kind: 'signedIn',
     });

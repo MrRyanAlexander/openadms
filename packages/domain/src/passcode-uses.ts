@@ -6,9 +6,10 @@
 // - **Only what no other report carries.** A setup, a site move and a switch to a monitor who
 //   has no assignment arrive as an unplanned assignment, with their own security events
 //   (`AssignmentRules.securityEventsOf`). Here: a switch to a monitor who has their own
-//   assignment, a session opened on the phone under the passcode, and a wrong try at it.
-// - **A wrong try names nobody**: the passcode wasn't taken, so nothing was done for anybody.
-//   Every other use is about one monitor.
+//   assignment, a session opened on the phone under the passcode, the sign-in screen unlocked
+//   after too many wrong tries at it (ADR-576), and a wrong try at the passcode.
+// - **A wrong try and an unlock name nobody**: a wrong try did nothing for anybody, and an
+//   unlock opens the screen to whoever signs in next. Every other use is about one monitor.
 // - **The first security event of a use takes the id the phone gave it**, so the same report
 //   sent again is known and nothing is written twice.
 // - **One monitor at a time**: a phone passed on, or a session opened on it for a monitor,
@@ -24,6 +25,8 @@ export const loggedPasscodeUses = [
   'SESSION_AS_MONITOR',
   // The temporary session for a monitor picked from the roster.
   'TEMPORARY_SESSION',
+  // The phone's sign-in screen unlocked, locked after too many wrong tries at it (ADR-576).
+  'SIGN_IN_UNLOCK',
   // The passcode typed wrong, whatever it was typed for.
   'WRONG_TRY',
 ] as const;
@@ -46,7 +49,7 @@ export type LoggedPasscodeUseRefusal = (typeof loggedPasscodeUseRefusals)[number
 export class PasscodeLogRules {
   // Whether a use of that kind is about a monitor. A report says who exactly where it is.
   namesAMonitor(use: LoggedPasscodeUse): boolean {
-    return use !== 'WRONG_TRY';
+    return use !== 'WRONG_TRY' && use !== 'SIGN_IN_UNLOCK';
   }
 
   // The security events a use saved is, the one that takes the phone's id first.
@@ -60,14 +63,17 @@ export class PasscodeLogRules {
         return [taken('AS_MONITOR')];
       case 'TEMPORARY_SESSION':
         return [taken('TEMPORARY')];
+      case 'SIGN_IN_UNLOCK':
+        return [taken(null)];
       case 'WRONG_TRY':
         return [{ kind: 'MASTER_PASSCODE_FAILED', masterPasscodeSession: null }];
     }
   }
 
-  // Whether a use saved ends the sessions others had open on that phone before it.
+  // Whether a use saved ends the sessions others had open on that phone before it: one that
+  // names a monitor.
   endsEarlierSessions(use: LoggedPasscodeUse): boolean {
-    return use !== 'WRONG_TRY';
+    return this.namesAMonitor(use);
   }
 
   // Whether a use may be about them: a monitor. One archived since is still who it was for.

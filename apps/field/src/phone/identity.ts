@@ -13,7 +13,7 @@ import {
 } from '@open-adms/contracts';
 import { PhoneProofRules } from '@open-adms/domain';
 
-import type { Asking, NotAnswered, Reply, Server } from '../server.ts';
+import type { Asking, NotAnswered, Reply, Sender, Server } from '../server.ts';
 import type { Keyring } from '../store/keyring.ts';
 import type { PhoneStore } from '../store/phone-store.ts';
 
@@ -121,6 +121,21 @@ export class PhoneIdentity {
     }
   }
 
+  // The master user at the phone (ADR-531, 576): it proves itself with the master passcode beside
+  // its signature, and what is handed back sends as somebody signed in on it, for this act alone.
+  // That token is kept nowhere, and the passcode is sent once and held by nobody here.
+  async masterUser(
+    passcode: string,
+  ): Promise<{ readonly kind: 'atThePhone'; readonly send: Sender } | NotAnswered> {
+    const proven = await this.proof(passcode);
+    if (!('token' in proven)) return proven;
+    const { token } = proven;
+    return {
+      kind: 'atThePhone',
+      send: (served, asking = {}) => this.server.ask(served, { ...asking, token }),
+    };
+  }
+
   private async token(): Promise<{ readonly token: string } | NotAnswered> {
     const held = heldToken(await this.keyring.secret('phoneToken'));
     if (held !== undefined && Date.parse(held.until) > this.now().getTime()) {
@@ -136,6 +151,20 @@ export class PhoneIdentity {
   // text for it with its device key, and sends both; the token it is given is held in the
   // keyring until it runs out by the phone's clock.
   private async proved(): Promise<{ readonly token: string } | NotAnswered> {
+    const asked = this.now();
+    const proven = await this.proof();
+    if (!('token' in proven)) return proven;
+    const { token, expiresInSeconds } = proven;
+    const until = new Date(asked.getTime() + expiresInSeconds * 1000).toISOString();
+    await this.keyring.keep('phoneToken', JSON.stringify({ token, until }));
+    return { token };
+  }
+
+  // A challenge asked by the phone's id and signed with its device key, the master passcode
+  // beside the signature where one is handed in: the token it is given, and for how long.
+  private async proof(
+    passcode?: string,
+  ): Promise<{ readonly token: string; readonly expiresInSeconds: number } | NotAnswered> {
     const enrolment = await this.enrolment();
     const key = await this.keyring.deviceKey();
     // A phone holding no enrolment, or no key, has nothing to prove itself with.
@@ -147,15 +176,10 @@ export class PhoneIdentity {
     if (challenged.kind !== 'answered') return challenged;
     const { challenge } = challenged.answer;
     const signature = await key.signed(PhoneProofRules.signed(challenge));
-    const asked = this.now();
     const proven = await this.server.ask(provePhoneEndpoint, {
       ids,
-      json: { challenge, signature },
+      json: passcode === undefined ? { challenge, signature } : { challenge, signature, passcode },
     });
-    if (proven.kind !== 'answered') return proven;
-    const { token, expiresInSeconds } = proven.answer;
-    const until = new Date(asked.getTime() + expiresInSeconds * 1000).toISOString();
-    await this.keyring.keep('phoneToken', JSON.stringify({ token, until }));
-    return { token };
+    return proven.kind === 'answered' ? proven.answer : proven;
   }
 }

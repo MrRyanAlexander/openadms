@@ -13,13 +13,18 @@
 // across midnight still finds it): Kim Nguyen on disposals and the drop-off log at Marsh Road TDSR,
 // Ana Brooks on collections and incidents, Lee Morgan on two assignments, Tariq Patel on none. A
 // test signs them in on its own phone with the Monitor ID and the made-up password handed on.
+// **And P2** (task 3.3.1, ADR-576), "Bayline County PPDR, Hurricane Delphine", with Marsh Road
+// TDSR entered again on it and nobody's assignment: where the tests that set a phone up under the
+// master passcode put the monitors they create, so that P1's login list, which other tests read
+// whole, stays the cast's.
 import type { ApiProcess } from '@open-adms/api';
-import { uuidv7, type Policy } from '@open-adms/domain';
+import type { Prisma } from '@open-adms/db';
+import { NewProjectSettings, uuidv7, type Policy } from '@open-adms/domain';
 
 import { storiesHostname } from './over-https.ts';
 import { builtInPolicy } from './policy.ts';
 import { assigned } from './stories/board.ts';
-import { p1TimeZone, setUpP1, setUpP1Sites } from './stories/p1.ts';
+import { p1TimeZone, setUpP1, setUpP1Sites, startSeries, type P1 } from './stories/p1.ts';
 import { listeningApi, StoryApi } from './story-api.ts';
 import { StoryDatabase, storyMasterPasscode } from './story-database.ts';
 import { StoryMedia } from './story-media.ts';
@@ -97,6 +102,50 @@ export class BrowserWorld {
     }
   }
 
+  // P2 as the example world names it (spec/CONVENTIONS.md §6): PPDR work for the same client under
+  // the same declaration event, loads alone, its numbers from 102001, and Marsh Road TDSR entered
+  // again with the same GPS and permit. Nothing else of its setup: a phone set up on it picks no
+  // more than that.
+  private static async setUpP2(
+    tx: Prisma.TransactionClient,
+    policy: Policy,
+    p1: P1,
+  ): Promise<void> {
+    const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
+    const project = await tx.project.create({
+      data: {
+        name: 'Bayline County PPDR, Hurricane Delphine',
+        clientId: p1.client,
+        declarationEventId: p1.declarationEvent,
+        programTypeId: ppdr.id,
+        timeZone: p1TimeZone,
+        activeFrom: new Date('2026-10-12'),
+        activeTo: new Date('2027-01-31'),
+        ticketNumberSource: 'GENERATED',
+        workflows: ['LOAD'],
+        ...new NewProjectSettings(policy).for(ppdr),
+      },
+    });
+    await startSeries(tx, project.id, { LOAD: 102001 });
+    const tdsrType = await tx.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } });
+    await tx.disposalSite.create({
+      data: {
+        projectId: project.id,
+        activationDate: new Date('2026-10-12'),
+        takesLoads: true,
+        name: 'Marsh Road TDSR',
+        siteTypeId: tdsrType.id,
+        siteTypeKey: tdsrType.key,
+        haulOutsLeaveHere: true,
+        chargesTippingFee: false,
+        ineligibleSite: false,
+        permitNumber: 'FDEP-DMS-2026-0117',
+        latitude: '39.09000000',
+        longitude: '-75.62000000',
+      },
+    });
+  }
+
   // The cast, written as the stories write theirs: setup by Dana Reyes through `$write`, the yard
   // phone and the monitors at the API's own endpoints (its process, on the real clock, stopped
   // before the world's own starts on the same port), the board through `Assignments`.
@@ -115,6 +164,7 @@ export class BrowserWorld {
           await tx.userPermission.create({ data: { userId: luis.id, permission } });
         }
         const p1 = await setUpP1(tx, policy);
+        await BrowserWorld.setUpP2(tx, policy, p1);
         return { luis: luis.id, project: p1.project, ...(await setUpP1Sites(tx, p1.project)) };
       });
       const asked = served.requests(clock);

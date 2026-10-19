@@ -67,22 +67,21 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-18, through ADR-575)
-- **Phase 3 is open (ADR-557)**: 9 of 33 tasks done (ADR-557…575). Milestone 3.1 is done (the plan,
+### Where things stand (2026-10-18, through ADR-576)
+- **Phase 3 is open (ADR-557)**: 10 of 33 tasks done (ADR-557…576). Milestone 3.1 is done (the plan,
   the phone's scenarios in `spec/acceptance/11-field-app.md`, the checklist `spec/CHECKLIST-FIELD.md`,
   the shell at `https://field.adms.localhost` with `pnpm e2e` in the chain, axe-core on every screen,
   the look in `apps/field/src/look/`, the clickable prototype). **The user approved every
   recommendation of Q-215…Q-218 (ADR-573):** no confirmation after each value; today's own count on
   home; the bottom menu Work, Time (clock on), Sync, Settings; the number typed again only where a
   person copied it. Their notes on the prototype are ADR-571 (the number at New, open tickets,
-  waypoints, photos at any step). **Milestone 3.2:** the store (3.2.1, ADR-570), enrolment and the
-  proof (3.2.2, ADR-572), **online sign-in and the assignment (3.2.3, ADR-574)**: the session in the
-  keyring beside the phone's token (the browser build's in memory alone), home from the assignment
-  under the bottom menu, the lists kept and how stale, the browser tests' world given a cast;
-  **the login list and signing in offline (3.2.4, ADR-575)**: the two slow hashes with
-  @noble/hashes, the phone's monitor alone, the screen's own 5 and 10, the lock after 30 quiet
-  minutes, the sign-in made offline reported first. Milestone 3.2 is done.
-  **Next: task 3.3.1.** What each task did is its ADR and its `BACKLOG.md` tick.
+  waypoints, photos at any step). **Milestone 3.2 is done** (ADR-570…575): the store, enrolment and
+  the proof, online sign-in and the assignment, the login list and signing in offline.
+  **Milestone 3.3: setup with no assignment (3.3.1, ADR-576)**: the phone set up under the master
+  passcode from the sign-in screen, "No assignment today" or "Monitor created", online or on the
+  lists it holds; the report kept until saved and sent first; the uses of the passcode it checks
+  itself reported; the browser tests' world given P2.
+  **Next: task 3.3.2.** What each task did is its ADR and its `BACKLOG.md` tick.
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -150,7 +149,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 9 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 10 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -234,17 +233,18 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.3.1, setup with no assignment** (`BACKLOG.md`, Milestone 3.3; REQ-311, 311a's rest;
-C122, C125 and the register's note from 3.2.4; AC-02-38, AC-11-23…25, 63): the master passcode
-held in memory only for the act; online, what a setup picks from (`POST
-/phones/current/setup-choices`), the project, then the work, site and monitor, paged; offline only
-on the project whose lists the phone holds; the unplanned assignment's report
-(`POST /phones/current/unplanned-assignments`) kept until saved and sent first; offered on the
-`no-assignment` screen and straight on from "Monitor created" (ADR-572); **each use of the passcode
-kept on the phone and reported** (AC-11-23; the sign-in screen's unlock among them, which
-`passcode-uses` has no kind for yet: server work, the endpoint recipe). Builds on `SigningIn` and
-`LoginList`'s passcode check (`apps/field/src/phone/`, ADR-575). **From 2026-10-21, C175** (React
-19.3.1 and Playwright 1.64.1 read again).
+**Task 3.3.2, switching, moving and passcode sessions** (`BACKLOG.md`, Milestone 3.3; REQ-312;
+C122's rest, C123, C124, C126, C171; AC-02-42, 46, 47, AC-11-26, 27, 64): a switch under the
+master passcode (the earlier monitor's unsynced work archived, hidden, synced in the background;
+their session and offline sign-in's proof dropped) and a site move, offline if need be, each an
+unplanned assignment by `PhoneSetup`'s report (`occasion: 'MONITOR_SWITCH'`; a switch to a monitor
+with their own assignment the use `MONITOR_SWITCH`); sessions as the phone's monitor and temporary
+(`POST /phones/current/passcode-sessions` online; kept as uses with `PhoneReports.keepUse`
+offline), shown as the passcode's and ended at the project's midnight; `masterPasscodeSession` on
+every field event; **what ten wrong tries at the passcode offline do, proposed by ADR** (NIST
+SP 800-63B §3.2.10; today each is only kept as a `WRONG_TRY`). Builds on `PhoneSetup`,
+`PhoneReports` and `SigningIn` (`apps/field/src/phone/`, ADR-575, 576). **From 2026-10-21, C175**
+(React 19.3.1 and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

@@ -6,7 +6,9 @@
 // against the list wait from the policy's first count and lock the screen at its second until the
 // master passcode is typed here (AC-02-40). A sign-in that ended is said first (AC-11-14, 21, 64).
 // The fields take a paste and a password manager (AC-11-54, 63). Whoever holds the master passcode
-// creates a monitor from here (AC-02-07).
+// creates a monitor from here (AC-02-07), and sets the phone up for a monitor with no assignment,
+// online or, on the project whose lists it holds, with no connection (AC-02-38, AC-11-24; task
+// 3.3.1, ADR-576); set up, the screen says for whom, their Monitor ID filled in.
 import { provenPhoneEndpoint } from '@open-adms/contracts';
 import { useEffect, useState } from 'react';
 
@@ -27,26 +29,37 @@ export type Ended =
   | { readonly why: 'offlineRefused' }
   | { readonly why: 'inactive'; readonly minutes: number };
 
+// Who the phone was just set up for, on which project.
+export interface SetUpFor {
+  readonly name: string;
+  readonly monitorNumber: string;
+  readonly project: string;
+}
+
 export function Phone({
   enrolment,
   identity,
   signingIn,
   loginList,
   ended,
+  setUpFor,
   onSignedIn,
   onCreateMonitor,
+  onSetUp,
 }: {
   readonly enrolment: Enrolment;
   readonly identity: PhoneIdentity;
   readonly signingIn: SigningIn;
   readonly loginList: LoginList;
   readonly ended: Ended | null;
+  readonly setUpFor: SetUpFor | null;
   readonly onSignedIn: (signedIn: SignedIn) => void;
   readonly onCreateMonitor: () => void;
+  readonly onSetUp: () => void;
 }) {
   const said = words.phone;
   const [standing, setStanding] = useState<Standing>('checking');
-  const [monitorNumber, setMonitorNumber] = useState('');
+  const [monitorNumber, setMonitorNumber] = useState(setUpFor?.monitorNumber ?? '');
   const [password, setPassword] = useState('');
   const [passcode, setPasscode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -169,6 +182,11 @@ export function Phone({
             <p>{endedWords}</p>
           </Banner>
         )}
+        {setUpFor === null ? null : (
+          <Banner tone="good">
+            <p>{say(said.setUpFor, { name: setUpFor.name, project: setUpFor.project })}</p>
+          </Banner>
+        )}
         {locked ? (
           <>
             <Banner tone="notice" announced>
@@ -220,6 +238,9 @@ export function Phone({
             {busy ? said.signingIn : said.signIn}
           </Button>
         )}
+        <Button wide isDisabled={busy} onPress={onSetUp}>
+          {said.setUp}
+        </Button>
         <Button wide isDisabled={busy} onPress={onCreateMonitor}>
           {said.createMonitor}
         </Button>

@@ -5,7 +5,7 @@ import './components.css';
 
 export { Banner } from './banner.tsx';
 export { Button, ListRow } from './button.tsx';
-export { ListPicker, type Choice } from './list-picker.tsx';
+export { ListPicker, ListPicks, type Choice } from './list-picker.tsx';
 export { BottomMenu, type MenuItem } from './menu.tsx';
 export { NumberKeypad } from './keypad.tsx';
 export { PhotoStrip } from './photo-strip.tsx';

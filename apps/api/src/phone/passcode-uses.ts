@@ -6,7 +6,8 @@
 //
 // - **Only what no other report carries** (the domain's `loggedPasscodeUses`): the phone passed
 //   to a monitor who has their own assignment, a session opened on the phone under the
-//   passcode, and a wrong try at it. A setup, a move and a switch that made an assignment
+//   passcode, its sign-in screen unlocked (ADR-576), and a wrong try at it. A setup, a move
+//   and a switch that made an assignment
 //   arrive as that assignment (unplanned-assignments.ts), with their own events.
 // - **The phone's word, and its device key's.** The phone checked the passcode against its own
 //   check; the server is never sent it here. So nothing here counts toward the server's own
@@ -41,7 +42,7 @@ type Tx = Prisma.TransactionClient;
 export interface ReportedPasscodeUse {
   readonly id: string;
   readonly use: LoggedPasscodeUse;
-  // The monitor it was for; null for a wrong try.
+  // The monitor it was for; null for an unlock or a wrong try.
   readonly personId: string | null;
   // The phone's clock when it logged it, and how far that clock stood from UTC, in minutes.
   readonly loggedAt: Date;

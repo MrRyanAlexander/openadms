@@ -1,5 +1,6 @@
 // A monitor created (ADR-105, 120, 442, 572; AC-02-07): the Monitor ID the server issued, which is
-// their username, said with their name as the server kept it. Never their password.
+// their username, said with their name as the server kept it. Never their password. From here,
+// straight on to setting the phone up for them (REQ-311a; task 3.3.1, ADR-576).
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 
 import { Banner, Button, StatusStrip } from './look/index.ts';
@@ -8,10 +9,12 @@ import { say, words } from './words.ts';
 export function MonitorCreated({
   created,
   onAnother,
+  onSetUp,
   onDone,
 }: {
   readonly created: MonitorCreatedAnswer;
   readonly onAnother: () => void;
+  readonly onSetUp: () => void;
   readonly onDone: () => void;
 }) {
   const said = words.monitorCreated;
@@ -26,7 +29,10 @@ export function MonitorCreated({
         <p>{said.username}</p>
       </div>
       <div className="screen-actions">
-        <Button main wide onPress={onDone}>
+        <Button main wide onPress={onSetUp}>
+          {say(said.setUp, { name: created.name })}
+        </Button>
+        <Button wide onPress={onDone}>
           {said.done}
         </Button>
         <Button wide onPress={onAnother}>

@@ -63,7 +63,9 @@
     "unlock": "Unlock",
     "unlocking": "Unlocking…",
     "unlocked": "Unlocked. Sign in.",
-    "noPasscodeCheck": "This phone holds no check of the master passcode yet. Ask your supervisor."
+    "noPasscodeCheck": "This phone holds no check of the master passcode yet. Ask your supervisor.",
+    "setUp": "Set up this phone",
+    "setUpFor": "This phone is set up for {name} on {project}. {name} signs in now with their Monitor ID and password."
   },
   "createMonitor": {
     "title": "Create monitor",
@@ -82,7 +84,72 @@
     "monitorId": "{name}’s Monitor ID is {monitorNumber}.",
     "username": "It is their username: they sign in with it and their password.",
     "another": "Create another",
-    "done": "Done"
+    "done": "Done",
+    "setUp": "Set the phone up for {name}"
+  },
+  "setup": {
+    "title": "Set up this phone",
+    "needs": "Setting up the phone for a monitor with no assignment needs the master passcode. It is recorded as an unplanned assignment.",
+    "passcode": "Master passcode",
+    "next": "Next",
+    "checking": "Checking…",
+    "cancel": "Cancel",
+    "noLists": "With no signal, a phone is set up only on the project whose lists it holds, and this one holds none. Find signal and try again.",
+    "noCheck": "This phone holds no check of the master passcode yet, so it can’t be set up with no signal. Find signal and try again.",
+    "offline": "No signal: setting up on {project}, whose lists this phone holds.",
+    "project": {
+      "title": "Which project?",
+      "closed": "That project has closed. Pick another."
+    },
+    "work": {
+      "title": "What work?",
+      "hint": "Pick each kind of work they do today.",
+      "kinds": {
+        "COLLECTION": "Collections",
+        "DISPOSAL": "Disposals",
+        "HAUL_OUT_COLLECTION": "Haul-out collections",
+        "HAUL_OUT_DISPOSAL": "Haul-out disposals",
+        "UNIT_RATE": "Unit rate work"
+      },
+      "certifying": "Certifying trucks and crews",
+      "forms": {
+        "ROE": "ROEs",
+        "SURVEY": "Surveys",
+        "INCIDENT": "Incidents",
+        "DROP_OFF_LOG": "Drop-off logs"
+      },
+      "none": "Pick at least one kind of work."
+    },
+    "site": {
+      "title": "Which site?",
+      "none": "No site: curb work",
+      "noneDetail": "Collections and unit rate work at the curb"
+    },
+    "payItems": {
+      "title": "Which unit rate work?",
+      "band": "Size {from} to {to}",
+      "bandFrom": "Size {from} and up",
+      "bandTo": "Size up to {to}",
+      "none": "Pick at least one.",
+      "nothing": "This project has no unit rate work a monitor picks."
+    },
+    "monitor": {
+      "title": "Who works on this phone?",
+      "more": "Show more monitors",
+      "loading": "Loading…",
+      "none": "Pick the monitor."
+    },
+    "make": "Set up the phone",
+    "making": "Setting up…",
+    "made": {
+      "title": "Phone set up",
+      "for": "Set up for {name} on {project}, as an unplanned assignment.",
+      "saved": "The server has it.",
+      "held": "Kept on the phone. It goes to the server when the phone finds signal with somebody signed in.",
+      "notSaved": "The server didn’t take it. It stays on the phone, and the back office is told.",
+      "notHere": "This phone holds another project’s lists: {name} signs in with signal to take this one.",
+      "done": "Done"
+    }
   },
   "look": {
     "strip": {
@@ -173,7 +240,8 @@
         "other": "You’ll be signed out in {count} seconds with nothing done."
       },
       "stay": "Stay signed in"
-    }
+    },
+    "setUp": "Set up this phone"
   },
   "menu": {
     "label": "Menu",

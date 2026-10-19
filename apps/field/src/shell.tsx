@@ -2,21 +2,26 @@
 // moves between its screens. A phone not yet enrolled shows enrolment; an enrolled one, nobody
 // signed in, shows what it is, the sign-in (online, or from its login list) and "Create monitor";
 // with a monitor signed in, the work their assignment allows and the bottom menu, until they sign
-// out or the phone is left alone too long. Nothing is shown until the store has said whether the
-// phone is enrolled, which takes no network.
+// out or the phone is left alone too long. Whoever holds the master passcode sets the phone up
+// for a monitor with no assignment from the sign-in screen, or straight on from "Monitor created"
+// for the monitor just created (task 3.3.1, ADR-576); the sign-in screen then says for whom, their
+// Monitor ID filled in. Nothing is shown until the store has said whether the phone is enrolled,
+// which takes no network.
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
 import { CreateMonitor } from './create-monitor.tsx';
 import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';
-import { Phone, type Ended } from './phone.tsx';
+import { Phone, type Ended, type SetUpFor } from './phone.tsx';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
+import type { PhoneSetup, SetupMonitor } from './phone/setup.ts';
 import type { SigningIn } from './phone/signing-in.ts';
 import type { Server } from './server.ts';
+import { Setup } from './setup.tsx';
 import { SignedInPhone, type Inactivity } from './signed-in.tsx';
 
 // The phone as the build opens it: who it is to the server, the monitor signed in on it, the
@@ -27,13 +32,24 @@ export interface OpenedPhone {
   readonly lists: PhoneLists;
   readonly loginList: LoginList;
   readonly signingIn: SigningIn;
+  readonly setup: PhoneSetup;
   readonly inactivity: Inactivity;
 }
 
 type Seen =
   | { readonly screen: 'opening' }
   | { readonly screen: 'enrol' }
-  | { readonly screen: 'phone'; readonly enrolment: Enrolment; readonly ended: Ended | null }
+  | {
+      readonly screen: 'phone';
+      readonly enrolment: Enrolment;
+      readonly ended: Ended | null;
+      readonly setUpFor?: SetUpFor;
+    }
+  | {
+      readonly screen: 'setup';
+      readonly enrolment: Enrolment;
+      readonly forMonitor: SetupMonitor | null;
+    }
   | { readonly screen: 'signedIn'; readonly enrolment: Enrolment; readonly signedIn: SignedIn }
   | { readonly screen: 'createMonitor'; readonly enrolment: Enrolment }
   | {
@@ -98,11 +114,38 @@ export function Shell({
           signingIn={opened.signingIn}
           loginList={opened.loginList}
           ended={seen.ended}
+          setUpFor={seen.setUpFor ?? null}
           onSignedIn={(signedIn) => {
             setSeen({ screen: 'signedIn', enrolment: seen.enrolment, signedIn });
           }}
           onCreateMonitor={() => {
             setSeen({ screen: 'createMonitor', enrolment: seen.enrolment });
+          }}
+          onSetUp={() => {
+            setSeen({ screen: 'setup', enrolment: seen.enrolment, forMonitor: null });
+          }}
+        />
+      );
+    case 'setup':
+      return (
+        <Setup
+          setup={opened.setup}
+          standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }}
+          forMonitor={seen.forMonitor}
+          onDone={(made, monitor) => {
+            setSeen({
+              screen: 'phone',
+              enrolment: seen.enrolment,
+              ended: null,
+              setUpFor: {
+                name: monitor.name,
+                monitorNumber: monitor.monitorNumber,
+                project: made.assignment.project.name,
+              },
+            });
+          }}
+          onCancel={() => {
+            setSeen({ screen: 'phone', enrolment: seen.enrolment, ended: null });
           }}
         />
       );
@@ -114,6 +157,7 @@ export function Shell({
           lists={opened.lists}
           loginList={opened.loginList}
           inactivity={opened.inactivity}
+          setup={opened.setup}
           signedIn={seen.signedIn}
           onSignedOut={signedOut}
         />
@@ -136,6 +180,14 @@ export function Shell({
           created={seen.created}
           onAnother={() => {
             setSeen({ screen: 'createMonitor', enrolment: seen.enrolment });
+          }}
+          onSetUp={() => {
+            const { userId, monitorNumber, name } = seen.created;
+            setSeen({
+              screen: 'setup',
+              enrolment: seen.enrolment,
+              forMonitor: { monitorId: userId, monitorNumber, name },
+            });
           }}
           onDone={() => {
             setSeen({ screen: 'phone', enrolment: seen.enrolment, ended: null });

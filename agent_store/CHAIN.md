@@ -7,7 +7,7 @@
 > task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
 > **A count that differs from this page without a reason is a finding, not noise.**
 
-**Seen whole:** 2026-10-18, task 3.2.4 (ADR-575), on the user's Mac, the installation at head: `pnpm chain` 9 of 10 in 12 min 17 s, its one lint error fixed and `pnpm chain lint licences` then 2 of 2; every count below as seen.
+**Seen whole:** 2026-10-18, task 3.3.1 (ADR-576), on the user's Mac, the installation at head: `pnpm chain` 10 of 10 in 11 min 11 s; every count below as seen.
 
 ## `pnpm ready`
 
@@ -20,13 +20,13 @@
 
 ## `pnpm test`
 
-**`Test Files 198 passed (198)`, `Tests 3391 passed (3391)`.**
+**`Test Files 199 passed (199)`, `Tests 3403 passed (3403)`.**
 
 | Project | Tests | Files | Needs |
 |---|---|---|---|
-| `packages/domain` | 879 | 46 | nothing |
+| `packages/domain` | 880 | 46 | nothing |
 | `packages/contracts` | 93 | 9 | nothing |
-| `apps/api` | 761 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `apps/api` | 762 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
 | `packages/db` | 1090 | 49 | `pnpm ready` |
 | `packages/scenarios` | 158 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness, the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (26), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
 | `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
@@ -34,7 +34,7 @@
 | `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
 | `tools/setup` | 20 | 3 | nothing |
 | `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
-| `apps/field` | 103 | 10 | nothing (signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 30 (each screen of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+| `apps/field` | 113 | 11 | nothing (setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 31 (each screen module of the app's and the prototype's, both words files), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
 
 ## `pnpm lint`, `pnpm licences`
 
@@ -68,7 +68,7 @@ P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1
 
 ## `pnpm e2e`
 
-**30 browser tests**, `30 passed (2.2m)` in the chain (about 30 s run alone): the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) and signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 13 of 13 screens checked, in 100 checks; 0 found.`, **13 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `phone`, `no-assignment`, `sync` and `settings`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
+**33 browser tests**, `33 passed (27.2s)` in the chain: the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the prototype's 9 (`e2e/prototype.e2e.ts`, ADR-568: four walks in each theme and one at 320 px with 200% text), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) and setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then the prototype (`dist/prototype/`, about 400 kB, and `prototype.html` in one file), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 20 of 20 screens checked, in 116 checks; 0 found.`, **20 screens of the app**, its prototype's among them: the app's `create-monitor`, `enrol`, `home`, `monitor-created`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-made`, `no-assignment`, `sync` and `settings`, the prototype's `prototype-collection`, `-stop`, `-sync`, `-tower`, `-unit-rate`.
 
 ## `pnpm security`
 
@@ -88,7 +88,7 @@ series on `adms` moves with every run (a sequence isn't rolled back); gaps are n
 
 ## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
 
-`pnpm chain`, the whole chain, 12 min 41 s (seen 2026-10-18; `pnpm test` 4 min 15 s of it, `pnpm scenarios` 5 min 24 s, `pnpm e2e` 27 s).
+`pnpm chain`, the whole chain, 11 min 11 s (seen 2026-10-18; `pnpm test` 4 min 9 s of it, `pnpm scenarios` 5 min 19 s, `pnpm e2e` 32 s).
 `pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
 `pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
 `pnpm ready` on a stopped stack under a minute.

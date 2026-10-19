@@ -2,7 +2,8 @@
 // the field app built for it, its made-up master passcode, and its cast of monitors (each with
 // their Monitor ID and made-up password, and the board Luis wrote for them: Kim Nguyen on
 // disposals and the drop-off log at Marsh Road TDSR, Ana Brooks on collections and incidents,
-// Lee Morgan on two assignments, Tariq Patel on none), as the run's setup handed them on.
+// Lee Morgan on two assignments, Tariq Patel on none), as the run's setup handed them on. The world
+// also holds P2, with nobody's work, for the setup tests' own monitors (ADR-576).
 function handedOn(name: string): string {
   const value = process.env[name];
   if (value === undefined || value === '') {

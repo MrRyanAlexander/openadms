@@ -13,6 +13,11 @@
 // sign-in** (`POST /phones/current/offline-sign-ins`, AC-11-21) and holds the session the server
 // gives for it, dropping the proof; refused, it drops the sign-in and the monitor signs in online,
 // nothing the phone holds lost. Signing out, or the lock after inactivity, drops either.
+//
+// **What the phone reports besides its records goes next** (BACKLOG 3.3.1, C122; ADR-576): an
+// unplanned assignment set up on it and the uses of the master passcode it logged, sent with the
+// monitor's session ahead of the request asked for (reports.ts), so the lists the server answers
+// take an assignment set up with no connection (AC-11-25).
 import {
   monitorSignedInAnswerSchema,
   offlineSignInReportSchema,
@@ -31,6 +36,7 @@ import type { Keyring } from '../store/keyring.ts';
 import type { PhoneIdentity } from './identity.ts';
 import type { LoginListEntry } from './login-list.ts';
 import { signInProof } from './offline-check.ts';
+import type { PhoneReports } from './reports.ts';
 
 // Who is signed in, until when by the phone's clock, and the assignment the phone takes for them
 // now, or why it takes none; and whether they signed in with no connection and the server hasn't
@@ -112,14 +118,21 @@ const offlineSignIns = new OfflineSignInRules();
 export class MonitorOnPhone {
   private readonly identity: PhoneIdentity;
   private readonly keyring: Keyring;
+  private readonly reports: PhoneReports;
   private readonly now: () => Date;
   // A report under way: the monitor's requests at once wait on its one report, never each sending
   // the sign-in again (the server takes it once).
   private reporting: Promise<HeldSession | NotAnswered> | undefined;
 
-  constructor(identity: PhoneIdentity, keyring: Keyring, now = () => new Date()) {
+  constructor(
+    identity: PhoneIdentity,
+    keyring: Keyring,
+    reports: PhoneReports,
+    now = () => new Date(),
+  ) {
     this.identity = identity;
     this.keyring = keyring;
+    this.reports = reports;
     this.now = now;
   }
 
@@ -217,6 +230,8 @@ export class MonitorOnPhone {
   // With nobody signed in nothing is sent; answered `NOT_SIGNED_IN`, the session is dropped and
   // the answer is the caller's to show. A sign-in made offline is reported first (AC-11-21):
   // refused, it is dropped and the answer is `SIGN_IN_REFUSED`; not answered, it stays as it is.
+  // Then the phone's held reports (AC-11-25): with no signal for them, nothing more is asked; a
+  // report the server refused is the sync's to carry, and the request goes on.
   async ask<E extends Endpoint>(
     served: E,
     asking: Omit<Asking, 'token' | 'session'> = {},
@@ -232,15 +247,25 @@ export class MonitorOnPhone {
       if (!('answer' in taken)) return taken;
       held = taken;
     }
-    const reply = await this.identity.asPhone(served, { ...asking, session: held.answer.token });
+    const session = held.answer.token;
+    const unsent = await this.reports.sent((sent, more = {}) =>
+      this.identity.asPhone(sent, { ...more, session }),
+    );
+    const notSignedIn = unsent?.kind === 'refused' && unsent.code === 'NOT_SIGNED_IN';
+    const reply =
+      unsent?.kind === 'unreachable' || notSignedIn
+        ? unsent
+        : await this.identity.asPhone(served, { ...asking, session });
     if (reply.kind === 'refused' && reply.code === 'NOT_SIGNED_IN') {
       await this.keyring.keep('monitorSession', undefined);
     }
     return reply;
   }
 
-  // The assignment the phone takes now, as a later answer said (its lists read, ADR-450): the
-  // session keeps it in place of the one the sign-in answered.
+  // The assignment the phone takes now, as a later answer said (its lists read, ADR-450) or as
+  // the phone was set up for this monitor under the master passcode (ADR-576): the session keeps
+  // it in place of the one the sign-in answered. (A sign-in made offline always holds the lists'
+  // assignment, so it is never set up from "No assignment today".)
   async took(
     assignment: PhoneAssignmentAnswer | null,
     noAssignment: NoAssignmentReason | null,

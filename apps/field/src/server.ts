@@ -25,6 +25,13 @@ export type Reply<E extends Endpoint> =
 // What a request came to, but an answer: the same for every endpoint.
 export type NotAnswered = Exclude<Reply<Endpoint>, { readonly kind: 'answered' }>;
 
+// Something that asks the server as one caller, its token (and any session) already beside what
+// it sends: the monitor signed in, or the master user at the phone for one act.
+export type Sender = <E extends Endpoint>(
+  served: E,
+  asking?: Omit<Asking, 'token' | 'session'>,
+) => Promise<Reply<E>>;
+
 export interface Asking {
   // The endpoint's path parameters, by name.
   readonly ids?: Readonly<Record<string, string>>;

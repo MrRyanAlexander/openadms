@@ -64,8 +64,8 @@ export const passcodeUseReportSchema = z
     id: z.uuid(),
     // What the passcode was typed for.
     use: z.enum(loggedPasscodeUses),
-    // The monitor it was for, from the phone's login list; null for a wrong try, and only
-    // for one.
+    // The monitor it was for, from the phone's login list; null for an unlock or a wrong try,
+    // and only for those.
     personId: z.uuid().nullable(),
     // The phone's clock when it was logged, as a UTC instant, and how far that clock stood
     // from UTC, in minutes (ADR-100): UTC−12:00 to UTC+14:00.

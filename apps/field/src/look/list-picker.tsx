@@ -29,6 +29,50 @@ export function ListPicker({
   readonly picked: string | null;
   readonly onPick: (key: string) => void;
 }) {
+  return (
+    <Rows
+      labelledBy={labelledBy}
+      choices={choices}
+      picked={picked === null ? [] : [picked]}
+      onPicked={(keys) => {
+        for (const key of keys) onPick(key);
+      }}
+      many={false}
+    />
+  );
+}
+
+// The same rows where several may be picked (a setup's work, ADR-576): each tap picks a row or
+// lets it go, and a screen reader hears each row's name and whether it is picked.
+export function ListPicks({
+  labelledBy,
+  choices,
+  picked,
+  onPicked,
+}: {
+  readonly labelledBy: string;
+  readonly choices: readonly Choice[];
+  readonly picked: readonly string[];
+  readonly onPicked: (keys: readonly string[]) => void;
+}) {
+  return (
+    <Rows labelledBy={labelledBy} choices={choices} picked={picked} onPicked={onPicked} many />
+  );
+}
+
+function Rows({
+  labelledBy,
+  choices,
+  picked,
+  onPicked,
+  many,
+}: {
+  readonly labelledBy: string;
+  readonly choices: readonly Choice[];
+  readonly picked: readonly string[];
+  readonly onPicked: (keys: readonly string[]) => void;
+  readonly many: boolean;
+}) {
   const { contains } = useFilter({ sensitivity: 'base' });
   const [search, setSearch] = useState('');
   const shown = choices.filter((choice) => contains(choice.label, search));
@@ -44,12 +88,13 @@ export function ListPicker({
         aria-labelledby={labelledBy}
         className="list-picker-rows"
         items={shown}
-        selectionMode="single"
-        disallowEmptySelection
-        selectedKeys={picked === null ? [] : [picked]}
+        selectionMode={many ? 'multiple' : 'single'}
+        disallowEmptySelection={!many}
+        selectedKeys={picked}
         onSelectionChange={(selection) => {
-          if (selection === 'all') return;
-          for (const key of selection) onPick(String(key));
+          onPicked(
+            selection === 'all' ? choices.map(({ key }) => key) : [...selection].map(String),
+          );
         }}
         renderEmptyState={() => <p className="quiet">{words.look.nothingFound}</p>}
       >

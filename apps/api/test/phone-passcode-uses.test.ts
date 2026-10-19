@@ -215,6 +215,7 @@ describe('who may report one', () => {
         [logged('SESSION_AS_MONITOR', null), 'personId'],
         [logged('TEMPORARY_SESSION', null), 'personId'],
         [logged('WRONG_TRY', sam.userId), 'personId'],
+        [logged('SIGN_IN_UNLOCK', sam.userId), 'personId'],
         [logged('MONITOR_SWITCH', sam.monitorNumber), 'personId'],
         // The phone's instant is a UTC instant; its offset travels beside it.
         [logged('WRONG_TRY', null, { loggedAt: '2026-10-12T13:00:00-04:00' }), 'loggedAt'],
@@ -474,6 +475,43 @@ describe('a wrong try at the passcode on a phone', () => {
         expect((await answered(served, token, one)).said).toEqual(['ALREADY_SAVED', null]);
       }
       expect(await written(tx, phone)).toEqual([6, 0, 1]);
+    });
+  });
+});
+
+describe('the sign-in screen unlocked on a phone', () => {
+  it('AC-11-23, AC-02-40, ADR-576 the tower’s sign-in screen, locked after ten wrong tries against its login list, unlocked with the master passcode at 13:00 with no connection: reported at 13:05 with Tariq signed in, it is one use of the master passcode about nobody at the phone’s own time, written as the master passcode’s actor; it ends no session and counts no try', async () => {
+    await world(async (served, tx) => {
+      const { phone, tariq, logged } = await theTowersPhone(served, tx);
+      served.clock.at = mondayAfternoon;
+      const token = await provenBoth(served, phone);
+      const tariqs = (await signedIn(served, token, tariq)).token;
+      const sent = logged('SIGN_IN_UNLOCK', null);
+      const { said: first, requestId } = await served
+        .ask('POST', reportPasscodeUseEndpoint.path, {
+          payload: sent,
+          bearer: token,
+          monitorSession: tariqs,
+        })
+        .then((answer) => {
+          expect(told(answer)).toEqual([200, undefined]);
+          const read = passcodeUseAnswerSchema.parse(answer.body);
+          return { said: [read.answer, read.reason], requestId: answer.requestId };
+        });
+      expect(first).toEqual(['SAVED', null]);
+      expect(await events(tx, requestId)).toEqual([
+        ['MASTER_PASSCODE_USE', null, phone.id, '2026-10-12T17:00:00.000Z', offset, null],
+      ]);
+      expect(await audited(tx, requestId)).toEqual([
+        ['security_event', 'INSERT', masterPasscodeActorId, 'DEVICE', phone.id],
+      ]);
+      const on = await served.ask('GET', '/phones/current/monitor', {
+        bearer: token,
+        monitorSession: tariqs,
+      });
+      expect(told(on)).toEqual([200, undefined]);
+      expect(await tx.masterPasscodeTries.count()).toBe(0);
+      expect(await written(tx, phone)).toEqual([1, 0, 1]);
     });
   });
 });
