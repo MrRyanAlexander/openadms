@@ -12,5 +12,9 @@
     "allowImportingTsExtensions": true
   },
   "include": ["src", "src/**/*.json"],
-  "references": [{ "path": "../../packages/contracts" }, { "path": "../../packages/domain" }]
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/receipts" }
+  ]
 }

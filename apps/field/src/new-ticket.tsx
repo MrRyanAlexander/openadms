@@ -25,6 +25,9 @@
 //   ADR-421; C96). A number this phone already holds for the same kind of field event (the same
 //   barcode scanned twice at a tower, `adms-exceptions` Scenario A), or a control ticket outside
 //   the project's ranges, is questioned, never refused (ADR-031, 052).
+// - **Scanned by a keyboard-style scanner or the camera** (task 3.6.3, ADR-596; `scan.tsx`): the
+//   badge and the number alike; the ticket's number's field opens no keyboard on a phone, so one
+//   typed by hand goes through "The barcode won't read", with its reason (Q-105).
 //
 // Nothing here waits on the server (ADR-030; AC-11-05): the lists are read again only where there
 // is signal.
@@ -32,18 +35,12 @@ import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contrac
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { Step, TruckFacts, TypeAgain } from './capture.tsx';
-import {
-  Banner,
-  Button,
-  ListPicker,
-  NumberKeypad,
-  ScanField,
-  type Standing,
-} from './look/index.ts';
+import { Banner, Button, ListPicker, NumberKeypad, type Standing } from './look/index.ts';
 import type { HeldLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
 import type { Fix, NumberFrom, NumberSaid, PhoneTicket, Workflow } from './phone/tickets.ts';
 import type { CaptureParts, CapturedKind } from './ticket-capture.tsx';
+import { ScanEntry } from './scan.tsx';
 import { unitRateStepsAtNew } from './unit-rate.tsx';
 import { listsRead, say, timeOfDay, words } from './words.ts';
 
@@ -426,15 +423,13 @@ export function NewTicket({
           {unitRate ? said.badge.crewStart : said.badge.start}
         </Button>,
         <>
-          <ScanField
+          <ScanEntry
+            camera={parts.camera}
             label={said.badge.label}
             value={badge}
             onChange={setBadge}
-            onScan={() => {
-              document.querySelector<HTMLInputElement>('.scan-field input')?.focus();
-            }}
-            onEnter={() => {
-              badged();
+            onEnter={(value) => {
+              badged(value.trim());
             }}
           />
           {known ? <TruckFacts certNumber={certNumber} lists={lists} /> : null}
@@ -549,16 +544,15 @@ export function NewTicket({
             {said.number.wontRead}
           </Button>
         </>,
-        <ScanField
+        <ScanEntry
+          camera={parts.camera}
           label={scanWords.label}
           value={scanned}
           onChange={setScanned}
-          onScan={() => {
-            document.querySelector<HTMLInputElement>('.scan-field input')?.focus();
-          }}
-          onEnter={() => {
-            if (scanned.trim() !== '')
-              take({ number: scanned.trim(), from: 'SCANNED', reasonId: null });
+          keyboard={false}
+          onEnter={(value) => {
+            if (value.trim() !== '')
+              take({ number: value.trim(), from: 'SCANNED', reasonId: null });
           }}
         />,
       );

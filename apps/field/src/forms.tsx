@@ -40,16 +40,9 @@ import {
   TypeAgain,
   typedAddressChange,
 } from './capture.tsx';
-import {
-  Banner,
-  Button,
-  ListPicker,
-  ScanField,
-  StatusStrip,
-  TextEntry,
-  type Standing,
-} from './look/index.ts';
+import { Banner, Button, ListPicker, StatusStrip, TextEntry, type Standing } from './look/index.ts';
 import { TakePhoto } from './camera.tsx';
+import { ScanEntry } from './scan.tsx';
 import type { FormDetails, FormKind, OwnAnswer, PhoneForm } from './phone/forms.ts';
 import type { HeldLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
@@ -1049,14 +1042,12 @@ function FillForm({
         >
           {text('certNumber') === null ? said.incident.certNone : words.capture.next}
         </Button>,
-        <ScanField
+        <ScanEntry
+          camera={parts.camera}
           label={said.incident.certLabel}
           value={typed.certNumber}
           onChange={(value) => {
             typing('certNumber')(value.slice(0, numberLongest));
-          }}
-          onScan={() => {
-            document.querySelector<HTMLInputElement>('.scan-field input')?.focus();
           }}
         />,
       );

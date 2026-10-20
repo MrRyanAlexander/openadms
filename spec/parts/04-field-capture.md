@@ -23,7 +23,9 @@ sync (ADR-224). The phone never refuses honest work; every problem is flagged la
    (ADR-186). **Then the number**: the control ticket scanned, or the phone's next generated number,
    which **opens the ticket at once, never typed again** (the user, ADR-589); the number is **typed
    again by hand** to confirm only where a person copied it off pre-printed stock (one typed because
-   the barcode won't read), never after a scan (the user, ADR-571, 573, amending ADR-209). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
+   the barcode won't read), never after a scan (the user, ADR-571, 573, amending ADR-209). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). **A scan is by
+   the camera or a keyboard-style scanner**, the same wherever a number is scanned; the ticket's
+   number's field opens no keyboard, so a number typed by hand is the flagged one (ADR-596). The
    field event waits in the phone's **open list** while the truck loads: the monitor leaves it at
    any step and comes back to finish it, and a phone holds several, **never two for one truck**
    (the user, ADR-571).
@@ -33,7 +35,12 @@ sync (ADR-224). The phone never refuses honest work; every problem is flagged la
    gallery, fingerprinted when taken, at most 8 per ticket, at any step while the ticket is open; the
    review shows them (ADR-101, 157, 571).
 3. **Complete: the details**, picked **by name, never a code or a rate** (ADR-207).
-4. **Submit**: the review, then **the receipt prints**, on every project (ADR-102, 115).
+4. **Submit**: the review, then **the receipt prints**, on every project (ADR-102, 115): one receipt
+   content model, to ZPL for the Zebra and PDF, its barcode Code 128 of the bare number; **never a
+   record**, so it prints again from home at any time while the phone holds the ticket, and nothing
+   is written, sent or counted (ADR-595). **Anything printed scans back**: home's "Scan a
+   barcode" says whether this phone holds the ticket or certification, never fetching it (Q-95,
+   ADR-596).
 
 A field event started by mistake can be **cancelled**; it stays on the phone, unsynced (ADR-056). **Once
 submitted it is sealed for the monitor**: no reopen and no edit, even to undo a mistake; the back

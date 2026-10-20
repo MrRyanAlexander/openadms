@@ -5662,3 +5662,8 @@ is tried on). **Read the one you need before you write a test or a migration the
 | `apps/worker`, the job queue, what queues work | `worker-tests.md` |
 | `apps/field`, its browser end-to-end tests, the field app's page and its headers | `browser-tests.md` (ADR-564, 565) |
 
+## Moved 2026-10-20 (ADR-596): `SUMMARY.md` §4, "Open questions and approvals": what was already answered, word for word
+
+- **The Phase 2 audit's three questions are answered** (the user, 2026-10-17; ADR-551): the two new flags kept as worded; enrolment takes the master passcode alone (a second thing: not now); the firm types its own master passcode, never a generated one.
+
+From the end of "Phase 3's opening, the agent defaults (ADR-557, 558, 560)": (The ticket number entered twice and the Build 1 board's open designs: answered, ADR-573.)

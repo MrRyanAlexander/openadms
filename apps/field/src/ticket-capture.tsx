@@ -12,9 +12,12 @@
 //   never sent: ADR-056). **A load turned away at a tower gets nothing** (ADR-155; AC-04-44): its
 //   disposal, opened at New, is cancelled, and no other record is made.
 // - **Submitted, sealed for the monitor** (ADR-477): the next ticket, or a split's next property
-//   or pile under the same number (adms-field-app §4A.3). **On a control-ticket project the tower
-//   may write the load call, the monitor's name and the truck on the back of the driver's
-//   ticket** (ADR-115; REQ-321), as the screen says until the receipt prints (task 3.6.2).
+//   or pile under the same number (adms-field-app §4A.3). **Its receipt prints as it is
+//   submitted** (task 3.6.2, ADR-595; AC-04-97): its copies through the phone's printer, said on
+//   the screen with "Print the receipt again"; a collection from a control ticket prints none (the
+//   ticket handed over, its stub kept). **On a control-ticket project the tower may instead write
+//   the load call, the monitor's name and the truck on the back of the driver's ticket** (ADR-115;
+//   REQ-321), as the screen says.
 import type { PhoneAssignmentAnswer } from '@open-adms/contracts';
 import { SiteArea, ticketPhotosAtMost, type SiteAreaHeld } from '@open-adms/domain';
 import { useState, type ReactNode } from 'react';
@@ -31,7 +34,9 @@ import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
 import type { AddressLookup, Locator } from './phone/place.ts';
 import type { PhoneTickets, PhoneTicket } from './phone/tickets.ts';
+import { ticketReceipt, type Printed, type ReceiptPrinter } from './phone/printing.ts';
 import { workOfKind } from './phone/works.ts';
+import { printed, ReceiptPrinted } from './printing.tsx';
 import { CompleteDisposal, CompleteHaulOut } from './tower.tsx';
 import { CompleteUnitRate } from './unit-rate.tsx';
 import { counted, say, timeOfDay, words } from './words.ts';
@@ -50,6 +55,8 @@ export interface CaptureParts {
   readonly lookup: AddressLookup;
   // The camera, opened only when a photograph is taken (task 3.6.1, ADR-586).
   readonly camera: Camera;
+  // The phone's printer, which every submit prints its receipt on (task 3.6.2, ADR-595).
+  readonly printer: ReceiptPrinter;
   readonly waypointsAtMost: number;
 }
 
@@ -108,7 +115,13 @@ export function TicketCapture({
 }) {
   const [at, setAt] = useState<Capturing>(start);
   const [lists, setLists] = useState(held);
+  const [print, setPrint] = useState<Printed | null>(null);
   const ticket = 'id' in at ? parts.tickets.ticket(at.id) : undefined;
+  const receiptOf = (of: PhoneTicket) =>
+    ticketReceipt(of, lists.lists, assignment.project.name, {
+      name: signedIn.name,
+      monitorNumber: signedIn.monitorNumber,
+    });
 
   switch (at.at) {
     case 'new':
@@ -170,7 +183,16 @@ export function TicketCapture({
             setAt({ at: 'photo', id: ticket.id, photoId, from: 'complete' });
           }}
           onSubmitted={() => {
+            // Its receipt prints as it is submitted, its copies (none for a control ticket's
+            // collection): said, never waited on.
+            const submitted = parts.tickets.ticket(ticket.id);
+            setPrint(null);
             setAt({ at: 'submitted', id: ticket.id });
+            if (submitted === undefined) return;
+            const receipt = receiptOf(submitted);
+            if (receipt.copies.length > 0) {
+              void printed(parts.printer, receipt, receipt.copies).then(setPrint);
+            }
           }}
           onLeave={onHome}
           below={after}
@@ -247,6 +269,12 @@ export function TicketCapture({
               <p>{say(said.submitted.saved, { number: ticket.ticketNumber })}</p>
             </Banner>
             <p className="quiet">{said.submitted.sealed}</p>
+            <ReceiptPrinted
+              key={ticket.id}
+              printer={parts.printer}
+              receipt={receiptOf(ticket)}
+              first={print}
+            />
             {kind === 'DISPOSAL' && onPaper ? <p>{said.submitted.onTheBack}</p> : null}
           </div>
           <div className="screen-actions">

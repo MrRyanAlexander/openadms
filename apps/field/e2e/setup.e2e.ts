@@ -159,6 +159,8 @@ test('REQ-311a, AC-02-38, AC-11-24, AC-11-25, AC-11-23, AC-11-63: Jo Kim created
     '/phones/current/setup-choices',
     '/phones/:id/proofs',
   ]);
+  // Its answer is read after the request is seen (`recorded`): waited for, never read early.
+  await expect.poll(() => at(asked, '/phones/current/sign-ins').at(-1)?.answer).toBeDefined();
   const signIn = at(asked, '/phones/current/sign-ins').at(-1);
   expect((signIn?.answer as { assignment: { id: string } }).assignment.id).toBe(
     (report?.body as { id: string }).id,

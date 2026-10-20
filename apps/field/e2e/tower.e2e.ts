@@ -455,13 +455,18 @@ test('AC-04-38, AC-11-41, AC-11-88, C182, C118, REQ-305, REQ-124f, AC-05-10: Lee
     fieldEvent: { ticketNumber: '101050', loadCall: 80, scaleReceiptId: receiptId },
   });
   expect(moved.answers).toEqual(['SAVED', 'SAVED', 'SAVED']);
+  // Its answer is read after the request is seen (`recorded`): waited for, never read early.
+  await expect.poll(() => at(asked, '/phones/current/lists').at(-1)?.answer).toBeDefined();
   const read = at(asked, '/phones/current/lists').at(-1)?.answer as {
     lists: { quantityLookup: { asks: string }[] };
   };
   expect(read.lists.quantityLookup.map(({ asks }) => asks)).toContain('SCALE_WEIGHT');
 
   // A load of Vegetative to FDS on Coastline's 730416: the scale weight, never a load call; the
-  // tandem's second disposal points at the receipt copied with the first.
+  // tandem's second disposal points at the receipt copied with the first. What these three
+  // submits send is read from every sync after this point: a sync the phone runs on its own may
+  // carry the first before "Sync now" is pressed.
+  const beforeWeighed = syncs(asked).length;
   await begun(page, english.home.start.disposal, '730416', '101051');
   await page.getByRole('button', { name: said.open.complete }).click();
   await page.getByRole('option', { name: 'Vegetative to FDS', exact: true }).click();
@@ -497,8 +502,15 @@ test('AC-04-38, AC-11-41, AC-11-88, C182, C118, REQ-305, REQ-124f, AC-05-10: Lee
   await page.getByRole('button', { name: said.next }).click();
   await submitted(page, '201004', ['Mulch', 'CCL-51207 · 24 tons']);
 
-  const second = await syncedNow(page, asked);
-  const weighed = sentSince(asked, second);
+  await syncedNow(page, asked);
+  await expect
+    .poll(() =>
+      syncs(asked)
+        .slice(beforeWeighed)
+        .every(({ answer }) => answer !== undefined),
+    )
+    .toBe(true);
+  const weighed = sentSince(asked, beforeWeighed);
   const events = weighed.records.flatMap((record) =>
     record.record === 'FIELD_EVENT' ? [record.fieldEvent] : [],
   );

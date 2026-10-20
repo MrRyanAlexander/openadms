@@ -136,8 +136,10 @@ test('AC-11-12, AC-02-07: the token is kept in the keyring alone, never the web 
 
   // The Monitor ID the server issued, which is their username (its body is read after the screen
   // may already show it).
-  await expect.poll(() => after[3]?.answer).toBeDefined();
-  const created = after[3]?.answer as { monitorNumber: string; name: string };
+  // Polled on the requests as they are now: `toApi` copies each, so a copy made before the answer
+  // came never gets it.
+  await expect.poll(() => toApi(asked).slice(from)[3]?.answer).toBeDefined();
+  const created = toApi(asked).slice(from)[3]?.answer as { monitorNumber: string; name: string };
   expect(created.monitorNumber).toMatch(/^M\d{6,}$/);
   await expect(
     page.getByText(

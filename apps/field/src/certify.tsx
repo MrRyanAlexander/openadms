@@ -22,7 +22,8 @@
 //   assigned with them (ADR-294; AC-03-36); the representatives' names. A modified truck's
 //   certification names the one it replaces, and why (ADR-082).
 // - The review, every value once; **sealed at submit** (ADR-477). Submitted, the number to write
-//   on the placard and the badge is shown again.
+//   on the placard and the badge is shown again, and **its itemised receipt prints** (task 3.6.2,
+//   ADR-595), the driver's or the crew's, with "Print the receipt again".
 //
 // Nothing here waits on the server (ADR-030), and nothing is refused over eligibility (ADR-052):
 // what the server's own rules refuse is answered at the sync, shown with its words and kept.
@@ -64,6 +65,8 @@ import {
 } from './phone/certifications.ts';
 import type { HeldLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
+import { certificationReceipt, type Printed } from './phone/printing.ts';
+import { printed, ReceiptPrinted } from './printing.tsx';
 import type { CaptureParts } from './ticket-capture.tsx';
 import { say, timeOfDay, words } from './words.ts';
 
@@ -160,7 +163,13 @@ export function CertificationCapture({
   readonly after?: ReactNode;
 }) {
   const [at, setAt] = useState<Certifying>(start);
+  const [print, setPrint] = useState<Printed | null>(null);
   const certification = 'id' in at ? parts.certifications.certification(at.id) : undefined;
+  const receiptOf = (of: PhoneCertification) =>
+    certificationReceipt(of, held.lists, assignment.project.name, {
+      name: signedIn.name,
+      monitorNumber: signedIn.monitorNumber,
+    });
 
   switch (at.at) {
     case 'new':
@@ -194,7 +203,13 @@ export function CertificationCapture({
             setAt({ at: 'photo', id: certification.id, photoId });
           }}
           onSubmitted={() => {
+            // Its itemised receipt prints as it is submitted: said, never waited on.
+            const submitted = parts.certifications.certification(certification.id);
+            setPrint(null);
             setAt({ at: 'submitted', id: certification.id });
+            if (submitted === undefined) return;
+            const receipt = receiptOf(submitted);
+            void printed(parts.printer, receipt, receipt.copies).then(setPrint);
           }}
           onLeave={onHome}
           below={after}
@@ -264,6 +279,12 @@ export function CertificationCapture({
               )}
             </dl>
             <p>{say(said.submitted.placard, { number: certification.certNumber })}</p>
+            <ReceiptPrinted
+              key={certification.id}
+              printer={parts.printer}
+              receipt={receiptOf(certification)}
+              first={print}
+            />
             <p className="quiet">{said.submitted.sealed}</p>
           </div>
           <div className="screen-actions">

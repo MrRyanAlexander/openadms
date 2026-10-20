@@ -8,6 +8,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import * as domain from '@open-adms/domain';
+import * as receipts from '@open-adms/receipts';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
@@ -82,7 +83,7 @@ function shipped(name: string, from: string, found = new Map<string, string>()) 
 }
 
 describe('the field app holds', () => {
-  it('AC-11-69: no outside SDK: what it ships is React, React Aria, @noble/hashes (the login list’s slow hashes, ADR-575), the two workspaces of the rules and the payloads, and what they bring', () => {
+  it('AC-11-69: no outside SDK: what it ships is React, React Aria, @noble/hashes (the login list’s slow hashes, ADR-575), the three workspaces of the rules, the payloads and the receipts (ADR-595), and what they bring', () => {
     const manifest = JSON.parse(readFileSync(join(field, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
@@ -90,6 +91,7 @@ describe('the field app holds', () => {
       '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@open-adms/receipts',
       'react',
       'react-aria-components',
       'react-dom',
@@ -103,6 +105,7 @@ describe('the field app holds', () => {
       '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@open-adms/receipts',
       '@react-types/shared',
       '@swc/helpers',
       'aria-hidden',
@@ -121,7 +124,7 @@ describe('the field app holds', () => {
     ]);
   });
 
-  it('AC-11-06: no rule of its own: it imports only React, React Aria, @noble/hashes’ Argon2id, HMAC and SHA-256, the rules, the payloads and its own files, and declares no name the rules use', () => {
+  it('AC-11-06: no rule of its own: it imports only React, React Aria, @noble/hashes’ Argon2id, HMAC and SHA-256, the rules, the payloads, the receipts and its own files, and declares no name the rules or the receipts use', () => {
     const allowed = [
       '@noble/hashes/argon2.js',
       '@noble/hashes/hmac.js',
@@ -131,8 +134,10 @@ describe('the field app holds', () => {
       'react-aria-components',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@open-adms/receipts',
     ];
-    const rules = new Set(Object.keys(domain));
+    // The receipts' names too: what a receipt says is its package's, never the app's (ADR-595).
+    const rules = new Set([...Object.keys(domain), ...Object.keys(receipts)]);
     expect(rules.size).toBeGreaterThan(100);
     for (const { path, file } of modules) {
       const { imported, declared } = namesIn(file);

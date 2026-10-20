@@ -31,6 +31,7 @@
     "openapi": "pnpm generate && tsc --build && node apps/api/src/openapi.ts && prettier --write apps/api/openapi.json",
     "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
     "e2e": "pnpm generate && tsc --build && pnpm --filter @open-adms/field e2e",
+    "field:control-tickets": "pnpm generate && tsc --build && pnpm --filter @open-adms/field control-tickets",
     "field:try": "pnpm generate && tsc --build && pnpm --filter @open-adms/field try",
     "clean": "tsc --build --clean"
   },
@@ -41,7 +42,7 @@
     "prettier": "3.9.8",
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.1",
-    "vite": "8.3.0",
+    "vite": "8.3.3",
     "vitest": "5.0.1"
   },
   "prettier": {

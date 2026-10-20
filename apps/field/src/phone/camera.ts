@@ -12,6 +12,9 @@
 //   source (AC-11-61). The photograph is the frame at its full size, encoded once by the browser:
 //   the original, fingerprinted as it is (`photographs.ts`). The iPhone and Android builds take
 //   it through the platform's own camera (tasks 3.8.2, 3.9.1).
+// - **Scanning** (task 3.6.3, ADR-596): the same camera, opened when "Scan" is pressed, gives what
+//   it sees as pixels (`seen`) for the phone's own barcode reader (`scanning.ts`), and is let go as
+//   soon as a barcode reads or the camera is put away. Nothing of a scan is kept.
 
 // What opening the camera came to: a live view, the camera refused, or none to open.
 export type CameraOpened =
@@ -19,9 +22,17 @@ export type CameraOpened =
   | { readonly kind: 'refused' }
   | { readonly kind: 'none' };
 
-// The camera, open: what it sees, drawn; the photograph taken; let go.
+// What the camera sees now, as pixels: four bytes each (red, green, blue, opacity), row by row.
+export interface Frame {
+  readonly width: number;
+  readonly height: number;
+  readonly data: ArrayLike<number>;
+}
+
+// The camera, open: what it sees, drawn or as pixels; the photograph taken; let go.
 export interface CameraView {
   drawOn(canvas: HTMLCanvasElement, most: number): void;
+  seen(most: number): Frame | undefined;
   taken(): Promise<Uint8Array | undefined>;
   closed(): void;
 }
@@ -69,6 +80,8 @@ export class BrowserCamera implements Camera {
 class BrowserCameraView implements CameraView {
   private readonly stream: MediaStream;
   private readonly video: HTMLVideoElement;
+  // Where a scan's frame is drawn to be read, never shown.
+  private readonly pixels = document.createElement('canvas');
 
   constructor(stream: MediaStream, video: HTMLVideoElement) {
     this.stream = stream;
@@ -85,6 +98,21 @@ class BrowserCameraView implements CameraView {
     if (canvas.width !== drawnWidth) canvas.width = drawnWidth;
     if (canvas.height !== drawnHeight) canvas.height = drawnHeight;
     canvas.getContext('2d')?.drawImage(this.video, 0, 0, drawnWidth, drawnHeight);
+  }
+
+  // What the camera sees now as pixels, at most `most` on its longer side: what a scan reads.
+  seen(most: number): Frame | undefined {
+    const { videoWidth: width, videoHeight: height } = this.video;
+    if (width === 0 || height === 0) return undefined;
+    const scale = Math.min(1, most / Math.max(width, height));
+    const drawnWidth = Math.max(1, Math.round(width * scale));
+    const drawnHeight = Math.max(1, Math.round(height * scale));
+    if (this.pixels.width !== drawnWidth) this.pixels.width = drawnWidth;
+    if (this.pixels.height !== drawnHeight) this.pixels.height = drawnHeight;
+    const drawn = this.pixels.getContext('2d', { willReadFrequently: true });
+    if (drawn === null) return undefined;
+    drawn.drawImage(this.video, 0, 0, drawnWidth, drawnHeight);
+    return drawn.getImageData(0, 0, drawnWidth, drawnHeight);
   }
 
   // The frame showing now at its full size, as the browser encodes a photograph.

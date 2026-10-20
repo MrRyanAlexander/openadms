@@ -274,6 +274,30 @@ export class PhoneCertifications {
     return this.certifications.filter((one) => one.monitorId === monitorId && one.state === 'OPEN');
   }
 
+  // A monitor's submitted certifications on a project, the newest first: what home prints again
+  // (task 3.6.2, ADR-595), while the phone holds them.
+  submittedOf(monitorId: string, projectId: string): readonly PhoneCertification[] {
+    return this.certifications
+      .filter(
+        (one) =>
+          one.monitorId === monitorId && one.projectId === projectId && one.state === 'SUBMITTED',
+      )
+      .sort((one, other) => (other.closedAt ?? '').localeCompare(one.closedAt ?? ''));
+  }
+
+  // A monitor's certifications on a project under a cert number, whatever became of them: what a
+  // scan of a certification's receipt finds (task 3.6.3, ADR-596).
+  numbered(
+    monitorId: string,
+    projectId: string,
+    certNumber: string,
+  ): readonly PhoneCertification[] {
+    return this.certifications.filter(
+      (one) =>
+        one.monitorId === monitorId && one.projectId === projectId && one.certNumber === certNumber,
+    );
+  }
+
   certification(id: string): PhoneCertification | undefined {
     return this.certifications.find((one) => one.id === id);
   }

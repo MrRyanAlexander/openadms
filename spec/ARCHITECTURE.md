@@ -1104,6 +1104,21 @@ test suite that any client, including the scenario harness, must pass.
 - A **printable test set** of control tickets with real, scannable barcodes is a deliverable, so
   scanning is tested against paper (user, Build 1).
 
+✅ **Built (task 3.6.2, ADR-595; agent defaults where the bullets above don't say):** the content
+model, its ZPL and its PDF and Code 128 are written in `packages/receipts`, with no dependency (each
+bar drawn from the one encoder, in the PDF and the ZPL alike, never left to the printer's own); the
+browser build prints at submit to a PDF the browser saves, and again from home; a collection from a
+control ticket prints none; the ZPL is for a ZQ620's 576 dots at 203 dpi until a printer is asked
+(3.8.3); `pnpm field:control-tickets` writes the test set.
+
+✅ **Built (task 3.6.3, ADR-596; agent defaults where the bullets above don't say):** the browser
+build scans wherever a number is scanned by a keyboard-style scanner (into the scan field, or from
+anywhere on the screen outside another field) or by the camera, its frames read by
+`packages/receipts`' own Code 128 reader (`Code128.readRow`, no dependency and no
+`BarcodeDetector`), two lines across or down the view agreeing before a number is taken; the
+ticket's number's field opens no keyboard, so a typed one is the flagged "won't read" path; home's
+"Scan a barcode" says what the phone holds under the number, never asking the server.
+
 **Section status:** ✅ Approved 2026-09-25 (ADR-104)
 
 ---
@@ -1236,6 +1251,7 @@ packages/
   db/             Prisma schema folder, migrations, hardening SQL (§5.6), seed data
   domain/         the rules as classes: capacity, volume, pricing, time, numbering (shared by phone and server)
   contracts/      Zod schemas for every API and sync payload; generated OpenAPI
+  receipts/       the receipt content model, to ZPL and PDF, Code 128; the control-ticket test set (ADR-595)
   scenarios/      the scenario harness and the golden mission
 infra/local/      docker compose, Caddy
 tools/setup/      the installer (local + demo deploy)
@@ -1244,6 +1260,7 @@ tools/setup/      the installer (local + demo deploy)
 Each package has one owner and one direction of dependency:
 - `domain` depends on nothing.
 - `contracts` depends on `domain`.
+- `receipts` depends on `domain` (a certification's capacity) and on nothing else (ADR-595).
 - The apps depend on both.
 - **Only `db` and the two server apps touch Postgres.**
 

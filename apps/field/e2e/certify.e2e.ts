@@ -18,6 +18,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
 import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
+import { printedPages } from './receipt-read.ts';
 import { worldCast, worldOrigin } from './world.ts';
 
 const said = english.certify;
@@ -299,10 +300,31 @@ test('AC-11-42, AC-03-14, AC-03-36, AC-03-09, AC-11-82, REQ-322, C118, C129: Jo 
     await expect(page.locator('.facts').getByText(value, { exact: true })).toBeVisible();
   }
   await checkScreen(page);
+  // Submitted, its itemised receipt prints (task 3.6.2, ADR-595): the driver's copy, each box as
+  // measured and the capacity worked out, its barcode the cert number.
+  const receipt = page.waitForEvent('download');
   await page.getByRole('button', { name: said.review.submit }).click();
   await expect(heading(page)).toHaveText(filled(said.submitted.title, { number }));
   await expect(page.getByText(filled(said.submitted.placard, { number }))).toBeVisible();
   await expect(page.getByText(filled(said.cy, { capacity: '65' }))).toBeVisible();
+  const printed = await printedPages(await receipt);
+  expect(printed.name).toBe(`receipt-${number}.pdf`);
+  expect(printed.pages).toHaveLength(1);
+  expect(printed.pages[0]?.barcode).toBe(number);
+  const words = printed.pages[0]?.words.join(' ') ?? '';
+  for (const line of [
+    'Certification',
+    'Driver’s copy',
+    `Certification ${number}`,
+    'Capacity: 65 CY',
+    'Contractor: Rivera Trucking for Coastline Haulers LLC',
+    'Vehicle: Hydraulic Dump Trailer',
+    'Main box:',
+    'Helpers: Lee Morgan',
+  ]) {
+    expect(words).toContain(line);
+  }
+  expect(words).not.toContain('R160');
   await checkScreen(page);
   await page.getByRole('button', { name: said.submitted.home }).click();
   await expect(heading(page)).toHaveText(english.home.title);

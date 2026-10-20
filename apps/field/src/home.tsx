@@ -9,6 +9,12 @@
 // AC-11-80), nothing ranked or compared; **the open tickets**, each by its truck and number, opened
 // where it was left (AC-11-75); and a word when fewer than two days' worth of ticket numbers are
 // left (ADR-065).
+//
+// Task 3.6.2 (ADR-595): **"Print a receipt again"**, once the monitor has submitted anything on the
+// project on this phone: a receipt prints again at any time, and nothing is recorded of it.
+//
+// Task 3.6.3 (ADR-596): **"Scan a barcode"**, once the phone holds the project's lists: anything
+// printed scans back, and the phone says what it holds under the number (`scan.tsx`).
 import type { ReactNode } from 'react';
 
 import { Banner, Button, ListRow, StatusStrip, type Standing } from './look/index.ts';
@@ -35,6 +41,8 @@ export function Home({
   open = [],
   onOpen,
   numbersLow = false,
+  onReceipts,
+  onScanBack,
   children,
   after,
 }: {
@@ -51,6 +59,10 @@ export function Home({
   readonly open?: readonly OpenRow[];
   readonly onOpen?: (id: string) => void;
   readonly numbersLow?: boolean;
+  // Where the monitor has submitted anything here: its receipts printed again.
+  readonly onReceipts?: () => void;
+  // Where the phone holds the project's lists: a number scanned back.
+  readonly onScanBack?: () => void;
   // Anything the screen shows below the assignment, and below the work's buttons.
   readonly children?: ReactNode;
   readonly after?: ReactNode;
@@ -93,6 +105,16 @@ export function Home({
               ))}
             </ul>
           </section>
+        )}
+        {onReceipts === undefined ? null : (
+          <Button wide onPress={onReceipts}>
+            {words.printing.home}
+          </Button>
+        )}
+        {onScanBack === undefined ? null : (
+          <Button wide onPress={onScanBack}>
+            {words.scanning.home}
+          </Button>
         )}
         {children}
       </div>

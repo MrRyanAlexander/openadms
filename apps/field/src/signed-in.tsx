@@ -39,7 +39,11 @@
 // home starts a disposal, a haul-out's collection and a haul-out's disposal the same way. Task
 // 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew, and where its
 // work is photographed by stage, the next stage to do (ADR-590). Task 3.5.5
-// (ADR-585): certifying, an open certification named by its number.
+// (ADR-585): certifying, an open certification named by its number. Task 3.6.2 (ADR-595): home
+// prints any receipt again, of the monitor's tickets and certifications submitted on the project
+// on this phone, and nothing is recorded of it. Task 3.6.3 (ADR-596): home's "Scan a barcode"
+// says what the phone holds of the monitor's under a number scanned back, and nothing is recorded
+// of it either.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -52,6 +56,10 @@ import { FormCapture, formBegun, formStarted, formTitle, type Filling } from './
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
 import { Move } from './move.tsx';
+import { certificationReceipt, ticketReceipt } from './phone/printing.ts';
+import { ReceiptsToPrint, type Reprintable } from './printing.tsx';
+import { scannedBack } from './phone/scanning.ts';
+import { ScanBack } from './scan.tsx';
 import type { Ended, SetUpFor } from './phone.tsx';
 import type { Enrolment } from './phone/identity.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
@@ -172,6 +180,8 @@ export function SignedInPhone({
   const [capturing, setCapturing] = useState<Capturing | null>(null);
   const [filling, setFilling] = useState<Filling | null>(null);
   const [certifying, setCertifying] = useState<Certifying | null>(null);
+  const [reprinting, setReprinting] = useState(false);
+  const [scanningBack, setScanningBack] = useState(false);
   const [numbersLow, setNumbersLow] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
@@ -489,9 +499,67 @@ export function SignedInPhone({
     );
   }
 
+  // A receipt printed again (task 3.6.2): the monitor's own, of the assignment's project.
+  if (reprinting && signedIn.assignment !== null && heldNow !== undefined) {
+    const { assignment } = signedIn;
+    const project = assignment.project;
+    const monitor = { name: signedIn.name, monitorNumber: signedIn.monitorNumber };
+    const receipts: Reprintable[] = [
+      ...capture.tickets.submittedOf(signedIn.userId, project.id).map((ticket) => ({
+        id: ticket.id,
+        receipt: ticketReceipt(ticket, heldNow.lists, project.name, monitor),
+        closedAt: ticket.closedAt ?? ticket.startedAt,
+        timeZone: ticket.timeZone,
+      })),
+      ...capture.certifications.submittedOf(signedIn.userId, project.id).map((one) => ({
+        id: one.id,
+        receipt: certificationReceipt(one, heldNow.lists, project.name, monitor),
+        closedAt: one.closedAt ?? one.certifiedAt,
+        timeZone: one.timeZone,
+      })),
+    ].sort((one, other) => other.closedAt.localeCompare(one.closedAt));
+    return (
+      <ReceiptsToPrint
+        printer={capture.printer}
+        standing={standing}
+        receipts={receipts}
+        onBack={() => {
+          setReprinting(false);
+        }}
+        below={warning}
+      />
+    );
+  }
+
+  // A number scanned back (task 3.6.3): what the phone holds of the monitor's under it, on the
+  // assignment's project, never asked of the server.
+  if (scanningBack && signedIn.assignment !== null && heldNow !== undefined) {
+    const projectId = signedIn.assignment.project.id;
+    return (
+      <ScanBack
+        camera={capture.camera}
+        standing={standing}
+        find={(number) =>
+          scannedBack(number, {
+            tickets: capture.tickets.numbered(signedIn.userId, projectId, number),
+            certifications: capture.certifications.numbered(signedIn.userId, projectId, number),
+            lists: heldNow.lists,
+          })
+        }
+        onBack={() => {
+          setScanningBack(false);
+        }}
+        below={warning}
+      />
+    );
+  }
+
   if (place === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
     const { tickets, forms, certifications } = capture;
+    const submitted =
+      tickets.submittedOf(signedIn.userId, assignment.project.id).length > 0 ||
+      certifications.submittedOf(signedIn.userId, assignment.project.id).length > 0;
     const open = tickets
       .openOf(signedIn.userId)
       .filter((ticket) => ticket.projectId === assignment.project.id);
@@ -583,6 +651,20 @@ export function SignedInPhone({
           }
         }}
         numbersLow={numbersLow}
+        {...(submitted && heldNow !== undefined
+          ? {
+              onReceipts: () => {
+                setReprinting(true);
+              },
+            }
+          : {})}
+        {...(heldNow === undefined
+          ? {}
+          : {
+              onScanBack: () => {
+                setScanningBack(true);
+              },
+            })}
         after={bottom}
       >
         <p>{synced}</p>

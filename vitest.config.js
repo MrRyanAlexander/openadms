@@ -24,6 +24,8 @@ export default defineConfig({
     projects: [
       'packages/domain',
       'packages/contracts',
+      // The receipts (ADR-595): the content model, its PDF and ZPL, Code 128; they need nothing.
+      'packages/receipts',
       'tools/setup',
       'tools/security',
       // The chain's one command (ADR-533): how it reads each step and CHAIN.md, needing nothing.

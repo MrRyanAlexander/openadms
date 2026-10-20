@@ -5,7 +5,7 @@
 // worked out by the domain's `Capacity`, never kept or sent; submitted sealed in the outbox as the
 // record the contract carries, its boxes each with the measurements its shape holds and `null` for
 // the rest, a crew's none; its five views after it, one photograph each; a submit cut short
-// finished on opening again. Here over a store in memory; through the screens against the real
+// finished on opening again; found by its number scanned back (BACKLOG 3.6.3, ADR-596). Here over a store in memory; through the screens against the real
 // API, e2e/certify.e2e.ts.
 import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contracts';
 import { describe, expect, it } from 'vitest';
@@ -23,7 +23,7 @@ import { PhoneOutbox } from '../src/phone/outbox.ts';
 import type { Json } from '../src/store/phone-store.ts';
 import { noLists } from './checks.ts';
 import { HeldStore } from './held.ts';
-import { ana, kim, marshRoad, p1 } from './phone-world.ts';
+import { ana, kim, marshRoad, p1, p2 } from './phone-world.ts';
 
 const kimsDay: PhoneAssignmentAnswer = {
   id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d61',
@@ -187,6 +187,18 @@ describe('a certification', () => {
       again.certifications.openOf(kim.id).map(({ id, step, primeId }) => [id, step, primeId]),
     ).toEqual([[made.id, 'subs', coastline]]);
     expect(again.certifications.openOf(ana.id)).toEqual([]);
+  });
+
+  it('AC-11-49 is found by its cert number scanned back, whatever became of it, for its own monitor on its project alone (task 3.6.3, ADR-596)', async () => {
+    const { certifications } = await phone();
+    const made = await certifications.begin(begun());
+    await certifications.cancel(made.id);
+    expect(
+      certifications.numbered(kim.id, p1.id, '730515').map(({ id, state }) => [id, state]),
+    ).toEqual([[made.id, 'CANCELLED']]);
+    expect(certifications.numbered(ana.id, p1.id, '730515')).toEqual([]);
+    expect(certifications.numbered(kim.id, p2.id, '730515')).toEqual([]);
+    expect(certifications.numbered(kim.id, p1.id, '730516')).toEqual([]);
   });
 
   it('AC-11-42 has its capacity worked out by the domain’s Capacity from its boxes, never kept: 730415’s boxes are 65 CY; a crew has none', () => {

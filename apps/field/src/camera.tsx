@@ -17,8 +17,8 @@ const said = words.capture.camera;
 // The live view's longest side, drawn: the photograph itself is the frame at its full size.
 const viewMost = 1200;
 
-// What the camera sees, drawn on a canvas each frame while it is open.
-function Viewfinder({ view }: { readonly view: CameraView }) {
+// What the camera sees, drawn on a canvas each frame while it is open; a scan's too (scan.tsx).
+export function Viewfinder({ view }: { readonly view: CameraView }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     let frame = 0;

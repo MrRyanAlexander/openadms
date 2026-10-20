@@ -304,6 +304,31 @@ export class PhoneTickets {
     );
   }
 
+  // A monitor's submitted tickets on a project, the newest first: what home prints again
+  // (task 3.6.2, ADR-595), while the phone holds them.
+  submittedOf(monitorId: string, projectId: string): readonly PhoneTicket[] {
+    return this.tickets
+      .filter(
+        (ticket) =>
+          ticket.monitorId === monitorId &&
+          ticket.projectId === projectId &&
+          ticket.state === 'SUBMITTED',
+      )
+      .sort((one, other) => (other.closedAt ?? '').localeCompare(one.closedAt ?? ''));
+  }
+
+  // A monitor's field events on a project under a number, whatever became of them, the oldest
+  // first: what a scan of a printed barcode finds (task 3.6.3, ADR-596). The barcode carries the
+  // bare number, so a split's properties are all found.
+  numbered(monitorId: string, projectId: string, number: string): readonly PhoneTicket[] {
+    return this.tickets.filter(
+      (ticket) =>
+        ticket.monitorId === monitorId &&
+        ticket.projectId === projectId &&
+        ticket.ticketNumber === number,
+    );
+  }
+
   // A monitor's cancelled tickets, kept on the phone, never sent.
   cancelledOf(monitorId: string): readonly PhoneTicket[] {
     return this.tickets.filter(

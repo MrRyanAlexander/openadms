@@ -16,6 +16,7 @@ import { PhoneLists } from './phone/lists.ts';
 import { LoginList } from './phone/login-list.ts';
 import { MonitorOnPhone } from './phone/monitor.ts';
 import { PhoneOutbox } from './phone/outbox.ts';
+import { PdfPrinter } from './phone/printing.ts';
 import { PasscodeSessions } from './phone/passcode-sessions.ts';
 import { PasscodeOnPhone } from './phone/passcode.ts';
 import { AddressLookup, BrowserLocator } from './phone/place.ts';
@@ -91,6 +92,8 @@ const phone = BrowserStore.opened().then(async (store) => {
       locator: new BrowserLocator(),
       lookup: new AddressLookup(monitor),
       camera: new BrowserCamera(),
+      // The browser build prints a receipt to a PDF the browser saves (task 3.6.2, ADR-595).
+      printer: new PdfPrinter(),
       waypointsAtMost: policy.fieldEventWaypointsAtMost,
     },
     identity,

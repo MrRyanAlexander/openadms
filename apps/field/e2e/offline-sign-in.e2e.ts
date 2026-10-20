@@ -150,6 +150,10 @@ test('AC-11-21, AC-11-64: the server refuses Ana’s sign-in made with no signal
   });
   await context.setOffline(false);
   await expect(page.getByText(english.phone.offlineRefused)).toBeVisible();
+  // Its answer is read after the request is seen (`recorded`): waited for, never read early.
+  await expect
+    .poll(() => at(asked, '/phones/current/offline-sign-ins').at(-1)?.answer)
+    .toBeDefined();
   expect(at(asked, '/phones/current/offline-sign-ins').at(-1)?.answer).toMatchObject({
     code: 'SIGN_IN_REFUSED',
   });

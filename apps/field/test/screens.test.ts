@@ -52,6 +52,10 @@ describe('AC-11-51: the screens of the field app', () => {
       'session-monitor',
       'phone-locked',
       'phone',
+      // A receipt printed again (task 3.6.2, ADR-595).
+      'receipts',
+      // A number scanned back (task 3.6.3, ADR-596).
+      'scan-back',
       'setup-passcode',
       'setup-project',
       'setup-work',
@@ -150,7 +154,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 53 of 53 screens checked, in 54 checks; 0 found.',
+      '\nAccessibility: 55 of 55 screens checked, in 56 checks; 0 found.',
     );
   });
 

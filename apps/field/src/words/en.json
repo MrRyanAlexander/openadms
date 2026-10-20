@@ -731,7 +731,7 @@
       "title": "Ticket {number} saved",
       "saved": "Ticket {number} is saved on this phone. It goes at the next sync.",
       "sealed": "A submitted ticket can’t be changed on the phone. The back office corrects it if it needs to be.",
-      "onTheBack": "On a paper ticket you may write the load call, your name and the truck on the back of the driver’s ticket.",
+      "onTheBack": "Or, on a paper ticket, write the load call, your name and the truck on the back of the driver’s ticket instead of handing over the printed one.",
       "nextProperty": "Next property of this load ({number}-{suffix})",
       "nextPile": "Next pile of this haul-out ({number}-{suffix})",
       "home": "Home"
@@ -927,6 +927,48 @@
       "home": "Home"
     },
     "photoBack": "Back to the form"
+  },
+  "printing": {
+    "printed": "Receipt printed: {copies}.",
+    "controlTicket": "Hand the driver the control ticket and keep its stub: no receipt prints for it. Print one if the ticket is lost or damaged.",
+    "notPrinted": "The receipt didn’t print. Print it again when the printer is ready.",
+    "again": "Print the receipt again",
+    "print": "Print a receipt",
+    "home": "Print a receipt again",
+    "title": "Print a receipt again",
+    "about": "A receipt prints again as it first printed. Nothing is saved or sent.",
+    "row": "{title} · {number}",
+    "when": "{day} {time}",
+    "printedAgain": "{heading}: printed again ({copies}).",
+    "back": "Back to today’s work"
+  },
+  "scanning": {
+    "camera": {
+      "title": "Scan with the camera",
+      "hold": "Hold the barcode inside the view, straight across it. It is taken as soon as it reads.",
+      "away": "Put the camera away",
+      "opening": "Opening the camera…",
+      "refused": "The camera is turned off for this app. Scan with a scanner or type the number, or turn the camera on for this app in the phone’s settings.",
+      "none": "The camera couldn’t be opened. Scan with a scanner or type the number."
+    },
+    "home": "Scan a barcode",
+    "title": "Scan a barcode",
+    "about": "Scan a receipt, a control ticket or a badge to see whether this phone holds it. Nothing is saved or sent.",
+    "label": "Number scanned",
+    "look": "Look it up",
+    "found": {
+      "ticket": "Ticket {number} is on this phone: {kind}, {state}.",
+      "certification": "Certification {number} is on this phone: {state}.",
+      "inLists": "Certification {number} is in this phone’s lists."
+    },
+    "state": {
+      "OPEN": "open",
+      "SUBMITTING": "submitted",
+      "SUBMITTED": "submitted",
+      "CANCELLED": "cancelled, never sent"
+    },
+    "nothing": "Nothing on this phone has the number {number}.",
+    "back": "Back to today’s work"
   },
   "certify": {
     "cancel": "Cancel this certification",

@@ -169,6 +169,8 @@ test('AC-11-34, C183: a phone holding a record this release can’t read is answ
   await expect(
     page.getByRole('heading', { level: 2, name: english.turnIn.notTurnedIn.title }),
   ).toBeVisible();
+  // Its answer is read after the request is seen (`recorded`): waited for, never read early.
+  await expect.poll(() => at(asked, '/phones/current/turn-ins')[0]?.answer).toBeDefined();
   const [turnIn] = at(asked, '/phones/current/turn-ins');
   const answer = turnIn?.answer as {
     turnedIn: boolean;

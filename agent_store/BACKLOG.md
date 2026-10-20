@@ -316,7 +316,7 @@ time clock → iPhone → Android → prove it.
   stages' screen, home's next stage, the review's large photographs). Two migrations. Loosenings 10
   of 10 caught. What it leaves: a flag for a stage left without its photograph, if the user wants
   one; whether ROE and cert numbers stop being typed again too.
-- [ ] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
+- [x] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
   receipt content model (its package by ADR: the back office's receipt batch reads it too), to PDF
   and ZPL; Code 128 of the bare number; every project prints; reprinted at any time, never
   recorded; the printable control-ticket test set.
@@ -326,9 +326,11 @@ time clock → iPhone → Android → prove it.
   stand until the receipt prints (ADR-115, `ticket-capture.tsx`). Read ARCHITECTURE §12 first; a
   new dependency (PDF, barcode) needs its ADR. **From 2026-10-21, C175** (React 19.3.1 and
   Playwright 1.64.1 read again).
-- [ ] **3.6.3 Scanning** (REQ-315's browser half; AC-11-49): a keyboard-style scanner and the camera
+  ✅ done 2026-10-20 (ADR-595): `packages/receipts` (no dependency), printed at submit and from home, never recorded, `pnpm field:control-tickets`; AC-11-46, 48 and AC-04-97's field app part whole; AC-11-47, 50 browser parts; loosenings 23 of 23; five older browser tests made to wait for a request's answer instead of reading a copy made before it came (no assertion changed). What it leaves: nothing of its own.
+- [x] **3.6.3 Scanning** (REQ-315's browser half; AC-11-49): a keyboard-style scanner and the camera
   where the browser allows; anything printed scans back and an existing ticket says so; a scan
   outside the control ranges questioned.
+  ✅ done 2026-10-20 (ADR-596): one scan box wherever a number is scanned, taking a keyboard-style scanner (from anywhere on the screen) and the camera (our own Code 128 reader, two lines agreeing, no dependency); the ticket number's box opens no keyboard, so a typed number is the flagged "won't read" path; home's "Scan a barcode" (screen 55) says what the phone holds under a number, never asking the server; AC-11-49's browser part; loosenings 21 of 21. What it leaves: nothing of its own.
 
 ### Milestone 3.7 — The time clock (REQ-310; ADR-241)
 - [ ] **3.7.1 The time clock's records** (REQ-310's server half; AC-02-54, 55): the clock's records

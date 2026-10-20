@@ -8,12 +8,14 @@
   "scripts": {
     "build": "tsc --build && vite build",
     "e2e": "tsc --build && vite build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && playwright install --only-shell chromium && playwright test",
+    "control-tickets": "tsc --build && node e2e/control-tickets.ts",
     "try": "tsc --build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && node e2e/try.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "@open-adms/contracts": "workspace:*",
     "@open-adms/domain": "workspace:*",
+    "@open-adms/receipts": "workspace:*",
     "react": "19.3.0",
     "react-aria-components": "1.22.1",
     "react-dom": "19.3.0"
@@ -25,6 +27,6 @@
     "@types/react-dom": "19.3.0",
     "axe-core": "4.14.0",
     "typescript": "6.0.3",
-    "vite": "8.3.0"
+    "vite": "8.3.3"
   }
 }

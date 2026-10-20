@@ -6,20 +6,24 @@
 // two days' worth of numbers, and the first block of each series the work makes numbers of; unit
 // rate work as it goes, and the working crew (BACKLOG 3.5.3; ADR-583); its photographs, each
 // fingerprinted at capture, shrunk, taken again in its place or taken off (BACKLOG 3.6.1;
-// ADR-586). Here
+// ADR-586); and their receipts, printed at submit and again at any time, never recorded (BACKLOG
+// 3.6.2; ADR-595); and what a number scanned back finds on the phone (BACKLOG 3.6.3; ADR-596). Here
 // over a store in memory; through the screens against the real API, e2e/collection.e2e.ts.
 import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contracts';
-import { describe, expect, it } from 'vitest';
+import { Receipts } from '@open-adms/receipts';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PhoneLists } from '../src/phone/lists.ts';
 import type { MonitorOnPhone } from '../src/phone/monitor.ts';
 import { PhoneOutbox } from '../src/phone/outbox.ts';
 import type { PhotoShrink } from '../src/phone/photographs.ts';
+import { PdfPrinter, ticketReceipt } from '../src/phone/printing.ts';
+import { scannedBack } from '../src/phone/scanning.ts';
 import { PhoneTickets, type Begun } from '../src/phone/tickets.ts';
 import type { Json } from '../src/store/phone-store.ts';
 import { noLists } from './checks.ts';
 import { HeldStore } from './held.ts';
-import { ana, p1 } from './phone-world.ts';
+import { ana, hangers, kim, landfill, p1, p2 } from './phone-world.ts';
 
 const collections: PhoneAssignmentAnswer = {
   id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d41',
@@ -688,5 +692,205 @@ describe('the phone’s numbers', () => {
     expect(await tickets.low('LOAD')).toBe(false);
     await tickets.open(begun({ certNumber: '730416', ticketNumber: '101002' }));
     expect(await tickets.low('LOAD')).toBe(true);
+  });
+});
+
+// The lists a receipt names what was recorded from: Coastline's 730415, Vegetative, the landfill,
+// the hanger pay item.
+const coastline = { id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d51', name: 'Coastline Haulers LLC' };
+const printable: PhoneListsRecord = {
+  ...generated,
+  debrisTypes: { LOAD: [{ id: vegetative, name: 'Vegetative' }], HAUL_OUT: [] },
+  certifications: [
+    {
+      id: '0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d52',
+      certNumber: '730415',
+      kind: 'CONTAINER',
+      capacityCy: 65,
+      prime: coastline,
+      firstTierSub: null,
+      secondTierSub: null,
+    },
+  ],
+  sites: [landfill],
+  payItems: [hangers],
+};
+const anaPrints = { name: ana.name, monitorNumber: ana.number };
+
+// A printer whose PDFs are kept here, as the browser would save them.
+function printerKeeping() {
+  const saved: { name: string; bytes: Uint8Array }[] = [];
+  return { saved, printer: new PdfPrinter((name, bytes) => saved.push({ name, bytes })) };
+}
+const pagesIn = (bytes: Uint8Array) =>
+  Buffer.from(bytes)
+    .toString('latin1')
+    .match(/\/Type \/Page /g)?.length ?? 0;
+
+describe('a ticket’s receipt (BACKLOG 3.6.2; ADR-595)', () => {
+  async function submitted(lists: PhoneListsRecord, more: Partial<Begun> = {}) {
+    const held = await phone(lists);
+    const opened = await held.tickets.open(begun(more));
+    await held.tickets.changed(opened.id, {
+      formDebrisTypeId: more.kind === 'UNIT_RATE' ? null : vegetative,
+      address: '14 Heron St',
+      addressSource: 'TYPED',
+    });
+    held.clock.now = new Date('2026-10-19T12:40:00Z');
+    expect(await held.tickets.submit(opened.id, null)).toMatchObject({ kind: 'sealed' });
+    const ticket = held.tickets.ticket(opened.id);
+    if (ticket === undefined) throw new Error('No ticket submitted.');
+    return { ...held, ticket };
+  }
+
+  it('AC-04-97, AC-11-46, AC-11-47: collection 101001 prints its two copies as one PDF named by its bare number, from what the phone holds and the names its lists give', async () => {
+    const { ticket } = await submitted(printable);
+    const receipt = ticketReceipt(ticket, printable, p1.name, anaPrints);
+    expect(receipt.barcode).toBe('101001');
+    expect(Receipts.wordsOf(receipt, 'DRIVER')).toEqual([
+      'Collection',
+      'Driver’s copy',
+      p1.name,
+      'Ticket 101001',
+      '101001',
+      'Truck',
+      'Cert number: 730415',
+      'Capacity: 65 CY',
+      'Contractor: Coastline Haulers LLC',
+      'Load',
+      'Debris type: Vegetative',
+      'Address: 14 Heron St',
+      'Monitor and times',
+      'Monitor: Ana Brooks (M004127)',
+      'Started: Oct 19, 2026, 8:15 AM EDT',
+      'Ended: Oct 19, 2026, 8:40 AM EDT',
+    ]);
+    const { saved, printer } = printerKeeping();
+    expect(await printer.print(receipt, receipt.copies)).toEqual({
+      kind: 'printed',
+      copies: ['DRIVER', 'MONITOR'],
+    });
+    expect(saved.map(({ name }) => name)).toEqual(['receipt-101001.pdf']);
+    expect(Buffer.from(saved[0]?.bytes ?? []).toString('latin1')).toMatch(/^%PDF-1\.4\n/);
+    expect(pagesIn(saved[0]?.bytes ?? new Uint8Array())).toBe(2);
+  });
+
+  it('AC-11-48: printed again the next day it prints as it first did, and writes nothing: no change to the store, nothing more to send', async () => {
+    const { ticket, store, clock, outbox } = await submitted(printable);
+    const waiting = outbox.waiting();
+    const changed = vi.spyOn(store, 'change');
+    const { saved, printer } = printerKeeping();
+    const receipt = ticketReceipt(ticket, printable, p1.name, anaPrints);
+    await printer.print(receipt, receipt.copies);
+    clock.now = new Date('2026-10-20T14:00:00Z');
+    const again = ticketReceipt(ticket, printable, p1.name, anaPrints);
+    await printer.print(again, Receipts.again(again));
+    expect(saved).toHaveLength(2);
+    expect(saved[1]?.bytes).toEqual(saved[0]?.bytes);
+    expect(changed).not.toHaveBeenCalled();
+    expect(outbox.waiting()).toBe(waiting);
+  });
+
+  it('AC-04-97: a collection from a control ticket prints none (the ticket handed over, its stub kept), and prints the driver’s copy again; a disposal from one prints the driver’s (ADR-115)', async () => {
+    const control: PhoneListsRecord = {
+      ...printable,
+      blocks: [],
+      numbering: { ...printable.numbering, ticketNumberSource: 'CONTROL' },
+      controlRanges: [{ series: 'LOAD', firstNumber: 400001, lastNumber: 405000 }],
+    };
+    const { ticket } = await submitted(control, { ticketNumber: '400001', numberFrom: 'SCANNED' });
+    const receipt = ticketReceipt(ticket, control, p1.name, anaPrints);
+    expect(receipt.copies).toEqual([]);
+    expect(Receipts.again(receipt)).toEqual(['DRIVER']);
+    // Typed off a control ticket whose barcode won't read, or a split's next property under it:
+    // still the control ticket's.
+    for (const numberFrom of ['TYPED', 'CHAINED'] as const) {
+      const copied = ticketReceipt({ ...ticket, numberFrom }, control, p1.name, anaPrints);
+      expect(copied.copies, numberFrom).toEqual([]);
+    }
+    const { saved, printer } = printerKeeping();
+    expect(await printer.print(receipt, receipt.copies)).toEqual({ kind: 'printed', copies: [] });
+    expect(saved).toEqual([]);
+    const tower = await submitted(control, {
+      kind: 'DISPOSAL',
+      siteId: landfill.id,
+      ticketNumber: '400001',
+      numberFrom: 'SCANNED',
+    });
+    const disposal = ticketReceipt(tower.ticket, control, p1.name, anaPrints);
+    expect(disposal.copies).toEqual(['DRIVER']);
+    expect(Receipts.wordsOf(disposal, 'DRIVER')).toContain('Site: Bayline County Landfill');
+  });
+
+  it('AC-04-97: a unit rate ticket prints the pay item the phone worked out, by its code, and the payable type by name', async () => {
+    const { tickets } = await phone(printable);
+    const opened = await tickets.open(
+      begun({
+        workflow: 'UNIT_RATE',
+        kind: 'UNIT_RATE',
+        certNumber: '730417',
+        ticketNumber: '301001',
+      }),
+    );
+    const worked = await tickets.changed(opened.id, {
+      payableTypeId: hangers.payableType.id,
+      kindOfWorkId: hangers.kindOfWork.id,
+      payItemId: hangers.id,
+      unitCount: 1,
+    });
+    const receipt = ticketReceipt(worked, printable, p1.name, anaPrints);
+    expect(receipt.copies).toEqual(['CREW']);
+    expect(Receipts.wordsOf(receipt, 'CREW')).toEqual(
+      expect.arrayContaining([
+        'Crew',
+        'Cert number: 730417',
+        'Work: Hangers',
+        'Pay item: HANGERS-RMV-EA',
+        'Count: 1',
+      ]),
+    );
+  });
+});
+
+describe('a number scanned back (BACKLOG 3.6.3; AC-11-49; ADR-596)', () => {
+  it('AC-11-49: finds each of the monitor’s field events on the project under the bare number, whatever became of it, and a certification in the lists; nothing of another monitor’s, another project’s, or a number nothing holds; and writes nothing', async () => {
+    const { tickets, store } = await phone(printable);
+    const first = await tickets.open(begun({ splitSuffix: 'A' }));
+    await tickets.changed(first.id, { formDebrisTypeId: vegetative, estimateCy: 30 });
+    expect(await tickets.submit(first.id, null)).toMatchObject({ kind: 'sealed' });
+    const second = await tickets.open(
+      begun({ splitSuffix: 'B', numberFrom: 'CHAINED', certNumber: '730415' }),
+    );
+    const cancelled = await tickets.open(begun({ ticketNumber: '101002', certNumber: '730499' }));
+    await tickets.cancel(cancelled.id);
+    await tickets.open(begun({ ticketNumber: '101003', certNumber: '730416', monitorId: kim.id }));
+    await tickets.open(begun({ ticketNumber: '101004', certNumber: '730418', projectId: p2.id }));
+    const changed = vi.spyOn(store, 'change');
+    const found = (number: string) =>
+      scannedBack(number, {
+        tickets: tickets.numbered(ana.id, p1.id, number.trim()),
+        certifications: [],
+        lists: printable,
+      });
+
+    expect(
+      found('101001').map((one) =>
+        one.kind === 'ticket' ? [one.ticket.splitSuffix, one.ticket.state] : [one.kind],
+      ),
+    ).toEqual([
+      ['A', 'SUBMITTED'],
+      ['B', 'OPEN'],
+    ]);
+    expect(found('101001').map((one) => one.kind === 'ticket' && one.ticket.id)).toEqual([
+      first.id,
+      second.id,
+    ]);
+    expect(found(' 101002 ')).toMatchObject([{ kind: 'ticket', ticket: { state: 'CANCELLED' } }]);
+    expect(found('730415')).toEqual([{ kind: 'inLists' }]);
+    expect(found('101003')).toEqual([]);
+    expect(found('101004')).toEqual([]);
+    expect(found('999999')).toEqual([]);
+    expect(found('')).toEqual([]);
+    expect(changed).not.toHaveBeenCalled();
   });
 });

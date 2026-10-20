@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590; no field tag on a phone, unit rate's crew first and its dashboard, ADR-591, 592) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590; no field tag on a phone, unit rate's crew first and its dashboard, ADR-591, 592; printing as built, ADR-595; scanning as built, ADR-596) -->
 
-> **This page states today's rules** (last changed by ADR-592, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-596, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -431,7 +431,34 @@ display only, and the barcode carries the bare number (ADR-062).
   control-ticket project the tower may instead write the load call, their details and the truck
   number **on the back of the control ticket**; a haul-out prints at its loading end (ADR-102, 115;
   ARCHITECTURE §12). No placard or badge printing (ADR-088).
+  ⚠️ *ADR-595 (task 3.6.2, agent defaults), printing as built:* **one receipt content model in
+  `packages/receipts`**, read by the field app and the back office's receipt batch, rendered to
+  ZPL and PDF with the same words in the same order and the same bars; the receipt says the
+  number (barcode: Code 128 of the bare number, never a suffix or a label), the truck, the load or
+  the work (a unit rate ticket's pay item by its code, never a rate), then the monitor and the
+  times in the project's time zone; a certification's is itemised, each box as measured and the
+  capacity worked out, never a driver's phone or licence number. **Printed as it is submitted**
+  (the browser build's printer saves a PDF), its copies: a collection two, the driver's and the
+  monitor's, **or none from a control ticket** (handed over, its stub kept); the driver's at a
+  disposal and at both ends of a haul-out; the crew's; a certification's the driver's or the
+  crew's. **Printed again from home** ("Print a receipt again"), the same copies (a control
+  ticket's collection the driver's), the same bytes; **nothing is written, sent or counted**. A
+  printer that fails says so and the work goes on.
 - **Scanning**: the phone's camera or a keyboard-style Bluetooth scanner; anything printed scans back.
+  ⚠️ *ADR-596 (task 3.6.3, agent defaults), scanning as built in the browser build:* **wherever a
+  number is scanned** (a badge, a control ticket, the driver's ticket, an incident's cert number)
+  one scan entry takes it: **a keyboard-style scanner** types it and Enter, into the field or, with
+  the focus anywhere else on the screen outside another field or a dialog, into the scan field from
+  its first key; **"Scan" opens the camera** over the screen, read by the receipts package's own
+  Code 128 reader, nine lines across the view and nine down it, **a number taken only when two
+  lines read it**, then the camera let go (no dependency, no `BarcodeDetector`; the phones' own
+  cameras 3.8.2, 3.9.1). **The ticket's number's field opens no keyboard on a phone**: one typed by
+  hand goes through "The barcode won't read", flagged with its reason (Q-105). **"Scan a barcode"
+  on home** says what this phone holds of the monitor's under a number on the project (each field
+  event of the ticket, open, submitted or cancelled; a certification they made here; one in the
+  lists; or nothing), read from the phone alone, never fetched, written or counted (the user,
+  Q-95: "If the ticket already exists it should simply tell the monitor it exists, not try to
+  fetch all of the data back to them").
 - **Cancelling**: a field event started by mistake can be cancelled; it's never synced and stays on
   the phone until it's set up again, so it can be extracted if needed (ADR-056). It keeps the number
   taken at New; a generated one is never issued again, and a cancelled ticket is left out of the
