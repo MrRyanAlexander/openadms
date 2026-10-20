@@ -2,15 +2,15 @@
 name: adms-decisions
 description: How to record an Open ADMS architectural decision (ADR) or a known deviation (KD), and where the existing ones live. Use when making a senior engineering judgment call — naming, an architectural pattern, a schema tradeoff, a deliberate deviation — or when you find code that disagrees with a spec skill, or when you need to check what has already been decided so you do not contradict it.
 ---
-<!-- skill-status: current (checked 2026-09-29, ADR-253; how to read and append, ADR-532) -->
+<!-- skill-status: current (checked 2026-09-29, ADR-253; how to read and append, ADR-532; no session log, ADR-594) -->
 
 ## Where the record lives
 
 | File | Contents |
 |---|---|
 | `agent_store/SUMMARY.md` | **Start here.** What's true now: current rules by topic with the ADRs to cite (an index in its header), superseded ADRs never to cite, open gaps, what waits on the user |
-| `agent_store/DECISIONS.md` | Full ADR log + the scratchpad (history moved out of other pages) + the dated session log. **Over 2 MB: never read it whole.** Before deciding anything architectural, grep it for the ADRs your `SUMMARY.md` topic cites (`grep -n '^| \*\*ADR-519' agent_store/DECISIONS.md`) and read those rows. |
-| `agent_store/DEVIATIONS.md` | Known Deviations — every place code **or a doc** disagrees with a spec skill. The KDs against `database/` are rebuild lessons now (ADR-093). Read at orientation. |
+| `agent_store/DECISIONS.md` | Full ADR log + the scratchpad (history moved out of other pages) + the session log up to 2026-10-20 (retired by ADR-594: the git commit is the record of a session). **Over 2 MB: never read it whole.** Before deciding anything architectural, grep it for the ADRs your `SUMMARY.md` topic cites (`grep -n '^| \*\*ADR-519' agent_store/DECISIONS.md`) and read those rows; for a sweep, ask a `scout`. |
+| `agent_store/DEVIATIONS.md` | Known Deviations — every place code **or a doc** disagrees with a spec skill. The KDs against `database/` are rebuild lessons now (ADR-093). `SUMMARY.md` §3 lists the open ones; read a KD's row when your task touches it. |
 
 **Append, never rewrite. Never renumber existing entries.**
 
@@ -33,8 +33,8 @@ classes, tests, counts, what was seen in a run) belongs in the code, the BACKLOG
 
 **Appending:** the ADR table ends just before `## 📝 Operational scratchpad`. Find the last row
 (`grep -n '^| \*\*ADR-' agent_store/DECISIONS.md | tail -1`), read a few lines there (offset and
-limit), and insert the new row after it with Edit. The session log is the file's last lines:
-append one line at the end.
+limit), and insert the new row after it with Edit. **No session-log line** (ADR-594): the commit
+message the close-out gives the user says what a session did.
 
 ADR row format:
 
@@ -51,6 +51,23 @@ it to the user in your ⚠️ Flags section.
 
 A deviation is a defect to report, not a spec to rewrite. The spec skills carry domain truth
 that came from the user; code drift does not overrule them.
+
+## The user's answers, and how to ask (moved from `NEXT.md`'s Handoff, ADR-594)
+
+- They answer **inline** in the docs (usually `spec/QUESTIONS.md`), sometimes inside tables, as
+  corrections above earlier quotes, or numbered oddly; they write "APPROVED" under sections. Read the
+  changed section in full; move each answer into a dated `> **User, …:**` quote, verbatim; record an
+  ADR in the same response; update `SUMMARY.md`, the owning skill, `spec/RULES.md` and the part pages.
+- They answer wearing **different hats**: a firm setting up, a monitor in the field, the back office
+  (ADR-224). Note which, and design each side for its own user.
+- **A "yes" to an either-or question is read back before it is recorded** (Q-139 → ADR-147 → 301:
+  a misread "Yes" stood five days). Say which half you understood, in one line, and never ask two
+  things in one question. An acceptance scenario is where the user catches a misreading: write
+  them plainly.
+- Write questions that stand alone: plain words, **a story told as a table of what happens to each
+  ticket**, then the question, refs at the end. No paraphrase ("TOO MUCH PARAPHRASING"). Give ticket
+  numbers that make sense. When their numbers don't add up, show the arithmetic and ask once.
+  Never guess money.
 
 ## When nothing settles it: the question shot-clock (ADR-230)
 

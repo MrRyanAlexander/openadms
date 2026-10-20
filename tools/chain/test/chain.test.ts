@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { heldAgainst, writtenCounts } from '../src/expected.ts';
+import {
+  countsBegin,
+  countsEnd,
+  heldAgainst,
+  merged,
+  recorded,
+  writtenCounts,
+  type Run,
+} from '../src/expected.ts';
 import { chainSteps, chosenSteps, plainLines, type Beside, type Step } from '../src/steps.ts';
 
 const steps = chainSteps({ fresh: false });
@@ -279,76 +287,50 @@ describe('each step’s reading', () => {
   });
 });
 
-// CHAIN.md's own wording, cut down (agent_store/CHAIN.md).
+// CHAIN.md as `pnpm chain record` writes it, cut down (agent_store/CHAIN.md).
 const page = `# Open ADMS — The chain's counts, today
 
-## \`pnpm ready\`
+Words of the page's own, kept as they are.
 
-| \`pnpm installer:check\` | **37 \`✓\`**, no \`✗\`, exit 0 |
-| Migrations at head | **132** (\`packages/db/prisma/migrations/\` is the list) |
-
-## \`pnpm test\`
-
-**\`Test Files 181 passed (181)\`, \`Tests 3152 passed (3152)\`.**
-
-| Project | Tests | Files | Needs |
+${countsBegin}
+| Step | Its newest run | Took | Passed |
 |---|---|---|---|
-| \`packages/domain\` | 833 | 45 | nothing |
-| \`infra/local\` | 77 | 6 | \`pnpm ready\` |
+| \`test\` | 2026-10-19 10:00 UTC | 4m 15s | ✓ |
 
-## \`pnpm lint\`, \`pnpm licences\`
+| Step | Count | Today |
+|---|---|---|
+| \`installer:check\` | installer:check ✓ | 37 |
+| \`test\` | tests | 3152 |
+| \`test\` | tests in packages/domain | 833 |
+| \`test\` | files in packages/domain | 45 |
+| \`scenarios\` | stories | 23 |
+| \`scenarios\` | checks in p1-priced | 28 |
+${countsEnd}
 
-- Licences: **\`454 packages: 454 allowed, 0 refused, 0 undecided.\`** on the Mac
-
-## \`pnpm scenarios\`
-
-\`This run’s template, adms_story_template_…: 132 migrations applied\`, then **\`Stories: 23 passed, 0
-failed.\`**
-
-| Story | Checks | | Story | Checks |
-|---|---|---|---|---|
-| \`ticket-101001\` | 16 | | \`p1-priced\` | 28 |
-
-## \`pnpm e2e\`
-
-**7 browser tests**, \`7 passed (1.9s)\`; **1 screen of the app**
-
-## \`pnpm security\`
-
-the grant tests **\`48 files, 1083
-tests: 1083 passed, 0 failed\`**; ending **\`Security checks: 12 passed, 0 failed.\`**
+What follows the counts, kept as it is.
 `;
 
+const order = steps.map((s) => s.name);
+const at = '2026-10-20 08:00 UTC';
+
 describe('CHAIN.md', () => {
-  it('is read for each count in its own words, under the step it is read from', () => {
+  it('is read for each count of its table, under the step it is read from', () => {
     expect(writtenCounts(page).map((c) => [c.step, c.key, c.value])).toEqual([
       ['installer:check', 'installer:check ✓', 37],
-      ['installer:check', 'migrations at head', 132],
-      ['test', 'test files', 181],
       ['test', 'tests', 3152],
       ['test', 'tests in packages/domain', 833],
       ['test', 'files in packages/domain', 45],
-      ['test', 'tests in infra/local', 77],
-      ['test', 'files in infra/local', 6],
-      ['scenarios', 'story migrations', 132],
       ['scenarios', 'stories', 23],
-      ['scenarios', 'checks in ticket-101001', 16],
       ['scenarios', 'checks in p1-priced', 28],
-      ['e2e', 'browser tests', 7],
-      ['e2e', 'screens', 1],
-      ['security', 'grant test files', 48],
-      ['security', 'grant tests', 1083],
-      ['security', 'security checks', 12],
-      ['licences', 'licensed packages', 454],
     ]);
   });
 
-  it('writes nothing it is not read for: a page in other words gives no count, never a guess', () => {
+  it('writes nothing it is not read for: a page without the table gives no count, never a guess', () => {
     expect(writtenCounts('# The chain\n\nAbout three thousand tests.\n')).toEqual([]);
+    expect(writtenCounts(`${countsBegin}\n| \`test\` | tests | 3152 |\n`)).toEqual([]);
   });
 
   it('is held against what a run saw: the same, a difference, a count it does not write, one a passed step did not show', () => {
-    const written = writtenCounts(page);
     const held = heldAgainst(
       [
         { key: 'tests', value: 3152 },
@@ -356,7 +338,7 @@ describe('CHAIN.md', () => {
         { key: 'tests in tools/chain', value: 14 },
         { key: 'stories', value: 23 },
       ],
-      written,
+      writtenCounts(page),
       new Set(['test']),
     );
     expect(held.same).toEqual([
@@ -366,11 +348,80 @@ describe('CHAIN.md', () => {
     expect(held.differ).toEqual([{ key: 'tests in packages/domain', seen: 840, written: 833 }]);
     expect(held.unwritten).toEqual([{ key: 'tests in tools/chain', value: 14 }]);
     // Only the steps that passed are asked for what they did not show: scenarios did not pass.
-    expect(held.unseen.map((c) => c.key)).toEqual([
-      'test files',
-      'files in packages/domain',
-      'tests in infra/local',
-      'files in infra/local',
+    expect(held.unseen.map((c) => c.key)).toEqual(['files in packages/domain']);
+  });
+});
+
+describe('pnpm chain record', () => {
+  const run: Run = {
+    steps: [
+      {
+        name: 'test',
+        passed: true,
+        at,
+        took: '4m 20s',
+        counts: [
+          { key: 'tests', value: 3160 },
+          { key: 'tests in packages/domain', value: 841 },
+        ],
+      },
+      {
+        name: 'scenarios',
+        passed: false,
+        at,
+        took: '3m 1s',
+        counts: [{ key: 'stories', value: 22 }],
+      },
+    ],
+  };
+
+  it('replaces a passed step’s rows with what it saw, a count it no longer shows gone, and keeps the rest', () => {
+    const outcome = recorded(page, run, order);
+    expect(writtenCounts(outcome.page).map((c) => [c.step, c.key, c.value])).toEqual([
+      ['installer:check', 'installer:check ✓', 37],
+      ['test', 'tests', 3160],
+      ['test', 'tests in packages/domain', 841],
+      ['scenarios', 'stories', 23],
+      ['scenarios', 'checks in p1-priced', 28],
     ]);
+    expect(outcome.changed).toEqual([
+      { key: 'tests', from: 3152, to: 3160 },
+      { key: 'tests in packages/domain', from: 833, to: 841 },
+      { key: 'files in packages/domain', from: 45, to: undefined },
+    ]);
+    expect(outcome.leftAsTheyWere).toEqual(['scenarios']);
+  });
+
+  it('touches nothing of the page outside its table, and says each step’s newest run', () => {
+    const outcome = recorded(page, run, order);
+    expect(outcome.page.startsWith("# Open ADMS — The chain's counts, today\n\nWords")).toBe(true);
+    expect(outcome.page.endsWith('\nWhat follows the counts, kept as it is.\n')).toBe(true);
+    expect(outcome.page).toContain(`| \`test\` | ${at} | 4m 20s | ✓ |`);
+    expect(outcome.page).toContain(`| \`scenarios\` | ${at} | 3m 1s | ✗ |`);
+    expect(outcome.page.split(countsBegin)).toHaveLength(2);
+  });
+
+  it('adds the table to a page that has none, and reads back what it wrote', () => {
+    const outcome = recorded('# The chain\n', run, order);
+    expect(outcome.page.startsWith(`# The chain\n\n${countsBegin}\n`)).toBe(true);
+    expect(writtenCounts(outcome.page).map((c) => c.key)).toEqual([
+      'tests',
+      'tests in packages/domain',
+    ]);
+  });
+
+  it('keeps the newest run of each step: a run of some steps replaces those alone', () => {
+    const before: Run = {
+      steps: [
+        { name: 'test', passed: true, at: 'earlier', took: '4m', counts: [] },
+        { name: 'e2e', passed: false, at: 'earlier', took: '1m', counts: [] },
+      ],
+    };
+    const latest = [{ name: 'e2e', passed: true, at, took: '2m', counts: [] }];
+    expect(merged(before, latest).steps.map((s) => [s.name, s.at, s.passed])).toEqual([
+      ['test', 'earlier', true],
+      ['e2e', at, true],
+    ]);
+    expect(merged(undefined, latest).steps).toEqual(latest);
   });
 });

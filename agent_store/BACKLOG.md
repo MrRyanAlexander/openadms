@@ -1,7 +1,8 @@
 # Open ADMS — Backlog
 
-> Milestone detail for the active phase. Read when picking up new work; the single active task
-> is in `agent_store/NEXT.md`. Tick boxes as you complete them.
+> Milestone detail for the active phase. Read when picking up new work; **the next task is the
+> active phase's first unticked box** (the session hook prints it, ADR-594). Tick boxes as you
+> complete them.
 
 ## Active — Phase 3: Field app *(opened by the user 2026-10-17, ADR-557; this plan is ADR-558)*
 
@@ -26,9 +27,9 @@ time clock → iPhone → Android → prove it.
 
 ### Brief for every Phase 3 task (ADR-558)
 
-- **One task per response**, whole (ADR-516). Each ends with real observed output (`adms-verify`),
-  the close-out (`adms-close-out`) and the user's git block with named paths. Don't tick a box on
-  "should work".
+- **Each task whole** (ADR-516), one at a time or back to back in a run (`/adms-run`, ADR-594).
+  Each ends with real observed output (`adms-verify`), its own ADRs and tick (`adms-close-out`);
+  the user's git block with named paths comes once per response. Don't tick a box on "should work".
 - **Read first:** `spec/acceptance/11-field-app.md` (the task's rows, and section L's); ARCHITECTURE
   §7…§12, §15, §16 and the ⚠️ notes in them; `adms-field-app` §4A (every capture rule); the
   owning skill for the workflow (`adms-ticket-workflows`, `adms-certifications`, `adms-exceptions`);
@@ -59,7 +60,7 @@ time clock → iPhone → Android → prove it.
   and export, the receipt batch (Phase 4); the demo deploy and the app stores (Phase 5a). Don't
   build ahead.
 - **A REQ is ticked, and a scenario marked passing, only from a run you saw.**
-- Docker's disk here is 8 GB (`NEXT.md`, Tools and housekeeping); stop the stack at close-out.
+- Docker's disk here is 8 GB (`adms-verify`, "Environment and housekeeping"); stop the stack at close-out.
 
 ### Milestone 3.0 — Open the phase
 - [x] **3.0.1 Open the phase** ✅ done 2026-10-17 (ADR-557…560): the plan; the 33 REQs moved; the
@@ -319,6 +320,12 @@ time clock → iPhone → Android → prove it.
   receipt content model (its package by ADR: the back office's receipt batch reads it too), to PDF
   and ZPL; Code 128 of the bare number; every project prints; reprinted at any time, never
   recorded; the printable control-ticket test set.
+  *Before it (from `NEXT.md`, ADR-594):* Code 128 of the bare number, never a label; never
+  recorded means no record, audit row or count; the test set is PARKS's `400001`–`400050`. On a
+  control-ticket project the submitted disposal's words about the back of the driver's ticket
+  stand until the receipt prints (ADR-115, `ticket-capture.tsx`). Read ARCHITECTURE §12 first; a
+  new dependency (PDF, barcode) needs its ADR. **From 2026-10-21, C175** (React 19.3.1 and
+  Playwright 1.64.1 read again).
 - [ ] **3.6.3 Scanning** (REQ-315's browser half; AC-11-49): a keyboard-style scanner and the camera
   where the browser allows; anything printed scans back and an existing ticket says so; a scan
   outside the control ranges questioned.
@@ -535,7 +542,7 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again** before the chain: each container runs what was built when it started, and `door.test.ts` and `container.test.ts` ask them. (C85, C95)
 - **A sidecar's Caddyfile** (`routing/`, `objectstore/`) is a mounted file: `local:up` doesn't remake its container when only that changed; `docker restart` it, or `local:down` first. A changed object-store policy or key is picked up by `local:down` then `up`. **On a Linux host** each key under `infra/local/.generated/tls/` must be readable by its container's user. (C136, C162, C167)
 - **A new piece of work meant to run longer than `DATABASE_WORK_LONGEST_MS`** states its own limits with its ADR. (C166)
-- **Counts go in `CHAIN.md` alone; a lesson about a layer's tests in its page beside `adms-verify`; loosenings through `loosen.mjs` in one list.** (C116)
+- **Counts go in `CHAIN.md` alone, written by `pnpm chain record` (ADR-594); a lesson about a layer's tests in its page beside `adms-verify`; loosenings through `loosen.mjs` in one list.** (C116)
 
 **Every task that adds an endpoint** (the recipe; the API page beside `adms-verify` has the helpers)
 - Define it with `endpoint()` in `packages/contracts/src/endpoints.ts`, in `endpoints` **in path order**, and add its line to `apps/api/test/every-endpoint.test.ts`; give every number it takes a least and a most (a whole number one a column holds), no secret in its path or query, no address the server would ask (`endpoints.test.ts`, "what every endpoint takes"). (C86, C101)

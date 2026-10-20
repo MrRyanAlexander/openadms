@@ -317,7 +317,7 @@ Breaking one is a defect whatever the tests say. Numbers are stable; other docs 
 
 # PART 8 — WHERE IT'S HEADED
 
-- **Where the product ends up and the road there:** `agent_store/NEXT.md` (the Handoff) and
+- **Where the product ends up and the road there:** `agent_store/ROADMAP.md` (ADR-594) and
   `spec/VISION.md` (approved, ADR-269). Phases: 0 foundation → 1 data core and engine → 2 API and sync → 3 field
   app → 4 back office → 5 later features. Later requirements: `agent_store/REQUIREMENTS-LATER.md`.
 - **There is no USACE mode** (ADR-077): every project runs the same rules, plus an optional "USACE

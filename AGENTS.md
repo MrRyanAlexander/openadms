@@ -15,97 +15,103 @@ it, or ask.** Confidently wrong code is the default failure mode here.
 plus read-only viewers it issues. A **client** (the jurisdiction paying), contractors and property
 owners are **records**; a **client user** is a viewer login. Detail: `adms-domain` §1.4.
 
-The system of record for a debris mission, from declaration to audit:
-- The **back office** sets up a project: client → declaration event → project, then pay items
-  and rules read off the contract, certifications, sites and ROEs.
-- The back office **dispatches** each day: an **assignment** says who works where, on what.
-- **Field monitors** capture collections, disposals, haul-outs, unit-rate work and forms on
-  enrolled phones that take their assignment (never "provisioned"), offline, syncing whenever
-  there's signal.
-- **The engine** joins each ticket's field events by ticket number, validates them, writes the
-  completed record and its transactions as conclusions from the events, and flags anything wrong.
-- **Reviewers** correct, renumber or void (audited) and reprocess.
-- **The ledger** always shows the current truth. The back office assembles the client package
-  from it by hand.
+The system of record for a debris mission, from declaration to audit: the **back office** sets up
+a project (client → declaration event → project, then pay items and rules read off the contract,
+certifications, sites and ROEs) and **dispatches** each day (an **assignment** says who works
+where, on what); **field monitors** capture collections, disposals, haul-outs, unit-rate work and
+forms on enrolled phones that take their assignment (never "provisioned"), offline, syncing
+whenever there's signal; **the engine** joins each ticket's field events by ticket number,
+validates them, writes the completed record and its transactions as conclusions from the events,
+and flags anything wrong; **reviewers** correct, renumber or void (audited) and reprocess; **the
+ledger** always shows the current truth, and the back office assembles the client package from it
+by hand.
 
-## Start here
+**Security first, at every layer.** The platform is rebuilt, TypeScript end to end with Prisma
+(ADR-093/094); the old code is gone and is never a source. The spec pages are approved (ADR-269).
+Phases are the build order; the spec is the target.
+
+## Where each kind of fact lives
 
 | To… | Read |
 |---|---|
-| Understand the system, then find the part you're touching | **`spec/INDEX.md`**, the book: what it is, nine parts, a step-by-step page each |
-| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**: its header's topic index, then only the topics your task touches (never whole; ADR-445, 532) |
-| Know the next task, where the product ends up, and the road there | `agent_store/NEXT.md` (the Handoff, then the Next Atomic Task) |
-| Know how a layer is built and secured (install, database, API, devices, sync, storage, tests) | **`spec/ARCHITECTURE.md`**: the sections for that layer (`grep -n '^## '`; never whole) |
-| Know the rules for a topic, and why | the skill (table below) |
-| Answer "how does it behave?" | `SUMMARY.md`, then the skill, then `spec/QUESTIONS.md` |
-| Explain, demo or test the domain | **`spec/golden/MISSION.md`**: one mission, every kind of record, each one's life. Never invent coverage |
-| Name anything, or write an example, a test fixture or a seed | **`spec/CONVENTIONS.md`**: today's words, code names, the pay item code convention, the example world, the retired examples |
+| Know the next task | the session hook (it prints `BACKLOG.md`'s first unticked box); the active phase, scope and exit: `agent_store/NEXT.md` |
+| Know what's decided **now**, and which ADRs to cite | `agent_store/SUMMARY.md`: its header's topic index, then only the topics your task touches, never whole (ADR-445, 532) |
+| Understand the system, find the part you touch | `spec/INDEX.md`, then that part's page |
+| How a layer is built and secured | `spec/ARCHITECTURE.md`: that layer's sections (`grep -n '^## '`), never whole |
+| The rules for a topic, and why | the skill whose description names it (they are all current); `spec/QUESTIONS.md` (✅ answers it) |
+| Explain, demo or test the domain | `spec/golden/MISSION.md`. Never invent coverage |
+| Name anything, write an example, a fixture or a seed | `spec/CONVENTIONS.md`; field names `spec/DATA-MODEL.md`; flag wording `spec/FLAGS.md`; lists `spec/LISTS.md` |
+| The user's Build 1 answers | `spec/FROM-BUILD-1.md` (verbatim); Build 1 code is never a source (ADR-102) |
 
-**Security first, at every layer.** The platform is rebuilt, TypeScript end to end with Prisma
-(ADR-093/094); the old code is gone and is never a source. `spec/VISION.md` and the
-other spec pages are approved (ADR-269). Phases are the build order; the spec is the target.
+**Load `adms-domain` before your first task in a conversation** (and before explaining the
+domain), then the skill for what you touch. **What to trust, in order:** the newest ADR →
+`SUMMARY.md` → the skill → spec drafts. A term, status or field you can't find in `SUMMARY.md` is
+probably superseded (`SUMMARY.md` §2 lists what replaced it).
 
-## Load the right skill before you work
+## The working loop
 
-| About to touch — or answer a question about | Load |
-|---|---|
-| Anything — first task of the conversation; what an ADMS is, glossary, invariants | `adms-domain` |
-| Schema, models, enums and lists, org hierarchy, which service owns what | `adms-data-model` |
-| Certifications, cert numbers, capacity math, containers, crews | `adms-certifications` |
-| Creating/matching tickets, the four workflows, the project setup spine | `adms-ticket-workflows` |
-| Duplicates, quarantine, renumber vs void, corrections, splits | `adms-exceptions` |
-| Weights, tonnage, scale receipts, apportionment, FDS loads | `adms-scale-receipts` |
-| Validators, rules engine, statuses, flag messages, volume math | `adms-validation` |
-| Pricing, `Transaction`, `AuditRecord`, the ledger | `adms-ledger-audit`; the rule builder: `spec/RULES.md` |
-| Phone setup, sign-in, devices (Phase 0); field capture screens (later phases) | `adms-field-app` |
-| An architectural call, or code/docs that disagree with a skill | `adms-decisions` |
-| Any code, config, install, auth, device, sync or storage work | read **`spec/ARCHITECTURE.md`**'s sections for that layer first (not a skill) |
-| Running the checks | `adms-verify` |
-| Closing out a response that changed files | `adms-close-out` |
+1. **ORIENT** — the hook's next task (or the user's); its whole BACKLOG line, the phase's brief
+   above it, the register's standing rules and the lines naming it; `adms-domain`; the
+   `SUMMARY.md` topics and the skill it touches. Nothing more until you need it.
+2. **SCOPE** — the active phase and a permitted directory? If not, say which phase and ask. Never
+   silently widen scope.
+3. **GROUND** — read the actual files before editing. Never infer a field name, enum value or model
+   name from prose; the schema is the source of truth.
+4. **EXECUTE** — minimal edits; no adjacent refactors, no building ahead. Every dependency pinned by
+   an ADR. Do the whole task: never cut it into parts ahead of time (ADR-516). Prove each part
+   with targeted runs as you go (`adms-verify`).
+5. **VERIFY** — the whole chain once, by the **`verifier`** agent in the background; rerun only
+   what failed; `pnpm chain record` (`adms-verify`). Report real observed output, never "should pass".
+6. **CLOSE** — `adms-close-out`, started while the verifier runs: the **`recorder`** agent does the
+   bookkeeping from your brief.
 
-**What to trust, in order — for every answer, explanation or demo, not only code:** the newest ADR
-→ `SUMMARY.md` → a skill marked current (`<!-- skill-status: current -->`; the session hook lists
-them) → in any other skill, **only its ⚠️ notes: its body describes the old system** (KD-58) →
-spec drafts. A term, status or field you can't find in `SUMMARY.md` is probably superseded
-(`SUMMARY.md` §2 lists what replaced it). The user's Build 1 answers are verbatim in
-`spec/FROM-BUILD-1.md`; Build 1 code is never a source (ADR-102).
+**Several tasks in one go:** `/adms-run` (the `adms-run` skill): a fresh `builder` agent per task,
+you as the lead, the same ADRs, ticks and seen chain per task, stopping for questions, the user's
+hands, a red chain or a milestone's end.
 
-**Unknown behaviour?** Load the owning skill, then check `spec/QUESTIONS.md` (✅: answer from it).
-**Product discovery is closed (ADR-230):** ask only when the answer changes money, evidence or what
-a monitor must do, it blocks your task, and nothing recorded covers it: at most three questions,
-each standing alone (plain words, a story, refs at the end) with your recommendation. Otherwise pick
-the option that keeps the firm's choice open, record an ADR marked "agent default", and carry on.
+## Working fast and cheap (ADR-594)
+
+Cost is turns × context, and the last turns of a task carry the most context. So:
+- **Batch.** Independent reads and searches go in one message; several `grep`s in one command; a
+  file under about 40 KB read whole, once, never in five `sed` ranges; all of one file's changes in
+  one edit or one patch script.
+- **Delegate by the thinking it needs.** *Where* is something (definitions, uses, exact lists, an
+  ADR by number) → **`scout`** (Haiku). Running the chain and reading its logs → **`verifier`**
+  (Sonnet). State-file bookkeeping → **`recorder`** (Sonnet). Decisions, domain reasoning, product
+  code, anything the user reads → you (Opus). A cheaper agent never decides a domain fact and
+  never edits product code; check what it cites before relying on it.
+- **Overlap the waits.** The chain (about eleven minutes) runs in the background while you write
+  the ADR and the recorder's brief; never sit idle on it, never edit code under it.
+- **Don't reread.** What you read this session is still in context; what an agent reported is in
+  its answer.
+
+## Working with the user
+
+- The user is the domain expert and the authority on field reality; the `development/` specs are
+  not (their truck-capacity section is wrong). The legacy screenshots in `development/legacy_app(…)/`
+  are the best evidence of what a firm needs; when told "think harder", look there first.
+- **When the user reviews finished work with questions, answer in plain words first and change no
+  code until they say go** (ADR-531). Their answers inline in the docs, a "yes" read back before
+  it is recorded, and how to write a question: `adms-decisions`, "The user's answers".
+- **Product discovery is closed (ADR-230):** ask only when the answer changes money, evidence or
+  what a monitor must do, it blocks your task, and nothing recorded covers it (at most three
+  questions, each standing alone, with your recommendation). Otherwise pick the option that keeps
+  the firm's choice open, record an ADR marked "agent default", and carry on. Before asking how a
+  contract line works, check whether projects, names, pay items and rules already express it
+  (ADR-197, 200). Never relabel a status mark yourself (ADR-133, 139).
+- Say "installation", never "instance", and never mention data sharing between installations
+  (ADR-112); "set up", never "provision". Security directions: say what NIST SP 800-63B and ASVS
+  Level 2 ask before building (ADR-401).
 
 ## State files — `agent_store/`
 
-| File | What | Yours to edit? |
-|---|---|---|
-| `SUMMARY.md` | Current rules by topic (an index in its header), superseded ADRs, open gaps, what waits on the user. **Keep it current** | ✅ update |
-| `NEXT.md` | Active phase, exit criteria, next atomic task | ✅ tick |
-| `CHAIN.md` | The chain's counts today, the only place they are written (ADR-445) | ✅ replace |
-| `BACKLOG.md` | The active phase's tasks; the carry-forward register (live items only, and the standing "every task that…" rules) | ✅ tick |
-| `DECISIONS.md` | Full ADR log + session log. Append-only, never renumber | ✅ append |
-| `DEVIATIONS.md` | Full code-vs-skill gap log | ✅ append |
-| `ARCHIVE.md` | History moved word for word out of the pages above when they are trimmed (ADR-532). **Grep only, never read whole** | ✅ append |
-| `REQUIREMENTS.md` / `-LATER.md` | The active and finished phases' checklist (Phase 3 active, opened by the user, ADR-557) / the gated phases, 4–5 | ✅ tick |
-| `ROADMAP.md` | The user's one-page roadmap, start to finish, in tables (ADR-280). Summarises the files above | ✅ update at close-out |
-
-## Working loop
-
-1. **ORIENT** — read `NEXT.md`, then `SUMMARY.md`'s header and only the topics your task touches;
-   your task's line in `BACKLOG.md` with the register's items for it and its standing rules; load
-   `adms-domain` on the first task; find your part in `spec/INDEX.md`. No task given? `NEXT.md`'s
-   Next Atomic Task is it.
-2. **SCOPE** — does this belong to the active phase and a permitted directory? If not, say which
-   phase it belongs to and ask. Never silently widen scope.
-3. **GROUND** — read the actual files before editing. Never infer a field name, enum value or
-   model name from prose; the schema is the source of truth.
-4. **EXECUTE** — minimal edits. No adjacent refactors, no building ahead. Every dependency is
-   pinned; a new one needs an ADR. Answer in the form asked for (chat text, a file, an artifact).
-   Do the whole task: never cut it into parts ahead of time (ADR-516).
-5. **VERIFY** — load `adms-verify` (`pnpm ready` first; counts against `CHAIN.md`). Report real
-   observed output, never "should pass".
-6. **CLOSE** — load `adms-close-out`.
+All yours to edit. `BACKLOG.md` (tasks; the next is the first `- [ ]`; the carry-forward register
+and its standing rules) · `DECISIONS.md` (every ADR, append-only, never renumbered; over 2 MB:
+grep) · `SUMMARY.md` (the rules now by topic; §2 superseded, §3 open KDs, §4 defaults) ·
+`CHAIN.md` (the counts, written by `pnpm chain record`) · `REQUIREMENTS.md` / `-LATER.md` ·
+`DEVIATIONS.md` (KDs, append-only) · `NEXT.md` (the phase, its scope and exit) · `ROADMAP.md`
+(the user's, ADR-280) · `ARCHIVE.md` (moved words, word for word; grep only). Which fact goes
+where, and when: `adms-close-out`'s table.
 
 ## Write boundaries
 
@@ -113,13 +119,14 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 |---|---|
 | `agent_store/` | ✅ all files |
 | `.claude/skills/` | ⚠️ domain content came from the user — record their decisions (marked with the ADR), never "correct" it; log a KD instead |
+| `.claude/agents/` | ✅ the agents' roles (ADR-594); a change that widens what a cheaper agent may write needs an ADR |
 | `spec/` | ⚠️ agent drafts, user approves; approved content is treated like a skill (ADR-043) |
 | `.claude/settings.json`, `.claude/hooks/` | ⚠️ enforcement — never weaken without the user asking; the hook's rules are tested (`tools/security/test/guard-hook.test.ts`): change hook, test and this table together (ADR-283) |
 | `development/` | ❌ read-only reference. Its truck-capacity section is **wrong**; never use it |
 | `apps/`, `packages/`, `infra/`, `tools/` (ARCHITECTURE §18) | ✅ open for the scaffold (ADR-143), built in `BACKLOG.md` order; every dependency pinned by an ADR, lockfiles committed |
 | Root monorepo files: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json` + `tsconfig.base.json`, `eslint.config.js`, `vitest.config.js`, `.nvmrc`, `.editorconfig`, `LICENSE`, `.gitignore` | ✅ for the scaffold (ADR-231, 255, 259) |
-| `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; a root compose file was the historical stack, retired by the user (KD-59, closed): never recreate one, the local stack is `infra/local/compose.yaml` |
-| `database/`, `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 the old code and its placeholders, gone from the working folder (ADR-093): never recreate them or port from a copy; the hook refuses a write under `database/`. The layout is ARCHITECTURE §18 |
+| `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; never recreate a root compose file (KD-59): the local stack is `infra/local/compose.yaml` |
+| `database/`, `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 the old code, gone (ADR-093): never recreate or port from a copy. The layout is ARCHITECTURE §18 |
 | `**/node_modules/`, `**/.venv/`, `**/.pytest_cache/`, `**/__pycache__/`, `.git/`; generated: `**/dist/`, `**/src/generated/`, `**/.generated/`, `**/.cache/`, `**/.state/` | ❌ never (change the source, rerun the tool) |
 | `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub, reviewed and tested (ADR-113, enforced by the hook) |
 | `**/.env*`, secrets | ❌ never read, write or print an env file (the hook blocks it; `.env.example` is fine): reference keys by name, load one in a subshell, compare `shasum`s; never echo, log or commit a secret |
@@ -130,7 +137,9 @@ the option that keeps the firm's choice open, record an ADR marked "agent defaul
 `merge` `rebase` `restore` `reset` `stash` `clean` `rm`). Read-only inspection is expected:
 `status`, `diff`, `log --oneline`, `branch --show-current`. Enforced by `.claude/hooks/guard.sh`;
 a block is the rule working (ADR-008). A missing file is intentional: report it, never restore
-it. End any file-changing response with a copy-paste git block for the user. Never commit to `main`.
+it. End any file-changing response with a copy-paste git block for the user, staging named paths
+(never `git add .`); the hook also refuses a Bash command whose text names a git write, a heredoc
+included: write such a file with the Write tool. Never commit to `main`.
 
 ## Non-negotiables
 
@@ -188,9 +197,6 @@ One line each. Details and the ADRs to cite: `agent_store/SUMMARY.md`. Reasons: 
 
 ## Recording decisions
 
-Made a judgment call? Append an ADR to `DECISIONS.md` **in the same response**, update
-`SUMMARY.md`, and update the `spec/parts/` page if a step changed. **Each fact has one home**
-(`SUMMARY.md`, "Agent tooling"): the ADR says the decision and why; the summary the rule in a few
-lines; the BACKLOG tick that it's done; never a build log restated in another file (ADR-532). Found code *or docs* that
-disagree with a skill? Don't silently reconcile: append a KD to `DEVIATIONS.md`, update
-`SUMMARY.md`, and raise it. *`adms-decisions`*
+A judgment call gets an ADR **in the same work**; code *or docs* that disagree with a skill get a
+KD, never a silent fix (`adms-decisions`). Each fact has one home (`adms-close-out`'s table); never
+a build log restated in another file (ADR-532).

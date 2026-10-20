@@ -22,7 +22,7 @@ what's still open.
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
 | **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
-| **Build** the next thing, or see where it ends up | Chapter 4: `agent_store/NEXT.md` has the one next task and the road to done |
+| **Build** the next thing, or see where it ends up | Chapter 4: the next task is `agent_store/BACKLOG.md`'s first unticked box; the road to done is `agent_store/ROADMAP.md` (ADR-594) |
 | **Maintain** it: fix, change, or answer a question | Chapter 5 |
 
 ---
@@ -142,7 +142,7 @@ Each page in `spec/parts/` has the same shape, so you always know where to look:
 
 | File | What it holds |
 |---|---|
-| `agent_store/NEXT.md` | The active phase, its exit criteria, and **the one next atomic task** |
+| `agent_store/NEXT.md` | The active phase, its scope and exit criteria, where things stand (the next task: `BACKLOG.md`'s first unticked box, ADR-594) |
 | `agent_store/BACKLOG.md` | Milestones and sub-tasks for the active phase |
 | `agent_store/REQUIREMENTS.md` | Phase 0 and Phase 1 checklist (REQ-0xx, REQ-1xx) — tick only when observed |
 | `agent_store/REQUIREMENTS-LATER.md` | Phases 2–5, gated |

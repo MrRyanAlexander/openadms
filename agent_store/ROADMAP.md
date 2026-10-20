@@ -1,17 +1,17 @@
 # Open ADMS — Roadmap
 
 > **The one page to look at to see where the build is.** From the first decision to the day people
-> use it. Kept current by agents at every close-out (ADR-280): when a task, milestone or phase
-> closes, its row here changes in the same response.
+> use it. Kept current by agents when a milestone or phase closes, a REQ is ticked, or what waits
+> on the user changes (ADR-280, 594): its row here changes in the same response.
 >
 > It **summarises**; it decides nothing. The detail and the authority are `NEXT.md` (the next task),
 > `BACKLOG.md` (the active phase's tasks), `REQUIREMENTS.md` / `REQUIREMENTS-LATER.md` (every
 > requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
 > page disagrees with them, they win.
 >
-> **Last updated:** 2026-10-20 (**Your unit rate notes, rebuilt (ADR-591…593):** a new unit rate ticket starts with the crew (same crew, or scan a new one and photograph it), then what work it is; hangers, leaners and stumps then open the ticket's dashboard, where Pre-work, Measurement and Post-work each open their photo (the measurement its numbers too) and drop you back; no "Other photos" step; no field tag on any ticket on the phone; "Look up address" now finds a street when you try the app. **Waiting on you:** KD-80, whether field tags stay as a back-office label or go entirely. Next: receipts, task 3.6.2.)
+> **Last updated:** 2026-10-20: the harness reshaped (ADR-594): tasks can now run back to back (`/adms-run`), with the cheap work (running the checks, bookkeeping, searching) done by cheaper models; no product change; next is still task 3.6.2, Receipts.
 >
-> *This line holds the latest session alone (ADR-516); what each session did is its ADR and `DECISIONS.md`'s session log.*
+> *This line holds the latest change alone (ADR-516); what each session did is its ADRs and its git commit (ADR-594).*
 
 **Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
 

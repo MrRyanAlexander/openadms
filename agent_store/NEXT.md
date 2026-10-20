@@ -1,10 +1,9 @@
 # Open ADMS — Next
 
-> **This file defines the immediate scope of work.** If asked for something outside this phase,
-> say which phase it belongs to and ask before proceeding. Keep the Next Atomic Task pointer at
-> the bottom accurate. Milestone detail lives in `agent_store/BACKLOG.md`. **Keep this page under
-> about 20 KB** (the session hook warns past it; ADR-532): where things stand in a few lines,
-> never a task-by-task record (that is each task's ADR and its BACKLOG tick).
+> **The active phase: what it is, its scope and its exit, and where things stand in a few lines.**
+> It changes when the phase, its scope or its exit changes, or what waits on the user does; never
+> per task (ADR-594). **The next task is not written here:** it is the first unticked box of
+> `BACKLOG.md`'s active phase, which the session hook prints. Keep this page under 10 KB.
 
 ## Active Phase — **Phase 3 (the field app): opened by the user 2026-10-17 (ADR-557)**
 
@@ -58,204 +57,31 @@ one task per response (ADR-558); read its brief before any task.
 
 Only then is **Phase 4 (the back office and portal)** offered to the user to open.
 
----
 
-## 🔁 Handoff — read this first in a new session
+## Where things stand (2026-10-20, through ADR-594)
 
-Everything decided is in the files; nothing lives only in an old chat. This block says **where
-things stand, where the product ends up, the road there, and how the user works**. What is true
-now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
-the round-by-round history is the session log at the end of `DECISIONS.md`.
-
-### Where things stand (2026-10-20, through ADR-593)
-- **Phase 3 is open (ADR-557)**: 20 of 33 tasks done (ADR-557…586). **Milestones 3.1…3.5 are done**:
-  the plan, the scenarios, the checklist, the shell at `https://field.adms.localhost` with
-  `pnpm e2e` in the chain and axe-core on every screen; the store, enrolment, sign-in online and
-  offline, setup, switching, moving and sessions under the master passcode; the phone's own sync,
-  its photographs' files and "Sync and turn in"; and **every capture in the browser build**: the
-  collection, the tower and the haul-out, unit rate, the forms, and **certifying (ADR-585)**, with a
-  phone away from its site told so. **Milestone 3.6 is under way: photographs are done (ADR-586)**,
-  from the app's own camera only, taken again in place or removed, the native shrink's interface
-  with the browser build keeping the original. **The user's notes from trying it with
-  `pnpm field:try` are built (ADR-587…590):** no police report asked by default, a sync every five
-  minutes, a made number never typed again, unit rate work photographed by stage. **Their next
-  notes (ADR-591…593):** unit rate rebuilt as the crew first, the work second and, for work by
-  stage, a dashboard whose three parts each drop back to it; no field tag on any phone capture
-  (KD-80 asks whether the list goes too); "Look up address" answered in the browser world.
-  **Next: receipts (3.6.2), then scanning (3.6.3).**
-  What each task did is its ADR and its `BACKLOG.md` tick; the longer account is `ARCHIVE.md`
-  ("Moved 2026-10-19", ADR-580 and ADR-585).
-- **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
-  row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
-  independent check of Phases 0–2 is answered whole (ADR-541…551); its file
-  (`AUDIT-2026-10-17-PHASE-2.md`) is no longer in the working folder (a missing file is intentional; never restored).
-- **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
-  met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
-  part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
-  numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
-  §3a–§3c and `DECISIONS.md`.
-- **Phase 2:** 44 tasks over Milestones 2.0…2.9 (ADR-376…555); the user's answers to the
-  defaults page confirmed all but D1 (ADR-538, 539). What each task left is `BACKLOG.md`'s
-  carry-forward register (live items only since ADR-532), mapped to Phase 3's tasks (ADR-558).
-- **What runs.** The API (NestJS on Fastify) is the local stack's own service, reached only at
-  `https://api.adms.localhost` through Caddy; the worker drains the job queue. **Every endpoint is
-  defined in `packages/contracts` and served through `@Serves`; `Admission` asks who may call it
-  before the schemas read anything**; the recipe for adding one is the register's standing rules.
-- **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule),
-  `packages/contracts` (every payload, the sync client's suite), `packages/scenarios` (the harness
-  and stories, the golden mission among them), `apps/api/src/` (services by area, `process/`,
-  `phone/`, `sync/`, `review/`, `setup/`, `dispatch/`, `viewer/`), `apps/worker/src/`
-  (`reconciliation/`, `mileage/`, `process/`), `tools/` (installer, security, licences), `infra/local`.
+- **Phases 0–2 are done** (Phase 0 2026-10-01; Phase 1 2026-10-06; Phase 2's exit met 2026-10-17,
+  ADR-555). **Phase 3 is open**: Milestones 3.0…3.5 done, 3.6 under way (photographs done,
+  ADR-586; the user's notes from `pnpm field:try` built, ADR-587…593). The tasks and what each
+  left: `BACKLOG.md`; the user's view: `ROADMAP.md`; the rules now: `SUMMARY.md` by topic.
+- **The harness was reshaped (ADR-594):** runs of tasks (`/adms-run`), Haiku and Sonnet agents for
+  the cheap work (`.claude/agents/`), the counts recorded by `pnpm chain record`, no session log,
+  this page and the hook cut down.
 - **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
   `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
   passcode is a throw-away random value.
-- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks; for the
-  on-device milestones (3.8, 3.9) a real iPhone and Android phone, a Zebra ZQ printer, Xcode and an
-  Apple developer account (`ROADMAP.md` §6); `SUMMARY.md` §4 lists the defaults open to them.
-- **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
-  in security is suggested, say what the standard asks before building it.**
-
-### The model as it stands now (today's words; `SUMMARY.md` has each rule and its ADR)
-The firm's setup decides how things play out (ADR-197), and there are **two sides** (ADR-224): the
-monitor enters only the main ticket, the system and the back office do the rest.
-- **Setup:** client → declaration event → project; contractors and **contracts** (name, prime,
-  link); **forms** with their **debris types**, named as the contract names the work; **pay items**
-  (a code unique on the project, a description, a **payable type**, Unit of Measure, size band,
-  capture settings, **a rate per prime**); **sites** (site type + Takes loads · Haul-outs leave here
-  · Charges a tipping fee · Ineligible site); field tags; the project map; **rules** per form,
-  **naming one contract** and running only on its prime's tickets: criteria → *Add / Remove
-  transaction #n*, *Void ticket*.
-- **Phones and people:** a phone is **enrolled** once; the back office's **dispatch board** gives
-  each person a daily **assignment**; the phone takes it at sign-in; setup by master passcode is the
-  fallback; phones sync whenever there's signal, with somebody signed in. The optional **time
-  clock** hangs on the assignment.
-- **Field:** each monitor records a **field event** (`COL` `DIS` · `HOC` `HOD` · `URT`). **The badge,
-  then the number, at New**; a ticket left at any step and resumed, one open per truck on a phone
-  (ADR-571). Picks **by name, never a code**. One quantity: a load call, or a scale
-  weight when the paying pay item is by weight. A submitted record is sealed for its monitor.
-- **Engine:** groups field events on project + workflow + bare number; flags, never blocks;
-  attaches zone and mileage; runs every passing rule in # order; writes the completed load and the
-  transactions (regenerated, each removed row copied to audit first).
-- **Back office:** sees everything, corrects in place (audited), accepts flags, voids with a reason,
-  reprocesses; QC status is separate; only QC Approved records lock as invoiced, optionally in a
-  named **invoice batch**; the client package is assembled by hand from exports; one review queue;
-  a setup check; the pay item screen writes its own rules.
-
-### Where it ends up
-Done is proven, not ticked (`spec/VISION.md` §8): approved part pages → **acceptance scenarios**
-(`spec/acceptance/`, `AC-…`) → a **golden mission** (`spec/golden/`, signed off by the user) → the
-same scenarios passing at each layer (engine, API, apps). The finished surfaces are `VISION.md` §7.
-
-### The road to done (the user's view: `ROADMAP.md`)
-| Phase | What it produces | Status |
-|---|---|---|
-| 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
-| 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
-| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 20 of 33 tasks |
-| 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
-| 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
-
-### What is still to be asked (so nothing is guessed later)
-- **Nothing blocks** (ADR-230). New questions only under the shot-clock rule.
-- **Agent defaults the user may overturn:** `SUMMARY.md` §4 (never copied here, ADR-516).
-- **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
-  settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
-  candidate; `RULES.md` §7 "Is valid".
-- **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
-  installation).
-
-### How the user works
-- The user is the domain expert and the authority on field reality; the `development/` specs are
-  not (their truck-capacity section is wrong). The legacy screenshots in `development/legacy_app(…)/`
-  are the best evidence of what a firm needs; when told "think harder", look there first.
-- They answer **inline** in the docs (usually `spec/QUESTIONS.md`), sometimes inside tables, as
-  corrections above earlier quotes, or numbered oddly; they write "APPROVED" under sections. Read the
-  changed section in full; move each answer into a dated `> **User, …:**` quote, verbatim; record an
-  ADR in the same response; update `SUMMARY.md`, the owning skill, `spec/RULES.md` and the part pages.
-- They answer wearing **different hats**: a firm setting up, a monitor in the field, the back office
-  (ADR-224). Note which, and design each side for its own user.
-- **A "yes" to an either-or question is read back before it is recorded** (Q-139 → ADR-147 → 301:
-  a misread "Yes" stood five days). Say which half you understood, in one line, and never ask two
-  things in one question. An acceptance scenario is where the user catches a misreading: write
-  them plainly.
-- Write questions that stand alone: plain words, **a story told as a table of what happens to each
-  ticket**, then the question, refs at the end. No paraphrase ("TOO MUCH PARAPHRASING"). Give ticket
-  numbers that make sense. When their numbers don't add up, show the arithmetic and ask once.
-  Never guess money.
-- **When the user reviews a finished task with questions, answer them in plain words first and
-  change no code until they say go** (that is how the review of 2.8.6 went, ADR-531).
-- **Don't cut a task ahead of time** (ADR-516): take the whole task; cut only when it truly can't go
-  on, and say what was left on the task's tick line.
-- Before asking how a contract line works, check whether projects, names, pay items and rules already
-  express it (ADR-197, 200). Never relabel a status mark yourself (ADR-133, 139).
-- Never mention data sharing between installations; say "installation", never "instance" (ADR-112).
-  Say "set up", never "provision".
-
-### Tools and housekeeping
-- **To try the build by hand: `pnpm field:try`** (the stack up; never beside `pnpm e2e`): the
-  tests' world, its monitors printed, a Chrome of its own; Ctrl-C drops it (ADR-585).
-- **Every command starts with** `eval "$(fnm env --shell zsh)"`. **The chain is `pnpm chain`**, run in
-  the background (ADR-533); its first step is `pnpm ready` (the stack up, then `installer:check`). **Leave nothing running** (ADR-277): stop the stack with
-  `pnpm local:down` at close-out (`adms-close-out` §0); nothing needs to stay running today. Docker
-  Desktop may be closed at a session's start: `open -a Docker`, and quit it at close-out if you
-  opened it.
-- **Docker's disk is 8 GB** (ADR-282): the stack's images take about 4.4 GB and its data about
-  0.5 GB. It was full on 2026-10-03 (four throw-away copies of `adms` at once) and 2026-10-10 (after
-  `pnpm test`, `pnpm scenarios` and two more database runs: Postgres restarted in a loop on its
-  write-ahead log). **If `pnpm ready` or `local:up` fails for space, stop and ask the user to free
-  some** (`docker builder prune`, about 0.9 GB, is theirs) or raise the limit; never work around
-  it. **Try loosened guards two at a time**, each copy `STRATEGY FILE_COPY` then a `CHECKPOINT`
-  after its drop (`adms-verify` §1.3). A first `local:up` downloads the map extract (20 MB, IPv4
-  only) and takes about two minutes; a resume about 12 s.
-- **When Docker misbehaves:** it hangs often on this machine and a restart always clears it (the
-  user, ADR-551): a `docker` call or `local:up` that hangs, or every call answering 500 →
-  `docker desktop restart` at once, never a long wait (quitting by `osascript` left its backend
-  running); then `pnpm local:down` and `up`. **Volumes nobody recognises are an agent's one-off
-  containers** (the stack's own are all named `open-adms-local_…`): run every one-off with `--rm`,
-  and before close-out `docker volume ls -f dangling=true` must show none you made; `local:up` meeting `ECONNRESET` or a container
-  whose layer is gone → `pnpm local:down` and `up` once more. **On a Linux host (a cloud session)**
-  the containers run as uid 1000: after `pnpm installer` the two service env files, after each
-  `local:up` the copied Caddy root, and each key under `infra/local/.generated/tls/` by its own
-  container's user (Postgres 999, the mail catcher 65534, the address server's `nominatim`, the
-  rest 1000) must be readable, or that service fails to start.
-- **A guard's `--create-only` stub must come out empty** (KD-70): if it carries a line nobody asked
-  for, find the `dbgenerated` default Prisma reads back differently; never write around the hook.
-  `prisma migrate dev --create-only` applies earlier pending migrations to `adms` and wants a
-  terminal when the new migration carries a warning (`adms-verify`, "The schema").
-- **`pnpm lint` runs under a 4 GB heap** (ADR-465); if it stops with "heap out of memory", split it
-  by workspace.
-- **Git:** the repository has `main`, a branch per phase (`phase0-foundation`, `phase1-data-coreh`,
-  `phase2-api-sync`, the current one) and the remote `openadms_dev` (GitHub), all the user's.
-  **Agents never write to git** (ADR-008): end a file-changing response with the user's git block,
-  **staging named paths, never `git add .`**. The guard hook also refuses a Bash command whose text
-  names a git write, a heredoc included: write such a file with the Write tool.
+- **Git:** `main`, a branch per phase (`phase0-foundation`, `phase1-data-coreh`,
+  `phase2-api-sync`, the current one) and the remote `openadms_dev`, all the user's (ADR-008).
 - **Gone on purpose:** `database/`, the placeholder folders and the Build 1 copy (never recreate or
   port from them); `README.md` is missing (the user's, KD-34). `pdftoppm` isn't installed, so the
   legacy field-app PDFs can't be read here (they were reviewed in round 22).
-- **The session hook prints the Next Atomic Task below into every session**, and warns when
-  `SUMMARY.md`'s topics or this page outgrow their budgets (ADR-532).
 
-## 📍 Next Atomic Task
+## Waiting on the user
 
-**Task 3.6.2, Receipts** (`BACKLOG.md`, Milestone 3.6; REQ-314's browser half, 315 in part,
-321; AC-04-97, AC-11-46…48, 50). One receipt content model (its package by ADR: the back office's
-receipt batch reads it too), rendered to PDF and ZPL; Code 128 of the bare number, never a label;
-every project prints; reprinted at any time, never recorded (no record, audit row or count); the
-printable control-ticket test set for PARKS (`400001`–`400050`). On a control-ticket project the
-submitted disposal's words about the back of the driver's ticket stand until the receipt prints
-(ADR-115, `ticket-capture.tsx`). Read its whole brief and ARCHITECTURE §12 first; a new dependency
-(PDF, barcode) needs its ADR. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read
-again).
-
-**New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
-topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**
-`eval "$(fnm env --shell zsh)"`; **the chain is `pnpm chain`** (in the background: about ten
-minutes; `pnpm ready` is its first step, ADR-533); after a change to `apps/api`
-or `apps/worker`, `pnpm local:up` again. The checks are `adms-verify`'s (read the page for the
-layer you touch); the counts are `CHAIN.md`'s. **If Docker's 8 GB disk is full, stop and ask the
-user**; the rest of what Docker and a Linux host need is the Handoff's "Tools and housekeeping".
-Names: `spec/CONVENTIONS.md`; field names: `spec/DATA-MODEL.md`; flag wording: `spec/FLAGS.md`.
-
-**Keep this section short (ADR-375):** the hook prints all of it into every session. It holds the
-next task and what that task needs, never a list of finished ones.
+- **Nothing blocks** (ADR-230). The defaults they may overturn: `SUMMARY.md` §4. Open: KD-80
+  (whether the field tag list goes too).
+- **For the on-device milestones (3.8, 3.9):** a real iPhone and Android phone, a Zebra ZQ printer,
+  Xcode and an Apple developer account (`ROADMAP.md` §6).
+- **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
+  settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
+  candidate; `RULES.md` §7 "Is valid". Ours: design tasks Q-166 and Q-167.

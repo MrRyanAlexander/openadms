@@ -5021,3 +5021,644 @@ REQ in the same response (ADR-519's lesson).
   certifying.** What each
   task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
   `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
+
+
+## Moved 2026-10-20 (ADR-594): the harness reshaped; each page as it stood through ADR-593, word for word
+
+Where each part lives now: `NEXT.md`'s "How the user works" → `AGENTS.md` ("Working with the
+user") and `adms-decisions` ("The user's answers, and how to ask"); its "Tools and housekeeping" →
+`adms-verify` ("Environment and housekeeping"); its Next Atomic Task → 3.6.2's own `BACKLOG.md`
+line (the hook reads the next task from `BACKLOG.md`); its "The model as it stands now", "Where it
+ends up" and "The road to done" → already `SUMMARY.md`, `spec/VISION.md` §8 and `ROADMAP.md`.
+`CHAIN.md`'s counts → its generated table (byte-identical counts); its prose (which tests need the
+stack, each count's notes) is below. `adms-verify`'s body → `chain-reference.md` beside it (moved
+there whole, not here).
+
+### From `agent_store/NEXT.md`, from "---" before the Handoff to the end
+
+---
+
+## 🔁 Handoff — read this first in a new session
+
+Everything decided is in the files; nothing lives only in an old chat. This block says **where
+things stand, where the product ends up, the road there, and how the user works**. What is true
+now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
+the round-by-round history is the session log at the end of `DECISIONS.md`.
+
+### Where things stand (2026-10-20, through ADR-593)
+- **Phase 3 is open (ADR-557)**: 20 of 33 tasks done (ADR-557…586). **Milestones 3.1…3.5 are done**:
+  the plan, the scenarios, the checklist, the shell at `https://field.adms.localhost` with
+  `pnpm e2e` in the chain and axe-core on every screen; the store, enrolment, sign-in online and
+  offline, setup, switching, moving and sessions under the master passcode; the phone's own sync,
+  its photographs' files and "Sync and turn in"; and **every capture in the browser build**: the
+  collection, the tower and the haul-out, unit rate, the forms, and **certifying (ADR-585)**, with a
+  phone away from its site told so. **Milestone 3.6 is under way: photographs are done (ADR-586)**,
+  from the app's own camera only, taken again in place or removed, the native shrink's interface
+  with the browser build keeping the original. **The user's notes from trying it with
+  `pnpm field:try` are built (ADR-587…590):** no police report asked by default, a sync every five
+  minutes, a made number never typed again, unit rate work photographed by stage. **Their next
+  notes (ADR-591…593):** unit rate rebuilt as the crew first, the work second and, for work by
+  stage, a dashboard whose three parts each drop back to it; no field tag on any phone capture
+  (KD-80 asks whether the list goes too); "Look up address" answered in the browser world.
+  **Next: receipts (3.6.2), then scanning (3.6.3).**
+  What each task did is its ADR and its `BACKLOG.md` tick; the longer account is `ARCHIVE.md`
+  ("Moved 2026-10-19", ADR-580 and ADR-585).
+- **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
+  row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
+  independent check of Phases 0–2 is answered whole (ADR-541…551); its file
+  (`AUDIT-2026-10-17-PHASE-2.md`) is no longer in the working folder (a missing file is intentional; never restored).
+- **Phases 0 and 1 are done** (Phase 0 closed 2026-10-01, all 17 REQs, ADR-281…288; Phase 1's exit
+  met 2026-10-06, ADR-371, 372). **Every spec page is approved** (ARCHITECTURE, VISION, INDEX, the
+  part pages, LISTS, RATE-SHEET, RULES, DATA-MODEL, FLAGS, CONVENTIONS, the golden mission and its
+  numbers, all ten acceptance files, THREAT-MODEL, CHECKLIST-API §3.1). Their record: `ROADMAP.md`
+  §3a–§3c and `DECISIONS.md`.
+- **Phase 2:** 44 tasks over Milestones 2.0…2.9 (ADR-376…555); the user's answers to the
+  defaults page confirmed all but D1 (ADR-538, 539). What each task left is `BACKLOG.md`'s
+  carry-forward register (live items only since ADR-532), mapped to Phase 3's tasks (ADR-558).
+- **What runs.** The API (NestJS on Fastify) is the local stack's own service, reached only at
+  `https://api.adms.localhost` through Caddy; the worker drains the job queue. **Every endpoint is
+  defined in `packages/contracts` and served through `@Serves`; `Admission` asks who may call it
+  before the schemas read anything**; the recipe for adding one is the register's standing rules.
+- **What exists:** `packages/db` (schema, guards, tests), `packages/domain` (every rule),
+  `packages/contracts` (every payload, the sync client's suite), `packages/scenarios` (the harness
+  and stories, the golden mission among them), `apps/api/src/` (services by area, `process/`,
+  `phone/`, `sync/`, `review/`, `setup/`, `dispatch/`, `viewer/`), `apps/worker/src/`
+  (`reconciliation/`, `mileage/`, `process/`), `tools/` (installer, security, licences), `infra/local`.
+- **This machine's installation holds no person but the seed's actors** (`pnpm local:accounts` and
+  `pnpm installer:admin` are never run for real here; the API's tests rely on it). Its master
+  passcode is a throw-away random value.
+- **Open deviations:** none (`SUMMARY.md` §3). **Waiting on the user:** nothing blocks; for the
+  on-device milestones (3.8, 3.9) a real iPhone and Android phone, a Zebra ZQ printer, Xcode and an
+  Apple developer account (`ROADMAP.md` §6); `SUMMARY.md` §4 lists the defaults open to them.
+- **The user's word (ADR-401): sign-in follows NIST SP 800-63B and ASVS Level 2; when a direction
+  in security is suggested, say what the standard asks before building it.**
+
+### The model as it stands now (today's words; `SUMMARY.md` has each rule and its ADR)
+The firm's setup decides how things play out (ADR-197), and there are **two sides** (ADR-224): the
+monitor enters only the main ticket, the system and the back office do the rest.
+- **Setup:** client → declaration event → project; contractors and **contracts** (name, prime,
+  link); **forms** with their **debris types**, named as the contract names the work; **pay items**
+  (a code unique on the project, a description, a **payable type**, Unit of Measure, size band,
+  capture settings, **a rate per prime**); **sites** (site type + Takes loads · Haul-outs leave here
+  · Charges a tipping fee · Ineligible site); field tags; the project map; **rules** per form,
+  **naming one contract** and running only on its prime's tickets: criteria → *Add / Remove
+  transaction #n*, *Void ticket*.
+- **Phones and people:** a phone is **enrolled** once; the back office's **dispatch board** gives
+  each person a daily **assignment**; the phone takes it at sign-in; setup by master passcode is the
+  fallback; phones sync whenever there's signal, with somebody signed in. The optional **time
+  clock** hangs on the assignment.
+- **Field:** each monitor records a **field event** (`COL` `DIS` · `HOC` `HOD` · `URT`). **The badge,
+  then the number, at New**; a ticket left at any step and resumed, one open per truck on a phone
+  (ADR-571). Picks **by name, never a code**. One quantity: a load call, or a scale
+  weight when the paying pay item is by weight. A submitted record is sealed for its monitor.
+- **Engine:** groups field events on project + workflow + bare number; flags, never blocks;
+  attaches zone and mileage; runs every passing rule in # order; writes the completed load and the
+  transactions (regenerated, each removed row copied to audit first).
+- **Back office:** sees everything, corrects in place (audited), accepts flags, voids with a reason,
+  reprocesses; QC status is separate; only QC Approved records lock as invoiced, optionally in a
+  named **invoice batch**; the client package is assembled by hand from exports; one review queue;
+  a setup check; the pay item screen writes its own rules.
+
+### Where it ends up
+Done is proven, not ticked (`spec/VISION.md` §8): approved part pages → **acceptance scenarios**
+(`spec/acceptance/`, `AC-…`) → a **golden mission** (`spec/golden/`, signed off by the user) → the
+same scenarios passing at each layer (engine, API, apps). The finished surfaces are `VISION.md` §7.
+
+### The road to done (the user's view: `ROADMAP.md`)
+| Phase | What it produces | Status |
+|---|---|---|
+| 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
+| 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
+| 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 20 of 33 tasks |
+| 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
+| 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
+
+### What is still to be asked (so nothing is guessed later)
+- **Nothing blocks** (ADR-230). New questions only under the shot-clock rule.
+- **Agent defaults the user may overturn:** `SUMMARY.md` §4 (never copied here, ADR-516).
+- **Later phases, not asked now:** the HHW trail (KD-30, REQ-518); the time clock's screens (rules
+  settled, ADR-241); which phase the read-only portal lands in (`VISION.md` §7); each Phase 5
+  candidate; `RULES.md` §7 "Is valid".
+- **Ours, not the user's:** design tasks Q-166 (regional map data) and Q-167 (upgrading an
+  installation).
+
+### How the user works
+- The user is the domain expert and the authority on field reality; the `development/` specs are
+  not (their truck-capacity section is wrong). The legacy screenshots in `development/legacy_app(…)/`
+  are the best evidence of what a firm needs; when told "think harder", look there first.
+- They answer **inline** in the docs (usually `spec/QUESTIONS.md`), sometimes inside tables, as
+  corrections above earlier quotes, or numbered oddly; they write "APPROVED" under sections. Read the
+  changed section in full; move each answer into a dated `> **User, …:**` quote, verbatim; record an
+  ADR in the same response; update `SUMMARY.md`, the owning skill, `spec/RULES.md` and the part pages.
+- They answer wearing **different hats**: a firm setting up, a monitor in the field, the back office
+  (ADR-224). Note which, and design each side for its own user.
+- **A "yes" to an either-or question is read back before it is recorded** (Q-139 → ADR-147 → 301:
+  a misread "Yes" stood five days). Say which half you understood, in one line, and never ask two
+  things in one question. An acceptance scenario is where the user catches a misreading: write
+  them plainly.
+- Write questions that stand alone: plain words, **a story told as a table of what happens to each
+  ticket**, then the question, refs at the end. No paraphrase ("TOO MUCH PARAPHRASING"). Give ticket
+  numbers that make sense. When their numbers don't add up, show the arithmetic and ask once.
+  Never guess money.
+- **When the user reviews a finished task with questions, answer them in plain words first and
+  change no code until they say go** (that is how the review of 2.8.6 went, ADR-531).
+- **Don't cut a task ahead of time** (ADR-516): take the whole task; cut only when it truly can't go
+  on, and say what was left on the task's tick line.
+- Before asking how a contract line works, check whether projects, names, pay items and rules already
+  express it (ADR-197, 200). Never relabel a status mark yourself (ADR-133, 139).
+- Never mention data sharing between installations; say "installation", never "instance" (ADR-112).
+  Say "set up", never "provision".
+
+### Tools and housekeeping
+- **To try the build by hand: `pnpm field:try`** (the stack up; never beside `pnpm e2e`): the
+  tests' world, its monitors printed, a Chrome of its own; Ctrl-C drops it (ADR-585).
+- **Every command starts with** `eval "$(fnm env --shell zsh)"`. **The chain is `pnpm chain`**, run in
+  the background (ADR-533); its first step is `pnpm ready` (the stack up, then `installer:check`). **Leave nothing running** (ADR-277): stop the stack with
+  `pnpm local:down` at close-out (`adms-close-out` §0); nothing needs to stay running today. Docker
+  Desktop may be closed at a session's start: `open -a Docker`, and quit it at close-out if you
+  opened it.
+- **Docker's disk is 8 GB** (ADR-282): the stack's images take about 4.4 GB and its data about
+  0.5 GB. It was full on 2026-10-03 (four throw-away copies of `adms` at once) and 2026-10-10 (after
+  `pnpm test`, `pnpm scenarios` and two more database runs: Postgres restarted in a loop on its
+  write-ahead log). **If `pnpm ready` or `local:up` fails for space, stop and ask the user to free
+  some** (`docker builder prune`, about 0.9 GB, is theirs) or raise the limit; never work around
+  it. **Try loosened guards two at a time**, each copy `STRATEGY FILE_COPY` then a `CHECKPOINT`
+  after its drop (`adms-verify` §1.3). A first `local:up` downloads the map extract (20 MB, IPv4
+  only) and takes about two minutes; a resume about 12 s.
+- **When Docker misbehaves:** it hangs often on this machine and a restart always clears it (the
+  user, ADR-551): a `docker` call or `local:up` that hangs, or every call answering 500 →
+  `docker desktop restart` at once, never a long wait (quitting by `osascript` left its backend
+  running); then `pnpm local:down` and `up`. **Volumes nobody recognises are an agent's one-off
+  containers** (the stack's own are all named `open-adms-local_…`): run every one-off with `--rm`,
+  and before close-out `docker volume ls -f dangling=true` must show none you made; `local:up` meeting `ECONNRESET` or a container
+  whose layer is gone → `pnpm local:down` and `up` once more. **On a Linux host (a cloud session)**
+  the containers run as uid 1000: after `pnpm installer` the two service env files, after each
+  `local:up` the copied Caddy root, and each key under `infra/local/.generated/tls/` by its own
+  container's user (Postgres 999, the mail catcher 65534, the address server's `nominatim`, the
+  rest 1000) must be readable, or that service fails to start.
+- **A guard's `--create-only` stub must come out empty** (KD-70): if it carries a line nobody asked
+  for, find the `dbgenerated` default Prisma reads back differently; never write around the hook.
+  `prisma migrate dev --create-only` applies earlier pending migrations to `adms` and wants a
+  terminal when the new migration carries a warning (`adms-verify`, "The schema").
+- **`pnpm lint` runs under a 4 GB heap** (ADR-465); if it stops with "heap out of memory", split it
+  by workspace.
+- **Git:** the repository has `main`, a branch per phase (`phase0-foundation`, `phase1-data-coreh`,
+  `phase2-api-sync`, the current one) and the remote `openadms_dev` (GitHub), all the user's.
+  **Agents never write to git** (ADR-008): end a file-changing response with the user's git block,
+  **staging named paths, never `git add .`**. The guard hook also refuses a Bash command whose text
+  names a git write, a heredoc included: write such a file with the Write tool.
+- **Gone on purpose:** `database/`, the placeholder folders and the Build 1 copy (never recreate or
+  port from them); `README.md` is missing (the user's, KD-34). `pdftoppm` isn't installed, so the
+  legacy field-app PDFs can't be read here (they were reviewed in round 22).
+- **The session hook prints the Next Atomic Task below into every session**, and warns when
+  `SUMMARY.md`'s topics or this page outgrow their budgets (ADR-532).
+
+## 📍 Next Atomic Task
+
+**Task 3.6.2, Receipts** (`BACKLOG.md`, Milestone 3.6; REQ-314's browser half, 315 in part,
+321; AC-04-97, AC-11-46…48, 50). One receipt content model (its package by ADR: the back office's
+receipt batch reads it too), rendered to PDF and ZPL; Code 128 of the bare number, never a label;
+every project prints; reprinted at any time, never recorded (no record, audit row or count); the
+printable control-ticket test set for PARKS (`400001`–`400050`). On a control-ticket project the
+submitted disposal's words about the back of the driver's ticket stand until the receipt prints
+(ADR-115, `ticket-capture.tsx`). Read its whole brief and ARCHITECTURE §12 first; a new dependency
+(PDF, barcode) needs its ADR. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read
+again).
+
+**New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
+topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**
+`eval "$(fnm env --shell zsh)"`; **the chain is `pnpm chain`** (in the background: about ten
+minutes; `pnpm ready` is its first step, ADR-533); after a change to `apps/api`
+or `apps/worker`, `pnpm local:up` again. The checks are `adms-verify`'s (read the page for the
+layer you touch); the counts are `CHAIN.md`'s. **If Docker's 8 GB disk is full, stop and ask the
+user**; the rest of what Docker and a Linux host need is the Handoff's "Tools and housekeeping".
+Names: `spec/CONVENTIONS.md`; field names: `spec/DATA-MODEL.md`; flag wording: `spec/FLAGS.md`.
+
+**Keep this section short (ADR-375):** the hook prints all of it into every session. It holds the
+next task and what that task needs, never a list of finished ones.
+
+### From `agent_store/CHAIN.md`, whole
+
+# Open ADMS — The chain's counts, today
+
+> **The one place the chain's numbers are written** (ADR-445). What each command proves and what a
+> pass looks like is the `adms-verify` skill's; this page is only what you should see **today**.
+> **A task that adds or removes a test, a story's check, a migration or a package replaces the
+> number here in the same response**: today's only, never a "before it…" chain (the reason is the
+> task's ADR and its session-log line in `DECISIONS.md`). No other file carries these counts.
+> **A count that differs from this page without a reason is a finding, not noise.**
+
+**Seen whole:** 2026-10-19, the user's notes on trying the field app (ADR-587…590), on the user’s Mac, the installation at head: `pnpm chain` 10 of 10 in 13 min 38 s; every count below as seen.
+
+## `pnpm ready`
+
+| What | Today |
+|---|---|
+| `pnpm local:up` | eight `Healthy` services (`pnpm chain` says `10 containers Healthy`: these eight, the API's and the worker's) (`routing-tls` the seventh, ADR-517; `objectstore-tls` the eighth, ADR-525), `Keeping the stack’s root and every service’s certificate.`, `Keeping the object store’s bucket adms-media (it keeps every version).` (ADR-480), the field app built first (ADR-565) and `https://field.adms.localhost/ → 200 <!doctype html> <html lang="en"> …`, then the API's and the worker's containers: `https://api.adms.localhost/health → 200 {"status":"ok"}` and `the worker’s health answer → 200 {"status":"ok","jobsWaiting":0,"jobsSetAside":0,"oldestJobWaitingSeconds":0}` |
+| `pnpm installer:check` | **38 `✓`**, no `✗`, exit 0 (the two since ADR-530: each service's policy values in force; one since ADR-542: the API's three secrets there and apart) |
+| Migrations at head | **149** (`packages/db/prisma/migrations/` is the list) |
+| `pnpm local:down` (close-out) | 10 containers and the network: 11 `Removed` lines |
+
+## `pnpm test`
+
+**`Test Files 210 passed (210)`, `Tests 3585 passed (3585)`.**
+
+| Project | Tests | Files | Needs |
+|---|---|---|---|
+| `packages/domain` | 915 | 49 | nothing (a kind of work photographed by stage, set and changed, 4, and the phone's sync every five minutes 1, ADR-588, 590; the measurements each box shape holds 1 and whether a point is at a site 1, ADR-585; what a phone offers on a survey, 3, ADR-584; what a phone asks of unit rate work, 10, ADR-583; what a phone at a site asks, 6, ADR-582) |
+| `packages/contracts` | 98 | 9 | nothing |
+| `apps/api` | 765 | 58 | `pnpm ready` for most (the API's own page beside `adms-verify` says which need nothing) |
+| `packages/db` | 1095 | 49 | `pnpm ready` |
+| `packages/scenarios` | 163 | 7 | `pnpm ready` for `stories.test.ts` (the runner and a run's template, 5) and `story-api.test.ts` (a story's API over HTTPS through the proxy, every request of a story's phone, the back office and the viewers at their browsers, and a turn-in meeting another request of its phone in the database, 16); the flag catalogue (81 flags), the harness (its tower asking its site's lookup, ADR-582), the phone held to the sync contract's suite and to what it sends and takes in at a sync, its photographs' files and its turn-in among it, and its wait when told to (28), the policy and the server apps' exports (2) need nothing. **The stories themselves are not here** (ADR-446) |
+| `apps/worker` | 51 | 6 | `pnpm ready` for the map servers (13), their answers on an HTTPS server of the stack's certificate (6) and its container (3); the process (14), the job loop (its set-aside lines and its health, 11) and the lost phones' backstop (4) need nothing |
+| `infra/local` | 77 | 6 | `pnpm ready` for the map services and every hop's TLS, the object store's thirteen ports refused among it (`hops.test.ts`, 25); Docker alone for `compose.test.ts` (18); nothing for the certificates (12) and the extract |
+| `tools/security` | 143 | 3 | nothing (the scan's and the grant tests' rules 51, who reaches Postgres 35, the guard hook 57) |
+| `tools/setup` | 20 | 3 | nothing |
+| `tools/chain` | 16 | 1 | nothing (how `pnpm chain` reads each step's output and this page) |
+| `apps/field` | 242 | 19 | nothing (a unit rate ticket's photographs by stage 1, ADR-590; a ticket's photographs, the original fingerprinted first, a native shrink's file and depth file, at most 8, one taken again in its place, a form's field following it and a form at its eight still taking one again, an empty one never shrunk, the page opening the camera to itself alone 7, ADR-586; the certifications begun on the phone, their number, capacity, boxes sent with `null` for what a shape doesn't hold, five views, a crew's, a replacement, a refusal kept open, a submit cut short 12, ADR-585; the forms begun on the phone, an ROE's number, their records and photographs, this phone's ROEs and pre-work surveys 7, ADR-584; the tickets begun on the phone, the duplicate check, today's count and its first block 11, ADR-581, the tower's and the haul-out's 3, ADR-582, and unit rate's and the working crew 3, ADR-583; "Sync and turn in", the wipe, a key the firm's time revoked, a lost answer, a record it can't read 13, ADR-580; its photographs' files sent, asked after on reopening and sized by the signal 8, ADR-579; the field app's own sync client held to the sync contract's suite over its store, twice 42, and its sync runs 9, ADR-578; the master passcode on the phone, its ten wrong tries' lock, switching, moving and its sessions 12, ADR-577; setting the phone up under the master passcode and its reports 9, ADR-576; signing in offline, the login list and the screen's own tries 14, ADR-575; the device key 4 and the phone's identity 11, ADR-572; the monitor signed in and the lists held 8, ADR-574; what the field app holds 11, ADR-565, 570, 572: no web-layer storage, no key from a secret but the device key's public half read out, no attestation, no console; the store's sealing 4, ADR-570; its words 24 (each screen module of the app's and its words file; the prototype's gone, ADR-583), its page's policy and the API it names 10, ADR-565, 568; the accessibility check's screens, rules and reporter 6, ADR-566; the look's tokens 5, ADR-568) |
+
+## `pnpm lint`, `pnpm licences`
+
+- Lint: `All matched files use Prettier code style!`, exit 0 (ESLint under a 4 GB heap, ADR-465).
+- Licences: **`472 packages: 472 allowed, 0 refused, 0 undecided.`** on the Mac; one fewer on
+  Linux (the lockfile's Mac-only packages aren't installed there; not seen there since ADR-479).
+
+## `pnpm scenarios`
+
+`This run’s template, adms_story_template_…: 149 migrations applied`, then **`Stories: 24 passed, 0
+failed.`** Each story `passed: N checks, N passed, 0 failed`:
+
+| Story | Checks | | Story | Checks |
+|---|---|---|---|---|
+| `ticket-101001` | 16 | | `p1-priced` | 29 |
+| `dispatch-monday` | 22 | | `p1-reviewed` | 36 |
+| `setup` | 52 | | `p1-voided` | 32 |
+| `certification` | 29 | | `p1-invoiced` | 27 |
+| `numbering` | 16 | | `golden-mission` | 32 |
+| `p1-field-days` | 35 | | `p1-left-out` | 31 |
+| `sync` | 51 | | `first-admin` | 32 |
+| `p1-any-order` | 4 | | `p1-queued` | 20 |
+| `p1-reconciled` | 39 | | `p1-viewed` | 26 |
+| `under-the-passcode` | 9 | | `held-for-review` | 16 |
+| `interrupted-upload` | 8 | | `burst` | 8 |
+| `lost-phone-key` | 14 | | `offline-sign-in` | 5 |
+
+The golden mission's figures are `spec/golden/MISSION.md`'s and change only at the user's word:
+P1 $5,548.25 on 19 lines, P2 $324.00. `p1-reconciled` through `p1-left-out`, `p1-queued` and
+`p1-viewed` ask the map servers, and `burst` too (its lines `It took …`, the jobs' sizes, the take read again, the neighbour read, a setup change's read and a run by its size are measurements, ADR-505, 506, never checked).
+
+## `pnpm e2e`
+
+**51 browser tests**, `51 passed (48.8s)` in the chain: the sync every five minutes 1 (`e2e/sync.e2e.ts`, ADR-588); the photographs' 2 (`e2e/photographs.e2e.ts`, `e2e/camera-refused.e2e.ts`, ADR-586: Ana's two from the camera, one taken again from full size and one removed, the camera open checked, the file sent a JPEG whose SHA-256 is the original's; the camera refused in a browser of its own, the collection goes on), certifying's 2 (`e2e/certify.e2e.ts`, ADR-585: Jo measures 730415's boxes to 65 CY, Rivera offered, Lee picked, five views, synced and in the lists; a crew on a held number left and finished, refused at the sync and kept, one cancelled), the forms' 3 (`e2e/forms.e2e.ts`, ADR-584: on P2 an ROE and two surveys, the post-work one offline; Ana's incident on P1 with its offers and required field, left and finished, one cancelled; Kim's drop-off log with every type of the firm's own fields), unit rate's 2 (`e2e/unit-rate.e2e.ts`, ADR-583: Jo's crew 730417 kept and confirmed, a hanger and leaners, two open for one crew, "ineligible" where allowed; on another phone a stump, white goods and crew time, the crew changed), the tower's and the haul-out's 3 (`e2e/tower.e2e.ts`, ADR-582: Kim at Marsh Road TDSR's tower offline, Lee's split haul-out at its loading end, Lee at the Landfill moved offline to Cypress Creek, its lookup then read: the weight, a tandem's receipt, the count), the collection's 4 (`e2e/collection.e2e.ts`, ADR-581: the number shown and typed again, two tickets open and resumed, completed offline and synced, the split chain, the PARKS project's control tickets), the door's 7 (`apps/field/e2e/door.e2e.ts`; ADR-564, 565), the phone's store's 4 (`e2e/store.e2e.ts`, ADR-570) enrolment's 3 (`e2e/enrolment.e2e.ts`, ADR-572, in the run's own world, a `adms_story_…` database the harness makes and drops) signing in's 3 (`e2e/sign-in.e2e.ts`, ADR-574, against the world's cast) signing in offline's 4 (`e2e/offline-sign-in.e2e.ts`, ADR-575) setting a phone up under the passcode's 3 (`e2e/setup.e2e.ts`, ADR-576, the world's P2 among them) the passcode's switching, moving, sessions and lock 4 (`e2e/switching.e2e.ts`, ADR-577), the sync contract's suite in Chromium over the browser build's store 1 (`e2e/sync-client.e2e.ts`) and the phone's sync against the world's API 1 (`e2e/sync.e2e.ts`, ADR-578), its photographs' files against the world's media endpoint 1 (`e2e/photo-files.e2e.ts`, ADR-579), and "Sync and turn in" 3 (`e2e/turn-in.e2e.ts`, ADR-580: Ana's phone turned in and erased, one answered not turned in, the world's lost `P1-TWR-LF` turned in with the passcode). The field app built first (`dist/web/assets/index-….js` about 636 kB, its stylesheet about 9 kB), then the same for the world (`dist/world`), then Chromium's headless shell fetched if missing; needs `pnpm ready`. Then the accessibility check's line (ADR-566): `Accessibility: 53 of 53 screens checked, in 233 checks; 0 found.`, **53 screens of the app**, each check in both themes and at 320 CSS px with 200% text (ADR-583; the prototype gone): certifying's six (ADR-585) `new-certification`, `certify`, `certify-box`, `cancel-certification`, `certification-photo`, `certification-submitted`; the forms' ten (ADR-584) `new-roe`, `new-survey`, `new-incident`, `fill-roe`, `fill-survey`, `fill-incident`, `fill-drop-off-log`, `form-photo`, `form-submitted`, `cancel-form`; `new-collection`, `new-haul-out`, `new-disposal`, `new-unit-rate`, `complete-unit-rate`, `complete-disposal`, `complete-haul-out`, `open-ticket`, `cancel-ticket`, `complete-collection`, `photo`, `submitted`, `create-monitor`, `enrol`, `home`, `monitor-created`, `move-passcode`, `-site`, `-made`, `session-passcode`, `-monitor`, `phone-locked`, `phone`, `setup-passcode`, `-project`, `-work`, `-site`, `-pay-items`, `-monitor`, `-hand-over`, `-handed`, `-made`, `no-assignment`, `sync`, `settings`, `turn-in` and `turned-in`.
+
+## `pnpm security`
+
+`✓ 0 open advisories` (3 accepted by id; 495 packages); secretlint `0 found`; the installation's own secrets
+(13 values from 4 env files; the eleventh the API's key file's path, ADR-517; the twelfth and thirteenth the password and sealing keys, ADR-542) `0 found`; a password-like setting `0 found`; a whole slow hash, an
+authenticator's secret or a private key as a JWK `0 found` (8 inline exceptions named); **the built field app's four scans `0 found`** (`Secrets scan of the built field app (3 files in apps/field/dist/web)`, ADR-565: the page, its script and its stylesheet); env files
+`✓ every one ignored by git and untracked`; who reaches Postgres: `of 14 workspaces, the
+product's that reach it: apps/api, apps/worker, packages/db` (3 tools named), `596 source files
+read`, `15 statements` (a turn-in's and a top-up's lock on the phone's row, ADR-524; a phone's back-office change and the worker's revocation, each locking the phone's row, ADR-530; who signs in with an address, ADR-547), `prisma migrate diff: no difference`; the grant tests **`49 files, 1095
+tests: 1095 passed, 0 failed`**; ending **`Security checks: 16 passed, 0 failed.`**
+
+## What the installation holds after a run
+
+Only the seed: 3 users (the system actor, the master passcode's actor, the device key's), 1 master
+passcode version, the firm's lists' values (98 on a new installation since ADR-530; an installation made before keeps its own), the firm's settings record (ADR-530), and their audit records. The Monitor ID
+series on `adms` moves with every run (a sequence isn't rolled back); gaps are normal.
+
+## How long it takes here (the user's Mac, seen 2026-10-09; for judging a hang, not a target)
+
+`pnpm chain`, the whole chain, 12 min 15 s (seen 2026-10-19; `pnpm test` 4 min 23 s of it, `pnpm scenarios` 5 min 24 s, `pnpm e2e` 50 s).
+`pnpm test` about 2 min 20 s; `pnpm scenarios` about 3 min, of which `burst` under 2 min (its drain about 38 s since ADR-506);
+`pnpm security` a few seconds after `pnpm test` (the database tests run again otherwise);
+`pnpm ready` on a stopped stack under a minute.
+
+### From `AGENTS.md` (`CLAUDE.md`), whole
+
+# Open ADMS — Agent Operating System
+
+Offline-capable debris management and field reconciliation for disaster recovery. A truckload is
+recorded as **two field events by two monitors who cannot see each other** (a collection event at
+the curb, a disposal event at the dump) under one ticket number; only the server joins them, and
+flags what disagrees.
+
+**Nothing about this domain is guessable. Never infer a domain fact — load the skill that owns
+it, or ask.** Confidently wrong code is the default failure mode here.
+
+## What we're building
+
+**Who's who:** a **firm** (usually a monitoring firm) installs Open ADMS and runs its own
+**installation**; its **users** are its back office (admins, managers/analysts) and field monitors,
+plus read-only viewers it issues. A **client** (the jurisdiction paying), contractors and property
+owners are **records**; a **client user** is a viewer login. Detail: `adms-domain` §1.4.
+
+The system of record for a debris mission, from declaration to audit:
+- The **back office** sets up a project: client → declaration event → project, then pay items
+  and rules read off the contract, certifications, sites and ROEs.
+- The back office **dispatches** each day: an **assignment** says who works where, on what.
+- **Field monitors** capture collections, disposals, haul-outs, unit-rate work and forms on
+  enrolled phones that take their assignment (never "provisioned"), offline, syncing whenever
+  there's signal.
+- **The engine** joins each ticket's field events by ticket number, validates them, writes the
+  completed record and its transactions as conclusions from the events, and flags anything wrong.
+- **Reviewers** correct, renumber or void (audited) and reprocess.
+- **The ledger** always shows the current truth. The back office assembles the client package
+  from it by hand.
+
+## Start here
+
+| To… | Read |
+|---|---|
+| Understand the system, then find the part you're touching | **`spec/INDEX.md`**, the book: what it is, nine parts, a step-by-step page each |
+| Know what's decided **now**, and which ADRs to cite | **`agent_store/SUMMARY.md`**: its header's topic index, then only the topics your task touches (never whole; ADR-445, 532) |
+| Know the next task, where the product ends up, and the road there | `agent_store/NEXT.md` (the Handoff, then the Next Atomic Task) |
+| Know how a layer is built and secured (install, database, API, devices, sync, storage, tests) | **`spec/ARCHITECTURE.md`**: the sections for that layer (`grep -n '^## '`; never whole) |
+| Know the rules for a topic, and why | the skill (table below) |
+| Answer "how does it behave?" | `SUMMARY.md`, then the skill, then `spec/QUESTIONS.md` |
+| Explain, demo or test the domain | **`spec/golden/MISSION.md`**: one mission, every kind of record, each one's life. Never invent coverage |
+| Name anything, or write an example, a test fixture or a seed | **`spec/CONVENTIONS.md`**: today's words, code names, the pay item code convention, the example world, the retired examples |
+
+**Security first, at every layer.** The platform is rebuilt, TypeScript end to end with Prisma
+(ADR-093/094); the old code is gone and is never a source. `spec/VISION.md` and the
+other spec pages are approved (ADR-269). Phases are the build order; the spec is the target.
+
+## Load the right skill before you work
+
+| About to touch — or answer a question about | Load |
+|---|---|
+| Anything — first task of the conversation; what an ADMS is, glossary, invariants | `adms-domain` |
+| Schema, models, enums and lists, org hierarchy, which service owns what | `adms-data-model` |
+| Certifications, cert numbers, capacity math, containers, crews | `adms-certifications` |
+| Creating/matching tickets, the four workflows, the project setup spine | `adms-ticket-workflows` |
+| Duplicates, quarantine, renumber vs void, corrections, splits | `adms-exceptions` |
+| Weights, tonnage, scale receipts, apportionment, FDS loads | `adms-scale-receipts` |
+| Validators, rules engine, statuses, flag messages, volume math | `adms-validation` |
+| Pricing, `Transaction`, `AuditRecord`, the ledger | `adms-ledger-audit`; the rule builder: `spec/RULES.md` |
+| Phone setup, sign-in, devices (Phase 0); field capture screens (later phases) | `adms-field-app` |
+| An architectural call, or code/docs that disagree with a skill | `adms-decisions` |
+| Any code, config, install, auth, device, sync or storage work | read **`spec/ARCHITECTURE.md`**'s sections for that layer first (not a skill) |
+| Running the checks | `adms-verify` |
+| Closing out a response that changed files | `adms-close-out` |
+
+**What to trust, in order — for every answer, explanation or demo, not only code:** the newest ADR
+→ `SUMMARY.md` → a skill marked current (`<!-- skill-status: current -->`; the session hook lists
+them) → in any other skill, **only its ⚠️ notes: its body describes the old system** (KD-58) →
+spec drafts. A term, status or field you can't find in `SUMMARY.md` is probably superseded
+(`SUMMARY.md` §2 lists what replaced it). The user's Build 1 answers are verbatim in
+`spec/FROM-BUILD-1.md`; Build 1 code is never a source (ADR-102).
+
+**Unknown behaviour?** Load the owning skill, then check `spec/QUESTIONS.md` (✅: answer from it).
+**Product discovery is closed (ADR-230):** ask only when the answer changes money, evidence or what
+a monitor must do, it blocks your task, and nothing recorded covers it: at most three questions,
+each standing alone (plain words, a story, refs at the end) with your recommendation. Otherwise pick
+the option that keeps the firm's choice open, record an ADR marked "agent default", and carry on.
+
+## State files — `agent_store/`
+
+| File | What | Yours to edit? |
+|---|---|---|
+| `SUMMARY.md` | Current rules by topic (an index in its header), superseded ADRs, open gaps, what waits on the user. **Keep it current** | ✅ update |
+| `NEXT.md` | Active phase, exit criteria, next atomic task | ✅ tick |
+| `CHAIN.md` | The chain's counts today, the only place they are written (ADR-445) | ✅ replace |
+| `BACKLOG.md` | The active phase's tasks; the carry-forward register (live items only, and the standing "every task that…" rules) | ✅ tick |
+| `DECISIONS.md` | Full ADR log + session log. Append-only, never renumber | ✅ append |
+| `DEVIATIONS.md` | Full code-vs-skill gap log | ✅ append |
+| `ARCHIVE.md` | History moved word for word out of the pages above when they are trimmed (ADR-532). **Grep only, never read whole** | ✅ append |
+| `REQUIREMENTS.md` / `-LATER.md` | The active and finished phases' checklist (Phase 3 active, opened by the user, ADR-557) / the gated phases, 4–5 | ✅ tick |
+| `ROADMAP.md` | The user's one-page roadmap, start to finish, in tables (ADR-280). Summarises the files above | ✅ update at close-out |
+
+## Working loop
+
+1. **ORIENT** — read `NEXT.md`, then `SUMMARY.md`'s header and only the topics your task touches;
+   your task's line in `BACKLOG.md` with the register's items for it and its standing rules; load
+   `adms-domain` on the first task; find your part in `spec/INDEX.md`. No task given? `NEXT.md`'s
+   Next Atomic Task is it.
+2. **SCOPE** — does this belong to the active phase and a permitted directory? If not, say which
+   phase it belongs to and ask. Never silently widen scope.
+3. **GROUND** — read the actual files before editing. Never infer a field name, enum value or
+   model name from prose; the schema is the source of truth.
+4. **EXECUTE** — minimal edits. No adjacent refactors, no building ahead. Every dependency is
+   pinned; a new one needs an ADR. Answer in the form asked for (chat text, a file, an artifact).
+   Do the whole task: never cut it into parts ahead of time (ADR-516).
+5. **VERIFY** — load `adms-verify` (`pnpm ready` first; counts against `CHAIN.md`). Report real
+   observed output, never "should pass".
+6. **CLOSE** — load `adms-close-out`.
+
+## Write boundaries
+
+| Path | Access |
+|---|---|
+| `agent_store/` | ✅ all files |
+| `.claude/skills/` | ⚠️ domain content came from the user — record their decisions (marked with the ADR), never "correct" it; log a KD instead |
+| `spec/` | ⚠️ agent drafts, user approves; approved content is treated like a skill (ADR-043) |
+| `.claude/settings.json`, `.claude/hooks/` | ⚠️ enforcement — never weaken without the user asking; the hook's rules are tested (`tools/security/test/guard-hook.test.ts`): change hook, test and this table together (ADR-283) |
+| `development/` | ❌ read-only reference. Its truck-capacity section is **wrong**; never use it |
+| `apps/`, `packages/`, `infra/`, `tools/` (ARCHITECTURE §18) | ✅ open for the scaffold (ADR-143), built in `BACKLOG.md` order; every dependency pinned by an ADR, lockfiles committed |
+| Root monorepo files: `package.json`, `pnpm-workspace.yaml`, `tsconfig.json` + `tsconfig.base.json`, `eslint.config.js`, `vitest.config.js`, `.nvmrc`, `.editorconfig`, `LICENSE`, `.gitignore` | ✅ for the scaffold (ADR-231, 255, 259) |
+| `pnpm-lock.yaml`; `README.md`; the root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; a root compose file was the historical stack, retired by the user (KD-59, closed): never recreate one, the local stack is `infra/local/compose.yaml` |
+| `database/`, `api/`, `field-webapp/`, `back-office-webapp/` | 🔒 the old code and its placeholders, gone from the working folder (ADR-093): never recreate them or port from a copy; the hook refuses a write under `database/`. The layout is ARCHITECTURE §18 |
+| `**/node_modules/`, `**/.venv/`, `**/.pytest_cache/`, `**/__pycache__/`, `.git/`; generated: `**/dist/`, `**/src/generated/`, `**/.generated/`, `**/.cache/`, `**/.state/` | ❌ never (change the source, rerun the tool) |
+| `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub, reviewed and tested (ADR-113, enforced by the hook) |
+| `**/.env*`, secrets | ❌ never read, write or print an env file (the hook blocks it; `.env.example` is fine): reference keys by name, load one in a subshell, compare `shasum`s; never echo, log or commit a secret |
+
+## Git — the agent does not write to git
+
+**Never run a git command that mutates state** (`init` `add` `commit` `push` `checkout` `switch`
+`merge` `rebase` `restore` `reset` `stash` `clean` `rm`). Read-only inspection is expected:
+`status`, `diff`, `log --oneline`, `branch --show-current`. Enforced by `.claude/hooks/guard.sh`;
+a block is the rule working (ADR-008). A missing file is intentional: report it, never restore
+it. End any file-changing response with a copy-paste git block for the user. Never commit to `main`.
+
+## Non-negotiables
+
+One line each. Details and the ADRs to cite: `agent_store/SUMMARY.md`. Reasons: the skill named.
+
+- **The firm's setup decides; hardcode as little as possible.** Ship defaults tailored to debris work
+  that the firm can change. Before proposing a new ticket type, unit, criterion or behaviour, or
+  asking how a contract line works, check whether projects, names, codes, rules and lists already
+  express it. Which price a contract means is the firm's call, never ours. *(ADR-197)*
+- **Two sides.** The monitor enters only the main ticket, fast; fees, pricing, zones, mileage and
+  checks are the system's work. The back office sees everything, laid out to review, fix and QC many
+  tickets quickly. The rules are the firm's own tool: enable options, never hardcode its rules. The
+  user answers as a firm, a monitor or the back office: note which hat. *(ADR-224)*
+- **Flag, never block.** After setup nothing refuses field work or a record over eligibility.
+  Problems get a plain message: "Ticket 101008: debris type mismatch. Flagged for review." *`adms-validation`*
+- **Security first.** Best practice at every layer (ARCHITECTURE §16); HTTPS between services, locally
+  too; CORS by exact allow-list, never disabled; never log or print a secret. *(ADR-093/098)*
+- **The database enforces the rules itself** — roles, grants, constraints, triggers — not only the
+  code. *(ADR-097, ARCHITECTURE §5)*
+- **Nothing is lost.** No hard deletes (archive, close, void). **`AuditRecord` is append-only**, one
+  per change, with a real actor. Transactions are **regenerated, never reversed**; each removed row
+  is first copied in full to `AuditRecord`. *`adms-ledger-audit`*
+- **Records are correctable by permission** (any captured field, audited, prior value kept), then
+  reprocessed, completed tickets included. Monitors never edit in the field. *`adms-exceptions`*
+- **Renumber real work; void what never happened.** Renumbering a phantom double-bills. *`adms-exceptions`*
+- **Statuses: `PENDING | COMPLETED | MANUAL_REVIEW | VOID`.** Review still bills; a person (with a
+  reason) or a rule's *Void ticket* action voids. `FAILED` is gone. *`adms-validation`*
+- **Field events are the evidence; everything the system writes is drawn from them.** A ticket is its
+  number and its events (`COL` `DIS` · `HOC` `HOD` · `URT`); the completed load and haul-out (`CLT` /
+  `CHO`) are not events and are system-written only. Never a bare "event" for the disaster (the
+  *declaration event*). *`adms-domain` §1.2 (ADR-236)*
+- **Pairs group on the bare ticket number** (per project and workflow; split suffix stripped).
+  Never parse meaning from a number; type labels are display only. *`adms-validation`*
+- **Offline is normal.** Arrival order means nothing; order by field time; an unpartnered event
+  never expires. *`adms-exceptions`*
+- **A phone is enrolled once and "set up", never "provisioned"**: its work comes from the day's
+  **assignment** (dispatch board); one project at a time; master passcode (one per firm) for
+  enrolment and the offline fallback; offline sign-in from a login list; syncs whenever there's
+  signal; data encrypted, never backed up. *(ADR-095/096/105/106/240)*
+- **Every project has a time zone**; the device clock is the recorded time; odd times are flagged. *(ADR-100)*
+- **A certification certifies a container or a crew, never a vehicle.** Cert number = placard =
+  badge. Capacity follows `adms-certifications` §3A.3 **exactly**. *`adms-certifications`*
+- **Monitors never see a rate or a code**; they pick by name. Rules match tickets on criteria; their
+  **actions** add numbered transactions (a pay item); a rule names one contract and runs only on
+  its prime's tickets. *`adms-ledger-audit` (ADR-239)*
+- **Names and examples follow `spec/CONVENTIONS.md`**: the industry's keyword or plain English, never
+  a legacy screen label; examples from its example world, never the retired ones (`1A`, `54A`, TFR,
+  Hwy 20 TDSR…), which live only in the history files. *(ADR-234/235)*
+- **QC status is separate** (QC Review / Approved / Issues / Void), set only by people. *(ADR-107)*
+- **Pick-lists a firm uses are extendable, not hard-coded** (`spec/LISTS.md`); values are picked,
+  never typed. *`adms-data-model`*
+- **Scale receipts are conditional** (FDS only, contract decides), hand-transcribed, never
+  inferred. *`adms-scale-receipts`* **There is no USACE mode.** *`adms-domain`*
+- **Never relax a threshold or a unique constraint to pass a test.** Thresholds are policy (`.env`).
+
+## Recording decisions
+
+Made a judgment call? Append an ADR to `DECISIONS.md` **in the same response**, update
+`SUMMARY.md`, and update the `spec/parts/` page if a step changed. **Each fact has one home**
+(`SUMMARY.md`, "Agent tooling"): the ADR says the decision and why; the summary the rule in a few
+lines; the BACKLOG tick that it's done; never a build log restated in another file (ADR-532). Found code *or docs* that
+disagree with a skill? Don't silently reconcile: append a KD to `DEVIATIONS.md`, update
+`SUMMARY.md`, and raise it. *`adms-decisions`*
+
+### From `.claude/skills/adms-close-out/SKILL.md`, whole
+
+---
+name: adms-close-out
+description: Close out an Open ADMS response that changed files. Covers leaving nothing running (the local stack stopped, throw-away databases, containers and volumes gone), the required execution summary format, which agent_store state files to tick, the flags section, the next atomic task pointer, and the copy-paste git block the user runs themselves. Use as the final step of any task that modified files.
+---
+<!-- skill-status: current (checked 2026-09-29, ADR-253; leave nothing running, ADR-277; the roadmap, ADR-280; each fact once, ADR-532) -->
+
+## 0. Leave nothing running (ADR-277)
+
+After the last verification run, and before the summary:
+- **Stop the local stack:** `pnpm local:down` (it removes containers and network only; the data
+  volumes, `infra/local/.env` and Caddy's root are kept, so the next `pnpm local:up` resumes).
+- **Drop your throw-away databases:** no `adms_story_…` (`pnpm scenarios clean`, before `down`) and
+  no `adms_mutation` or other copy you made; only `adms` and `adms_shadow` stay.
+- **No stray containers or volumes you made:** `docker ps -a` empty for anything you started;
+  `docker volume ls -f dangling=true` shows nothing you created. Run any one-off container with
+  `--rm` (and no anonymous volume it doesn't need).
+- **Keep something running only with a written reason:** a line in `NEXT.md`'s Handoff saying what,
+  why, and who stops it. Otherwise the next agent starts it with `pnpm local:up`.
+- If the permission check refuses a stop or a removal, say so in Flags and give the user the
+  command; never leave it unmentioned.
+- Never stop or remove what you didn't start (the user's own containers): report it in Flags instead.
+
+## 1. Update state first
+
+**Each fact has one home; write it there once, briefly** (ADR-445, 516, 532). Never restate a
+build log in a second file, never add a "Before it…" chain, never strike text through to keep it:
+what leaves a page is gone from it (history is the ADRs and git; a bulk move goes word for word
+to `agent_store/ARCHIVE.md`, under a dated "Moved" heading).
+
+
+- `agent_store/NEXT.md` — tick the completed task; keep the Next Atomic Task pointer accurate.
+  Its "Where things stand" says where things stand in a few lines: a finished task's detail is
+  its ADR, its BACKLOG tick and the carry-forward register, never a new paragraph there.
+- `agent_store/BACKLOG.md` — tick the task: `✅ done <date> (ADR-…):` and a line or two of what
+  it built, then "What it leaves: C…". The detail is the ADR's, not the tick's.
+- `agent_store/DECISIONS.md` — append an ADR if you made a judgment call (see `adms-decisions`), and
+  one session-log line at the end of the file (what was done, its ADRs, the chain's result).
+- `agent_store/DEVIATIONS.md` — append a KD if you found code disagreeing with a skill.
+- `agent_store/REQUIREMENTS.md` — tick any REQ now satisfied.
+- `agent_store/SUMMARY.md` — reflect any ADR added or superseded and any KD opened or closed:
+  change the topic's bullet in place (the rule as it now stands, in a few lines, with its ADRs; no
+  counts, file lists, dates seen or history), add a §2 row for what it supersedes, list a new
+  agent default in §4 (one row per ADR), and replace the header's "Updated" line. Edit by topic,
+  never read it whole; a topic past about 15 KB is split (the session hook warns).
+- `agent_store/CHAIN.md` — **the only place the chain's counts are written** (ADR-445): replace
+  the numbers that changed (tests by project, a story's checks, migrations, licences) with
+  today's. Never restate a count in `NEXT.md`, `SUMMARY.md` or a skill; never keep a "before it…".
+- **A new lesson about a layer's tests** (a helper, an exact list, what a loosening is tried on)
+  goes in that layer's page beside the `adms-verify` skill, not in the skill's own page.
+- `agent_store/BACKLOG.md` **carry-forward register** — anything your ADRs leave for later gets a
+  line (the next C-number) under the task or phase that picks it up, a new standing rule under
+  "Standing rules"; **remove the lines you did, naming their C-numbers in your ADR** (ADR-274,
+  532). No server "no task yet" is left unfiled (ADR-519).
+- `agent_store/ROADMAP.md` — the user's one-page roadmap (ADR-280): when a task, milestone or phase
+  closed, a REQ was ticked, or what waits on the user changed, update its rows and **replace** its
+  "Last updated" line with this session's, in plain words (never "Before it…"). Its §7 says which
+  row. Never add a date estimate.
+- `agent_store/NEXT.md` stays under about 20 KB: its "Where things stand" changes a line, never
+  gains a paragraph per task.
+
+## 2. Then close with exactly this structure
+
+````markdown
+### 📋 Execution Summary
+- **Phase:** Phase X — [name, from NEXT.md]
+- **Task:** [the atomic task completed]
+- **Files changed:** [paths]
+- **Verification:** [real observed output, e.g. "typecheck clean across every workspace; tests 42 passed" with the real counts]
+- **Left running:** [`docker ps -a` after `pnpm local:down`: "nothing", or what and the NEXT.md line saying why]
+
+### 🧠 State Updates
+- NEXT.md: [task ticked, or "no change"]
+- DECISIONS.md: [ADR-0XX added, or "no change"]
+- DEVIATIONS.md: [KD-XX added/closed, or "no change"]
+- REQUIREMENTS.md: [REQ-1XX ticked, or "no change"]
+
+### ⚠️ Flags
+- [anything contradicting a skill, skipped, or needing a decision — or "none"]
+
+### ⏭️ Next
+- [the next atomic task from NEXT.md]
+
+### 💻 Git — run these yourself
+```bash
+git status
+git checkout -b <branch-name>   # only when on main: never commit to main
+git add <files>
+git commit -m "feat(scope): message"
+```
+````
+
+**Docs-only work** (Phase 0 until the scaffold): "Verification" is the consistency checks you
+actually ran (e.g. a grep showing no stale reference remains, `diff CLAUDE.md AGENTS.md` empty),
+never a test result.
+
+If you changed nothing, skip the git block. Never fabricate verification output.
+Never run a git command that mutates state — that is the user's to run.
+
+### From `.claude/skills/adms-verify/SKILL.md`, its first 26 lines (the rest is `chain-reference.md`)
+
+---
+name: adms-verify
+description: Run the Open ADMS verification chain and report real observed output. Covers loading Node 24 through fnm, `pnpm ready` before the chain, the frozen pnpm install, typecheck, the Vitest run, lint and format, the licence report, the stories, the security checks, the local stack and the installer, `pnpm chain` (the whole chain in one command, one summary held against CHAIN.md), the clean-copy check after a dependency change, how loosenings are tried in one command, and which page to read for the layer you touch (the schema, the database tests, the API's tests, the worker's). Today's expected counts are in agent_store/CHAIN.md. Use after any code or config edit, before closing out any code task, or whenever asked to verify, test, typecheck, or confirm the build is green.
+---
+
+<!-- skill-status: current (rewritten for the rebuild's chain 2026-09-29, ADR-259; cut to the chain itself 2026-10-09, ADR-445: the counts are `agent_store/CHAIN.md`'s, each layer's tests have a page of their own beside this one, and the list of ADRs that stood here is in DECISIONS.md's scratchpad, "Moved 2026-10-09 (ADR-445)"; the stories once and the grant tests' earlier run, ADR-446; a run's template, ADR-447; a container kept, ADR-448; the whole chain in one command, `pnpm chain`, ADR-533; the field app's browser tests a step of it, `browser-tests.md`, ADR-564, 565) -->
+
+> **This page is the chain: what to run, what each command proves, what a pass looks like.** The
+> rule never changes: **report real observed output, never "should pass".** **Today's counts are in
+> one place, `agent_store/CHAIN.md`** (ADR-445): read it beside this page, and compare what you see
+> with it.
+
+## Read the page for the layer you touch
+
+Each is beside this file, in `.claude/skills/adms-verify/`. They hold what earlier tasks learned
+the hard way (how a test is written for that layer, its helpers, its exact lists, what a loosening
+is tried on). **Read the one you need before you write a test or a migration there; skip the rest.**
+
+| Touching | Read first |
+|---|---|
+| `packages/db/prisma/schema/`, a migration, a guard, a new table's tests | `schema-and-migrations.md` |
+| `packages/db` or its tests; a throw-away copy of `adms`; a guard's loosening | `database-tests.md` |
+| `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` (its first section, then the one for your area) |
+| `apps/worker`, the job queue, what queues work | `worker-tests.md` |
+| `apps/field`, its browser end-to-end tests, the field app's page and its headers | `browser-tests.md` (ADR-564, 565) |
+
