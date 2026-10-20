@@ -375,6 +375,7 @@ export {
   renameListValueEndpoint,
   archiveListValueEndpoint,
   unarchiveListValueEndpoint,
+  changeListValueSettingsEndpoint,
   changeFormEndpoint,
   changeFormDebrisTypeEndpoint,
   setCrewDayStepsEndpoint,

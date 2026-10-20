@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 
-import { Banner, Button } from './look/index.ts';
+import { Banner, Button, type ButtonTone } from './look/index.ts';
 import { Camera as CameraIcon } from './look/icons.tsx';
 import type { Camera, CameraView } from './phone/camera.ts';
 import { words } from './words.ts';
@@ -39,11 +39,16 @@ function Viewfinder({ view }: { readonly view: CameraView }) {
 export function TakePhoto({
   camera,
   isDisabled = false,
+  tone,
+  icon,
   onTaken,
   children,
 }: {
   readonly camera: Camera;
   readonly isDisabled?: boolean;
+  // A stage of the work's state, and its icon in the camera's place (ADR-590).
+  readonly tone?: ButtonTone | undefined;
+  readonly icon?: ReactNode;
   // Whether the photograph was kept: one too large to ever go is not.
   readonly onTaken: (bytes: Uint8Array) => Promise<boolean>;
   readonly children: ReactNode;
@@ -80,7 +85,8 @@ export function TakePhoto({
       ) : null}
       <Button
         wide
-        icon={<CameraIcon />}
+        tone={tone}
+        icon={icon ?? <CameraIcon />}
         isDisabled={isDisabled || busy !== 'no'}
         onPress={() => {
           setBusy('opening');

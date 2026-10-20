@@ -454,7 +454,7 @@ The eighteen lists:
 | `DebrisType` | | |
 | `ReductionMethod` | | |
 | `PayableType` | | |
-| `KindOfWork` | **countShape** enum (`NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS`) | `STUMPS` (ADR-198) |
+| `KindOfWork` | **countShape** enum (`NUMBER` · `ITEM_COUNTS` · `ITEM_HOURS`); **photosByStage** boolean, false unless stated (whether its tickets' photographs are taken by stage, before, the measurement and after; on as shipped for Hangers, Leaners and Stumps; set when added and changed later; the user, ADR-590) | `STUMPS` (ADR-198) |
 | `ItemName` | **kindOfWorkId** | |
 | `VehicleType` | **certifies** enum `CertificationKind` (`CONTAINER` · `CREW`; the set a certification's `kind` uses, ADR-302) | |
 | `VehicleFeature` | | |
@@ -1366,6 +1366,7 @@ item requires is a flag.
 | **projectId** | → `Project` | |
 | fieldEventId, certificationId, roeId, surveyId, incidentId, dropOffLogId, scaleReceiptId, quarantinedRecordId, heldRecordId | → each | **Exactly one owner** (check). `quarantinedRecordId` while its record waits in quarantine; the photo moves to the field event when a reviewer resolves it (ADR-292). `heldRecordId` while its record is held for a person; it moves to the record a person saves from it (ADR-526 (4)) |
 | view | enum `PhotoView` | A certification's five: `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` (ADR-179) |
+| stage | enum `PhotoStage` | The stage of the work a unit rate ticket's photograph shows, where its kind of work is photographed by stage: `PRE_WORK` · `MEASUREMENT` · `POST_WORK`, one each (the user, ADR-590). **Only a field event's photograph** has one, or one kept with its record in quarantine or held (`photo_stage_check`); corrected as evidence is; viewers see it |
 | **capturedAt** | instant | With its offset |
 | latitude, longitude | decimal(38,8) | |
 | **originalSha256** | text | Taken at capture; the phone's word |
@@ -2123,6 +2124,7 @@ A new value in any of them is a code change with an ADR (`spec/LISTS.md` Group 2
 | `SiteAreaSource` | `DRAWN` · `UPLOAD` · `ESRI_LAYER` | `SiteAreaVersion` |
 | `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` | `ClockEntry` |
 | `PhotoView` | `OPERATOR_WITH_PLACARD` · `INTERIOR_OR_BACK` · `RIGHT` · `LEFT` · `FRONT` | `Photo` |
+| `PhotoStage` | `PRE_WORK` · `MEASUREMENT` · `POST_WORK` (ADR-590) | `Photo` |
 | `SyncAnswer` | `SAVED` · `QUARANTINED` | `SyncedRecord` |
 | `ReconciliationTrigger` ✅ | `SYNC` · `CORRECTION` · `SETUP_CHANGE` · `REPROCESS` | `ReconciliationRun` |
 | `FlagBilling` ✅ | `BILLS` · `LINE_NOT_BILLED` · `NOT_BILLED` | `Flag` |

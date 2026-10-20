@@ -25,6 +25,8 @@ interface ProgramTypeValue extends Value {
 
 interface KindOfWorkValue extends KeyedValue<'kindOfWork'> {
   readonly countShape: CountShape;
+  // Whether its tickets' photographs are taken by stage (ADR-590); off where it isn't said.
+  readonly photosByStage?: boolean;
   // The item names offered on a ticket of an itemised kind; none on a kind that counts a number.
   readonly items: readonly string[];
 }
@@ -93,11 +95,12 @@ export const startingValues: StartingValues = {
   reductionMethods: named('Grinding', 'Incineration', 'Compaction'),
   payableTypes: named(...umbrellaTypes, 'Crew time', 'Tipping fee'),
   // The item names are the ones the spec's own examples use (spec/RULES.md §9, the golden mission's
-  // tickets 301006 and 301007, spec/LISTS.md); a firm adds its contract's.
+  // tickets 301006 and 301007, spec/LISTS.md); a firm adds its contract's. Hangers, Leaners and
+  // Stumps are photographed by stage, before, the measurement and after (the user, ADR-590).
   kindsOfWork: [
-    { name: 'Hangers', countShape: 'NUMBER', items: [] },
-    { name: 'Leaners', countShape: 'NUMBER', items: [] },
-    { key: 'STUMPS', name: 'Stumps', countShape: 'NUMBER', items: [] },
+    { name: 'Hangers', countShape: 'NUMBER', photosByStage: true, items: [] },
+    { name: 'Leaners', countShape: 'NUMBER', photosByStage: true, items: [] },
+    { key: 'STUMPS', name: 'Stumps', countShape: 'NUMBER', photosByStage: true, items: [] },
     { name: 'HHW', countShape: 'ITEM_COUNTS', items: ['Paint cans', 'Propane tanks', 'Pesticide'] },
     {
       name: 'White Goods',

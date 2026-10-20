@@ -89,6 +89,9 @@ export const policyNames = {
   // long before it closes the phone warns, in seconds.
   phoneInactivityLockMinutes: 'PHONE_INACTIVITY_LOCK_MINUTES',
   phoneInactivityWarningSeconds: 'PHONE_INACTIVITY_WARNING_SECONDS',
+  // How often a phone with a monitor signed in syncs on its own, in minutes (ARCHITECTURE §9; the
+  // user, ADR-588).
+  phoneSyncEveryMinutes: 'PHONE_SYNC_EVERY_MINUTES',
   // How long our address server has to answer a phone's address lookup, in seconds (ARCHITECTURE
   // §3; ADR-455): a monitor waits on it, so it is far shorter than the worker's own.
   addressLookupAnswerSeconds: 'ADDRESS_LOOKUP_ANSWER_SECONDS',
@@ -242,6 +245,8 @@ const ranges: Record<PolicyName, { least: number; most: number }> = {
   [policyNames.phoneInactivityLockMinutes]: { least: 2, most: 60 },
   // WCAG 2.2.1: at least twenty seconds to keep the session with one simple act.
   [policyNames.phoneInactivityWarningSeconds]: { least: 20, most: 300 },
+  // The user's "at least every 5 minutes" (ADR-588): never less often than an hour.
+  [policyNames.phoneSyncEveryMinutes]: { least: 1, most: 60 },
   [policyNames.addressLookupAnswerSeconds]: { least: 1, most: 60 },
   [policyNames.mediaStoreAnswerSeconds]: { least: 1, most: 600 },
   [policyNames.mediaFileBytesAtMost]: { least: 1048576, most: 1073741824 },
@@ -316,6 +321,7 @@ export class Policy {
   readonly phoneSignInLongestWaitMinutes: number;
   readonly phoneInactivityLockMinutes: number;
   readonly phoneInactivityWarningSeconds: number;
+  readonly phoneSyncEveryMinutes: number;
   readonly addressLookupAnswerSeconds: number;
   readonly mediaStoreAnswerSeconds: number;
   readonly mediaFileBytesAtMost: number;
@@ -395,6 +401,7 @@ export class Policy {
       values,
       policyNames.phoneInactivityWarningSeconds,
     );
+    this.phoneSyncEveryMinutes = Policy.read(values, policyNames.phoneSyncEveryMinutes);
     this.addressLookupAnswerSeconds = Policy.read(values, policyNames.addressLookupAnswerSeconds);
     this.mediaStoreAnswerSeconds = Policy.read(values, policyNames.mediaStoreAnswerSeconds);
     this.mediaFileBytesAtMost = Policy.read(values, policyNames.mediaFileBytesAtMost);

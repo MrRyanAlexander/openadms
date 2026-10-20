@@ -10778,7 +10778,7 @@
     "/lists/{list}/values": {
       "post": {
         "operationId": "addListValue",
-        "summary": "Adds a value of the firm’s own to one of its lists, at the end, with a name and what its list asks beside it: a program type whether it requires ROEs, a kind of unit rate work the shape of its count, an item name its kind of work, a vehicle type what it certifies, an incident sub-type its incident type, a reason where it is offered. A field tag is added on its project.",
+        "summary": "Adds a value of the firm’s own to one of its lists, at the end, with a name and what its list asks beside it: a program type whether it requires ROEs, a kind of unit rate work the shape of its count (and, if it says so, that its photographs are taken by stage: before the work, its measurement and after), an item name its kind of work, a vehicle type what it certifies, an incident sub-type its incident type, a reason where it is offered. A field tag is added on its project.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "x-open-adms-permission": "SETUP",
@@ -10830,6 +10830,9 @@
                   "countShape": {
                     "type": "string",
                     "enum": ["NUMBER", "ITEM_COUNTS", "ITEM_HOURS"]
+                  },
+                  "photosByStage": {
+                    "type": "boolean"
                   },
                   "kindOfWorkId": {
                     "type": "string",
@@ -11058,6 +11061,9 @@
                           "countShape": {
                             "type": ["string", "null"]
                           },
+                          "photosByStage": {
+                            "type": ["boolean", "null"]
+                          },
                           "kindOfWorkId": {
                             "anyOf": [
                               {
@@ -11127,6 +11133,7 @@
                           "archived",
                           "requiresRoe",
                           "countShape",
+                          "photosByStage",
                           "kindOfWorkId",
                           "certifies",
                           "incidentTypeId",
@@ -11522,6 +11529,166 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "record": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "key": {
+                          "type": ["string", "null"]
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "position": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "archived": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["id", "key", "name", "position", "archived"],
+                      "additionalProperties": false
+                    },
+                    "warnings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "code": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "message": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["code", "message"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "queued": {
+                      "type": "object",
+                      "properties": {
+                        "jobs": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "tickets": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "lockedAsInvoiced": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["jobs", "tickets", "lockedAsInvoiced"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": ["record", "warnings"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lists/{list}/values/{valueId}/settings": {
+      "patch": {
+        "operationId": "changeListValueSettings",
+        "summary": "Changes what a value of one of the firm’s lists states beside its name, where its list lets it change once added: a kind of unit rate work whether its photographs are taken by stage (before the work, its measurement and after it). Phones are shown it with their next lists; nothing is queued, since no rule reads it.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "SETUP",
+        "parameters": [
+          {
+            "name": "list",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "program-types",
+                "declaration-reference-types",
+                "debris-types",
+                "reduction-methods",
+                "payable-types",
+                "kinds-of-work",
+                "item-names",
+                "vehicle-types",
+                "vehicle-features",
+                "crew-types",
+                "site-types",
+                "site-labels",
+                "incident-types",
+                "incident-sub-types",
+                "reasons",
+                "survey-work-types",
+                "clock-activities",
+                "field-tags"
+              ]
+            }
+          },
+          {
+            "name": "valueId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "photosByStage": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "The answer.",
@@ -22695,9 +22862,19 @@
                                       "countShape": {
                                         "type": "string",
                                         "enum": ["NUMBER", "ITEM_COUNTS", "ITEM_HOURS"]
+                                      },
+                                      "photosByStage": {
+                                        "default": false,
+                                        "type": "boolean"
                                       }
                                     },
-                                    "required": ["id", "name", "key", "countShape"],
+                                    "required": [
+                                      "id",
+                                      "name",
+                                      "key",
+                                      "countShape",
+                                      "photosByStage"
+                                    ],
                                     "additionalProperties": false
                                   },
                                   "countIsAlwaysOne": {
@@ -23811,9 +23988,19 @@
                                       "countShape": {
                                         "type": "string",
                                         "enum": ["NUMBER", "ITEM_COUNTS", "ITEM_HOURS"]
+                                      },
+                                      "photosByStage": {
+                                        "default": false,
+                                        "type": "boolean"
                                       }
                                     },
-                                    "required": ["id", "name", "key", "countShape"],
+                                    "required": [
+                                      "id",
+                                      "name",
+                                      "key",
+                                      "countShape",
+                                      "photosByStage"
+                                    ],
                                     "additionalProperties": false
                                   },
                                   "countIsAlwaysOne": {
@@ -32078,6 +32265,17 @@
                               }
                             ]
                           },
+                          "stage": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "capturedAt": {
                             "type": "string",
                             "format": "date-time",
@@ -32122,6 +32320,7 @@
                           "incidentId",
                           "dropOffLogId",
                           "view",
+                          "stage",
                           "capturedAt",
                           "uploadedAt",
                           "removedAt",
@@ -34271,6 +34470,17 @@
                             }
                           ]
                         },
+                        "stage": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "capturedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -34315,6 +34525,7 @@
                         "incidentId",
                         "dropOffLogId",
                         "view",
+                        "stage",
                         "capturedAt",
                         "uploadedAt",
                         "removedAt",
@@ -34651,6 +34862,17 @@
                             }
                           ]
                         },
+                        "stage": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
                         "capturedAt": {
                           "type": "string",
                           "format": "date-time",
@@ -34695,6 +34917,7 @@
                         "incidentId",
                         "dropOffLogId",
                         "view",
+                        "stage",
                         "capturedAt",
                         "uploadedAt",
                         "removedAt",
@@ -34970,6 +35193,17 @@
                               }
                             ]
                           },
+                          "stage": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "capturedAt": {
                             "type": "string",
                             "format": "date-time",
@@ -35014,6 +35248,7 @@
                           "incidentId",
                           "dropOffLogId",
                           "view",
+                          "stage",
                           "capturedAt",
                           "uploadedAt",
                           "removedAt",
@@ -39591,6 +39826,18 @@
                                   }
                                 ]
                               },
+                              "stage": {
+                                "default": null,
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
                               "takenById": {
                                 "type": "string",
                                 "format": "uuid",
@@ -42741,6 +42988,17 @@
                                     }
                                   ]
                                 },
+                                "stage": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "capturedAt": {
                                   "type": "string",
                                   "format": "date-time",
@@ -42785,6 +43043,7 @@
                                 "incidentId",
                                 "dropOffLogId",
                                 "view",
+                                "stage",
                                 "capturedAt",
                                 "uploadedAt",
                                 "removedAt",
@@ -43990,6 +44249,17 @@
                                     }
                                   ]
                                 },
+                                "stage": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "capturedAt": {
                                   "type": "string",
                                   "format": "date-time",
@@ -44034,6 +44304,7 @@
                                 "incidentId",
                                 "dropOffLogId",
                                 "view",
+                                "stage",
                                 "capturedAt",
                                 "uploadedAt",
                                 "removedAt",
@@ -44969,6 +45240,17 @@
                                     }
                                   ]
                                 },
+                                "stage": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "capturedAt": {
                                   "type": "string",
                                   "format": "date-time",
@@ -45013,6 +45295,7 @@
                                 "incidentId",
                                 "dropOffLogId",
                                 "view",
+                                "stage",
                                 "capturedAt",
                                 "uploadedAt",
                                 "removedAt",
@@ -46000,6 +46283,17 @@
                                     }
                                   ]
                                 },
+                                "stage": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "capturedAt": {
                                   "type": "string",
                                   "format": "date-time",
@@ -46044,6 +46338,7 @@
                                 "incidentId",
                                 "dropOffLogId",
                                 "view",
+                                "stage",
                                 "capturedAt",
                                 "uploadedAt",
                                 "removedAt",
@@ -47220,6 +47515,17 @@
                                     }
                                   ]
                                 },
+                                "stage": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
                                 "capturedAt": {
                                   "type": "string",
                                   "format": "date-time",
@@ -47264,6 +47570,7 @@
                                 "incidentId",
                                 "dropOffLogId",
                                 "view",
+                                "stage",
                                 "capturedAt",
                                 "uploadedAt",
                                 "removedAt",
@@ -49175,6 +49482,17 @@
                               }
                             ]
                           },
+                          "stage": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": ["PRE_WORK", "MEASUREMENT", "POST_WORK"]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
                           "capturedAt": {
                             "type": "string",
                             "format": "date-time",
@@ -49219,6 +49537,7 @@
                           "incidentId",
                           "dropOffLogId",
                           "view",
+                          "stage",
                           "capturedAt",
                           "uploadedAt",
                           "removedAt",

@@ -5,7 +5,7 @@
 // picks it from the ROEs whose pre-work survey is done: on P2, where the golden mission makes
 // them and nobody else's work does, so no other test's collection meets the ROE. An incident is
 // its type, then the firm's sub-type, then only what P1's incident form offers, with the firm's
-// own required field; it is left part way and finished from home. A drop-off log at the
+// own field, not required (ADR-587); it is left part way and finished from home. A drop-off log at the
 // assignment's site answers the firm's own fields of every type. Each goes at the next sync as
 // the contract carries it, sealed.
 import type { BrowserContext, Page } from '@playwright/test';
@@ -315,7 +315,7 @@ test('AC-11-84, AC-11-85, AC-11-82, AC-04-80, AC-04-83, AC-11-05, REQ-307, C118:
   await expect(page.locator('.big-number')).toHaveText('R-0002');
 });
 
-test('AC-04-101, AC-04-86, AC-04-87, AC-04-99, AC-11-86, AC-11-75, AC-11-78, REQ-307, C67: Ana’s incident is its type, then the firm’s sub-type, then only what P1’s incident form offers, the contractor involved and a cert number and nowhere to take an ROE number; the firm’s required "Police report number" holds Next until answered; left part way, it waits on home and is finished there; one started by mistake is cancelled and never sent', async ({
+test('AC-04-101, AC-04-86, AC-04-87, AC-04-99, AC-11-86, AC-11-75, AC-11-78, REQ-307, C67: Ana’s incident is its type, then the firm’s sub-type, then only what P1’s incident form offers, the contractor involved and a cert number and nowhere to take an ROE number; the firm’s "Police report number" is not required, so Next goes on with it blank, and it is answered; left part way, it waits on home and is finished there; one started by mistake is cancelled and never sent', async ({
   page,
   context,
 }) => {
@@ -352,16 +352,14 @@ test('AC-04-101, AC-04-86, AC-04-87, AC-04-99, AC-11-86, AC-11-75, AC-11-78, REQ
   await fixed(page);
   await page.getByLabel(capture.place.typed).fill('22 Elm St');
   await next(page).click();
-  // The firm's own field, required: Next held until it is answered.
+  // The firm's own field, not required (ADR-587): Next goes on while it is blank; she answers it.
   await expect(heading(page)).toHaveText(said.own.title);
-  await expect(next(page)).toBeDisabled();
+  await expect(next(page)).toBeEnabled();
   await expect(
     page.getByText(filled(said.own.needed, { fields: 'Police report number' })),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await checkScreen(page);
-  await page
-    .getByLabel(filled(said.own.required, { label: 'Police report number' }))
-    .fill('BC-2026-1187');
+  await page.getByLabel('Police report number', { exact: true }).fill('BC-2026-1187');
   await next(page).click();
   await expect(heading(page)).toHaveText(said.photosTitle);
   await photographed(page);

@@ -20,10 +20,10 @@ sync (ADR-224). The phone never refuses honest work; every problem is flagged la
 1. **New: scan the badge** (the crew badge for unit rate). The certification loads, capacity
    included; **a monitor never types capacity** except for a truck keyed in by hand, which is flagged
    and bills the certification's capacity (ADR-154). **The certification says whose work it is**
-   (ADR-186). **Then the number**: the control ticket scanned, or the phone's next generated number
-   shown, the number **typed again by hand** to confirm only where a person copied it (one shown, or
-   one typed because the barcode won't read), never after a scan (the user, ADR-571, 573, amending
-   ADR-209). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
+   (ADR-186). **Then the number**: the control ticket scanned, or the phone's next generated number,
+   which **opens the ticket at once, never typed again** (the user, ADR-589); the number is **typed
+   again by hand** to confirm only where a person copied it off pre-printed stock (one typed because
+   the barcode won't read), never after a scan (the user, ADR-571, 573, amending ADR-209). A number typed because a barcode won't read is flagged and needs a reason (ADR-111). The
    field event waits in the phone's **open list** while the truck loads: the monitor leaves it at
    any step and comes back to finish it, and a phone holds several, **never two for one truck**
    (the user, ADR-571).
@@ -44,7 +44,7 @@ assignment**, never picked (ADR-195, 240).
 ## Workflow A — a load (`COL` → `DIS`)
 
 **The collection event, at the curb** (the phone has no site):
-1. **New**: scan the badge, then the number, scanned, or shown and typed again. GPS at load start and
+1. **New**: scan the badge, then the number, scanned, or made and opening at once. GPS at load start and
    load end; **"Mark waypoint"** as the truck loads (Q-104, ADR-571); photos from the start of
    loading.
 2. **Complete**: the **debris type** from the load form's list, and optionally a **field tag**
@@ -111,8 +111,8 @@ is paid by weight.
 ## Workflow C — unit rate (`URT`, one event, no pairing)
 
 1. **New**: scan the **crew badge**; it stays on the phone until the monitor changes crew (ADR-111).
-   A crew is its certification (ADR-228). **The number** (always generated) is shown and typed again
-   here (ADR-571, 573).
+   A crew is its certification (ADR-228). **The number** (always generated) opens the ticket at once
+   here, never typed again (ADR-571, 589).
 2. **The crew photo**, then pick the **payable type** by name (Hangers, Leaners, Stumps, White Goods,
    Crew time…; each shown once). The phone **works out the pay item** from the size bands and prints
    it; the monitor never sees a code or a rate (ADR-207, 213).
@@ -122,6 +122,11 @@ is paid by weight.
    an item list (HHW pounds as the count); crew time as items with hours to the quarter hour
    (ADR-126, 158, 177, 198). Optionally a field tag; the ROE on an ROE project. Where the pay item
    allows it, the monitor may **mark the work ineligible** (flagged, ADR-210).
+   **Hangers, leaners and stumps are photographed by stage** (the user, ADR-590; the firm's setting
+   on the kind of work): a pre-work photo, then usually the ticket is left for the next tree; back
+   at it, the measurement and its photo (after the cut for a hanger, before it for a leaner), then
+   the post-work photo. Each stage is a button to do or done, by colour, icon and word; nothing is
+   held for a stage left out; the review shows the three large under their names.
 4. **Print** the crew copy (Q-95).
 
 What each kind captures and bills, bands, stumps and fill: `adms-ticket-workflows` §4.5.

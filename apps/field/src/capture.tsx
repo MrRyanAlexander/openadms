@@ -216,13 +216,18 @@ export function PhotoDrawn({
   );
 }
 
-// What a photograph is called, to the eye and to a screen reader.
-export const photoLabel = (ticket: Photographed, photo: TicketPhoto): string =>
-  say(said.photos.taken, {
-    number: ticket.photos.indexOf(photo) + 1,
-    count: ticket.photos.length,
-    time: timeOfDay(new Date(photo.capturedAt), ticket.timeZone),
-  });
+// What a photograph is called, to the eye and to a screen reader: a stage of the work's by its
+// stage ("Pre-work photo, 8:41 AM", ADR-590).
+export const photoLabel = (ticket: Photographed, photo: TicketPhoto): string => {
+  const time = timeOfDay(new Date(photo.capturedAt), ticket.timeZone);
+  return photo.stage === undefined
+    ? say(said.photos.taken, {
+        number: ticket.photos.indexOf(photo) + 1,
+        count: ticket.photos.length,
+        time,
+      })
+    : say(said.photos.stageTaken, { stage: said.stages.names[photo.stage], time });
+};
 
 // A ticket's photographs, each shown and opened full size with a press, and the way to take
 // another, at most the ticket's eight (ADR-157).

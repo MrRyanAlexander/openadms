@@ -23,8 +23,8 @@
 // it holds now, the passcode's version, and whether its lists are of an older setup version.
 //
 // It captures as a phone does (adms-field-app §4A.4–§4A.6; BACKLOG 1.3.7, 3.5.1; C179): New scans
-// the badge, then takes the number (ADR-571): the next of its own block shown and typed again by
-// hand, or the truck's copy scanned; the field event waits, one open per truck; Complete takes the
+// the badge, then takes the number (ADR-571): the next of its own block, the field event opening
+// under it at once (ADR-589), or the truck's copy scanned; the field event waits, one open per truck; Complete takes the
 // details, picked by name from its lists. A cancelled field event keeps its number, unsent. A
 // unit rate pay item is worked out from the size bands by packages/domain's rule, the one the
 // server uses. Its screens, its printing and its own duplicate check are the field app's.
@@ -92,6 +92,7 @@ import {
   Capacity,
   certificationViews,
   type CertificationView,
+  type PhotoStage,
   type CertificationKind,
   FieldEventDetails,
   type HeldBlock,
@@ -394,10 +395,11 @@ export interface PhoneSetup {
 }
 
 // The number, at New, right after the badge (ADR-571). The first field event of a ticket makes
-// it: the next of the phone's block, shown (`made`), and typed again by hand, since a person
-// copied it. The second scans it off the truck's copy, as a control-ticket project's first does
+// it: the next of the phone's block (`made`), opening at once, never typed again (the user,
+// ADR-589). The second scans it off the truck's copy, as a control-ticket project's first does
 // off its stock (`scanned`): a scan is never typed again (the user, Q-218, ADR-573). A barcode
-// that won't read is typed, with a reason picked, and typed again. The next property or pile of
+// that won't read is typed, with a reason picked, and typed again: the one number a person
+// copies. The next property or pile of
 // a split carries its chain's number, from the field event before it.
 export type NumberEntry =
   | { readonly from: 'BLOCK' }
@@ -466,8 +468,8 @@ export interface Completed {
 }
 
 // What New answers: the field event opened under its number, or, where a person copied the
-// number, not until it is typed again to match (ADR-209, 573): the one check a phone makes before
-// a field event opens. Data entry, never eligibility.
+// number off a barcode that won't read, not until it is typed again to match (ADR-209, 573, 589):
+// the one check a phone makes before a field event opens. Data entry, never eligibility.
 export type Opened =
   | { readonly opened: true; readonly id: string }
   | {
@@ -594,6 +596,8 @@ export interface NewCertification {
 export interface NewPhoto {
   readonly of: { readonly kind: PhotoOwnerKind; readonly id: string };
   readonly view?: CertificationView;
+  // The stage of the work a unit rate ticket's photograph shows (ADR-590).
+  readonly stage?: PhotoStage;
   readonly latitude?: string;
   readonly longitude?: string;
   readonly depthFile?: boolean;
@@ -768,9 +772,10 @@ export class SimulatedDevice {
     } else {
       ticketNumber = number.number;
     }
-    // A number a person copied is typed again: one the phone made, one typed off a barcode that
-    // won't read. A scan, and a chain's number carried over, are not (ADR-573).
-    if (number.from === 'BLOCK' || number.from === 'TYPED') {
+    // A number a person copied is typed again: one typed off a barcode that won't read. One the
+    // phone made opens at once (ADR-589); a scan, and a chain's number carried over, are not
+    // typed again either (ADR-573).
+    if (number.from === 'TYPED') {
       const reentered = typedAgain ?? ticketNumber;
       if (reentered !== ticketNumber) {
         return { opened: false, reason: 'NUMBER_MISMATCH', shown: ticketNumber, reentered };
@@ -1053,6 +1058,7 @@ export class SimulatedDevice {
       projectId: this.current.projectId,
       owner: photo.of,
       view: photo.view ?? null,
+      stage: photo.stage ?? null,
       takenById: this.current.monitorId,
       capturedAt: capturedAt.toISOString(),
       deviceUtcOffsetMinutes: utcOffsetMinutes(this.current.timeZone, capturedAt),

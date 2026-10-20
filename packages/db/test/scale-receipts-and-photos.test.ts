@@ -601,6 +601,8 @@ describe('a photograph', () => {
       'received_at',
       'roe_id',
       'scale_receipt_id',
+      // Where its kind of work is photographed by stage (ADR-590; AC-04-104).
+      'stage',
       'survey_id',
       'uploaded_at',
       'uploaded_sha256',
@@ -1109,6 +1111,50 @@ describe('a photograph', () => {
       );
       expect(refusal.code, what).toBe(refusedBy.check);
       expect(refusal.message, what).toContain('"photo_view_check"');
+    }
+  });
+
+  it('AC-04-104 a field event’s photograph may say which stage of the work it shows, before, the measurement or after; no other photograph has a stage', async () => {
+    const { db, world } = tested;
+    const stages = ['PRE_WORK', 'MEASUREMENT', 'POST_WORK'];
+    expect(
+      (
+        await db.rows<{ value: string }>(
+          `SELECT enumlabel AS value FROM pg_enum WHERE enumtypid = 'photo_stage'::regtype
+           ORDER BY enumsortorder`,
+        )
+      ).map((row) => row.value),
+    ).toEqual(stages);
+    await asThePhone();
+    const hanger = await event({ ticket_number: '301020' });
+    const taken: string[] = [];
+    for (const stage of stages) taken.push(await photograph({ field_event_id: hanger }, { stage }));
+    // One with none beside them: the crew's, say.
+    taken.push(await photograph({ field_event_id: hanger }));
+    expect(
+      (
+        await db.rows<{ stage: string | null }>(
+          `SELECT "stage"::text AS stage FROM "photo" WHERE "id" = ANY($1) ORDER BY "id"`,
+          [taken],
+        )
+      ).map((row) => row.stage),
+    ).toEqual([...stages, null]);
+    expect(
+      await refusedRecord(
+        'photo',
+        photoLike(world, { field_event_id: hanger }, { stage: 'DURING' }),
+      ),
+    ).toBe(refusedBy.badValue);
+    const bcl88241 = await receipt();
+    for (const [what, owner] of [
+      ['a certification’s', { certification_id: world.certifications.c730415 }],
+      ['a scale receipt’s', { scale_receipt_id: bcl88241 }],
+    ] as const) {
+      const refusal = await db.refused(
+        ...phoneInsertOf('photo', photoLike(world, owner, { stage: 'PRE_WORK' })),
+      );
+      expect(refusal.code, what).toBe(refusedBy.check);
+      expect(refusal.message, what).toContain('"photo_stage_check"');
     }
   });
 

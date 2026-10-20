@@ -109,6 +109,7 @@ const listValueRead = (row: ListRow): ListValueRead => ({
   ...listValueRecord({ ...row, key: row.key ?? null }),
   requiresRoe: asked(row, 'requiresRoe') as boolean | null,
   countShape: asked(row, 'countShape') as string | null,
+  photosByStage: asked(row, 'photosByStage') as boolean | null,
   kindOfWorkId: asked(row, 'kindOfWorkId') as string | null,
   certifies: asked(row, 'certifies') as 'CONTAINER' | 'CREW' | null,
   incidentTypeId: asked(row, 'incidentTypeId') as string | null,

@@ -31,6 +31,7 @@ import {
   fieldEventWaypointsAtMostEver,
   masterPasscodeSessions,
   measuredAs,
+  photoStages,
   workflows,
 } from '@open-adms/domain';
 import { z } from 'zod';
@@ -400,13 +401,17 @@ const sha256 = z.string().regex(/^[0-9a-f]{64}$/, { message: 'is not a SHA-256 i
 // (ADR-481). Whether a depth file goes beside it, where the depth couldn't travel inside, is
 // the phone's to say, by giving that file's own fingerprint too, the phone's word like the other
 // two (ADR-482): the media endpoint checks each file against its own. A certification's five are photographs like any other's, each naming its
-// certification and saying which view it is; no other photograph has a view.
+// certification and saying which view it is; no other photograph has a view. **A field event's may
+// say which stage of the work it shows** (before, the measurement, after: ADR-590), where its kind
+// of work is photographed by stage; no other photograph has a stage, and one that says none, as
+// every phone sent before, is none.
 export const syncedPhotoSchema = z
   .strictObject({
     id,
     projectId: id,
     owner: z.strictObject({ kind: z.enum(photoOwnerKinds), id }),
     view: z.enum(certificationViews).nullable(),
+    stage: z.enum(photoStages).nullable().default(null),
     takenById: id,
     capturedAt: instant,
     deviceUtcOffsetMinutes: offset,
@@ -422,6 +427,13 @@ export const syncedPhotoSchema = z
         code: 'custom',
         message: 'Only a certification’s photograph is one of its views.',
         path: ['view'],
+      });
+    }
+    if (photo.stage !== null && photo.owner.kind !== 'FIELD_EVENT') {
+      context.addIssue({
+        code: 'custom',
+        message: 'Only a field event’s photograph shows a stage of the work.',
+        path: ['stage'],
       });
     }
   });

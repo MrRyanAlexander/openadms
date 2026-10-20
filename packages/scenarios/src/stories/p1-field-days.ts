@@ -615,33 +615,15 @@ export const p1FieldDays: Story = {
         measurement: { inches: 56.5, measuredAs: 'CIRCUMFERENCE' },
       }),
     );
-    story.at(
-      monday('11:12'),
-      'Ana scans 730415 again; her phone shows 101003 and she types 101030 by mistake',
-    );
-    story.check(
-      'AC-04-11 the number typed again doesn’t match: nothing opens, and 101003 isn’t used up',
-      [
-        ana.open('LOAD', 'COLLECTION', '730415', made, '101030'),
-        ana.opened.length,
-        ana.waiting.length,
-        ana.lastUsedNumber('LOAD'),
-      ],
-      [
-        { opened: false, reason: 'NUMBER_MISMATCH', shown: '101003', reentered: '101030' },
-        0,
-        2,
-        101002,
-      ],
-    );
-    const opened = ana.open('LOAD', 'COLLECTION', '730415', made, '101003');
-    if (!opened.opened) throw new Error('101003 typed again didn’t open.');
+    story.at(monday('11:12'), 'Ana scans 730415 again; her phone makes 101003');
+    const opened = ana.open('LOAD', 'COLLECTION', '730415', made);
+    if (!opened.opened) throw new Error('101003 didn’t open.');
     started['101003'] = opened.id;
     ids.push(opened.id);
     story.check(
-      'AC-04-11 she types 101003: the two match, and the collection opens under it',
-      ana.opened.map((event) => event.ticketNumber),
-      ['101003'],
+      'AC-04-11 the collection opens at once under 101003, the number the phone made, never typed again (ADR-589)',
+      [ana.opened.map((event) => event.ticketNumber), ana.lastUsedNumber('LOAD')],
+      [['101003'], 101003],
     );
     story.at(monday('11:30'), 'The truck is loaded: Vegetative');
     done(ana.complete(started['101003'], { ...vegetative, ...heronSt }));

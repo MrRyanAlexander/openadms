@@ -2056,6 +2056,9 @@ model KindOfWork {
   // What the monitor counts: a number, a list of items with a count each, or a list of items with
   // hours each (ADR-040, 084).
   countShape CountShape @map("count_shape")
+  // Whether its tickets' photographs are taken by stage: before the work, its measurement, after
+  // it (the user, ADR-590). The firm's setting; on as shipped for Hangers, Leaners and Stumps.
+  photosByStage Boolean @default(false) @map("photos_by_stage")
 
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)

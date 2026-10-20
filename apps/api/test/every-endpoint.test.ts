@@ -112,6 +112,7 @@ const inventory = [
   'renameListValue PATCH /lists/:list/values/:valueId SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'archiveListValue POST /lists/:list/values/:valueId/archivings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'unarchiveListValue POST /lists/:list/values/:valueId/unarchivings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
+  'changeListValueSettings PATCH /lists/:list/values/:valueId/settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'listForms GET /projects/:projectId/forms SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_SETUP',
   'createForm POST /projects/:projectId/forms SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeForm PATCH /forms/:formId SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',

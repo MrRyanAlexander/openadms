@@ -264,6 +264,7 @@ export const photographRecord = (photo: Photo): PhotographRecord => ({
   incidentId: photo.incidentId,
   dropOffLogId: photo.dropOffLogId,
   view: photo.view,
+  stage: photo.stage,
   capturedAt: photo.capturedAt.toISOString(),
   uploadedAt: time(photo.uploadedAt),
   removedAt: time(photo.archivedAt),

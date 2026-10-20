@@ -1,13 +1,14 @@
 // Setup's endpoints for the firm's own values on its lists (spec/LISTS.md; ARCHITECTURE §6;
-// AC-10-27; BACKLOG 2.4.2; ADR-070, 194, 302, 424, 527 (6)): a debris type in the firm's
+// AC-10-27; BACKLOG 2.4.2; ADR-070, 194, 302, 424, 527 (6), 590): a debris type in the firm's
 // library, a payable type; any list's value, or a project's field tag, renamed, archived and put
-// back. The door has already asked the caller's role and that they hold Setup; the
+// back; a kind of work's photographs by stage changed. The door has already asked the caller's role and that they hold Setup; the
 // service asks again inside its own piece of work.
 import {
   addDebrisTypeEndpoint,
   addListValueEndpoint,
   addPayableTypeEndpoint,
   archiveListValueEndpoint,
+  changeListValueSettingsEndpoint,
   renameListValueEndpoint,
   unarchiveListValueEndpoint,
   type BodyOf,
@@ -80,6 +81,23 @@ export class ListSetupController {
     );
     return renameListValueEndpoint.answer.parse(
       answered(request, outcome, listValueRecord, 'A list value was renamed.'),
+    );
+  }
+
+  @Serves(changeListValueSettingsEndpoint)
+  async change(
+    @Param() params: ParamsOf<typeof changeListValueSettingsEndpoint>,
+    @Body() body: BodyOf<typeof changeListValueSettingsEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    const outcome = await this.lists.change(
+      callerOf(request).userId,
+      params.list,
+      params.valueId,
+      stated(body),
+    );
+    return changeListValueSettingsEndpoint.answer.parse(
+      answered(request, outcome, listValueRecord, 'A list value’s settings were changed.'),
     );
   }
 

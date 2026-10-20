@@ -67,7 +67,7 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-586)
+### Where things stand (2026-10-19, through ADR-590)
 - **Phase 3 is open (ADR-557)**: 20 of 33 tasks done (ADR-557…586). **Milestones 3.1…3.5 are done**:
   the plan, the scenarios, the checklist, the shell at `https://field.adms.localhost` with
   `pnpm e2e` in the chain and axe-core on every screen; the store, enrolment, sign-in online and
@@ -76,7 +76,10 @@ the round-by-round history is the session log at the end of `DECISIONS.md`.
   collection, the tower and the haul-out, unit rate, the forms, and **certifying (ADR-585)**, with a
   phone away from its site told so. **Milestone 3.6 is under way: photographs are done (ADR-586)**,
   from the app's own camera only, taken again in place or removed, the native shrink's interface
-  with the browser build keeping the original. **Next: receipts (3.6.2), then scanning (3.6.3).**
+  with the browser build keeping the original. **The user's notes from trying it with
+  `pnpm field:try` are built (ADR-587…590):** no police report asked by default, a sync every five
+  minutes, a made number never typed again, unit rate work photographed by stage.
+  **Next: receipts (3.6.2), then scanning (3.6.3).**
   What each task did is its ADR and its `BACKLOG.md` tick; the longer account is `ARCHIVE.md`
   ("Moved 2026-10-19", ADR-580 and ADR-585).
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a

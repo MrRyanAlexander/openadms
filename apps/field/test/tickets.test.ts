@@ -530,6 +530,54 @@ describe('unit rate work', () => {
     ]);
   });
 
+  it('AC-11-90, AC-04-104 a leaner’s photographs by stage: one each, a stage taken again takes its own place, one taken again from full size keeps its stage, and each goes saying its stage beside one that says none', async () => {
+    const { tickets, outbox, clock } = await phone();
+    const tree = await tickets.open(begun({ ...crew, ticketNumber: '301004' }));
+    const shot = (byte: number) => Uint8Array.from([...pile, byte]);
+    const later = () => {
+      clock.now = new Date(clock.now.getTime() + 60_000);
+    };
+    // The crew's photograph, no stage; then the pre-work one, left, and the measurement.
+    expect(await tickets.photographed(tree.id, shot(1), null)).toBe(true);
+    later();
+    expect(await tickets.photographed(tree.id, shot(2), null, undefined, 'PRE_WORK')).toBe(true);
+    later();
+    await tickets.photographed(tree.id, shot(3), null, undefined, 'MEASUREMENT');
+    // The measurement taken again for its stage: in its own place, never a second.
+    const first = tickets.ticket(tree.id)?.photos.find(({ stage }) => stage === 'MEASUREMENT');
+    later();
+    await tickets.photographed(tree.id, shot(4), null, undefined, 'MEASUREMENT');
+    later();
+    await tickets.photographed(tree.id, shot(5), null, undefined, 'POST_WORK');
+    const taken = tickets.ticket(tree.id)?.photos ?? [];
+    expect(taken.map(({ stage }) => stage ?? null)).toEqual([
+      null,
+      'PRE_WORK',
+      'MEASUREMENT',
+      'POST_WORK',
+    ]);
+    expect(taken[2]?.id).not.toBe(first?.id);
+    expect(await tickets.photoBytes(first?.id ?? '')).toBeUndefined();
+    // The post-work photograph taken again from full size: it stays the post-work one.
+    later();
+    await tickets.photographed(tree.id, shot(6), null, taken[3]?.id);
+    const after = tickets.ticket(tree.id)?.photos ?? [];
+    expect([after.length, after[3]?.stage, after[3]?.id === taken[3]?.id]).toEqual([
+      4,
+      'POST_WORK',
+      false,
+    ]);
+    await tickets.changed(tree.id, {
+      payableTypeId: leaners,
+      kindOfWorkId: leanerKind,
+      unitCount: 1,
+    });
+    expect((await tickets.submit(tree.id, null)).kind).toBe('sealed');
+    expect(outbox.sends().photos.map(({ id, stage }) => [id, stage])).toEqual(
+      after.map(({ id, stage }) => [id, stage ?? null]),
+    );
+  });
+
   it('REQ-306, REQ-320 a stump goes with its root ball, "half or more exposed" and survey number; white goods with their items, no count; work marked ineligible says so', async () => {
     const { tickets, outbox } = await phone();
     const stump = await tickets.open(

@@ -10,7 +10,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  openedUnder,
+  photographed,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldCast, worldOrigin, type CastMonitor } from './world.ts';
 
 const said = english.capture;
@@ -29,10 +37,6 @@ async function placed(context: BrowserContext): Promise<void> {
   await context.setGeolocation({ latitude: 39.1385, longitude: -75.5537 });
 }
 
-async function typed(page: Page, number: string): Promise<void> {
-  for (const digit of number) await page.getByRole('button', { name: digit, exact: true }).click();
-}
-
 const syncs = (asked: readonly Asked[]) =>
   toApi(asked).filter(({ path }) => path === '/phones/current/syncs');
 
@@ -42,11 +46,7 @@ async function opened(page: Page): Promise<string> {
   await page.getByRole('button', { name: said.split.normal }).click();
   await page.getByLabel(said.badge.label).fill('730415');
   await page.getByRole('button', { name: said.badge.start }).click();
-  const number = (await page.locator('.big-number').first().textContent()) ?? '';
-  await typed(page, number);
-  await page.getByRole('button', { name: said.number.open }).click();
-  await expect(heading(page)).toContainText(number);
-  return number;
+  return openedUnder(page);
 }
 
 test('AC-04-79, AC-11-44, AC-11-68, AC-11-78: Ana takes two photographs from the camera, opened only then; the second taken again in its place from full size, the first removed; the one left goes with its original’s SHA-256 as the file’s, and the file sent is the one taken', async ({

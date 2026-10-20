@@ -1,7 +1,8 @@
 // What a phone asks of a unit rate ticket, at the domain (spec/acceptance/11-field-app.md
 // AC-11-43; spec/acceptance/04-field-capture.md AC-04-59; REQ-112b, 306, 320; ADR-207, 210, 213,
-// 583). P1's unit rate pay items as the golden mission §1 has them, with the browser world's
-// settings: a hanger measured, a leaner 24.1–99 in the monitor may mark ineligible.
+// 583, 590). P1's unit rate pay items as the golden mission §1 has them, with the browser world's
+// settings: a hanger measured, a leaner 24.1–99 in the monitor may mark ineligible; Hangers,
+// Leaners and Stumps photographed by stage, as shipped.
 import { describe, expect, it } from 'vitest';
 
 import { PhoneUnitRate, type PhoneKindOfWork, type PhoneUnitRatePayItem } from '../src/index.ts';
@@ -10,7 +11,8 @@ const kind = (
   name: string,
   countShape: PhoneKindOfWork['countShape'],
   key: PhoneKindOfWork['key'] = null,
-): PhoneKindOfWork => ({ id: `kind-${name}`, name, key, countShape });
+  photosByStage = false,
+): PhoneKindOfWork => ({ id: `kind-${name}`, name, key, countShape, photosByStage });
 
 const payItem = (
   code: string,
@@ -32,9 +34,9 @@ const payItem = (
   ...settings,
 });
 
-const hangers = kind('Hangers', 'NUMBER');
-const leaners = kind('Leaners', 'NUMBER');
-const stumps = kind('Stumps', 'NUMBER', 'STUMPS');
+const hangers = kind('Hangers', 'NUMBER', null, true);
+const leaners = kind('Leaners', 'NUMBER', null, true);
+const stumps = kind('Stumps', 'NUMBER', 'STUMPS', true);
 const whiteGoods = kind('White Goods', 'ITEM_COUNTS');
 const crewTime = kind('Crew time', 'ITEM_HOURS');
 const p1 = [
@@ -175,5 +177,28 @@ describe('crew time’s hours', () => {
       false,
       false,
     ]);
+  });
+});
+
+describe('the work photographed by stage', () => {
+  it('AC-11-90 hangers, leaners and stumps by their kind of work’s setting, as shipped; white goods and crew time not', () => {
+    expect(
+      ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'].map(
+        (work) => phone.asks(`type-${work}`)?.photosByStage,
+      ),
+    ).toEqual([true, true, true, false, false]);
+  });
+
+  it('AC-11-90 the firm’s setting, never the name: a kind of its own photographed by stage is, and Leaners turned off is not', () => {
+    const own = kind('Palms', 'NUMBER', null, true);
+    const off = kind('Leaners', 'NUMBER', null, false);
+    const firm = new PhoneUnitRate([
+      payItem('PLM-RMV-EA', 'Palms', own),
+      payItem('LNR-RMV-EA', 'Leaners', off),
+    ]);
+    expect([
+      firm.asks('type-Palms')?.photosByStage,
+      firm.asks('type-Leaners')?.photosByStage,
+    ]).toEqual([true, false]);
   });
 });

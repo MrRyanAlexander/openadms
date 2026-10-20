@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590) -->
 
-> **This page states today's rules** (last changed by ADR-576, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-590, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -166,7 +166,9 @@ gets tracked on a spreadsheet."
 11. **Sync whenever there's a connection**: records first, photos after, the phone told the truth
     record by record (saved, already saved, not saved); topped up with numbers and fresh lists; any
     phone with a connection may refresh its lists at any time (ADR-151, 240; ARCHITECTURE §9).
-    **A phone needn't be handed in for its work to arrive.**
+    **A phone needn't be handed in for its work to arrive.** **User, 2026-10-19 (ADR-588):** "Make
+    sure the field app syncs on it's own or attempts to at least every 5 minutes." A phone with a
+    monitor signed in tries a sync every `PHONE_SYNC_EVERY_MINUTES` (5), signal or not.
     ⚠️ *ADR-578 (task 3.4.1, agent default), as built in the field app: it syncs on signing in, on
     finding a connection, on coming back to the front and on "Sync now", the sync before the lists;
     what the server didn't take stays on the phone, listed on Sync in the server's words, and **goes
@@ -235,8 +237,8 @@ the normal case. Every control that matters runs **after the fact**, on the serv
   your list: continue?") and **never blocks**; blocking on stale data strands honest work in the field.
   The phone shows its own staleness ("Last synced: 2 days ago").
 - **The one check that must match before a field event saves** is a number typed again (below), only
-  where a person copied it: data entry, not eligibility (agent default, ADR-209; when, the user,
-  ADR-573).
+  where a person copied it off pre-printed stock: data entry, not eligibility (agent default,
+  ADR-209; when, the user, ADR-573, 589).
 
 ### 4A.2a What a phone holds for its assignment (ADR-207, 213, 223, 227, 240, 243)
 
@@ -306,7 +308,7 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 
 | Rule | Source |
 |---|---|
-| **Badge, then the number, at New** on every phone (the user, ADR-571, amending ADR-209): **New** scans the badge (the certification loads, capacity included; **the certification says whose work it is**, ADR-186), then takes the number: the control ticket scanned, or the phone's next generated number shown, then **typed again by hand only when a person copied it**: a number the phone made, or one typed because the barcode won't read; never after a scan (the user, Q-218, ADR-573; WCAG 3.3.7 allows the copy check as essential). The ticket opens and waits in home's **open list**; **Complete** takes the details; the receipt prints at submit. **User, 2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard) and then they scan the printed ticket. If the project is generating number, they'd generate the ticket number at that time." *Agent readings (ADR-571):* the tower and the haul-out's disposal scan the driver's ticket at New; unit rate takes its generated number at New after the crew badge | ADR-209, 571 |
+| **Badge, then the number, at New** on every phone (the user, ADR-571, amending ADR-209): **New** scans the badge (the certification loads, capacity included; **the certification says whose work it is**, ADR-186), then takes the number: the control ticket scanned, or **the phone's next generated number, which opens the ticket at once, never typed again** (the user, ADR-589); **typed again by hand only when a person copied it off pre-printed stock**: one typed because the barcode won't read; never after a scan (the user, Q-218, ADR-573; WCAG 3.3.7 allows the copy check as essential). **User, 2026-10-19:** "if we are generating the ticket number, we really don't want to block work re-entering it like we are right now. The only time it makes sense to block at the start to enter the number is when its scanned from pre-printed." The ticket opens and waits in home's **open list**; **Complete** takes the details; the receipt prints at submit. **User, 2026-10-18:** "Paper tickets would be scan at New. If a project is using paper tickets the monitor starts the ticket by scanning the drivers badge (which gets the truck number, same as the placard) and then they scan the printed ticket. If the project is generating number, they'd generate the ticket number at that time." *Agent readings (ADR-571):* the tower and the haul-out's disposal scan the driver's ticket at New; unit rate takes its generated number at New after the crew badge | ADR-209, 571, 589 |
 | **Leave it and come back** (the user, ADR-571): a ticket is left at any step and finished later from the open list, where the monitor left off, what they entered kept on the phone across sign-outs and restarts; a phone holds several open tickets, each shown by its truck and number; nothing open is sent. **User, 2026-10-18:** "tickets should absolutely have the save/pause option so you can work on it, puase and come back to finish it later. That's how work happens in reality. It's never a straight line." | ADR-477, 571 |
 | **One open ticket per truck on a phone** (the user, ADR-571): a badge, or a truck keyed in by hand, whose truck already has an open ticket opens that one rather than a second; the monitor finishes or cancels it. Data entry, never an eligibility check; across phones the server flags overlap (ADR-027). **User:** "we still want to prevent the phone from making 2 tickets for the same truck number at the same time." *Agent defaults:* a split chain is its truck's one open ticket; a unit rate crew isn't held to one | ADR-027, 571 |
 | **Waypoints** (the user, ADR-571; Q-104): **"Mark waypoint"** while a collection is open records the phone's time and whatever fix it has, in order. *Agent defaults:* collections only (each of a split's); at most a policy number; nothing in the engine reads them | ADR-083, 111, 571 |
@@ -332,7 +334,8 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 
 ⚠️ *ADR-581 (task 3.5.1, agent defaults), the collection as built in the field app:* a ticket is
 **its monitor's**, hidden from another on the phone; **its number is taken when it opens** (a
-copied number typed again to match), so backing out before that uses none; a cancelled ticket
+copied number typed again to match; one the phone makes opens it at once, ADR-589, once the place
+asked at the badge has answered), so backing out before that uses none; a cancelled ticket
 keeps its number unsent and is left out of the duplicate check, which looks at the same kind and
 suffix on the project; **an ROE is asked on a split's property and offered on a collection where
 the phone holds the project's ROEs**; the phone's place is asked only when the monitor captures
@@ -361,7 +364,7 @@ may be written on until the receipt prints (3.6.2).
 the monitor's newest unit rate ticket on the project on that phone** (whatever became of it), so
 New offers it first, "Same crew" or "Change crew", and the review submits "for crew 730417": its
 confirmation on each completion; a crew isn't held to one open ticket and is never keyed in by hand.
-The number is the phone's next of the unit rate series, always made there, typed again. Complete:
+The number is the phone's next of the unit rate series, always made there, opening at once (ADR-589). Complete:
 the crew shown with its photo, **the payable types each once, by name**, a field tag where the
 project has them, then **what the domain's `PhoneUnitRate` says the kind of work asks**: a count
 unless every pay item of the payable type is always one; a tree measured around or across where one
@@ -372,6 +375,25 @@ the work is entered, kept for the receipt and never shown**; "ineligible" is ask
 pay item worked out allows it (none worked out: any of the payable type's); an ROE where the phone
 holds them; one point, "Capture GPS" then the address. **The phone's lists say each kind of work's
 count shape and built-in key** (they named it only before), so the screen is never told by a name.
+
+**Unit rate work photographed by stage** (the user, ADR-590). **User, 2026-10-19:** "When work like
+hangers, leaners and stumps are performed, monitor needs to start the ticket -> take pre work photo,
+step back out of ticket (most of the time), start another ticket-back out of that one after pre
+work, return to the prior ticket -> take measurement photo (if after cut work, or right after pre
+work if needing before cutting), then a final post work photo. This is for leaners, hangers and
+stumps. No other unit rates have these specific requirements. We want to have buttons for these
+things in the flow, setup in a way that draws the right attention to them to guide work. So work
+that is incomplete, button is one color. When work is done, another." and "The review page should
+clearly show what part of the work photos were for … large enough to see them." Built so: where the
+kind of work's `photosByStage` says so (Hangers, Leaners, Stumps as shipped; the firm's setting),
+the work picked opens **its stages**, pre-work, measurement, post-work, each a button **to do in the
+notice colour or done in the good colour, with its icon and word**, the next to do edged; the
+measurement's stage opens the kind of work's own steps, which come back to it; **the ticket is left
+between stages ("Leave") and opened again from home where it was left, home naming the next
+stage**; one photograph a stage, taken again in its place; **nothing is held** for a stage left
+out; **the review shows each stage's photograph large under its name**. *Agent defaults:* where the
+setting lives; the measurement's steps from its stage; home's next stage; no flag yet for a missing
+stage.
 
 ## 4A.5 Numbers, printing and scanning
 
@@ -441,8 +463,8 @@ app's look is ADR-561's.** **Answered by the user 2026-10-18, every recommendati
 (Q-215…Q-218, ADR-573):** **no confirmation after each value**, the review screen shows everything
 once; **the monitor's own count of today's tickets on home**, nothing ranked or compared; **the
 bottom menu is Work, Time (only where the project has the time clock on), Sync and Settings**; **the
-number is typed again only when a person copied it** (one the phone made, one typed because the
-barcode won't read), never after a scan. The components and tokens every
+number is typed again only when a person copied it** (one typed because the barcode won't read;
+one the phone made no longer, the user, ADR-589), never after a scan. The components and tokens every
 screen is built from are `apps/field/src/look/` (ADR-567, 568).
 
 ---
@@ -480,6 +502,9 @@ What this page used to say, and why it changed. Never build from the left-hand s
 - The split button only where the program type requires ROEs → "Allow split loads" per project; the
   first collection `-A` (ADR-024 → 137, 173).
 - The time clock for monitors only → anyone with an assignment, by hand with nudges (ADR-063 → 241).
+- A number the phone made "shown and typed again" (ADR-573) → **opens the ticket at once**; only a
+  pre-printed number typed by hand is typed again (the user, ADR-589). "No timer" for the phone's
+  reads (ADR-574) → a sync tried every five minutes (the user, ADR-588).
 - Badge first, **number last** (scanned or shown at the end of Complete) → **badge, then the number,
   at New**; tickets left at any step and resumed, one open per truck on a phone; waypoints spelled
   out; photos at any step, shown on the review (the user, ADR-209 → 571).

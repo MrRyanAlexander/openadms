@@ -107,6 +107,7 @@ const phone = BrowserStore.opened().then(async (store) => {
       lockMinutes: policy.phoneInactivityLockMinutes,
       warningSeconds: policy.phoneInactivityWarningSeconds,
     },
+    syncEveryMinutes: policy.phoneSyncEveryMinutes,
     turnIn: new PhoneTurnIn({ store, identity, outbox, sync }),
     // Erased, the store can't be used again: the page opens afresh, with a new store, at
     // enrolment (AC-11-34).

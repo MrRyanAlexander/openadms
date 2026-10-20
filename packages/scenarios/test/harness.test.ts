@@ -428,21 +428,12 @@ describe('a simulated phone captures the badge, then the number, at New (ADR-571
     expect([event.ticketNumber, event.numberTyped, event.siteId]).toEqual(['101001', false, tdsr]);
   });
 
-  it('AC-04-11, AC-11-82 a copied number typed again that doesn’t match opens nothing: the same number shows until it does; a scanned one isn’t typed again', () => {
+  it('AC-04-11, AC-11-82 a number the phone made opens at once, never typed again; one typed off a barcode that won’t read and typed again wrong opens nothing; a scanned one isn’t typed again', () => {
     const { phone } = phoneAt('08:15');
-    expect(phone.open('LOAD', 'COLLECTION', '730415', made, '101010')).toEqual({
-      opened: false,
-      reason: 'NUMBER_MISMATCH',
-      shown: '101001',
-      reentered: '101010',
-    });
-    expect([phone.opened.length, phone.waiting.length, phone.lastUsedNumber('LOAD')]).toEqual([
-      0,
-      0,
-      null,
-    ]);
-    const opened = phone.open('LOAD', 'COLLECTION', '730415', made, '101001');
+    // Made by the phone: whatever the story says was typed, it opens (ADR-589).
+    const opened = phone.open('LOAD', 'COLLECTION', '730415', made, '101010');
     if (!opened.opened) throw new Error('not opened');
+    expect([phone.opened.length, phone.lastUsedNumber('LOAD')]).toEqual([1, 101001]);
     expect(saved(phone.complete(opened.id, {})).ticketNumber).toBe('101001');
     expect(
       phone.open('LOAD', 'DISPOSAL', '730415', typed('101060', 'Barcode damaged'), '101006'),

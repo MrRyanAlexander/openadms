@@ -7,8 +7,8 @@
 //   the next of the phone's block where the project generates them (marked used in its block in
 //   the same piece of work, `PhoneLists.gaveOut`, so it is never made again), or the control
 //   ticket scanned, or a number typed because the barcode won't read, with its reason. **The
-//   number is typed again only where a person copied it** (the user, Q-218, ADR-573): that check
-//   is the screen's, before it opens anything.
+//   number is typed again only where a person copied it off a pre-printed ticket** (the user,
+//   Q-218, ADR-573, 589): that check is the screen's, before it opens anything.
 // - **Several open, one per truck** (the user, ADR-571): a badge, or a truck keyed in by hand,
 //   whose truck has a ticket open on this phone is that ticket. A ticket is its monitor's: another
 //   monitor on the phone never sees it (*agent default*, as the archived queues, ADR-577).
@@ -38,6 +38,9 @@
 //   and "ineligible" where the monitor marked it. **The working crew** is the crew of the newest
 //   unit rate ticket this monitor began on the project on this phone: a crew badge scanned once
 //   stays theirs until they scan another (AC-04-70), and the server keeps no "current crew".
+//   **Its photographs by stage** (the user, ADR-590): where its kind of work says so, a
+//   photograph each of before the work, its measurement and after it, each taken again in its own
+//   place, sent saying its stage.
 //
 // No rule lives here that the server doesn't hold too: what each kind records is the contract's
 // own refusal at `PhoneOutbox.keep`, which answers before anything is sealed.
@@ -59,6 +62,7 @@ import {
   type MeasuredAs,
   type NotSavedNotice,
   type NumberSeriesName,
+  type PhotoStage,
 } from '@open-adms/domain';
 
 import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
@@ -473,16 +477,21 @@ export class PhoneTickets {
 
   // A photograph taken while the ticket is open, at any step (ADR-571), at most the ticket's eight
   // (ADR-157), or taken again in the place of one (`instead`): fingerprinted now, shrunk, its
-  // files kept beside the ticket, the one it takes the place of let go. One too large to ever go
-  // is not kept: whether it was.
+  // files kept beside the ticket, the one it takes the place of let go. **A stage of the work**
+  // (ADR-590) has one photograph: taken for a stage, it takes the place of the one the stage had,
+  // and taken again in the place of one, it keeps that one's stage. One too large to ever go is
+  // not kept: whether it was.
   async photographed(
     id: string,
     original: Uint8Array,
     fix: Fix | null,
     instead?: string,
+    stage?: PhotoStage,
   ): Promise<boolean> {
     const ticket = this.openTicket(id);
-    const before = ticket.photos.find((photo) => photo.id === instead);
+    const before = ticket.photos.find((photo) =>
+      instead === undefined ? stage !== undefined && photo.stage === stage : photo.id === instead,
+    );
     if (before === undefined && ticket.photos.length >= ticketPhotosAtMost) return false;
     const taken = await photoTaken(
       original,
@@ -491,7 +500,11 @@ export class PhoneTickets {
     );
     if (taken === undefined) return false;
     const at = this.now();
-    const photo = photoOf(uuidv7(at), taken, at, offsetOf(at), fix);
+    const staged = stage ?? before?.stage;
+    const photo: TicketPhoto = {
+      ...photoOf(uuidv7(at), taken, at, offsetOf(at), fix),
+      ...(staged === undefined ? {} : { stage: staged }),
+    };
     const now = this.openTicket(id);
     const next: PhoneTicket = {
       ...now,
@@ -711,6 +724,7 @@ export class PhoneTickets {
           projectId: ticket.projectId,
           owner: { kind: 'FIELD_EVENT', id: ticket.id },
           view: null,
+          stage: photo.stage ?? null,
           takenById: ticket.monitorId,
           capturedAt: photo.capturedAt,
           deviceUtcOffsetMinutes: photo.offset,

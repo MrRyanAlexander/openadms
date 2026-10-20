@@ -53,8 +53,8 @@
 // hers, as the golden mission has her.
 //
 // **And the forms that are no ticket's** (task 3.5.4, ADR-584): P1's incident form offering the
-// contractor involved and a cert number with its "Police report number" (required here), its
-// drop-off log form with made-up fields of every type, and the firm's incident sub-type "Mailbox
+// contractor involved and a cert number with its "Police report number" (not required: a firm
+// turns that on where it wants one, ADR-587), its drop-off log form with made-up fields of every type, and the firm's incident sub-type "Mailbox
 // struck" under "Property damage" (golden mission §2); and P2's ROE form, asking for the GPS, and
 // its survey form, where the golden mission makes its ROEs and surveys: an ROE made on P1 would
 // be offered on every collection and unit rate ticket there, so the tests that capture those on
@@ -237,9 +237,9 @@ export class BrowserWorld {
 
   // The forms that are no ticket's (task 3.5.4, ADR-584), through the setup service a story writes
   // them with: P1's incident form offering the contractor involved and a cert number and no ROE
-  // number (AC-04-101), with its "Police report number" (golden mission §2, AC-04-87), made
-  // required here so a test meets one; P1's drop-off log form, its own fields made up so a test
-  // meets every type; and P2's ROE form asking for the GPS and its survey form, with none.
+  // number (AC-04-101), with its "Police report number" (golden mission §2, AC-04-87), not
+  // required, as no incident is by default (the user, ADR-587); P1's drop-off log form, its own
+  // fields made up so a test meets every type and a required one; and P2's ROE form asking for the GPS and its survey form, with none.
   private static async formsSetup(
     forms: FormSetup,
     who: { readonly dana: string; readonly project: string; readonly p2: string },
@@ -257,7 +257,7 @@ export class BrowserWorld {
     });
     await saved(
       forms.ownFields(who.dana, incident.id, [
-        { id: 'police-report', label: 'Police report number', type: 'TEXT', required: true },
+        { id: 'police-report', label: 'Police report number', type: 'TEXT', required: false },
       ]),
     );
     const dropOff = await form(who.project, 'DROP_OFF_LOG', 'Drop-off log');

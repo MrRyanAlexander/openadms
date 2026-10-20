@@ -445,8 +445,10 @@ export {
   photoFileSignatureBytes,
   photoFileTypeOf,
   photoFileTypes,
+  photoStages,
   ticketPhotosAtMost,
   type PhotoFileType,
+  type PhotoStage,
 } from './photo-files.ts';
 export {
   CrewDaySteps,

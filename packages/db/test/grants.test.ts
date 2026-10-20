@@ -316,6 +316,8 @@ const correctable: Record<string, string[]> = {
     // While its record is held for a person (ADR-526).
     'held_record_id',
     'view',
+    // Corrected as the rest is (ADR-590).
+    'stage',
     'captured_at',
     'device_utc_offset_minutes',
     'latitude',

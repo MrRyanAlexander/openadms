@@ -853,12 +853,15 @@ const primes = z.array(
 );
 // A unit rate pay item's kind of work, as the phone picks its screen by it (REQ-112b; ADR-583):
 // what its monitor counts (a number, items with a count each, items with hours each) and its
-// built-in key, Stumps' screen being told by the key, never the name (ADR-194, 198).
+// built-in key, Stumps' screen being told by the key, never the name (ADR-194, 198); and whether
+// its photographs are taken by stage, before, the measurement and after (ADR-590), off in lists a
+// phone kept before the setting came.
 const kindOfWork = z.strictObject({
   id: z.uuid(),
   name: z.string(),
   key: z.enum(builtInKeys.kindOfWork).nullable(),
   countShape: z.enum(countShapes),
+  photosByStage: z.boolean().default(false),
 });
 const payItems = z.array(
   z.strictObject({

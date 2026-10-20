@@ -8,7 +8,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  openedUnder,
+  photographed,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldCast, worldOrigin, type CastMonitor } from './world.ts';
 
 const said = english.capture;
@@ -34,7 +42,7 @@ async function typed(page: Page, number: string): Promise<void> {
   for (const digit of number) await page.getByRole('button', { name: digit, exact: true }).click();
 }
 
-test('AC-11-74, AC-11-82, AC-04-91, AC-04-11, AC-11-36, AC-11-37, AC-11-68, AC-04-98, C184: Ana answers "normal", scans 730415 and is shown the phone’s next number, which she types again; typed wrong it opens nothing, typed right the collection opens under it before any detail; its first block came with her first sync', async ({
+test('AC-11-74, AC-11-82, AC-04-91, AC-04-11, AC-11-36, AC-11-37, AC-11-68, AC-04-98, C184: Ana answers "normal", scans 730415 and the collection opens at once under the phone’s next number, never typed again (ADR-589), before any detail; its first block came with her first sync', async ({
   page,
   context,
 }) => {
@@ -70,16 +78,8 @@ test('AC-11-74, AC-11-82, AC-04-91, AC-04-11, AC-11-36, AC-11-37, AC-11-68, AC-0
   await checkScreen(page);
   await page.getByRole('button', { name: said.badge.start }).click();
 
-  // Its next number, right there, typed again: wrong opens nothing.
-  await expect(page.getByText(first, { exact: true })).toBeVisible();
-  await typed(page, '101030');
-  await page.getByRole('button', { name: said.number.open }).click();
-  await expect(page.getByText(said.number.wrong)).toBeVisible();
-  await checkScreen(page);
-  await typed(page, first);
-  await page.getByRole('button', { name: said.number.open }).click();
-
-  // Open under it, before any detail is asked.
+  // Open at once under its next number, never typed again (ADR-589), before any detail is asked.
+  await expect(page.getByText(said.number.againTitle)).toHaveCount(0);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     filled(said.open.title, { kind: said.kinds.COLLECTION, number: first }),
   );
@@ -106,11 +106,7 @@ test('AC-11-75, AC-11-76, AC-11-77, AC-11-78, AC-11-79, AC-11-80, AC-11-05, AC-0
     await page.getByRole('button', { name: said.split.normal }).click();
     await page.getByLabel(said.badge.label).fill(badge);
     await page.getByRole('button', { name: said.badge.start }).click();
-    const shown = (await page.locator('.big-number').first().textContent()) ?? '';
-    await typed(page, shown);
-    await page.getByRole('button', { name: said.number.open }).click();
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(shown);
-    return shown;
+    return openedUnder(page);
   };
   const one = await open('730415');
   await page.getByRole('button', { name: said.leave }).click();
@@ -321,9 +317,7 @@ test('AC-04-98, AC-11-76, AC-04-91: Ana answers "split": 730416’s first proper
   await page.getByRole('button', { name: said.split.split }).click();
   await page.getByLabel(said.badge.label).fill('730416');
   await page.getByRole('button', { name: said.badge.start }).click();
-  const number = (await page.locator('.big-number').first().textContent()) ?? '';
-  await typed(page, number);
-  await page.getByRole('button', { name: said.number.open }).click();
+  const number = await openedUnder(page);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     filled(said.open.split, { kind: said.kinds.COLLECTION, number, suffix: 'A' }),
   );

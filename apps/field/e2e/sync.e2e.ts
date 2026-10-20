@@ -145,3 +145,27 @@ test('AC-11-22, AC-11-31, AC-05-46, AC-05-01: Kim signs in and the phone syncs; 
   await page.waitForTimeout(500);
   expect(syncs(asked).length).toBe(before);
 });
+
+test('AC-11-89: signed in and left on home, Kim’s phone syncs on its own once five minutes have gone by, and not before', async ({
+  page,
+}) => {
+  const { kim } = worldCast();
+  await page.clock.install();
+  const asked = recorded(page);
+  await enrolled(page, 'P1-TWR-EVERY');
+  await page.getByLabel(english.phone.monitorNumber).fill(kim.monitorNumber);
+  await page.getByLabel(english.phone.passwordLabel).fill(kim.password);
+  await page.getByRole('button', { name: english.phone.signIn }).click();
+  await expect(page.getByText(english.work.synced.now)).toBeVisible();
+  await expect.poll(() => syncs(asked).length).toBe(1);
+
+  // Four minutes on: nothing yet.
+  await page.clock.fastForward('04:00');
+  await page.waitForTimeout(500);
+  expect(syncs(asked).length).toBe(1);
+
+  // Five: the phone syncs by itself, with nobody touching it.
+  await page.clock.fastForward('01:00');
+  await expect.poll(() => syncs(asked).length).toBe(2);
+  expect(syncs(asked)[1]?.status).toBe(200);
+});

@@ -4,7 +4,7 @@ import './tokens.css';
 import './components.css';
 
 export { Banner } from './banner.tsx';
-export { Button, ListRow } from './button.tsx';
+export { Button, ListRow, type ButtonTone } from './button.tsx';
 export { ListPicker, ListPicks, type Choice } from './list-picker.tsx';
 export { BottomMenu, type MenuItem } from './menu.tsx';
 export { NumberKeypad } from './keypad.tsx';

@@ -53,6 +53,8 @@ export interface OpenedPhone {
   readonly passcode: PasscodeOnPhone;
   readonly sessions: PasscodeSessions;
   readonly inactivity: Inactivity;
+  // How often the phone syncs on its own while a monitor is signed in (the policy's, ADR-588).
+  readonly syncEveryMinutes: number;
   readonly turnIn: PhoneTurnIn;
   readonly reopened: () => void;
 }
@@ -240,6 +242,7 @@ export function Shell({
           outbox={opened.outbox}
           capture={opened.capture}
           inactivity={opened.inactivity}
+          syncEveryMinutes={opened.syncEveryMinutes}
           setup={opened.setup}
           signedIn={seen.signedIn}
           onSignedOut={signedOut}

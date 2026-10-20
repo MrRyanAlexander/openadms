@@ -623,6 +623,7 @@ export class Intake {
             quarantinedRecordId: quarantined?.id ?? null,
             heldRecordId: held,
             view: photo.view,
+            stage: photo.stage,
             capturedAt: photo.capturedAt,
             deviceUtcOffsetMinutes: photo.deviceUtcOffsetMinutes,
             receivedAt,

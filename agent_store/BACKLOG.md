@@ -307,6 +307,14 @@ time clock → iPhone → Android → prove it.
   68's browser parts. REQ-316 not ticked: its native capture and sizes are 3.8.2's. C176 done.
   Loosenings 18 of 18 caught (two slipped at first, an empty original shrunk and a form's retake
   at eight: their tests added). What it leaves: nothing of its own.
+- [x] **The user's notes on trying the field app** (2026-10-19, between 3.6.1 and 3.6.2; ADR-587…590;
+  AC-11-82, 86, 89…91, AC-04-11, 104): an incident's police report not required in the test world
+  (the firm's own field's *Required* box); a sync tried every `PHONE_SYNC_EVERY_MINUTES` (5); a
+  number the phone makes opens the ticket at once (the harness and `p1-field-days` too); unit rate
+  work photographed by stage (`Photo.stage`, `KindOfWork.photosByStage` with its endpoint, the
+  stages' screen, home's next stage, the review's large photographs). Two migrations. Loosenings 10
+  of 10 caught. What it leaves: a flag for a stage left without its photograph, if the user wants
+  one; whether ROE and cert numbers stop being typed again too.
 - [ ] **3.6.2 Receipts** (REQ-314's browser half, 315 in part, 321; AC-04-97, AC-11-46…48, 50): one
   receipt content model (its package by ADR: the back office's receipt batch reads it too), to PDF
   and ZPL; Code 128 of the bare number; every project prints; reprinted at any time, never

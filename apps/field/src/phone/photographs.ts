@@ -11,6 +11,8 @@
 // - **Each file sent is fingerprinted too**, the shrunk photograph's and a depth file's, so anyone
 //   can show the file sent came from the one taken. A file larger than the server ever takes
 //   (`MEDIA_FILE_BYTES_AT_MOST`) would never go, so it is never kept.
+import type { PhotoStage } from '@open-adms/domain';
+
 import type { Change, PhoneStore, Shelf } from '../store/phone-store.ts';
 import type { Fix } from './tickets.ts';
 
@@ -49,6 +51,9 @@ export interface TicketPhoto extends PhotoFingerprints {
   readonly bytes: number;
   // Handed to the outbox with its files, at submit.
   readonly kept: boolean;
+  // The stage of the work it shows, where a unit rate ticket's kind of work is photographed by
+  // stage (ADR-590); none on every other photograph.
+  readonly stage?: PhotoStage;
 }
 
 // A photograph taken, fingerprinted and shrunk, its files not yet kept.

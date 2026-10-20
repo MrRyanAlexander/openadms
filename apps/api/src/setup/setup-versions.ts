@@ -39,10 +39,12 @@ interface Named {
 }
 
 // A unit rate pay item's kind of work as a phone is shown it (ADR-583): its screen is picked by
-// what its monitor counts and, for Stumps, by its built-in key.
+// what its monitor counts and, for Stumps, by its built-in key; its photographs taken by stage
+// where the firm says so (ADR-590).
 export interface KindOfWorkShown extends Named {
   readonly key: BuiltInKey<'kindOfWork'> | null;
   readonly countShape: CountShapeName;
+  readonly photosByStage: boolean;
 }
 
 // A site's area as it stands (ADR-346): the project's circle round its GPS, or its newest own
@@ -277,7 +279,9 @@ export class SetupVersions {
         bandTo: true,
         archivedAt: true,
         payableType: { select: { id: true, name: true } },
-        kindOfWork: { select: { id: true, name: true, key: true, countShape: true } },
+        kindOfWork: {
+          select: { id: true, name: true, key: true, countShape: true, photosByStage: true },
+        },
         countIsAlwaysOne: true,
         gpsRequired: true,
         measurementRequired: true,
@@ -303,6 +307,7 @@ export class SetupVersions {
                 ...name(payItem.kindOfWork),
                 key: builtInKeys.kindOfWork.find((key) => key === payItem.kindOfWork?.key) ?? null,
                 countShape: payItem.kindOfWork.countShape,
+                photosByStage: payItem.kindOfWork.photosByStage,
               },
               countIsAlwaysOne: payItem.countIsAlwaysOne,
               gpsRequired: payItem.gpsRequired,

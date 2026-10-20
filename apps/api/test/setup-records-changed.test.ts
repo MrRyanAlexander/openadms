@@ -13,6 +13,7 @@ import {
   addListValueEndpoint,
   archiveListValueEndpoint,
   changeClientEndpoint,
+  changeListValueSettingsEndpoint,
   changeContractEndpoint,
   changeContractorEndpoint,
   changeDeclarationEventEndpoint,
@@ -494,6 +495,57 @@ describe('a value added to any of the firm’s lists', () => {
       ]);
       expect(notSaved(await add('field-tags', { name: 'Mixed' }))[0]).toBe('LIST_VALUE_SETTINGS');
       expect(told(await add('reasons', { name: 'Storm', uses: [] }))).toEqual([400, 'BAD_REQUEST']);
+    });
+  });
+
+  it('AC-11-90 a kind of work the firm adds is photographed by stage where it says so and not otherwise; once added, Leaners is turned off and on again, audited, and nothing else changes that way', async () => {
+    await world(async (api, tx, who) => {
+      const dana = await api.signedIn(danasEmail, long);
+      const add = (payload: object) =>
+        ask(api, dana, addListValueEndpoint, { ids: { list: 'kinds-of-work' }, payload });
+      const staged = saved(
+        addListValueEndpoint,
+        await add({ name: 'Palms', countShape: 'NUMBER', photosByStage: true }),
+      ).record;
+      const plain = saved(
+        addListValueEndpoint,
+        await add({ name: 'Signs', countShape: 'NUMBER' }),
+      ).record;
+      const byStage = async (id: string) =>
+        (await tx.kindOfWork.findUniqueOrThrow({ where: { id } })).photosByStage;
+      expect([await byStage(staged.id), await byStage(plain.id)]).toEqual([true, false]);
+
+      const leaners = await tx.kindOfWork.findFirstOrThrow({ where: { name: 'Leaners' } });
+      expect(leaners.photosByStage).toBe(true);
+      const change = (list: string, valueId: string, payload: object) =>
+        ask(api, dana, changeListValueSettingsEndpoint, { ids: { list, valueId }, payload });
+      const off = await change('kinds-of-work', leaners.id, { photosByStage: false });
+      expect(saved(changeListValueSettingsEndpoint, off).record.name).toBe('Leaners');
+      expect(await byStage(leaners.id)).toBe(false);
+      expect(
+        (await auditedBy(tx, off.requestId)).map(({ tableName, operation, actorId }) => [
+          tableName,
+          operation,
+          actorId,
+        ]),
+      ).toEqual([['kind_of_work', 'UPDATE', who.dana]]);
+      saved(
+        changeListValueSettingsEndpoint,
+        await change('kinds-of-work', leaners.id, { photosByStage: true }),
+      );
+      expect(await byStage(leaners.id)).toBe(true);
+      expect(notSaved(await change('kinds-of-work', leaners.id, {}))).toEqual([
+        'LIST_VALUE_SETTINGS',
+        'Not changed: nothing to change was said.',
+      ]);
+      const ppdr = await tx.programType.findFirstOrThrow({ where: { name: 'PPDR' } });
+      expect(notSaved(await change('program-types', ppdr.id, { photosByStage: true }))).toEqual([
+        'LIST_VALUE_SETTINGS',
+        'Not changed: a value of this list doesn’t change whether its photographs are taken by stage.',
+      ]);
+      expect(
+        told(await change('kinds-of-work', leaners.id, { countShape: 'ITEM_COUNTS' })),
+      ).toEqual([400, 'BAD_REQUEST']);
     });
   });
 });

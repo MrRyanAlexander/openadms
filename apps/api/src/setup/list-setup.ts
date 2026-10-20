@@ -5,6 +5,8 @@
 // name** (the domain's `ListValues.addRefusal`; ADR-527 (6)). **Every list's values are renamed,
 // archived and put back here**, a project's field tags among them: a built-in value is renamed if
 // the firm uses another word, and never archived (the domain's `ListValues`, and the database).
+// **What a value states beside its name changes here** where its list lets it once added: a kind
+// of unit rate work whether its photographs are taken by stage (ADR-590).
 import type { FirmList } from '@open-adms/contracts';
 import type { DebrisType, PayableType, Prisma } from '@open-adms/db';
 import { ListValues, listValueSettings, type ListValueSetting } from '@open-adms/domain';
@@ -33,7 +35,7 @@ interface ListTable {
   create(args: { data: Record<string, unknown> }): Promise<ListRow>;
   update(args: {
     where: { id: string };
-    data: { name?: string; archivedAt?: Date | null };
+    data: { name?: string; archivedAt?: Date | null } & Partial<Record<ListValueSetting, unknown>>;
   }): Promise<ListRow>;
 }
 
@@ -107,6 +109,26 @@ export class ListSetup extends QueueingService {
     return this.setup(person, (tx) =>
       ListSetup.table(tx, list).update({ where: { id: valueId }, data: { name } }),
     );
+  }
+
+  // What it states beside its name, changed where its list lets it once added: a kind of work's
+  // photographs by stage (ADR-590). Audited with what it was. Nothing is queued: no rule reads it,
+  // and a phone is shown it with its next lists, a new setup version (ADR-453).
+  change(
+    person: string,
+    list: FirmList,
+    valueId: string,
+    settings: Partial<Readonly<Record<ListValueSetting, unknown>>>,
+  ): Promise<Outcome<ListRow>> {
+    return this.setup(person, async (tx) => {
+      const stated = listValueSettings.filter((setting) => settings[setting] !== undefined);
+      const refusal = new ListValues().changeRefusal(list, stated);
+      if (refusal !== null) throw new Refused(refusal);
+      return ListSetup.table(tx, list).update({
+        where: { id: valueId },
+        data: Object.fromEntries(stated.map((setting) => [setting, settings[setting]])),
+      });
+    });
   }
 
   // Off new picks and kept on old records; put back as it was. A built-in value is never

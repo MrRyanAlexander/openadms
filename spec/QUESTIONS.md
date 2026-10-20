@@ -2428,6 +2428,15 @@ at most 4 per phase); a ticket under the minimum is flagged "no photos", never b
 
 > **User:** Proposal is perfect..Approved.
 
+> **User, 2026-10-19 (after trying the field app; ADR-590):** "Unit Rates are missing the details
+> needed. There are no pre work, measurement or post work flows. … This is for leaners, hangers and
+> stumps. No other unit rates have these specific requirements. We want to have buttons for these
+> things in the flow … So work that is incomplete, button is one color. When work is done, another.
+> … The review page should clearly show what part of the work photos were for. This way we show
+> pre,measure,post in the review page. And for these we want to make sure they are large enough to
+> see them." **Built (ADR-590):** a photograph's stage, one each of pre-work, measurement and
+> post-work, on the kinds of work the firm marks (Hangers, Leaners, Stumps as shipped), within the 8.
+
 *Refs:* ADR-101, Q-107; `adms-field-app` §4A.4.
 
 ### ✅ Q-149 — What each kind of unit rate work measures
@@ -5313,3 +5322,15 @@ after the badge; the question stands as asked, and the typing again happens ther
 **Decided (ADR-573):** typed again only when a person copied it (a number the phone made, or one
 typed because the barcode won't read); never after a scan. Each typed-again number must match
 before the ticket opens.
+
+> **User, 2026-10-19 (after trying the field app; ADR-589):** "It feels very blocking to enter the
+> ticket number at the start to verify it, but in the test case that mihgt be due to the choice to
+> be generated ticket numbers, vs scanned pre printed tickets. Thing is though, if we are generating
+> the ticket number, we really don't want to block work re-entering it like we are right now. The
+> only time it makes sense to block at the start to enter the number is when its scanned from
+> pre-printed."
+
+**Amended (ADR-589):** a number the phone makes opens the ticket at once, never typed again; only a
+pre-printed number typed because its barcode won't read is typed again (*agent reading* of "scanned
+from pre-printed", since a scan itself was never typed again). ROE and cert numbers are still typed
+again until you say otherwise.

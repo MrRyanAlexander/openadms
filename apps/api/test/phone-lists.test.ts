@@ -198,6 +198,8 @@ describe('the lists a phone takes', () => {
               name: 'Hangers',
               key: null,
               countShape: 'NUMBER',
+              // Photographed by stage, as shipped (ADR-590).
+              photosByStage: true,
             },
             // Its capture settings, each as Dana stated it.
             countIsAlwaysOne: true,

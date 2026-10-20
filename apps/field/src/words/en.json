@@ -505,8 +505,7 @@
     },
     "number": {
       "title": "The ticket number",
-      "shown": "This phone’s next number",
-      "noteIt": "Write it on the ticket, then type it again below.",
+      "shown": "The number",
       "againTitle": "Type the number again",
       "showAgain": "Show the number again",
       "wrong": "That doesn’t match. Type the number again.",
@@ -637,10 +636,46 @@
       "title": "Photos",
       "tooLarge": "That photo couldn’t be kept: it is empty or too large.",
       "taken": "Photo {number} of {count}, {time}",
+      "stageTaken": "{stage} photo, {time}",
       "open": "Open photo {number}",
       "remove": "Remove this photo",
       "retake": "Take this photo again",
       "back": "Back to the ticket"
+    },
+    "stages": {
+      "title": "The work, stage by stage",
+      "about": "Take each photo when the work gets there. Leave the ticket between stages and come back to it from home.",
+      "names": {
+        "PRE_WORK": "Pre-work",
+        "MEASUREMENT": "Measurement",
+        "POST_WORK": "Post-work"
+      },
+      "inWords": {
+        "PRE_WORK": "pre-work",
+        "MEASUREMENT": "measurement",
+        "POST_WORK": "post-work"
+      },
+      "numbered": "{number}. {stage}",
+      "toDo": "To do",
+      "done": "Done",
+      "take": {
+        "PRE_WORK": "Pre-work photo: to do",
+        "MEASUREMENT": "Measurement photo: to do",
+        "POST_WORK": "Post-work photo: to do"
+      },
+      "again": {
+        "PRE_WORK": "Pre-work photo: done. Take again",
+        "MEASUREMENT": "Measurement photo: done. Take again",
+        "POST_WORK": "Post-work photo: done. Take again"
+      },
+      "measure": "The measurement: to do",
+      "measured": "The measurement: {measured}. Change",
+      "open": "Open the {stage} photo",
+      "next": "Next: {stage}",
+      "allDone": "All three stages done",
+      "photosTitle": "The work’s photos",
+      "notTaken": "No {stage} photo taken",
+      "otherPhotos": "Other photos"
     },
     "camera": {
       "title": "Camera",

@@ -580,6 +580,20 @@ describe('kinds of unit rate work', () => {
     ]);
   });
 
+  it('AC-11-90 Hangers, Leaners and Stumps are photographed by stage as shipped, the rest not; a kind the firm adds is not unless it says so', async () => {
+    const rows = await tested.db.rows<{ name: string; photos_by_stage: boolean }>(
+      `SELECT "name", "photos_by_stage" FROM "kind_of_work" ORDER BY "position"`,
+    );
+    expect(rows).toEqual([
+      { name: 'Hangers', photos_by_stage: true },
+      { name: 'Leaners', photos_by_stage: true },
+      { name: 'Stumps', photos_by_stage: true },
+      { name: 'HHW', photos_by_stage: false },
+      { name: 'White Goods', photos_by_stage: false },
+      { name: 'Crew time', photos_by_stage: false },
+    ]);
+  });
+
   it('AC-01-38 a kind with no count shape, or one that isn’t of the three, is refused', async () => {
     const { db } = tested;
     await asTheApi();

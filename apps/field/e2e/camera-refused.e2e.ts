@@ -6,7 +6,7 @@ import type { Page } from '@playwright/test';
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
 import { launched } from './browser.ts';
-import { enrolled } from './phone-page.ts';
+import { enrolled, openedUnder } from './phone-page.ts';
 import { worldCast, worldOrigin } from './world.ts';
 
 const said = english.capture;
@@ -31,10 +31,7 @@ test('AC-11-68: Ana says no to the camera; the collection goes on without the ph
   await page.getByRole('button', { name: said.split.normal }).click();
   await page.getByLabel(said.badge.label).fill('730415');
   await page.getByRole('button', { name: said.badge.start }).click();
-  const number = (await page.locator('.big-number').first().textContent()) ?? '';
-  for (const digit of number) await page.getByRole('button', { name: digit, exact: true }).click();
-  await page.getByRole('button', { name: said.number.open }).click();
-  await expect(heading(page)).toContainText(number);
+  await openedUnder(page);
 
   await page.getByRole('button', { name: english.look.photos.take }).click();
   await expect(page.getByText(said.camera.refused)).toBeVisible();

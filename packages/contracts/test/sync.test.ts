@@ -590,6 +590,18 @@ describe('what a phone is answered', () => {
 });
 
 describe('a photograph’s record', () => {
+  it('AC-04-104, AC-11-90 a field event’s may say which stage of the work it shows; no other’s may; one that says nothing, as every phone sent before, says none', () => {
+    for (const stage of ['PRE_WORK', 'MEASUREMENT', 'POST_WORK']) {
+      expect(refusals(syncedPhotoSchema, { ...pilePhoto, stage }), stage).toEqual([]);
+    }
+    const said = syncedPhotoSchema.safeParse(pilePhoto);
+    expect(said.success && said.data.stage).toBeNull();
+    expect(refusals(syncedPhotoSchema, { ...pilePhoto, stage: 'DURING' })).toHaveLength(1);
+    expect(refusals(syncedPhotoSchema, { ...certificationPhotos[0], stage: 'PRE_WORK' })).toEqual([
+      'stage: Only a field event’s photograph shows a stage of the work.',
+    ]);
+  });
+
   it('AC-05-05, ADR-101, 481 what it is of, who took it, when and where, and both fingerprints, the phone’s word: never where its file is kept, which the server makes; a certification’s five each say their view, and only a certification’s photograph has one', () => {
     for (const photo of [pilePhoto, ...certificationPhotos]) {
       expect(refusals(syncedPhotoSchema, photo), photo.id).toEqual([]);

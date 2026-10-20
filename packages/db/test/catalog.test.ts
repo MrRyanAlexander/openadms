@@ -829,6 +829,13 @@ describe('the guards in the catalog', () => {
         definition:
           'CHECK (((view IS NULL) OR (certification_id IS NOT NULL) OR (held_record_id IS NOT NULL)))',
       },
+      {
+        // Only a field event's photograph says its stage of the work, kept with its record while
+        // that waits (ADR-590).
+        name: 'photo_stage_check',
+        definition:
+          'CHECK (((stage IS NULL) OR (field_event_id IS NOT NULL) OR (quarantined_record_id IS NOT NULL) OR (held_record_id IS NOT NULL)))',
+      },
       // ROEs and forms (ADR-327).
       {
         name: 'drop_off_log_answers_check',

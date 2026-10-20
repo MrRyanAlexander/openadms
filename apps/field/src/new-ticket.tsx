@@ -7,12 +7,14 @@
 //   allows split loads, for a collection (its properties) and a haul-out's collection (its piles,
 //   ADR-295); then the badge scanned (its truck or crew from the phone's certifications); then the
 //   number. **Where the number is made** (a collection, a haul-out's collection): the phone's
-//   next number shown and typed again, or the control ticket scanned. **Where it is carried** (a
-//   disposal, a haul-out's disposal): the driver's ticket scanned, never typed again, and never a
-//   number made there (ADR-019; REQ-308a). Either way a barcode that won't read is typed, with a
-//   reason from the firm's list, and typed again (Q-218, ADR-573).
-// - **Unit rate** (ADR-111, 571, 583; AC-04-70, AC-11-74): the crew's badge, then the phone's next
-//   number of the unit rate series, always made there (ADR-056), shown and typed again. **The
+//   next number, **the ticket opening under it at once, never typed again** (the user, ADR-589:
+//   "we really don't want to block work re-entering it"), or the control ticket scanned. **Where
+//   it is carried** (a disposal, a haul-out's disposal): the driver's ticket scanned, never typed
+//   again, and never a number made there (ADR-019; REQ-308a). Either way a pre-printed barcode
+//   that won't read is typed, with a reason from the firm's list, and typed again (Q-218, ADR-573):
+//   the one number still copied by a person.
+// - **Unit rate** (ADR-111, 571, 583, 589; AC-04-70, AC-11-74): the crew's badge, then the phone's
+//   next number of the unit rate series, always made there (ADR-056), opening at once. **The
 //   working crew stays**: where the monitor has one, New offers it first, "Same crew" or "Change
 //   crew", so it is confirmed on every ticket. A crew isn't held to one open ticket (the user's
 //   rule is one per truck), and a crew is never keyed in by hand: it has no capacity to type.
@@ -26,7 +28,7 @@
 // Nothing here waits on the server (ADR-030; AC-11-05): the lists are read again only where there
 // is signal.
 import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contracts';
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import { Step, TruckFacts, TypeAgain } from './capture.tsx';
 import {
@@ -176,7 +178,6 @@ export function NewTicket({
   const [badge, setBadge] = useState('');
   const [keyed, setKeyed] = useState(false);
   const [capacity, setCapacity] = useState('');
-  const [made, setMade] = useState<string | null>(null);
   const [scanned, setScanned] = useState('');
   const [typed, setTyped] = useState('');
   const [reasonId, setReasonId] = useState<string | null>(null);
@@ -185,8 +186,14 @@ export function NewTicket({
   const [asked, setAsked] = useState<{ said: NumberSaid; numbered: Numbered } | null>(null);
   const [reading, setReading] = useState<'no' | 'reading' | 'notRead' | 'stillNot'>('no');
   const [opening, setOpening] = useState(false);
-  // Whatever fix the phone has by the time the ticket opens, asked when the badge is scanned.
+  // Whatever fix the phone has by the time the ticket opens, asked when the badge is scanned; and
+  // the asking, which the ticket waits for (at most the locator's own few seconds): a number the
+  // phone makes opens it at once (ADR-589), and its start must still be where it began.
   const fix = useRef<Fix | null>(null);
+  const placing = useRef<Promise<unknown>>(Promise.resolve());
+  // The badge taken, as it was taken: "Same crew" opens the ticket in the same press that sets
+  // the badge, before the screen has it.
+  const badgeTaken = useRef('');
   const certNumber = badge.trim();
   const known = lists.certifications.some((one) => one.certNumber === certNumber);
   const scanWords = makesNumber(kind)
@@ -236,8 +243,13 @@ export function NewTicket({
 
   const open = async (numbered: Numbered) => {
     setOpening(true);
+    await placing.current;
     const opened = await parts.tickets.open({
-      ...base(certNumber, keyed, keyed && capacity !== '' ? Number(capacity) : null),
+      ...base(
+        badgeTaken.current === '' ? certNumber : badgeTaken.current,
+        keyed,
+        keyed && capacity !== '' ? Number(capacity) : null,
+      ),
       ticketNumber: numbered.number,
       numberFrom: numbered.from,
       numberTypedReasonId: numbered.reasonId,
@@ -268,16 +280,17 @@ export function NewTicket({
     setStep('question');
   };
 
-  const toNumber = useCallback(async () => {
+  const toNumber = async () => {
     if (!generated) {
       setStep('control');
       return;
     }
-    setMade(await parts.tickets.nextNumber(workflow));
-    setAgain('');
-    setWrong(false);
-    setStep('made');
-  }, [generated, parts.tickets, workflow]);
+    // The phone's next number, the ticket opening under it at once (ADR-589); none held, the
+    // screen says so.
+    const next = await parts.tickets.nextNumber(workflow);
+    if (next === null) setStep('made');
+    else take({ number: next, from: 'MADE', reasonId: null });
+  };
 
   const badged = (cert = certNumber) => {
     if (cert === '') return;
@@ -286,7 +299,8 @@ export function NewTicket({
       onOpened(already, true);
       return;
     }
-    void parts.locator.where().then((placed) => {
+    badgeTaken.current = cert;
+    placing.current = parts.locator.where().then((placed) => {
       if (placed.kind === 'fix') fix.current = placed.fix;
     });
     if (lists.certifications.some((one) => one.certNumber === cert)) void toNumber();
@@ -494,52 +508,15 @@ export function NewTicket({
         </>,
       );
     case 'made':
-      if (made === null) {
-        return frame(
-          said.number.title,
-          <Button wide onPress={onCancel}>
-            {said.leave}
-          </Button>,
-          <Banner tone="notice" announced>
-            <p>{said.number.none}</p>
-          </Banner>,
-        );
-      }
+      // Reached only where the phone holds no number to make: a number made opens the ticket.
       return frame(
         said.number.title,
-        <Button
-          main
-          wide
-          isDisabled={again === '' || opening}
-          onPress={() => {
-            if (again !== made) {
-              setWrong(true);
-              setAgain('');
-              return;
-            }
-            take({ number: made, from: 'MADE', reasonId: null });
-          }}
-        >
-          {said.number.open}
+        <Button wide onPress={onCancel}>
+          {said.leave}
         </Button>,
-        <>
-          <dl className="facts">
-            <dt>{said.number.shown}</dt>
-            <dd className="big-number">{made}</dd>
-          </dl>
-          <p>{said.number.noteIt}</p>
-          <h2 id={`${titleId}-again`}>{said.number.againTitle}</h2>
-          <TypeAgain
-            titleId={`${titleId}-again`}
-            number={made}
-            value={again}
-            onChange={(value) => {
-              setAgain(value);
-              setWrong(false);
-            }}
-            wrong={wrong}
-          />
-        </>,
+        <Banner tone="notice" announced>
+          <p>{said.number.none}</p>
+        </Banner>,
       );
     case 'control':
       return frame(

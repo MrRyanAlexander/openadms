@@ -68,6 +68,14 @@ export async function photographed(page: Page, take?: Locator): Promise<void> {
   await expect(camera).toBeHidden();
 }
 
+// A ticket opened at once under the phone's next number, never typed again (the user, ADR-589):
+// the number its heading names.
+export async function openedUnder(page: Page): Promise<string> {
+  const heading = page.getByRole('heading', { level: 1 });
+  await expect(heading).toHaveText(/\d{6}/);
+  return /\d{6}/.exec((await heading.textContent()) ?? '')?.[0] ?? '';
+}
+
 export async function enrolled(page: Page, name: string): Promise<void> {
   await page.goto(worldOrigin());
   await expect(page.getByRole('status')).toHaveText(english.shell.server.answers);

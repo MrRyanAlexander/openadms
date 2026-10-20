@@ -664,6 +664,8 @@ export type MapVersionAnswer = z.infer<typeof mapVersionAnswerSchema>;
 export const listValueReadSchema = listValueRecordSchema.extend({
   requiresRoe: z.boolean().nullable(),
   countShape: z.string().nullable(),
+  // A kind of unit rate work's: whether its photographs are taken by stage (ADR-590).
+  photosByStage: z.boolean().nullable(),
   kindOfWorkId: id.nullable(),
   certifies: z.enum(certificationKinds).nullable(),
   incidentTypeId: id.nullable(),

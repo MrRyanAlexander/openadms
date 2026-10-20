@@ -20,6 +20,12 @@ export type PhotoFileType = (typeof photoFileTypes)[number];
 // threshold the firm tunes. A certification takes its five set views instead (ADR-179).
 export const ticketPhotosAtMost = 8;
 
+// The stage of the work a unit rate ticket's photograph shows, where its kind of work is
+// photographed by stage (the user, ADR-590): before the work, its measurement, and after it, one
+// each (Q-148), in the order the work goes. No other photograph has a stage.
+export const photoStages = ['PRE_WORK', 'MEASUREMENT', 'POST_WORK'] as const;
+export type PhotoStage = (typeof photoStages)[number];
+
 // How many of a file's first bytes tell its kind.
 export const photoFileSignatureBytes = 12;
 

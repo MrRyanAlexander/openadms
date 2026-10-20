@@ -12,7 +12,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  openedUnder,
+  photographed,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldCast, worldOrigin, worldPasscode, type CastMonitor } from './world.ts';
 
 const said = english.capture;
@@ -299,11 +307,8 @@ test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leavin
   await page.getByRole('button', { name: said.split.split }).click();
   await page.getByLabel(said.badge.label).fill('730415');
   await page.getByRole('button', { name: said.badge.start }).click();
-  // The haul-out's own number, shown and typed again (its first block came with its lists).
-  const number = (await page.locator('.big-number').first().textContent()) ?? '';
-  expect(number).toMatch(/^\d+$/);
-  await typed(page, number);
-  await page.getByRole('button', { name: said.number.open }).click();
+  // The haul-out's own number, opening at once (its first block came with its lists; ADR-589).
+  const number = await openedUnder(page);
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     filled(said.open.split, { kind: said.kinds.HAUL_OUT_COLLECTION, number, suffix: 'A' }),
   );

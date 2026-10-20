@@ -17,6 +17,10 @@
 //   phone's answer is what prints; the worker works it out again and bills that (ADR-217).
 // - **"Ineligible" is offered where the pay item allows the monitor to mark it** (ADR-210): the
 //   pay item worked out, or, where none is, any of the payable type's.
+// - **Photographed by stage where its kind of work says so** (the user, ADR-590): before the
+//   work, its measurement and after it, each its own photograph, the work left and come back to
+//   between them; the firm's setting on the kind of work, on as shipped for Hangers, Leaners and
+//   Stumps.
 //
 // Nothing here refuses anything (ADR-052): a missing measurement, a count with decimals and work
 // marked ineligible are each flagged after sync, never stopped on the phone.
@@ -29,6 +33,8 @@ import type { CountShapeName } from './unit-rate-checks.ts';
 export interface PhoneKindOfWork extends Named {
   readonly key: BuiltInKey<'kindOfWork'> | null;
   readonly countShape: CountShapeName;
+  // Its photographs taken by stage: before, the measurement, after (ADR-590).
+  readonly photosByStage: boolean;
 }
 
 // A unit rate pay item, as a phone holds it: its code only to print, never to show.
@@ -55,6 +61,8 @@ export interface UnitRateAsked {
   readonly decimals: boolean;
   // A tree's measurement (around or across), a stump's (across), or none.
   readonly measured: 'TREE' | 'STUMP' | 'NONE';
+  // Whether its photographs are taken by stage: before, the measurement, after (ADR-590).
+  readonly photosByStage: boolean;
 }
 
 // A quarter of an hour, in hundredths: crew time's hours go to the quarter hour (ADR-084).
@@ -86,7 +94,12 @@ export class PhoneUnitRate {
     if (first === undefined) return null;
     const { kindOfWork } = first;
     const decimals = ofIt.some((payItem) => payItem.decimalsAllowed);
-    const kind = { payableType: first.payableType, kindOfWork, decimals };
+    const kind = {
+      payableType: first.payableType,
+      kindOfWork,
+      decimals,
+      photosByStage: kindOfWork.photosByStage,
+    };
     if (kindOfWork.countShape === 'ITEM_COUNTS') {
       return { ...kind, screen: 'ITEM_COUNTS', count: 'NONE', measured: 'NONE' };
     }

@@ -8,6 +8,7 @@ import {
   fieldEventKinds,
   masterPasscodeSessions,
   measuredAs,
+  photoStages,
   qcStatuses,
   quarantineReasons,
   workflows,
@@ -237,6 +238,9 @@ export const photographRecordSchema = z.strictObject({
   incidentId: id.nullable(),
   dropOffLogId: id.nullable(),
   view: z.enum(certificationViews).nullable(),
+  // The stage of the work a field event's photograph shows, where its kind of work is
+  // photographed by stage (ADR-590): what the review shows each one as.
+  stage: z.enum(photoStages).nullable(),
   capturedAt: at,
   // When its file reached storage; none until it has.
   uploadedAt: at.nullable(),

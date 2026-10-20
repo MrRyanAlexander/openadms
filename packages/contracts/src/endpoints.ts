@@ -1242,7 +1242,7 @@ export const addListValueEndpoint = endpoint({
   ...setup,
   name: 'addListValue',
   summary:
-    'Adds a value of the firm’s own to one of its lists, at the end, with a name and what its list asks beside it: a program type whether it requires ROEs, a kind of unit rate work the shape of its count, an item name its kind of work, a vehicle type what it certifies, an incident sub-type its incident type, a reason where it is offered. A field tag is added on its project.',
+    'Adds a value of the firm’s own to one of its lists, at the end, with a name and what its list asks beside it: a program type whether it requires ROEs, a kind of unit rate work the shape of its count (and, if it says so, that its photographs are taken by stage: before the work, its measurement and after), an item name its kind of work, a vehicle type what it certifies, an incident sub-type its incident type, a reason where it is offered. A field tag is added on its project.',
   method: 'POST',
   path: '/lists/:list/values',
   params: z.strictObject({ list: z.enum(firmLists) }),
@@ -1250,6 +1250,7 @@ export const addListValueEndpoint = endpoint({
     name: named,
     requiresRoe: z.boolean().optional(),
     countShape: z.enum(countShapes).optional(),
+    photosByStage: z.boolean().optional(),
     kindOfWorkId: z.uuid().optional(),
     certifies: z.enum(['CONTAINER', 'CREW']).optional(),
     incidentTypeId: z.uuid().optional(),
@@ -1289,6 +1290,20 @@ export const unarchiveListValueEndpoint = endpoint({
   method: 'POST',
   path: '/lists/:list/values/:valueId/unarchivings',
   params: listValue,
+  answer: savedAnswer(listValueRecordSchema),
+});
+
+// What a value states beside its name, changed where its list lets it change once added (the
+// domain's `ListValues.changeRefusal`): a kind of unit rate work's photographs by stage (ADR-590).
+export const changeListValueSettingsEndpoint = endpoint({
+  ...setup,
+  name: 'changeListValueSettings',
+  summary:
+    'Changes what a value of one of the firm’s lists states beside its name, where its list lets it change once added: a kind of unit rate work whether its photographs are taken by stage (before the work, its measurement and after it). Phones are shown it with their next lists; nothing is queued, since no rule reads it.',
+  method: 'PATCH',
+  path: '/lists/:list/values/:valueId/settings',
+  params: listValue,
+  body: z.strictObject({ photosByStage: z.boolean().optional() }),
   answer: savedAnswer(listValueRecordSchema),
 });
 
@@ -4540,6 +4555,7 @@ export const endpoints: readonly Endpoint[] = [
   renameListValueEndpoint,
   archiveListValueEndpoint,
   unarchiveListValueEndpoint,
+  changeListValueSettingsEndpoint,
   listFormsEndpoint,
   createFormEndpoint,
   changeFormEndpoint,

@@ -25,11 +25,13 @@ export interface ListValue {
 
 // What a value the firm adds to one of its lists states beside its name (spec/LISTS.md;
 // ADR-527 (6)): a program type whether it requires ROEs; a kind of unit rate work the shape of its
-// count; an item name its kind of work; a vehicle type what it certifies; an incident's sub-type
-// its incident type; a reason where it is offered. Every other list takes a name alone.
+// count, and may state whether its photographs are taken by stage (ADR-590; off where it doesn't);
+// an item name its kind of work; a vehicle type what it certifies; an incident's sub-type its
+// incident type; a reason where it is offered. Every other list takes a name alone.
 export const listValueSettings = [
   'requiresRoe',
   'countShape',
+  'photosByStage',
   'kindOfWorkId',
   'certifies',
   'incidentTypeId',
@@ -47,9 +49,17 @@ const settingsOf: Readonly<Partial<Record<string, readonly ListValueSetting[]>>>
   reasons: ['uses'],
 };
 
+// What a value may state too, and goes without where it doesn't; and what it may change once it
+// is added (a count's shape never: tickets are made by it).
+const mayStateOf: Readonly<Partial<Record<string, readonly ListValueSetting[]>>> = {
+  'kinds-of-work': ['photosByStage'],
+};
+const changeableOf = mayStateOf;
+
 const settingWords: Readonly<Record<ListValueSetting, string>> = {
   requiresRoe: 'whether it requires ROEs',
   countShape: 'the shape of its count',
+  photosByStage: 'whether its photographs are taken by stage',
   kindOfWorkId: 'its kind of work',
   certifies: 'what it certifies',
   incidentTypeId: 'its incident type',
@@ -68,7 +78,8 @@ export class ListValues {
     }
     const wanted = settingsOf[list] ?? [];
     const missing = wanted.filter((setting) => !stated.includes(setting));
-    const extra = stated.filter((setting) => !wanted.includes(setting));
+    const may = mayStateOf[list] ?? [];
+    const extra = stated.filter((setting) => !wanted.includes(setting) && !may.includes(setting));
     if (missing.length === 0 && extra.length === 0) return null;
     const said = (settings: readonly ListValueSetting[]): string =>
       settings.map((setting) => settingWords[setting]).join(', ');
@@ -78,6 +89,22 @@ export class ListValues {
         missing.length > 0
           ? `Not added: a value of this list states ${said(missing)}.`
           : `Not added: a value of this list takes no ${said(extra)}.`,
+    };
+  }
+
+  // Why a value's settings aren't changed so, or nothing: only what its list lets change once a
+  // value is added, a kind of unit rate work whether its photographs are taken by stage
+  // (ADR-590), and something must be said.
+  changeRefusal(list: string, stated: readonly ListValueSetting[]): SetupRecordRefusal | null {
+    if (stated.length === 0) {
+      return { code: 'LIST_VALUE_SETTINGS', message: 'Not changed: nothing to change was said.' };
+    }
+    const may = changeableOf[list] ?? [];
+    const not = stated.filter((setting) => !may.includes(setting));
+    if (not.length === 0) return null;
+    return {
+      code: 'LIST_VALUE_SETTINGS',
+      message: `Not changed: a value of this list doesn’t change ${not.map((setting) => settingWords[setting]).join(', ')}.`,
     };
   }
 

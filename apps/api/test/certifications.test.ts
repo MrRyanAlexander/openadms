@@ -1135,6 +1135,7 @@ describe('a certification as a phone sends it', () => {
         projectId: c.project.id,
         owner: { kind: 'CERTIFICATION', id: sent.id },
         view: 'LEFT',
+        stage: null,
         takenById: who.kim,
         deviceId: phone.id,
         capturedAt: new Date('2026-10-10T13:42:00Z'),

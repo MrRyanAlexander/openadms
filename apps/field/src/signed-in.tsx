@@ -7,9 +7,10 @@
 // **Sync** says when the phone last synced, what of its own the server didn't take, in the server's
 // words (AC-05-46, AC-11-31), and how stale the lists are, and syncs on asking; **Settings** says
 // who is signed in on which phone and signs them out. **The phone syncs** (task 3.4.1, ADR-578) on
-// signing in, whenever it finds a connection or comes back to the front, and on asking, then reads
-// the lists (AC-11-16; coming back to the front, only where the sync says they moved); told there
-// is no assignment, the phone keeps the lists it holds. A request answered `NOT_SIGNED_IN` sends
+// signing in, whenever it finds a connection or comes back to the front, **every few minutes on its
+// own** (the policy's, five as shipped: the user, ADR-588; AC-11-89), and on asking, then reads
+// the lists (AC-11-16; coming back to the front and on its own, only where the sync says they
+// moved); told there is no assignment, the phone keeps the lists it holds. A request answered `NOT_SIGNED_IN` sends
 // the monitor back to sign in, keeping everything the phone holds (AC-11-14). Every screen's strip
 // says how much waits to go and when the phone last synced. Time joins the menu with the time
 // clock's task (3.7.1), which tells the phone whether the project has it on.
@@ -36,7 +37,8 @@
 // tickets; the capture's screens take the place of the menu until the monitor goes home. The lock
 // after inactivity watches them too; nothing a ticket holds is lost to it. Task 3.5.2 (ADR-582):
 // home starts a disposal, a haul-out's collection and a haul-out's disposal the same way. Task
-// 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew. Task 3.5.5
+// 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew, and where its
+// work is photographed by stage, the next stage to do (ADR-590). Task 3.5.5
 // (ADR-585): certifying, an open certification named by its number.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -67,6 +69,7 @@ import {
   type CapturedKind,
   type Capturing,
 } from './ticket-capture.tsx';
+import { stagesLeft } from './unit-rate.tsx';
 import { counted, lastSynced, listsRead, say, timeOfDay, words } from './words.ts';
 
 // How long the phone may be left alone, in minutes, and how long before the end it warns, in
@@ -128,6 +131,7 @@ export function SignedInPhone({
   outbox,
   capture,
   inactivity,
+  syncEveryMinutes,
   setup,
   signedIn: first,
   onSignedOut,
@@ -141,6 +145,7 @@ export function SignedInPhone({
   readonly outbox: PhoneOutbox;
   readonly capture: CaptureParts;
   readonly inactivity: Inactivity;
+  readonly syncEveryMinutes: number;
   readonly setup: PhoneSetup;
   readonly signedIn: SignedIn;
   // Signed out by the monitor (nothing to say), or why the sign-in ended under them.
@@ -219,6 +224,16 @@ export function SignedInPhone({
       document.removeEventListener('visibilitychange', front);
     };
   }, [read]);
+  // And on its own every few minutes (the user, ADR-588), signal or not: a try with none stops at
+  // once and keeps everything, and a run already under way is shared, never sent twice.
+  useEffect(() => {
+    const every = window.setInterval(() => {
+      void read('unlessMoved');
+    }, syncEveryMinutes * 60_000);
+    return () => {
+      window.clearInterval(every);
+    };
+  }, [read, syncEveryMinutes]);
   useEffect(() => {
     theirs.current = true;
     return () => {
@@ -532,9 +547,15 @@ export function SignedInPhone({
                 suffix: ticket.splitSuffix,
               },
             ),
-            detail: say(said.started, {
-              time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
-            }),
+            detail: [
+              say(said.started, {
+                time: timeOfDay(new Date(ticket.startedAt), ticket.timeZone),
+              }),
+              // Work photographed by stage: the next stage to do (ADR-590).
+              heldNow === undefined ? null : stagesLeft(ticket, heldNow.lists),
+            ]
+              .filter((part) => part !== null)
+              .join(' · '),
           })),
           ...openForms.map((form) => ({
             id: form.id,

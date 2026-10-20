@@ -398,6 +398,16 @@ enum PhotoView {
   @@map("photo_view")
 }
 
+// The stage of the work a unit rate ticket's photograph shows, where its kind of work is
+// photographed by stage (the user, ADR-590): before the work, its measurement, after it.
+enum PhotoStage {
+  PRE_WORK
+  MEASUREMENT
+  POST_WORK
+
+  @@map("photo_stage")
+}
+
 // A photograph's record: the file itself is one object in storage, never overwritten, kept
 // indefinitely (ADR-101; ARCHITECTURE §11). It belongs to exactly one thing, one of its own
 // project's (a check in the guard migration): a field event, a certification, a scale receipt, an
@@ -423,6 +433,9 @@ model Photo {
 
   // Which of the five views a certification's photograph is; no other photograph has one.
   view PhotoView?
+  // Which stage of the work a field event's photograph shows, where its kind of work is
+  // photographed by stage (ADR-590); no other photograph has one. Corrected as evidence is.
+  stage PhotoStage?
 
   // The device's clock, as a UTC instant plus its offset; and when the server received the record
   // (ADR-100).

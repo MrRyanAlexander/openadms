@@ -215,6 +215,27 @@ h2 {
   width: 100%;
 }
 
+/* A step of work's state (ADR-590): to do in the notice colour, done in the good colour, each on
+   its own surface and edged thick, as the banners are; its icon and words say which as well. */
+.button-to-do {
+  border-width: calc(var(--edge) * 2);
+  border-color: var(--colour-notice);
+  background: var(--colour-notice-surface);
+  color: var(--colour-notice);
+}
+
+.button-done {
+  border-width: calc(var(--edge) * 2);
+  border-color: var(--colour-good);
+  background: var(--colour-good-surface);
+  color: var(--colour-good);
+}
+
+.button-to-do[data-pressed],
+.button-done[data-pressed] {
+  background: var(--colour-surface);
+}
+
 .list-row {
   display: flex;
   align-items: center;
@@ -540,6 +561,78 @@ h2 {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* A unit rate ticket's work, stage by stage (ADR-590): each stage its own card, its photograph
+   once taken, its state an icon and a word. The next one to do is edged thicker. */
+.stages {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: var(--radius);
+}
+
+.stage-next {
+  border-width: calc(var(--edge) * 2);
+  border-color: var(--colour-notice);
+}
+
+.stage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.stage-head h2 {
+  margin: 0;
+  font-size: var(--type-title);
+}
+
+.stage-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: var(--weight-strong);
+}
+
+.stage-state-done {
+  color: var(--colour-good);
+}
+
+.stage-state-to-do {
+  color: var(--colour-notice);
+}
+
+/* On the review, each stage's photograph shown large, under the stage it shows (the user: "large
+   enough to see them"). */
+.stage-photos {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.stage-photo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.stage-photo figcaption {
+  font-size: var(--type-title);
+  font-weight: var(--weight-strong);
 }
 
 /* The camera, open over the screen it was pressed on (task 3.6.1, ADR-586): what it sees, and the

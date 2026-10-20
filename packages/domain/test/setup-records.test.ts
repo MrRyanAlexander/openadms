@@ -94,6 +94,31 @@ describe('a value added to one of the firm’s lists', () => {
       'Not added: a field tag is added to its own project’s list.',
     );
   });
+
+  it('AC-11-90 a kind of unit rate work may state whether its photographs are taken by stage, and goes without it; no other list takes it', () => {
+    const lists = new ListValues();
+    expect(lists.addRefusal('kinds-of-work', ['countShape', 'photosByStage'])).toBeNull();
+    expect(lists.addRefusal('kinds-of-work', ['photosByStage'])?.message).toBe(
+      'Not added: a value of this list states the shape of its count.',
+    );
+    expect(lists.addRefusal('item-names', ['kindOfWorkId', 'photosByStage'])?.message).toBe(
+      'Not added: a value of this list takes no whether its photographs are taken by stage.',
+    );
+  });
+
+  it('AC-11-90 once added, a kind of work changes whether its photographs are taken by stage, never the shape of its count; nothing said changes nothing', () => {
+    const lists = new ListValues();
+    expect(lists.changeRefusal('kinds-of-work', ['photosByStage'])).toBeNull();
+    expect(lists.changeRefusal('kinds-of-work', ['countShape'])?.message).toBe(
+      'Not changed: a value of this list doesn’t change the shape of its count.',
+    );
+    expect(lists.changeRefusal('program-types', ['photosByStage'])?.message).toBe(
+      'Not changed: a value of this list doesn’t change whether its photographs are taken by stage.',
+    );
+    expect(lists.changeRefusal('kinds-of-work', [])?.message).toBe(
+      'Not changed: nothing to change was said.',
+    );
+  });
 });
 
 describe('a project closed (ADR-529 (b))', () => {

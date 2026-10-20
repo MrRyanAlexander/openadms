@@ -44,6 +44,7 @@ const shipped = {
   PHONE_SIGN_IN_LONGEST_WAIT_MINUTES: '15',
   PHONE_INACTIVITY_LOCK_MINUTES: '30',
   PHONE_INACTIVITY_WARNING_SECONDS: '60',
+  PHONE_SYNC_EVERY_MINUTES: '5',
   ADDRESS_LOOKUP_ANSWER_SECONDS: '5',
   MEDIA_STORE_ANSWER_SECONDS: '30',
   MEDIA_FILE_BYTES_AT_MOST: '33554432',
@@ -250,6 +251,12 @@ describe('wrong tries at a phone’s own sign-in screen', () => {
     ).toThrow(
       'The policy value PHONE_INACTIVITY_WARNING_SECONDS must be under PHONE_INACTIVITY_LOCK_MINUTES.',
     );
+  });
+
+  it('AC-11-89 a phone signed in syncs on its own every five minutes as shipped, never less often than an hour', () => {
+    expect(Policy.from(shipped).phoneSyncEveryMinutes).toBe(5);
+    refused('PHONE_SYNC_EVERY_MINUTES', '0', 'from 1 to 60');
+    refused('PHONE_SYNC_EVERY_MINUTES', '61', 'from 1 to 60');
   });
 });
 
