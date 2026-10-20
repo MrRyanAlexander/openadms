@@ -12,23 +12,13 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, recorded, toApi, type Asked } from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin, worldPasscode, type CastMonitor } from './world.ts';
 
 const said = english.forms;
 const capture = english.capture;
 const p2 = 'Bayline County PPDR, Hurricane Delphine';
 const heading = (page: Page) => page.getByRole('heading', { level: 1 });
-
-// A photograph from the camera, as the browser hands the page one: a small PNG.
-const photo = {
-  name: 'form.png',
-  mimeType: 'image/png',
-  buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPI7lOGIwbiOADSQxHBtdEJMAAAAABJRU5ErkJggg==',
-    'base64',
-  ),
-};
 
 const at = (asked: readonly Asked[], path: string) =>
   toApi(asked).filter((record) => record.path === path);
@@ -215,7 +205,7 @@ test('AC-11-84, AC-11-85, AC-11-82, AC-04-80, AC-04-83, AC-11-05, REQ-307, C118:
   await checkScreen(page);
   await next(page).click();
   await expect(heading(page)).toHaveText(said.roe.photoTitle);
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   // A photograph opened full size, and back.
   await page.getByRole('button', { name: filled(capture.photos.open, { number: '1' }) }).click();
@@ -374,7 +364,7 @@ test('AC-04-101, AC-04-86, AC-04-87, AC-04-99, AC-11-86, AC-11-75, AC-11-78, REQ
     .fill('BC-2026-1187');
   await next(page).click();
   await expect(heading(page)).toHaveText(said.photosTitle);
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   // Left for now: it waits on home, and opens where she left it.
   await page.getByRole('button', { name: capture.leave }).click();
@@ -465,7 +455,7 @@ test('AC-04-88, AC-11-87, AC-11-86, AC-11-78, REQ-307, C69, C127: Kim logs a res
   await page.getByRole('option', { name: said.own.yes, exact: true }).click();
   await page.getByRole('option', { name: 'Yard waste', exact: true }).click();
   await expect(next(page)).toBeEnabled();
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page, page.getByRole('button', { name: said.own.photo }));
   await expect(page.getByRole('img')).toHaveCount(1);
   await checkScreen(page);
   await next(page).click();

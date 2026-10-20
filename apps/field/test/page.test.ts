@@ -53,6 +53,24 @@ describe('AC-11-61 the page’s policy', () => {
   });
 });
 
+describe('AC-11-68 what the page may ask the phone for', () => {
+  it('is its camera and its place, the app’s own page alone, and never the microphone, payment or USB', () => {
+    const allowed = new Map(
+      servedHeaders['permissions-policy'].split(', ').map((feature) => {
+        const [name = '', origins = ''] = feature.split('=');
+        return [name, origins];
+      }),
+    );
+    expect(Object.fromEntries(allowed)).toEqual({
+      camera: '(self)',
+      geolocation: '(self)',
+      microphone: '()',
+      payment: '()',
+      usb: '()',
+    });
+  });
+});
+
 describe('the API the field app talks to', () => {
   it('is the local stack’s unless the build is told another', () => {
     expect(apiOriginOf({})).toBe('https://api.adms.localhost');

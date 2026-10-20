@@ -8,20 +8,10 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, recorded, toApi, type Asked } from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin, type CastMonitor } from './world.ts';
 
 const said = english.capture;
-
-// A photograph from the camera, as the browser hands the page one: a small PNG.
-const photo = {
-  name: 'pile.png',
-  mimeType: 'image/png',
-  buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPI7lOGIwbiOADSQxHBtdEJMAAAAABJRU5ErkJggg==',
-    'base64',
-  ),
-};
 
 async function signedIn(page: Page, monitor: CastMonitor): Promise<void> {
   await page.getByLabel(english.phone.monitorNumber).fill(monitor.monitorNumber);
@@ -156,7 +146,7 @@ test('AC-11-75, AC-11-76, AC-11-77, AC-11-78, AC-11-79, AC-11-80, AC-11-05, AC-0
   await expect(page.getByText(filled(said.open.waypoints.one, {}))).toBeVisible();
   await page.getByRole('button', { name: said.open.waypoint }).click();
   await expect(page.getByText(filled(said.open.waypoints.other, { count: '2' }))).toBeVisible();
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   await checkScreen(page);
 

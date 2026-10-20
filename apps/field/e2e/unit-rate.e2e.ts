@@ -11,21 +11,11 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, recorded, toApi, type Asked } from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin, type CastMonitor } from './world.ts';
 
 const said = english.capture;
 const heading = (page: Page) => page.getByRole('heading', { level: 1 });
-
-// A photograph from the camera, as the browser hands the page one: a small PNG.
-const photo = {
-  name: 'crew.png',
-  mimeType: 'image/png',
-  buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPI7lOGIwbiOADSQxHBtdEJMAAAAABJRU5ErkJggg==',
-    'base64',
-  ),
-};
 
 const at = (asked: readonly Asked[], path: string) =>
   toApi(asked).filter((record) => record.path === path);
@@ -229,7 +219,7 @@ test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-11
   await expect(
     page.getByText(filled(english.home.open.crew, { truck: '730417', number: n(0) })),
   ).toBeVisible();
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   await checkScreen(page);
   await page.getByRole('button', { name: said.next }).click();

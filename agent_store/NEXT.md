@@ -67,14 +67,16 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-585)
-- **Phase 3 is open (ADR-557)**: 19 of 33 tasks done (ADR-557…585). **Milestones 3.1…3.5 are done**:
+### Where things stand (2026-10-19, through ADR-586)
+- **Phase 3 is open (ADR-557)**: 20 of 33 tasks done (ADR-557…586). **Milestones 3.1…3.5 are done**:
   the plan, the scenarios, the checklist, the shell at `https://field.adms.localhost` with
   `pnpm e2e` in the chain and axe-core on every screen; the store, enrolment, sign-in online and
   offline, setup, switching, moving and sessions under the master passcode; the phone's own sync,
   its photographs' files and "Sync and turn in"; and **every capture in the browser build**: the
   collection, the tower and the haul-out, unit rate, the forms, and **certifying (ADR-585)**, with a
-  phone away from its site told so. **Next: Milestone 3.6, photographs, printing and scanning.**
+  phone away from its site told so. **Milestone 3.6 is under way: photographs are done (ADR-586)**,
+  from the app's own camera only, taken again in place or removed, the native shrink's interface
+  with the browser build keeping the original. **Next: receipts (3.6.2), then scanning (3.6.3).**
   What each task did is its ADR and its `BACKLOG.md` tick; the longer account is `ARCHIVE.md`
   ("Moved 2026-10-19", ADR-580 and ADR-585).
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
@@ -144,7 +146,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 19 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 20 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -230,14 +232,15 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.6.1, Photographs** (`BACKLOG.md`, Milestone 3.6; REQ-316's browser half; C176;
-AC-04-79, AC-11-44, 68, 78). **Build on 3.5.1…3.5.5's** (ADR-581…585): `TicketPhotos` and
-`PhotoDrawn` in `capture.tsx`, each capture's `photographed` (tickets, forms, a certification's five
-views). From the camera only, at most 8 per ticket; at any step while it is open, shown on the
-review, retaken or removed before submitting (ADR-571); SHA-256 at capture; the native shrink's
-interface (the browser build keeps the original); the page's `Permissions-Policy` opening the
-camera (C176). Read its whole brief and the register's items first. **From 2026-10-21, C175**
-(React 19.3.1 and Playwright 1.64.1 read again).
+**Task 3.6.2, Receipts** (`BACKLOG.md`, Milestone 3.6; REQ-314's browser half, 315 in part,
+321; AC-04-97, AC-11-46…48, 50). One receipt content model (its package by ADR: the back office's
+receipt batch reads it too), rendered to PDF and ZPL; Code 128 of the bare number, never a label;
+every project prints; reprinted at any time, never recorded (no record, audit row or count); the
+printable control-ticket test set for PARKS (`400001`–`400050`). On a control-ticket project the
+submitted disposal's words about the back of the driver's ticket stand until the receipt prints
+(ADR-115, `ticket-capture.tsx`). Read its whole brief and ARCHITECTURE §12 first; a new dependency
+(PDF, barcode) needs its ADR. **From 2026-10-21, C175** (React 19.3.1 and Playwright 1.64.1 read
+again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

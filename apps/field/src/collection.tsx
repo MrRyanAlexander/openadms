@@ -253,6 +253,7 @@ export function CompleteCollection({
         </Button>,
         <TicketPhotos
           tickets={parts.tickets}
+          camera={parts.camera}
           ticket={now}
           atMost={ticketPhotosAtMost}
           onTaken={async (bytes) => {
@@ -353,6 +354,7 @@ export function CompleteCollection({
           ) : (
             <TicketPhotos
               tickets={parts.tickets}
+              camera={parts.camera}
               ticket={now}
               atMost={ticketPhotosAtMost}
               onTaken={async (bytes) => {

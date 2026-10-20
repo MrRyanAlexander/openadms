@@ -21,7 +21,8 @@
 // - **The firm's own fields** (ADR-160, 278; C69): the newest version the lists held when the form
 //   was begun, each field by its type; a required one unanswered holds Next, data entry and never
 //   eligibility, but never a photograph's (the camera may be refused: AC-11-68).
-// - Photographs at any step, at most eight; the review, every value once; **sealed at submit**
+// - Photographs at any step, at most eight, from the camera only, each taken again in its place or
+//   removed before submitting (ADR-571, 586); the review, every value once; **sealed at submit**
 //   (ADR-477): nothing a monitor does after changes it (C66).
 //
 // Nothing here waits on the server (ADR-030; AC-11-05), and nothing is refused (ADR-052): what is
@@ -48,7 +49,7 @@ import {
   TextEntry,
   type Standing,
 } from './look/index.ts';
-import { Camera } from './look/icons.tsx';
+import { TakePhoto } from './camera.tsx';
 import type { FormDetails, FormKind, OwnAnswer, PhoneForm } from './phone/forms.ts';
 import type { HeldLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
@@ -310,14 +311,32 @@ export function FormCapture({
               {said.photoBack}
             </Button>
             {form.state === 'OPEN' ? (
-              <Button
-                wide
-                onPress={() => {
-                  void parts.forms.photoRemoved(form.id, photo.id).then(back);
-                }}
-              >
-                {words.capture.photos.remove}
-              </Button>
+              <>
+                <TakePhoto
+                  camera={parts.camera}
+                  onTaken={async (bytes) => {
+                    const where = await parts.locator.where();
+                    const id = await parts.forms.photographed(
+                      form.id,
+                      bytes,
+                      where.kind === 'fix' ? where.fix : null,
+                      photo.id,
+                    );
+                    if (id !== null) back();
+                    return id !== null;
+                  }}
+                >
+                  {words.capture.photos.retake}
+                </TakePhoto>
+                <Button
+                  wide
+                  onPress={() => {
+                    void parts.forms.photoRemoved(form.id, photo.id).then(back);
+                  }}
+                >
+                  {words.capture.photos.remove}
+                </Button>
+              </>
             ) : null}
           </div>
           {after}
@@ -758,12 +777,13 @@ function FillForm({
       {words.capture.next}
     </Button>
   );
-  const photographed = async (bytes: Uint8Array): Promise<string | null> => {
+  const photographed = async (bytes: Uint8Array, instead?: string): Promise<string | null> => {
     const where = await parts.locator.where();
     const id = await parts.forms.photographed(
       now.id,
       bytes,
       where.kind === 'fix' ? where.fix : null,
+      instead,
     );
     const after = parts.forms.form(now.id);
     if (after !== undefined) setNow(after);
@@ -772,6 +792,7 @@ function FillForm({
   const photos = (
     <TicketPhotos
       tickets={parts.forms}
+      camera={parts.camera}
       ticket={now}
       atMost={ticketPhotosAtMost}
       onTaken={async (bytes) => (await photographed(bytes)) !== null}
@@ -1257,7 +1278,7 @@ function OwnFields({
   readonly frame: (title: string, actions: ReactNode, children?: ReactNode) => ReactNode;
   readonly onAnswered: (answers: Readonly<Record<string, OwnAnswer>>) => Promise<unknown>;
   readonly onChanged: (change: Partial<FormDetails>) => Promise<PhoneForm>;
-  readonly onPhotographed: (bytes: Uint8Array) => Promise<string | null>;
+  readonly onPhotographed: (bytes: Uint8Array, instead?: string) => Promise<string | null>;
   readonly onPhoto: (photoId: string) => void;
 }) {
   const own = said.own;
@@ -1388,15 +1409,14 @@ function OwnFields({
                 form={form}
                 parts={parts}
                 onTaken={async (bytes) => {
+                  // Taken again, it takes the place of the one before, which answered the field.
                   const before = held({})[field.id];
-                  const id = await onPhotographed(bytes);
+                  const id = await onPhotographed(
+                    bytes,
+                    typeof before === 'string' ? before : undefined,
+                  );
                   if (id === null) return false;
                   await onChanged({ answers: held({ [field.id]: id }) });
-                  // The one it takes the place of goes, and the screen shows the form as kept.
-                  if (typeof before === 'string') {
-                    await parts.forms.photoRemoved(form.id, before);
-                    await onChanged({});
-                  }
                   return true;
                 }}
                 onOpen={onPhoto}
@@ -1424,8 +1444,6 @@ function OwnPhoto({
   readonly onTaken: (bytes: Uint8Array) => Promise<boolean>;
   readonly onOpen: (photoId: string) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [refused, setRefused] = useState(false);
   const answer = form.answers[field.id];
   const photo = form.photos.find(({ id }) => id === answer);
   const full = form.photos.length >= ticketPhotosAtMost;
@@ -1444,39 +1462,9 @@ function OwnPhoto({
           <PhotoDrawn tickets={parts.forms} photo={photo} label={photoLabel(form, photo)} />
         </Button>
       )}
-      {refused ? (
-        <Banner tone="notice" announced>
-          <p>{words.capture.photos.tooLarge}</p>
-        </Banner>
-      ) : null}
-      <input
-        ref={input}
-        hidden
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={(chosen) => {
-          const file = chosen.currentTarget.files?.[0];
-          chosen.currentTarget.value = '';
-          if (file === undefined) return;
-          void file
-            .arrayBuffer()
-            .then((bytes) => onTaken(new Uint8Array(bytes)))
-            .then((kept) => {
-              setRefused(!kept);
-            });
-        }}
-      />
-      <Button
-        wide
-        icon={<Camera />}
-        isDisabled={full && photo === undefined}
-        onPress={() => {
-          input.current?.click();
-        }}
-      >
+      <TakePhoto camera={parts.camera} isDisabled={full && photo === undefined} onTaken={onTaken}>
         {photo === undefined ? said.own.photo : said.own.retake}
-      </Button>
+      </TakePhoto>
     </section>
   );
 }

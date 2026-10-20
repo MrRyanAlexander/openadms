@@ -5,12 +5,8 @@
 // so in the run's own world (e2e/world-setup.ts; ADR-572), never the installation's database.
 import { defineConfig, devices } from '@playwright/test';
 
-import { apiOrigin, fieldOrigin, trustedKeys } from './e2e/stack.ts';
-import { worldApiOrigin } from './e2e/world.ts';
-
-const keys = await trustedKeys(
-  [fieldOrigin, apiOrigin, worldApiOrigin].map((origin) => new URL(origin).hostname),
-);
+import { launched } from './e2e/browser.ts';
+import { fieldOrigin } from './e2e/stack.ts';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -24,6 +20,7 @@ export default defineConfig({
     ...devices['Pixel 7'],
     baseURL: fieldOrigin,
     serviceWorkers: 'block',
-    launchOptions: { args: [`--ignore-certificate-errors-spki-list=${keys.join(',')}`] },
+    // The stack's certificates trusted by their keys; the fake camera allowed (e2e/browser.ts).
+    launchOptions: await launched('allowed'),
   },
 });

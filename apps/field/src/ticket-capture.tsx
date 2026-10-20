@@ -2,7 +2,8 @@
 // adms-ticket-workflows; BACKLOG 3.5.1…3.5.3; AC-04-44, AC-11-05, 74…79; ADR-030, 056, 155, 477,
 // 571, 573, 581…583): New (`new-ticket.tsx`), the open ticket, its Complete (the collection's,
 // `collection.tsx`; the tower's and the haul-out's, `tower.tsx`; unit rate's, `unit-rate.tsx`), a
-// photograph shown full size, and submitted.
+// photograph shown full size, taken again in its place or removed while the ticket is open
+// (ADR-571, 586), and submitted.
 //
 // - **The open ticket**: its truck, its number, when it was begun, a word where the phone's fix
 //   puts it away from its site (C118, ADR-585), "Mark waypoint" on a
@@ -18,10 +19,12 @@ import type { PhoneAssignmentAnswer } from '@open-adms/contracts';
 import { SiteArea, ticketPhotosAtMost, type SiteAreaHeld } from '@open-adms/domain';
 import { useState, type ReactNode } from 'react';
 
+import { TakePhoto } from './camera.tsx';
 import { PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx';
 import { CompleteCollection } from './collection.tsx';
 import { Banner, Button, StatusStrip, type Standing } from './look/index.ts';
 import { NewTicket, nextSuffix } from './new-ticket.tsx';
+import type { Camera } from './phone/camera.ts';
 import type { PhoneCertifications } from './phone/certifications.ts';
 import type { PhoneForms } from './phone/forms.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
@@ -45,6 +48,8 @@ export interface CaptureParts {
   readonly lists: PhoneLists;
   readonly locator: Locator;
   readonly lookup: AddressLookup;
+  // The camera, opened only when a photograph is taken (task 3.6.1, ADR-586).
+  readonly camera: Camera;
   readonly waypointsAtMost: number;
 }
 
@@ -190,14 +195,32 @@ export function TicketCapture({
               {said.photos.back}
             </Button>
             {ticket.state === 'OPEN' ? (
-              <Button
-                wide
-                onPress={() => {
-                  void parts.tickets.photoRemoved(ticket.id, photo.id).then(back);
-                }}
-              >
-                {said.photos.remove}
-              </Button>
+              <>
+                <TakePhoto
+                  camera={parts.camera}
+                  onTaken={async (bytes) => {
+                    const placed = await parts.locator.where();
+                    const kept = await parts.tickets.photographed(
+                      ticket.id,
+                      bytes,
+                      placed.kind === 'fix' ? placed.fix : null,
+                      photo.id,
+                    );
+                    if (kept) back();
+                    return kept;
+                  }}
+                >
+                  {said.photos.retake}
+                </TakePhoto>
+                <Button
+                  wide
+                  onPress={() => {
+                    void parts.tickets.photoRemoved(ticket.id, photo.id).then(back);
+                  }}
+                >
+                  {said.photos.remove}
+                </Button>
+              </>
             ) : null}
           </div>
           {after}
@@ -419,6 +442,7 @@ function OpenTicket({
         ) : null}
         <TicketPhotos
           tickets={parts.tickets}
+          camera={parts.camera}
           ticket={now}
           atMost={ticketPhotosAtMost}
           onTaken={async (bytes) => {

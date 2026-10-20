@@ -272,6 +272,40 @@ describe('a form', () => {
     expect(outbox.sends().photos).toEqual([]);
   });
 
+  it('AC-11-78 a photograph taken again takes its place and answers the field the one before did; the one before is never sent', async () => {
+    const { forms, outbox } = await phone();
+    const incident = await forms.begin(begun());
+    const first = (await forms.photographed(incident.id, damage, null)) ?? '';
+    await forms.changed(incident.id, { answers: { 'police-report': 'BC-1', damage: first } });
+    const again = await forms.photographed(
+      incident.id,
+      Uint8Array.from([...damage, 1]),
+      null,
+      first,
+    );
+    expect(again).not.toBeNull();
+    expect(forms.form(incident.id)?.photos.map(({ id }) => id)).toEqual([again]);
+    expect(forms.form(incident.id)?.answers).toEqual({ 'police-report': 'BC-1', damage: again });
+    await forms.submit(incident.id, null);
+    expect(outbox.sends().photos.map(({ id }) => id)).toEqual([again]);
+  });
+
+  it('AC-04-79 a form holding its eight still takes one again in its place, and takes no ninth', async () => {
+    const { forms } = await phone();
+    const incident = await forms.begin(begun());
+    const taken: string[] = [];
+    for (let photo = 0; photo < 8; photo += 1) {
+      taken.push((await forms.photographed(incident.id, damage, null)) ?? '');
+    }
+    expect(await forms.photographed(incident.id, damage, null)).toBeNull();
+    const again = await forms.photographed(incident.id, damage, null, taken[7]);
+    expect(again).not.toBeNull();
+    expect(forms.form(incident.id)?.photos.map(({ id }) => id)).toEqual([
+      ...taken.slice(0, 7),
+      again,
+    ]);
+  });
+
   it('a submit cut short is finished when the phone opens again: the record kept once, its photograph with it', async () => {
     const { forms, store, outbox } = await phone();
     const log = await forms.begin(

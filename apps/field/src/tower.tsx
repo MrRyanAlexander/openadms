@@ -189,6 +189,7 @@ function Photos({
   return (
     <TicketPhotos
       tickets={parts.tickets}
+      camera={parts.camera}
       ticket={ticket}
       atMost={ticketPhotosAtMost}
       onTaken={async (bytes) => {

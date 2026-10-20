@@ -635,12 +635,22 @@
     },
     "photos": {
       "title": "Photos",
-      "file": "Photo from the camera",
       "tooLarge": "That photo couldn’t be kept: it is empty or too large.",
       "taken": "Photo {number} of {count}, {time}",
       "open": "Open photo {number}",
       "remove": "Remove this photo",
+      "retake": "Take this photo again",
       "back": "Back to the ticket"
+    },
+    "camera": {
+      "title": "Camera",
+      "view": "What the camera sees",
+      "take": "Take the photo",
+      "taking": "Taking the photo…",
+      "away": "Put the camera away",
+      "opening": "Opening the camera…",
+      "refused": "The camera is turned off for this app. Carry on without the photo, or turn the camera on for this app in the phone’s settings.",
+      "none": "The camera couldn’t be opened. Carry on without the photo."
     },
     "review": {
       "title": "Check the ticket",

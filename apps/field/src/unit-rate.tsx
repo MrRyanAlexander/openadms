@@ -228,6 +228,7 @@ export function CompleteUnitRate({
   const photos = (
     <TicketPhotos
       tickets={parts.tickets}
+      camera={parts.camera}
       ticket={now}
       atMost={ticketPhotosAtMost}
       onTaken={async (bytes) => {

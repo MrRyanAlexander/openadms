@@ -188,7 +188,7 @@ describe('the field app holds', () => {
       'getBattery',
       'connection',
       'plugins',
-      'mediaDevices',
+      'enumerateDevices',
       'getId',
       'advertisingId',
       'identifierForVendor',
@@ -199,6 +199,23 @@ describe('the field app holds', () => {
         path,
       ).toEqual([]);
     }
+    // The camera's module alone reaches the phone's media devices, to open the camera (task 3.6.1,
+    // ADR-586): never to list them, whose ids tell one phone from another.
+    const media = modules.filter(({ file }) => namesIn(file).used.includes('mediaDevices'));
+    expect(media.map(({ path }) => path)).toEqual(['phone/camera.ts']);
+    const asked: string[] = [];
+    for (const { file } of media) {
+      eachNode(file, (node) => {
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          node.expression.name.text === 'mediaDevices'
+        ) {
+          asked.push(node.name.text);
+        }
+      });
+    }
+    expect(asked).toEqual(['getUserMedia']);
   });
 
   it('AC-11-61: no way to make HTML or code from a string', () => {

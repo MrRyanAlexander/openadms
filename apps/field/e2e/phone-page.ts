@@ -1,7 +1,7 @@
 // What the browser tests of a phone share (BACKLOG 3.2.2, 3.2.3; ADR-572, 574): every request the
 // page sends with what was answered, the phone enrolled through its first screen in the run's own
 // world, and what the browser holds raw, looked through for what must never be written down.
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect } from './accessible.ts';
@@ -56,6 +56,18 @@ export const filled = (word: string, filling: Readonly<Record<string, string>>) 
   word.replace(/\{(\w+)\}/g, (_, name: string) => filling[name] ?? `{${name}}`);
 
 // The phone enrolled through its first screen, and standing in service once it has proved itself.
+// A photograph taken through the app's camera (task 3.6.1, ADR-586): pressed to take one, what the
+// camera sees shown, taken, and the camera put away. Chromium's fake camera stands in for the
+// phone's, the page allowed it as a monitor would (e2e/browser.ts). `take` is the button that
+// opens it: "Take a photo" unless named.
+export async function photographed(page: Page, take?: Locator): Promise<void> {
+  await (take ?? page.getByRole('button', { name: english.look.photos.take })).click();
+  const camera = page.getByRole('dialog', { name: english.capture.camera.title });
+  await expect(camera.getByRole('img', { name: english.capture.camera.view })).toBeVisible();
+  await camera.getByRole('button', { name: english.capture.camera.take }).click();
+  await expect(camera).toBeHidden();
+}
+
 export async function enrolled(page: Page, name: string): Promise<void> {
   await page.goto(worldOrigin());
   await expect(page.getByRole('status')).toHaveText(english.shell.server.answers);

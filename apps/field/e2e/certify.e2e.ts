@@ -17,22 +17,12 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, recorded, toApi, type Asked } from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin } from './world.ts';
 
 const said = english.certify;
 const capture = english.capture;
 const heading = (page: Page) => page.getByRole('heading', { level: 1 });
-
-// A photograph from the camera, as the browser hands the page one: a small PNG.
-const photo = {
-  name: 'view.png',
-  mimeType: 'image/png',
-  buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPI7lOGIwbiOADSQxHBtdEJMAAAAABJRU5ErkJggg==',
-    'base64',
-  ),
-};
 
 const at = (asked: readonly Asked[], path: string) =>
   toApi(asked).filter((record) => record.path === path);
@@ -263,17 +253,14 @@ test('AC-11-42, AC-03-14, AC-03-36, AC-03-09, AC-11-82, REQ-322, C118, C129: Jo 
   // Five views, one each; one opened full size; the front taken again in its place.
   await expect(heading(page)).toHaveText(said.photosTitle);
   for (const view of Object.values(said.views)) {
-    await page
-      .locator('section', { has: page.getByRole('heading', { name: view, exact: true }) })
-      .locator('input[type=file]')
-      .setInputFiles(photo);
+    await photographed(page, page.getByRole('button', { name: filled(said.take, { view }) }));
     await expect(page.getByRole('button', { name: filled(said.retake, { view }) })).toBeVisible();
   }
   await expect(page.getByRole('img')).toHaveCount(5);
-  await page
-    .locator('section', { has: page.getByRole('heading', { name: said.views.FRONT }) })
-    .locator('input[type=file]')
-    .setInputFiles(photo);
+  await photographed(
+    page,
+    page.getByRole('button', { name: filled(said.retake, { view: said.views.FRONT }) }),
+  );
   await expect(page.getByRole('img')).toHaveCount(5);
   await checkScreen(page);
   await page.getByRole('button', { name: filled(said.open, { view: said.views.LEFT }) }).click();

@@ -37,7 +37,19 @@ import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
 import type { PhoneLists } from './lists.ts';
 import type { PhoneOutbox } from './outbox.ts';
 import { offsetOf } from './reports.ts';
-import type { Fix, TicketPhoto } from './tickets.ts';
+import {
+  filesDropped,
+  filesKept,
+  filesOf,
+  fingerprintsOf,
+  KeptAsTaken,
+  photoBytesOf,
+  photoOf,
+  photoTaken,
+  type PhotoShrink,
+  type TicketPhoto,
+} from './photographs.ts';
+import type { Fix } from './tickets.ts';
 
 export type FormKind = AssignmentFormDocumentType;
 export type FormState = 'OPEN' | 'SUBMITTING' | 'SUBMITTED' | 'CANCELLED';
@@ -128,6 +140,8 @@ export interface OfferedHere {
 export interface FormsOptions {
   // The most bytes one photograph's file may be (`MEDIA_FILE_BYTES_AT_MOST`).
   readonly photoBytesAtMost: number;
+  // The native shrink (ARCHITECTURE §11); the browser build keeps the original.
+  readonly shrink?: PhotoShrink;
   readonly now?: () => Date;
 }
 
@@ -136,10 +150,6 @@ export type FormSubmitted =
   | { readonly kind: 'notKept'; readonly notice: NotSavedNotice };
 
 const formsShelf = 'forms';
-const photoPrefix = 'photo:';
-
-const hex = (bytes: ArrayBuffer): string =>
-  Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 const isForm = (value: unknown): value is PhoneForm =>
   typeof value === 'object' &&
@@ -322,27 +332,44 @@ export class PhoneForms {
     return this.put({ ...form, ...change });
   }
 
-  // A photograph taken while the form is open, at most its eight (ADR-157, 188): fingerprinted
-  // now, its bytes kept beside the form. One too large to ever go is not kept. The photograph's
-  // id, where it was kept: a photograph field's answer.
-  async photographed(id: string, bytes: Uint8Array, fix: Fix | null): Promise<string | null> {
+  // A photograph taken while the form is open, at most its eight (ADR-157, 188), or taken again
+  // in the place of one (`instead`), a field it answered answered by the new one: fingerprinted
+  // now, shrunk, its files kept beside the form. One too large to ever go is not kept. The
+  // photograph's id, where it was kept: a photograph field's answer.
+  async photographed(
+    id: string,
+    original: Uint8Array,
+    fix: Fix | null,
+    instead?: string,
+  ): Promise<string | null> {
     const form = this.openForm(id);
-    if (form.photos.length >= ticketPhotosAtMost) return null;
-    if (bytes.byteLength === 0 || bytes.byteLength > this.options.photoBytesAtMost) return null;
+    const before = form.photos.find((photo) => photo.id === instead);
+    if (before === undefined && form.photos.length >= ticketPhotosAtMost) return null;
+    const taken = await photoTaken(
+      original,
+      this.options.shrink ?? new KeptAsTaken(),
+      this.options.photoBytesAtMost,
+    );
+    if (taken === undefined) return null;
     const at = this.now();
-    const sha256 = hex(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
-    const photo: TicketPhoto = {
-      id: uuidv7(at),
-      capturedAt: at.toISOString(),
-      offset: offsetOf(at),
-      fix,
-      sha256,
-      bytes: bytes.byteLength,
-      kept: false,
-    };
-    const next: PhoneForm = { ...this.openForm(id), photos: [...form.photos, photo] };
+    const photo = photoOf(uuidv7(at), taken, at, offsetOf(at), fix);
+    const now = this.openForm(id);
+    const next: PhoneForm =
+      before === undefined
+        ? { ...now, photos: [...now.photos, photo] }
+        : {
+            ...now,
+            photos: now.photos.map((one) => (one.id === before.id ? photo : one)),
+            answers: Object.fromEntries(
+              Object.entries(now.answers).map(([field, answer]) => [
+                field,
+                answer === before.id ? photo.id : answer,
+              ]),
+            ),
+          };
     await this.store.change([
-      { shelf: formsShelf, id: `${photoPrefix}${photo.id}`, value: bytes },
+      ...(before === undefined ? [] : filesDropped(formsShelf, before)),
+      ...filesKept(formsShelf, photo.id, taken),
       this.kept(next),
     ]);
     this.replace(next);
@@ -360,17 +387,18 @@ export class PhoneForms {
       ),
     };
     await this.store.change([
-      { shelf: formsShelf, id: `${photoPrefix}${photoId}`, dropped: true },
+      ...form.photos
+        .filter((photo) => photo.id === photoId)
+        .flatMap((photo) => filesDropped(formsShelf, photo)),
       this.kept(next),
     ]);
     this.replace(next);
     return next;
   }
 
-  // A photograph's file as it was taken, for the screen to draw.
-  async photoBytes(photoId: string): Promise<Uint8Array | undefined> {
-    const kept = await this.store.read(formsShelf, `${photoPrefix}${photoId}`);
-    return kept instanceof Uint8Array ? kept : undefined;
+  // A photograph's file as it is kept, for the screen to draw.
+  photoBytes(photoId: string): Promise<Uint8Array | undefined> {
+    return photoBytesOf(this.store, formsShelf, photoId);
   }
 
   // Cancelled: kept on the phone, never sent; an ROE keeps its number (ADR-056).
@@ -492,8 +520,8 @@ export class PhoneForms {
     }
     let now = form;
     for (const photo of form.photos.filter(({ kept }) => !kept)) {
-      const bytes = await this.photoBytes(photo.id);
-      if (bytes !== undefined) {
+      const files = await filesOf(this.store, formsShelf, photo);
+      if (files !== undefined) {
         const record: SyncedPhoto = {
           id: photo.id,
           projectId: form.projectId,
@@ -504,20 +532,15 @@ export class PhoneForms {
           deviceUtcOffsetMinutes: photo.offset,
           latitude: photo.fix?.latitude ?? null,
           longitude: photo.fix?.longitude ?? null,
-          originalSha256: photo.sha256,
-          uploadedSha256: photo.sha256,
-          depthSha256: null,
+          ...fingerprintsOf(photo),
         };
-        await this.outbox.keepPhoto(record, [{ file: 'photo', bytes }]);
+        await this.outbox.keepPhoto(record, files);
       }
       now = {
         ...now,
         photos: now.photos.map((one) => (one.id === photo.id ? { ...one, kept: true } : one)),
       };
-      await this.store.change([
-        { shelf: formsShelf, id: `${photoPrefix}${photo.id}`, dropped: true },
-        this.kept(now),
-      ]);
+      await this.store.change([...filesDropped(formsShelf, photo), this.kept(now)]);
       this.replace(now);
     }
     return this.put({ ...now, state: 'SUBMITTED' });

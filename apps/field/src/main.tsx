@@ -8,6 +8,7 @@ import { Policy, SignInTries } from '@open-adms/domain';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { BrowserCamera } from './phone/camera.ts';
 import { PhoneCertifications } from './phone/certifications.ts';
 import { PhoneForms } from './phone/forms.ts';
 import { PhoneIdentity } from './phone/identity.ts';
@@ -89,6 +90,7 @@ const phone = BrowserStore.opened().then(async (store) => {
       lists,
       locator: new BrowserLocator(),
       lookup: new AddressLookup(monitor),
+      camera: new BrowserCamera(),
       waypointsAtMost: policy.fieldEventWaypointsAtMost,
     },
     identity,

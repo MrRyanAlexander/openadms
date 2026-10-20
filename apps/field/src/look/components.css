@@ -541,3 +541,46 @@ h2 {
   width: 100%;
   height: auto;
 }
+
+/* The camera, open over the screen it was pressed on (task 3.6.1, ADR-586): what it sees, and the
+   two ways out, in thumb reach. */
+.camera-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow-y: auto;
+  background: var(--colour-page);
+}
+
+.camera {
+  max-width: var(--width-screen);
+  min-height: 100dvh;
+  margin: 0 auto;
+}
+
+.camera-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 100dvh;
+  padding: var(--space-4) calc(var(--space-4) + env(safe-area-inset-right))
+    calc(var(--space-4) + env(safe-area-inset-bottom))
+    calc(var(--space-4) + env(safe-area-inset-left));
+}
+
+.camera-view {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  max-height: 70dvh;
+  object-fit: contain;
+  background: var(--colour-surface);
+}
+
+.camera-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: auto;
+}

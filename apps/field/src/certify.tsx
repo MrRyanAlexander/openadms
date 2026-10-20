@@ -40,8 +40,9 @@ import {
   type CertificationView,
   type Measurement,
 } from '@open-adms/domain';
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
 
+import { TakePhoto } from './camera.tsx';
 import { PhotoDrawn, Step, TypeAgain } from './capture.tsx';
 import {
   Banner,
@@ -53,7 +54,6 @@ import {
   TextEntry,
   type Standing,
 } from './look/index.ts';
-import { Camera } from './look/icons.tsx';
 import {
   capacityOf,
   emptyBox,
@@ -1244,8 +1244,6 @@ function ViewPhotoField({
   readonly onTaken: (bytes: Uint8Array) => Promise<boolean>;
   readonly onOpen: (photoId: string) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [refused, setRefused] = useState(false);
   const photo = certification.photos.find((one) => one.view === view);
   const name = said.views[view];
   return (
@@ -1268,38 +1266,9 @@ function ViewPhotoField({
           />
         </Button>
       )}
-      {refused ? (
-        <Banner tone="notice" announced>
-          <p>{words.capture.photos.tooLarge}</p>
-        </Banner>
-      ) : null}
-      <input
-        ref={input}
-        hidden
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={(chosen) => {
-          const file = chosen.currentTarget.files?.[0];
-          chosen.currentTarget.value = '';
-          if (file === undefined) return;
-          void file
-            .arrayBuffer()
-            .then((bytes) => onTaken(new Uint8Array(bytes)))
-            .then((kept) => {
-              setRefused(!kept);
-            });
-        }}
-      />
-      <Button
-        wide
-        icon={<Camera />}
-        onPress={() => {
-          input.current?.click();
-        }}
-      >
+      <TakePhoto camera={parts.camera} onTaken={onTaken}>
         {say(photo === undefined ? said.take : said.retake, { view: name })}
-      </Button>
+      </TakePhoto>
     </section>
   );
 }

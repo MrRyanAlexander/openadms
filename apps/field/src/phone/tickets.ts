@@ -64,6 +64,18 @@ import {
 import type { Change, Json, PhoneStore } from '../store/phone-store.ts';
 import type { PhoneLists } from './lists.ts';
 import type { PhoneOutbox } from './outbox.ts';
+import {
+  filesDropped,
+  filesKept,
+  filesOf,
+  fingerprintsOf,
+  KeptAsTaken,
+  photoBytesOf,
+  photoOf,
+  photoTaken,
+  type PhotoShrink,
+  type TicketPhoto,
+} from './photographs.ts';
 import { offsetOf } from './reports.ts';
 
 export type TicketState = 'OPEN' | 'SUBMITTING' | 'SUBMITTED' | 'CANCELLED';
@@ -83,17 +95,7 @@ export interface Waypoint {
   readonly fix: Fix | null;
 }
 
-export interface TicketPhoto {
-  readonly id: string;
-  readonly capturedAt: string;
-  readonly offset: number;
-  readonly fix: Fix | null;
-  // Its file's SHA-256, taken when it was taken (ADR-101): the browser build keeps the original.
-  readonly sha256: string;
-  readonly bytes: number;
-  // Handed to the outbox with its file, at submit.
-  readonly kept: boolean;
-}
+export type { TicketPhoto } from './photographs.ts';
 
 // A scale receipt copied by hand at the tower (ADR-034, 038; adms-scale-receipts): its number
 // exactly as written and each weight as the paper says, none worked out. A tandem weighed once is
@@ -212,6 +214,8 @@ export interface TicketsOptions {
   // The most bytes one photograph's file may be (`MEDIA_FILE_BYTES_AT_MOST`): one larger would
   // never go, so it is never kept.
   readonly photoBytesAtMost: number;
+  // The native shrink (ARCHITECTURE §11); the browser build keeps the original.
+  readonly shrink?: PhotoShrink;
   readonly now?: () => Date;
 }
 
@@ -229,15 +233,11 @@ export type NumberSaid =
   | { readonly kind: 'outsideStock' };
 
 const ticketsShelf = 'tickets';
-const photoPrefix = 'photo:';
 const seriesOfWorkflow: Readonly<Record<Workflow, NumberSeriesName>> = {
   LOAD: 'LOAD',
   HAUL_OUT: 'HAUL_OUT',
   UNIT_RATE: 'UNIT_RATE',
 };
-
-const hex = (bytes: ArrayBuffer): string =>
-  Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, '0')).join('');
 
 const isTicket = (value: unknown): value is PhoneTicket =>
   typeof value === 'object' &&
@@ -472,26 +472,37 @@ export class PhoneTickets {
   }
 
   // A photograph taken while the ticket is open, at any step (ADR-571), at most the ticket's eight
-  // (ADR-157): fingerprinted now, its bytes kept beside the ticket. One too large to ever go is
-  // not kept: whether it was.
-  async photographed(id: string, bytes: Uint8Array, fix: Fix | null): Promise<boolean> {
+  // (ADR-157), or taken again in the place of one (`instead`): fingerprinted now, shrunk, its
+  // files kept beside the ticket, the one it takes the place of let go. One too large to ever go
+  // is not kept: whether it was.
+  async photographed(
+    id: string,
+    original: Uint8Array,
+    fix: Fix | null,
+    instead?: string,
+  ): Promise<boolean> {
     const ticket = this.openTicket(id);
-    if (ticket.photos.length >= ticketPhotosAtMost) return false;
-    if (bytes.byteLength === 0 || bytes.byteLength > this.options.photoBytesAtMost) return false;
+    const before = ticket.photos.find((photo) => photo.id === instead);
+    if (before === undefined && ticket.photos.length >= ticketPhotosAtMost) return false;
+    const taken = await photoTaken(
+      original,
+      this.options.shrink ?? new KeptAsTaken(),
+      this.options.photoBytesAtMost,
+    );
+    if (taken === undefined) return false;
     const at = this.now();
-    const sha256 = hex(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)));
-    const photo: TicketPhoto = {
-      id: uuidv7(at),
-      capturedAt: at.toISOString(),
-      offset: offsetOf(at),
-      fix,
-      sha256,
-      bytes: bytes.byteLength,
-      kept: false,
+    const photo = photoOf(uuidv7(at), taken, at, offsetOf(at), fix);
+    const now = this.openTicket(id);
+    const next: PhoneTicket = {
+      ...now,
+      photos:
+        before === undefined
+          ? [...now.photos, photo]
+          : now.photos.map((one) => (one.id === before.id ? photo : one)),
     };
-    const next: PhoneTicket = { ...this.openTicket(id), photos: [...ticket.photos, photo] };
     await this.store.change([
-      { shelf: ticketsShelf, id: `${photoPrefix}${photo.id}`, value: bytes },
+      ...(before === undefined ? [] : filesDropped(ticketsShelf, before)),
+      ...filesKept(ticketsShelf, photo.id, taken),
       this.kept(next),
     ]);
     this.replace(next);
@@ -503,17 +514,18 @@ export class PhoneTickets {
     const ticket = this.openTicket(id);
     const next = { ...ticket, photos: ticket.photos.filter((photo) => photo.id !== photoId) };
     await this.store.change([
-      { shelf: ticketsShelf, id: `${photoPrefix}${photoId}`, dropped: true },
+      ...ticket.photos
+        .filter((photo) => photo.id === photoId)
+        .flatMap((photo) => filesDropped(ticketsShelf, photo)),
       this.kept(next),
     ]);
     this.replace(next);
     return next;
   }
 
-  // A photograph's file as it was taken, for the screen to draw.
-  async photoBytes(photoId: string): Promise<Uint8Array | undefined> {
-    const kept = await this.store.read(ticketsShelf, `${photoPrefix}${photoId}`);
-    return kept instanceof Uint8Array ? kept : undefined;
+  // A photograph's file as it is kept, for the screen to draw.
+  photoBytes(photoId: string): Promise<Uint8Array | undefined> {
+    return photoBytesOf(this.store, ticketsShelf, photoId);
   }
 
   // Cancelled: kept on the phone with its number, never sent (ADR-056, 571).
@@ -692,8 +704,8 @@ export class PhoneTickets {
     }
     let now = ticket;
     for (const photo of ticket.photos.filter(({ kept }) => !kept)) {
-      const bytes = await this.photoBytes(photo.id);
-      if (bytes !== undefined) {
+      const files = await filesOf(this.store, ticketsShelf, photo);
+      if (files !== undefined) {
         const record: SyncedPhoto = {
           id: photo.id,
           projectId: ticket.projectId,
@@ -704,20 +716,15 @@ export class PhoneTickets {
           deviceUtcOffsetMinutes: photo.offset,
           latitude: photo.fix?.latitude ?? null,
           longitude: photo.fix?.longitude ?? null,
-          originalSha256: photo.sha256,
-          uploadedSha256: photo.sha256,
-          depthSha256: null,
+          ...fingerprintsOf(photo),
         };
-        await this.outbox.keepPhoto(record, [{ file: 'photo', bytes }]);
+        await this.outbox.keepPhoto(record, files);
       }
       now = {
         ...now,
         photos: now.photos.map((one) => (one.id === photo.id ? { ...one, kept: true } : one)),
       };
-      await this.store.change([
-        { shelf: ticketsShelf, id: `${photoPrefix}${photo.id}`, dropped: true },
-        this.kept(now),
-      ]);
+      await this.store.change([...filesDropped(ticketsShelf, photo), this.kept(now)]);
       this.replace(now);
     }
     return this.put({ ...now, state: 'SUBMITTED' });

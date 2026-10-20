@@ -12,7 +12,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, recorded, toApi, type Asked } from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin, worldPasscode, type CastMonitor } from './world.ts';
 
 const said = english.capture;
@@ -20,16 +20,6 @@ const p1 = 'Bayline County ROW, Hurricane Delphine';
 const marshRoad = 'Marsh Road TDSR';
 const landfill = 'Bayline County Landfill';
 const cypress = 'Cypress Creek Landfill';
-
-// A photograph from the camera, as the browser hands the page one: a small PNG.
-const photo = {
-  name: 'bed.png',
-  mimeType: 'image/png',
-  buffer: Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGPI7lOGIwbiOADSQxHBtdEJMAAAAABJRU5ErkJggg==',
-    'base64',
-  ),
-};
 
 const at = (asked: readonly Asked[], path: string) =>
   toApi(asked).filter((record) => record.path === path);
@@ -208,7 +198,7 @@ test('AC-11-74, AC-11-82, AC-11-40, AC-11-79, AC-11-78, AC-11-05, AC-04-96, AC-0
 
   // The network off from here: nothing waits on the server.
   await offline(context, page);
-  await page.locator('input[type=file]').setInputFiles(photo);
+  await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   await page.getByRole('button', { name: said.open.complete }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.debris.title);

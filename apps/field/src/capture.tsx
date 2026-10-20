@@ -9,14 +9,15 @@
 // - **Photographs are shown themselves** (the user's notes, ADR-571; AC-11-78), each drawn from
 //   its own bytes on a canvas, so the page's policy keeps `img-src 'self'` and takes no `blob:`
 //   (AC-11-61), with words a screen reader says ("Photo 1 of 2, 8:41 AM", WCAG 1.1.1); a press
-//   opens one full size. Taken from the phone's camera by the browser's own file input (the
-//   camera's own screen is task 3.6.1's), at any step while the ticket is open.
+//   opens one full size. Taken from the camera only (`camera.tsx`, task 3.6.1, ADR-586), at any
+//   step while the ticket is open; taken again or removed from its full size before submitting.
 // - **Where it was**: "Capture GPS", then the address looked up where there is signal, or typed
 //   (ADR-111, 119): a collection's place and a unit rate ticket's one point (REQ-306).
 import type { PhoneListsRecord } from '@open-adms/contracts';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button as Pressable } from 'react-aria-components';
 
+import { TakePhoto } from './camera.tsx';
 import {
   Banner,
   Button,
@@ -26,7 +27,7 @@ import {
   TextEntry,
   type Standing,
 } from './look/index.ts';
-import { Camera } from './look/icons.tsx';
+import type { Camera } from './phone/camera.ts';
 import type { AddressLookup, Locator } from './phone/place.ts';
 import type { PhoneTicket, TicketDetails, TicketPhoto } from './phone/tickets.ts';
 import { say, timeOfDay, words } from './words.ts';
@@ -227,19 +228,19 @@ export const photoLabel = (ticket: Photographed, photo: TicketPhoto): string =>
 // another, at most the ticket's eight (ADR-157).
 export function TicketPhotos({
   tickets,
+  camera,
   ticket,
   atMost,
   onTaken,
   onOpen,
 }: {
   readonly tickets: PhotoBytes;
+  readonly camera: Camera;
   readonly ticket: Photographed;
   readonly atMost: number;
   readonly onTaken: (bytes: Uint8Array) => Promise<boolean>;
   readonly onOpen: (photo: TicketPhoto) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [refused, setRefused] = useState(false);
   const full = ticket.photos.length >= atMost;
   const listId = useId();
   return (
@@ -272,39 +273,9 @@ export function TicketPhotos({
         </ul>
       )}
       {full ? <p className="quiet">{words.look.photos.full}</p> : null}
-      {refused ? (
-        <Banner tone="notice" announced>
-          <p>{said.photos.tooLarge}</p>
-        </Banner>
-      ) : null}
-      <input
-        ref={input}
-        hidden
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={(chosen) => {
-          const file = chosen.currentTarget.files?.[0];
-          chosen.currentTarget.value = '';
-          if (file === undefined) return;
-          void file
-            .arrayBuffer()
-            .then((bytes) => onTaken(new Uint8Array(bytes)))
-            .then((kept) => {
-              setRefused(!kept);
-            });
-        }}
-      />
-      <Button
-        wide
-        icon={<Camera />}
-        isDisabled={full}
-        onPress={() => {
-          input.current?.click();
-        }}
-      >
+      <TakePhoto camera={camera} isDisabled={full} onTaken={onTaken}>
         {words.look.photos.take}
-      </Button>
+      </TakePhoto>
     </div>
   );
 }

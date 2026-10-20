@@ -4,7 +4,9 @@
 // sealed in the outbox with its waypoints and photographs, a submit cut short finished on opening
 // again; the phone's own duplicate check, a control ticket outside the ranges, today's own count,
 // two days' worth of numbers, and the first block of each series the work makes numbers of; unit
-// rate work as it goes, and the working crew (BACKLOG 3.5.3; ADR-583). Here
+// rate work as it goes, and the working crew (BACKLOG 3.5.3; ADR-583); its photographs, each
+// fingerprinted at capture, shrunk, taken again in its place or taken off (BACKLOG 3.6.1;
+// ADR-586). Here
 // over a store in memory; through the screens against the real API, e2e/collection.e2e.ts.
 import type { PhoneAssignmentAnswer, PhoneListsRecord } from '@open-adms/contracts';
 import { describe, expect, it } from 'vitest';
@@ -12,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { PhoneLists } from '../src/phone/lists.ts';
 import type { MonitorOnPhone } from '../src/phone/monitor.ts';
 import { PhoneOutbox } from '../src/phone/outbox.ts';
+import type { PhotoShrink } from '../src/phone/photographs.ts';
 import { PhoneTickets, type Begun } from '../src/phone/tickets.ts';
 import type { Json } from '../src/store/phone-store.ts';
 import { noLists } from './checks.ts';
@@ -36,7 +39,11 @@ const generated: PhoneListsRecord = {
 
 // A phone holding Ana's lists, its outbox and its tickets over one store, on a clock the test
 // moves.
-async function phone(lists: PhoneListsRecord = generated, store = new HeldStore()) {
+async function phone(
+  lists: PhoneListsRecord = generated,
+  store = new HeldStore(),
+  shrink?: PhotoShrink,
+) {
   const clock = { now: new Date('2026-10-19T12:15:00Z') };
   const now = () => clock.now;
   if ((await store.read('lists', 'assignment')) === undefined) {
@@ -66,6 +73,7 @@ async function phone(lists: PhoneListsRecord = generated, store = new HeldStore(
   });
   const tickets = await PhoneTickets.opened(store, held, outbox, {
     photoBytesAtMost: 33_554_432,
+    ...(shrink === undefined ? {} : { shrink }),
     now,
   });
   return { store, clock, lists: held, outbox, tickets };
@@ -232,6 +240,106 @@ describe('a ticket submitted', () => {
     await tickets.open(begun({ certNumber: '730420' }));
     expect(tickets.todayOf(ana.id, p1.id, p1.timeZone)).toBe(2);
     expect(tickets.todayOf('0199e0a4-7d1c-7b3a-9c2e-5f6a7b8c9d99', p1.id, p1.timeZone)).toBe(0);
+  });
+});
+
+describe('a ticket’s photographs', () => {
+  const sha256 = async (bytes: Uint8Array) =>
+    Array.from(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes))),
+      (byte) => byte.toString(16).padStart(2, '0'),
+    ).join('');
+
+  it('AC-11-44 the browser build keeps the original: its SHA-256 taken at capture, the file sent the one taken, no depth file', async () => {
+    const { tickets, outbox } = await phone();
+    const opened = await tickets.open(begun());
+    await tickets.photographed(opened.id, pile, null);
+    const [photo] = tickets.ticket(opened.id)?.photos ?? [];
+    expect(photo).toMatchObject({
+      originalSha256: await sha256(pile),
+      uploadedSha256: await sha256(pile),
+      depthSha256: null,
+      bytes: pile.byteLength,
+    });
+    await tickets.changed(opened.id, { formDebrisTypeId: vegetative });
+    await tickets.submit(opened.id, null);
+    expect(outbox.sends().photos).toMatchObject([
+      { originalSha256: await sha256(pile), uploadedSha256: await sha256(pile), depthSha256: null },
+    ]);
+    expect(outbox.holdsFiles()).toEqual([`${photo?.id ?? ''} photo`]);
+  });
+
+  it('AC-11-44 a native shrink’s file and its depth file are each fingerprinted beside the original’s, and both go', async () => {
+    const shrunk = pile.subarray(0, 10);
+    const depth = Uint8Array.from([0x49, 0x49, 0x2a, 0x00, 9, 9]);
+    const native: PhotoShrink = {
+      shrunk: (original) => {
+        expect(original).toEqual(pile);
+        return Promise.resolve({ photo: shrunk, depth });
+      },
+    };
+    const { tickets, outbox } = await phone(generated, new HeldStore(), native);
+    const opened = await tickets.open(begun());
+    await tickets.photographed(opened.id, pile, null);
+    const [photo] = tickets.ticket(opened.id)?.photos ?? [];
+    expect(photo).toMatchObject({
+      originalSha256: await sha256(pile),
+      uploadedSha256: await sha256(shrunk),
+      depthSha256: await sha256(depth),
+      bytes: shrunk.byteLength,
+    });
+    expect(await tickets.photoBytes(photo?.id ?? '')).toEqual(shrunk);
+    await tickets.changed(opened.id, { formDebrisTypeId: vegetative });
+    await tickets.submit(opened.id, null);
+    expect(outbox.sends().photos).toMatchObject([
+      {
+        originalSha256: await sha256(pile),
+        uploadedSha256: await sha256(shrunk),
+        depthSha256: await sha256(depth),
+      },
+    ]);
+    expect([...outbox.holdsFiles()].sort()).toEqual(
+      [`${photo?.id ?? ''} depth`, `${photo?.id ?? ''} photo`].sort(),
+    );
+  });
+
+  it('AC-04-79, AC-11-78 are at most 8; one taken again takes its place, never counted twice, and one taken again or taken off is never sent', async () => {
+    const { tickets, outbox, clock } = await phone();
+    const opened = await tickets.open(begun());
+    for (let taken = 0; taken < 8; taken += 1) {
+      clock.now = new Date(clock.now.getTime() + 60_000);
+      expect(await tickets.photographed(opened.id, pile, null)).toBe(true);
+    }
+    expect(await tickets.photographed(opened.id, pile, null)).toBe(false);
+    const before = tickets.ticket(opened.id)?.photos ?? [];
+    const again = Uint8Array.from([...pile, 5]);
+    expect(await tickets.photographed(opened.id, again, null, before[2]?.id)).toBe(true);
+    const after = tickets.ticket(opened.id)?.photos ?? [];
+    expect(after).toHaveLength(8);
+    expect(after[2]?.id).not.toBe(before[2]?.id);
+    expect(after[2]?.originalSha256).toBe(await sha256(again));
+    expect(await tickets.photoBytes(before[2]?.id ?? '')).toBeUndefined();
+    await tickets.photoRemoved(opened.id, after[5]?.id ?? '');
+    await tickets.changed(opened.id, { formDebrisTypeId: vegetative });
+    await tickets.submit(opened.id, null);
+    const sent = outbox.sends().photos.map(({ id }) => id);
+    expect(sent).toEqual(after.filter((_, place) => place !== 5).map(({ id }) => id));
+    expect(sent).not.toContain(before[2]?.id);
+  });
+
+  it('one empty, or larger than the server ever takes, is not kept; an empty one is never shrunk', async () => {
+    const shrunk: Uint8Array[] = [];
+    const { tickets } = await phone(generated, new HeldStore(), {
+      shrunk: (original) => {
+        shrunk.push(original);
+        return Promise.resolve({ photo: original, depth: null });
+      },
+    });
+    const opened = await tickets.open(begun());
+    expect(await tickets.photographed(opened.id, new Uint8Array(), null)).toBe(false);
+    expect(await tickets.photographed(opened.id, new Uint8Array(33_554_433), null)).toBe(false);
+    expect(tickets.ticket(opened.id)?.photos).toEqual([]);
+    expect(shrunk.map(({ byteLength }) => byteLength)).toEqual([33_554_433]);
   });
 });
 
