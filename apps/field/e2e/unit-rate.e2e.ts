@@ -1,7 +1,8 @@
 // Unit rate work, through the field app's screens (BACKLOG 3.5.3; ADR-111, 207, 213, 571, 573,
 // 583), in the run's own world (e2e/world-setup.ts) against the real API: Jo Kim on P1's unit rate
 // work, every one of its unit rate pay items hers, with its two crews certified, the bucket truck
-// crew 730417 and the skid steer crew 730418 (the golden mission's 301001…301007). Each ticket
+// crew 730417 and the skid steer crew 730418 (the golden mission's 301001…301007, here each phone's
+// own block). Each ticket
 // opens at New under the crew's badge, then the phone's next number, typed again; the crew stays
 // hers and is confirmed on the next; the work is picked by name, its kind of work's screen asks
 // what it records, and the phone works its pay item out from the bands, never showing it or a
@@ -185,7 +186,7 @@ async function submitted(page: Page, crew: string, number: string, shown: readon
   await page.getByRole('button', { name: said.submitted.home }).click();
 }
 
-test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-112b: Jo scans the bucket truck crew 730417, is shown 301001 and types it again; a hanger measured 3 in across and two leaners go with the pay item the phone worked out from the bands, never shown, nor a rate; the crew stays hers, confirmed on each; two open at once for one crew; "ineligible" offered only where the pay item allows it', async ({
+test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-112b: Jo scans the bucket truck crew 730417, is shown the next number of her phone’s unit rate block (the golden mission’s 301001 on the first phone) and types it again; a hanger measured 3 in across and two leaners go with the pay item the phone worked out from the bands, never shown, nor a rate; the crew stays hers, confirmed on each; two open at once for one crew; "ineligible" offered only where the pay item allows it', async ({
   page,
   context,
 }) => {
@@ -205,16 +206,20 @@ test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-11
   await checkScreen(page);
   await page.getByRole('button', { name: said.badge.crewStart }).click();
   await expect(heading(page)).toHaveText(said.number.title);
-  await expect(page.locator('.big-number')).toHaveText('301001');
+  // The first of this phone's own block, whichever of Jo's phones synced first (ADR-585: her
+  // certifying phones take unit rate blocks too).
+  const first = Number(await page.locator('.big-number').textContent());
+  expect(first).toBeGreaterThanOrEqual(301001);
+  const n = (after: number) => String(first + after);
   // Typed again wrong, nothing opens; right, the ticket opens.
-  await keyed(page, '301010');
+  await keyed(page, n(9));
   await page.getByRole('button', { name: said.number.open }).click();
   await expect(page.getByText(said.number.wrong)).toBeVisible();
   await checkScreen(page);
-  await keyed(page, '301001');
+  await keyed(page, n(0));
   await page.getByRole('button', { name: said.number.open }).click();
   await expect(heading(page)).toHaveText(
-    filled(said.open.title, { kind: said.kinds.UNIT_RATE, number: '301001' }),
+    filled(said.open.title, { kind: said.kinds.UNIT_RATE, number: n(0) }),
   );
   await checkScreen(page);
 
@@ -222,7 +227,7 @@ test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-11
   await page.getByRole('button', { name: said.open.complete }).click();
   await expect(heading(page)).toHaveText(said.crew.photoTitle);
   await expect(
-    page.getByText(filled(english.home.open.crew, { truck: '730417', number: '301001' })),
+    page.getByText(filled(english.home.open.crew, { truck: '730417', number: n(0) })),
   ).toBeVisible();
   await page.locator('input[type=file]').setInputFiles(photo);
   await expect(page.getByRole('img')).toHaveCount(1);
@@ -251,21 +256,21 @@ test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-11
   // No "ineligible": the hanger's pay item doesn't allow it.
   await expect(heading(page)).toHaveText(said.place.workTitle);
   await checkScreen(page);
-  await submitted(page, '730417', '301001', ['Hangers', '3 in across', '1']);
+  await submitted(page, '730417', n(0), ['Hangers', '3 in across', '1']);
 
   // The next: the working crew offered first and confirmed; a leaner measured around.
   const leaner = await begun(page, { same: '730417' });
-  expect(leaner).toBe('301002');
+  expect(leaner).toBe(n(1));
   await workPicked(page, 'Leaners');
   await measured(page, said.measure.around, '56.5');
   await expect(heading(page)).toHaveText(said.place.workTitle);
-  await submitted(page, '730417', '301002', ['Leaners', '56.5 in around']);
+  await submitted(page, '730417', n(1), ['Leaners', '56.5 in around']);
 
   // Two open at once for the same crew: a crew isn't held to one; the first left for now.
   const big = await begun(page, { same: '730417' });
   await page.getByRole('button', { name: said.leave }).click();
   const spare = await begun(page, { same: '730417' });
-  expect([big, spare]).toEqual(['301003', '301004']);
+  expect([big, spare]).toEqual([n(2), n(3)]);
   await page.getByRole('button', { name: said.leave }).click();
   for (const number of [big, spare]) {
     await expect(
@@ -309,9 +314,9 @@ test('AC-11-74, AC-11-82, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-11
       event.endLatitude !== null,
     ]),
   ).toEqual([
-    ['UNIT_RATE', '301001', '730417', 'HNG-RMV-EA', 1, 3, 'DIAMETER', null, true],
-    ['UNIT_RATE', '301002', '730417', 'LNR-RMV-EA-24', 1, 56.5, 'CIRCUMFERENCE', null, true],
-    ['UNIT_RATE', '301003', '730417', 'LNR-RMV-EA-99', 1, 80, 'CIRCUMFERENCE', true, true],
+    ['UNIT_RATE', n(0), '730417', 'HNG-RMV-EA', 1, 3, 'DIAMETER', null, true],
+    ['UNIT_RATE', n(1), '730417', 'LNR-RMV-EA-24', 1, 56.5, 'CIRCUMFERENCE', null, true],
+    ['UNIT_RATE', n(2), '730417', 'LNR-RMV-EA-99', 1, 80, 'CIRCUMFERENCE', true, true],
   ]);
 });
 

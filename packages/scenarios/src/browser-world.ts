@@ -59,6 +59,12 @@
 // its survey form, where the golden mission makes its ROEs and surveys: an ROE made on P1 would
 // be offered on every collection and unit rate ticket there, so the tests that capture those on
 // P1 meet none.
+//
+// **And certifying** (task 3.5.5, ADR-585): Jo Kim's unit rate assignment on P1 certifies too, so
+// her phone holds the truck lists and the helpers (Kim, Ana and Lee, on P1 with her) and asks for
+// a block of P1's cert numbers in the same sync as her unit rate block; and the yard
+// phone holds the block its four certifications' numbers came from (730415…730514), so a phone's
+// block starts after it, as the series would have it had the yard phone certified them itself.
 // Its key is handed to the test with the rest (a made-up world's, never an installation's), for
 // the browser's keyring to hold as the phone's own: the browser can't otherwise hold a key made
 // before the run, and nothing else of it is planted.
@@ -68,6 +74,7 @@ import {
   Certifications,
   FormSetup,
   ListSetup,
+  NumberAllocator,
   PayItemSetup,
   Phones,
   ProjectSetup,
@@ -425,6 +432,13 @@ export class BrowserWorld {
       certifying: true,
       deviceId: who.yard,
     });
+    // The yard phone's block of P1's cert numbers, which its four certifications below take their
+    // numbers from (ADR-585).
+    const yardBlock = await new NumberAllocator(api, clock, policy).topUp(
+      { person: who.lee, deviceId: who.yard },
+      { projectId: who.project, series: 'CERTIFICATION', lastUsedNumber: null },
+    );
+    if (!yardBlock.saved) throw new Error(yardBlock.refusal.message);
     const certifications = new Certifications(api, clock, policy);
     const vehicle = async (name: string) =>
       (await api.vehicleType.findFirstOrThrow({ where: { name } })).id;
@@ -749,6 +763,7 @@ export class BrowserWorld {
           ...planned,
           personId: of('Jo Kim').id,
           fieldEventKinds: ['UNIT_RATE'],
+          certifying: true,
           payItemIds: unitRate,
         });
         await assigned(api, clock, office.luis, {

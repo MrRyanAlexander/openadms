@@ -2,7 +2,7 @@
 name: adms-certifications
 description: Open ADMS certifications, in today's rules. Read before touching any certification code. Covers why a certification certifies a container or a crew and never a vehicle (a crew is its certification), why both share one base, the exact capacity math (whole inches, a primary box plus add/subtract boxes with optional ÷2, a two-length hoist, a round bottom, a radius corner, rounded to hundredths each step, ÷46,656, then a whole CY half up), why the cert number IS the placard and badge number (system-issued from the project's series in phone blocks, or pre-printed; unique per project), how it reaches a field event, the lifecycle (tag expiry, revoke, replace, never copied, a truck keyed in by hand; never ends on its own), attestation and QC, five photos, and the real paper form. Use when working on certifications, placards, badges, cert numbers, containers, crews or capacity.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294; the capacity math built, ADR-320; the records and the service built, ADR-321; never copied, ADR-328…330; its changes behind requests, ADR-433) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-250; the driver shown from the certification, ADR-289; helpers picked, ADR-294; the capacity math built, ADR-320; the records and the service built, ADR-321; never copied, ADR-328…330; its changes behind requests, ADR-433; certifying on the phone built, ADR-585) -->
 
 > **This page states today's rules** (last changed by ADR-294, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -231,7 +231,12 @@ saved as a separate contractor with a warning), `CertificationChanges` and `Cont
 "Replaced on" is the new certification's certified time, as a day in the project's time zone. **Behind requests
 (ADR-433):** a measuring mistake corrected (takes *correct*), signatures on file (takes *QC*) and a
 revocation (an admin's alone); a certification is made, and a modified truck certified again, on a
-phone only, so both arrive with its sync (Phase 2, task 2.6.2).
+phone only, so both arrive with its sync (Phase 2, task 2.6.2). **Certifying on the phone (task
+3.5.5, ADR-585; agent defaults):** the field app's `PhoneCertifications` and its screens: the
+number from the phone's block or the pre-printed sheet, typed again; the prime picked, a sub typed
+with the prime's known subs offered; the boxes measured, the capacity worked out by `Capacity` as
+they are entered and shown, never typed; each box sent with the measurements its shape holds and
+`null` for the rest (`Capacity.measurementsOf`); five views; a helper picked; sealed at submit.
 
 ---
 

@@ -766,9 +766,12 @@ describe('a box corrected, added or taken off', () => {
         'Missing from the first entry',
       ]);
       expect(
-        (await tx.certificationBox.findMany({ where: { certificationId: c.trailer.id } })).map(
-          ({ position }) => position,
-        ),
+        (
+          await tx.certificationBox.findMany({
+            where: { certificationId: c.trailer.id },
+            orderBy: { position: 'asc' },
+          })
+        ).map(({ position }) => position),
       ).toEqual([0, 1, 2, 3]);
       expect(await tx.completedLoad.count({ where: { projectId: c.project.id } })).toBe(0);
 

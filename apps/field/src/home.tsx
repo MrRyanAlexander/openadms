@@ -1,9 +1,9 @@
 // Home (ADR-561 (4)): the day's assignment, its project and its one site where the work is at one,
 // with a large button for each kind of work it allows, at the bottom in thumb reach. What the
 // assignment allows is the one the phone took at sign-in (task 3.2.3, ADR-574); this screen only
-// shows it. A work whose capture screens are built starts from its button (the collection, task
-// 3.5.1; a disposal and a haul-out's two ends, task 3.5.2; unit rate work, task 3.5.3); the others
-// are shown and can't be pressed until their tasks (3.5.4, 3.5.5).
+// shows it. Each work starts from its button (the collection, task 3.5.1; a disposal and a
+// haul-out's two ends, task 3.5.2; unit rate work, task 3.5.3; the forms, task 3.5.4; certifying,
+// task 3.5.5), once the lists of its project are held.
 //
 // Task 3.5.1 (ADR-571, 573, 581): **the monitor's own count of today's tickets** (the user, Q-216;
 // AC-11-80), nothing ranked or compared; **the open tickets**, each by its truck and number, opened

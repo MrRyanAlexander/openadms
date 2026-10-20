@@ -39,7 +39,7 @@ one task per response (ADR-558); read its brief before any task.
    approved statuses, review queue, ledger (P1 $5,548.25 on 19 lines; P2 $324.00) and audit rows;
    every story still passing.
 2. **Every acceptance scenario with a Phase 3 part passes at its layer**, reported as N of M
-   (`spec/acceptance/11-field-app.md`: 133).
+   (`spec/acceptance/11-field-app.md`: 138).
 3. **All 33 REQs** ticked from runs that were seen, or moved with an ADR (ADR-371).
 4. **The field app's security checklist** (OWASP MASVS, `spec/CHECKLIST-FIELD.md`) answered
    control by control; the threat model's phone rows read again; `pnpm security` passing.
@@ -67,25 +67,16 @@ things stand, where the product ends up, the road there, and how the user works*
 now, topic by topic, is `SUMMARY.md` (its header's topic index, then only the topics you touch);
 the round-by-round history is the session log at the end of `DECISIONS.md`.
 
-### Where things stand (2026-10-19, through ADR-584)
-- **Phase 3 is open (ADR-557)**: 18 of 33 tasks done (ADR-557…584). **Milestones 3.1…3.4 are done**:
-  the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
-  (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
-  chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
-  answers to Q-215…Q-218 ADR-573); the store, enrolment and its proof, sign-in online and offline;
-  setup, switching, moving and sessions under the master passcode (its ten wrong tries offline lock
-  the phone, the user, ADR-577); the phone's own sync, its photographs' files, and **"Sync and turn
-  in" with the wipe (ADR-580)**. **Milestone 3.5 begun: the collection (ADR-581)**, with
-  waypoints end to end, the phone's first block of numbers, and the harness's phone taking the
-  number at New; **the tower and the haul-out (ADR-582)**, each quantity from the site's lookup by
-  one domain rule (`PhoneQuantityAsks`), the harness's tower asking the same; **unit rate
-  (ADR-583)**, each kind of work's screen by the domain's `PhoneUnitRate`; **the prototype gone**,
-  its checks on every screen; **the forms (ADR-584)**: the ROE's number from the phone's ROE
-  block, surveys (a post-work survey's ROEs by the domain's `PhoneSurveys`), the incident's offers,
-  the drop-off log, and the firm's own fields, now in the phone's lists. **Next: task 3.5.5,
-  certifying.** What each
-  task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
-  `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".
+### Where things stand (2026-10-19, through ADR-585)
+- **Phase 3 is open (ADR-557)**: 19 of 33 tasks done (ADR-557…585). **Milestones 3.1…3.5 are done**:
+  the plan, the scenarios, the checklist, the shell at `https://field.adms.localhost` with
+  `pnpm e2e` in the chain and axe-core on every screen; the store, enrolment, sign-in online and
+  offline, setup, switching, moving and sessions under the master passcode; the phone's own sync,
+  its photographs' files and "Sync and turn in"; and **every capture in the browser build**: the
+  collection, the tower and the haul-out, unit rate, the forms, and **certifying (ADR-585)**, with a
+  phone away from its site told so. **Next: Milestone 3.6, photographs, printing and scanning.**
+  What each task did is its ADR and its `BACKLOG.md` tick; the longer account is `ARCHIVE.md`
+  ("Moved 2026-10-19", ADR-580 and ADR-585).
 - **Phase 2's exit was met a third time (ADR-555)**: the chain green, three full story runs in a
   row, 184 of 184 Phase 2 scenarios, 22 of 23 REQs ticked and REQ-006 moved to Phase 3. The
   independent check of Phases 0–2 is answered whole (ADR-541…551); its file
@@ -153,7 +144,7 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 | 0 Foundation | approved architecture, scaffold, database hardening, scenario harness | ✅ 2026-10-01 |
 | 1 Data core and engine | every record, the engine, the ledger, review; the golden mission at the engine | ✅ 2026-10-06 |
 | 2 API and sync | the API, sign-in, phones, sync, queued jobs; the mission through the real endpoints | ✅ exit met 2026-10-17 (ADR-555), after reopenings for Milestones 2.8 and 2.9 |
-| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 18 of 33 tasks |
+| 3 Field app | browser, then iPhone, then Android | 🟡 open 2026-10-17 (ADR-557); 19 of 33 tasks |
 | 4 Back office and portal | setup screens, the rule builder, the review queue, exports, viewers | 🔒 |
 | 5 Later features and the demo deploy | Railway + Netlify, the outside penetration test, later features | 🔒 |
 
@@ -194,6 +185,8 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
   Say "set up", never "provision".
 
 ### Tools and housekeeping
+- **To try the build by hand: `pnpm field:try`** (the stack up; never beside `pnpm e2e`): the
+  tests' world, its monitors printed, a Chrome of its own; Ctrl-C drops it (ADR-585).
 - **Every command starts with** `eval "$(fnm env --shell zsh)"`. **The chain is `pnpm chain`**, run in
   the background (ADR-533); its first step is `pnpm ready` (the stack up, then `installer:check`). **Leave nothing running** (ADR-277): stop the stack with
   `pnpm local:down` at close-out (`adms-close-out` §0); nothing needs to stay running today. Docker
@@ -237,16 +230,14 @@ same scenarios passing at each layer (engine, API, apps). The finished surfaces 
 
 ## 📍 Next Atomic Task
 
-**Task 3.5.5, Certifying on a phone, and the truck keyed in by hand** (`BACKLOG.md`, Milestone
-3.5; REQ-322, 317; C118, C127, C129; AC-03-09, 14, 36, AC-11-42). **Build on 3.5.1…3.5.4's**
-(ADR-581…584): `PhoneTickets` and `PhoneForms` (a record begun, kept, left and finished, sealed),
-`capture.tsx` (`Step`, `TicketPhotos`, `TypeAgain`), the truck lists already in the phone's lists
-(ADR-553). The prime, the vehicle or crew type, each box's feature and the helpers picked from the
-lists, a sub typed with suggestions; the capacity from the domain's `Capacity`, shown, never typed;
-five views; the cert number from the phone's cert block or the pre-printed sheet; the boxes sent,
-every measurement a shape doesn't hold `null`; a hand-keyed truck's typed capacity. Read its whole
-brief and the register's items first. **From 2026-10-21, C175** (React 19.3.1 and Playwright
-1.64.1 read again).
+**Task 3.6.1, Photographs** (`BACKLOG.md`, Milestone 3.6; REQ-316's browser half; C176;
+AC-04-79, AC-11-44, 68, 78). **Build on 3.5.1…3.5.5's** (ADR-581…585): `TicketPhotos` and
+`PhotoDrawn` in `capture.tsx`, each capture's `photographed` (tickets, forms, a certification's five
+views). From the camera only, at most 8 per ticket; at any step while it is open, shown on the
+review, retaken or removed before submitting (ADR-571); SHA-256 at capture; the native shrink's
+interface (the browser build keeps the original); the page's `Permissions-Policy` opening the
+camera (C176). Read its whole brief and the register's items first. **From 2026-10-21, C175**
+(React 19.3.1 and Playwright 1.64.1 read again).
 
 **New session?** Read the Handoff above, then `SUMMARY.md`'s header (its topic index) and only the
 topics your task touches. Product discovery is closed (ADR-230). **Every command starts with**

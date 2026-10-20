@@ -280,7 +280,9 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38, AC-11-27: with no signal, P1-COL-2
   );
 
   await context.setOffline(false);
-  await expect.poll(() => at(asked, '/phones/current/login-list').length).toBe(2);
+  // The second read of the login list answered, not only asked (ADR-585: asked alone, a run once
+  // read it before its answer came).
+  await expect.poll(() => at(asked, '/phones/current/login-list')[1]?.status).toBe(200);
   const after = toApi(asked)
     .slice(before)
     .filter(({ path }) => !/\/(challenges|proofs)$/.test(path));

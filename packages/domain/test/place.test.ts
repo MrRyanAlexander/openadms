@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MapShapes,
   PlaceChecks,
+  SiteArea,
   SiteChecks,
   Tickets,
   type CheckedSite,
@@ -357,6 +358,16 @@ describe('a site’s area', () => {
       siteId: marshRoad.id,
       areaVersionId: 'area-version-1',
     });
+  });
+
+  it('C118, AC-11-88: one rule says whether a point is at a site, for the worker’s flag and the phone’s advisory alike: the circle round its GPS, or its own shape however far from its GPS', () => {
+    const circle = new SiteArea(marshRoad.gps, { kind: 'CIRCLE', meters: 200 });
+    expect([circle.holds(north150), circle.holds(north250)]).toEqual([true, false]);
+    const shape = new SiteArea(marshRoad.gps, {
+      kind: 'SHAPE',
+      shape: shapeOf(-75.63, 39.092, -75.61, 39.1),
+    });
+    expect([shape.holds(north250), shape.holds(north150)]).toEqual([true, false]);
   });
 
   it('a disposal with no GPS fix, or with no site, can’t be placed: nothing is raised here', () => {

@@ -4,7 +4,8 @@
 // `collection.tsx`; the tower's and the haul-out's, `tower.tsx`; unit rate's, `unit-rate.tsx`), a
 // photograph shown full size, and submitted.
 //
-// - **The open ticket**: its truck, its number, when it was begun, "Mark waypoint" on a
+// - **The open ticket**: its truck, its number, when it was begun, a word where the phone's fix
+//   puts it away from its site (C118, ADR-585), "Mark waypoint" on a
 //   collection (ADR-581), its photographs; Complete, leave it for now (it waits on home, where the
 //   monitor left it, across sign-outs and restarts: ADR-571), or cancel it (kept on the phone,
 //   never sent: ADR-056). **A load turned away at a tower gets nothing** (ADR-155; AC-04-44): its
@@ -14,13 +15,14 @@
 //   may write the load call, the monitor's name and the truck on the back of the driver's
 //   ticket** (ADR-115; REQ-321), as the screen says until the receipt prints (task 3.6.2).
 import type { PhoneAssignmentAnswer } from '@open-adms/contracts';
-import { ticketPhotosAtMost } from '@open-adms/domain';
+import { SiteArea, ticketPhotosAtMost, type SiteAreaHeld } from '@open-adms/domain';
 import { useState, type ReactNode } from 'react';
 
 import { PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx';
 import { CompleteCollection } from './collection.tsx';
 import { Banner, Button, StatusStrip, type Standing } from './look/index.ts';
 import { NewTicket, nextSuffix } from './new-ticket.tsx';
+import type { PhoneCertifications } from './phone/certifications.ts';
 import type { PhoneForms } from './phone/forms.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
@@ -33,15 +35,30 @@ import { counted, say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
 
-// What the capture screens work with: the phone's tickets, its forms (ADR-584) and its lists, its
-// place, the address lookup, and the most waypoints a collection takes (the policy's).
+// What the capture screens work with: the phone's tickets, its forms (ADR-584), its certifications
+// (ADR-585) and its lists, its place, the address lookup, and the most waypoints a collection takes
+// (the policy's).
 export interface CaptureParts {
   readonly tickets: PhoneTickets;
   readonly forms: PhoneForms;
+  readonly certifications: PhoneCertifications;
   readonly lists: PhoneLists;
   readonly locator: Locator;
   readonly lookup: AddressLookup;
   readonly waypointsAtMost: number;
+}
+
+// The site a ticket's work is at, by name, where the phone's fix at New puts it outside the site's
+// area as the lists hold it (the domain's `SiteArea`, the worker's rule; ADR-552 (3)(d), 585):
+// an advisory, never a refusal. None where the work is at no site or the phone had no fix.
+function awayFrom(ticket: PhoneTicket, held: HeldLists): string | undefined {
+  const site = held.lists.sites.find(({ id }) => id === ticket.siteId);
+  if (site === undefined || ticket.start === null) return undefined;
+  const area: SiteAreaHeld =
+    site.area.kind === 'CIRCLE'
+      ? site.area
+      : { kind: 'SHAPE', shape: { geometry: site.area.geometry, box: site.area.box } };
+  return new SiteArea(site, area).holds(ticket.start) ? undefined : site.name;
 }
 
 // The kinds of field event captured here: a load's two, a haul-out's two, and unit rate work.
@@ -303,6 +320,8 @@ function OpenTicket({
   });
   const full = now.waypoints.length >= parts.waypointsAtMost;
   const disposal = now.kind === 'DISPOSAL' || now.kind === 'HAUL_OUT_DISPOSAL';
+  // Begun away from the assignment's site, by the phone's fix at New: said, never refused (C118).
+  const away = awayFrom(now, lists);
 
   if (cancelling) {
     return (
@@ -353,6 +372,11 @@ function OpenTicket({
           keyedByHand={now.certKeyedByHand}
         />
         <p>{say(said.open.started, { time: timeOfDay(new Date(now.startedAt), now.timeZone) })}</p>
+        {away === undefined ? null : (
+          <Banner tone="notice">
+            <p>{say(said.open.notAtSite, { site: away })}</p>
+          </Banner>
+        )}
         {now.kind === 'COLLECTION' ? (
           <>
             <p>{counted(said.open.waypoints, now.waypoints.length)}</p>

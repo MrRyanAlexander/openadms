@@ -139,7 +139,8 @@ const shapeNames: Record<BoxShape, string> = {
   RADIUS_CORNER: 'radius corner',
 };
 
-type Measurement = Exclude<keyof MeasuredBox, 'position' | 'shape' | 'sign'>;
+// One of a box's measurements.
+export type Measurement = Exclude<keyof MeasuredBox, 'position' | 'shape' | 'sign'>;
 
 const measurementNames: Record<Measurement, string> = {
   length: 'length',
@@ -167,6 +168,12 @@ export class Capacity {
   constructor(kind: CertificationKind, boxes: readonly MeasuredBox[]) {
     this.kind = kind;
     this.boxes = [...boxes].sort((a, b) => a.position - b.position);
+  }
+
+  // The measurements a shape holds, in the sheet's order: what the certifying phone asks for, every
+  // other sent as null (C129; ADR-585).
+  static measurementsOf(shape: BoxShape): readonly Measurement[] {
+    return measurementsOf[shape];
   }
 
   // The capacity and the lines it came from, or why there is none.

@@ -3,7 +3,7 @@
 // their Monitor ID and made-up password, and the board Luis wrote for them: Kim Nguyen on
 // disposals and the drop-off log at Marsh Road TDSR, Ana Brooks on collections and incidents,
 // Lee Morgan on two assignments, Tariq Patel on none, Jo Kim on P1's unit rate work with its two
-// crews certified (task 3.5.3, ADR-583), and Sam Grant on the collections of the PARKS project,
+// crews certified (task 3.5.3, ADR-583) and on certifying (task 3.5.5, ADR-585), and Sam Grant on the collections of the PARKS project,
 // which numbers its loads from control tickets: task 3.5.1), as the run's setup handed them on. The world
 // also holds P2, with nobody's work, for the setup tests' own monitors (ADR-576), and P1-TWR-LF,
 // marked lost, whose key the firm's time revoked, with its key for a test to plant (ADR-580).

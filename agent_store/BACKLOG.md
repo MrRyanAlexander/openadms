@@ -268,97 +268,25 @@ time clock → iPhone → Android → prove it.
   3.5.1), so a browser phone's turn-in hands back none yet; the native keyrings' erase (3.8.1,
   3.9.1); C175 from 2026-10-21.
 
-### Milestone 3.5 — Capture (`adms-field-app` §4A; `adms-ticket-workflows`)
-- [x] **3.5.1 The collection, and what every capture shares** (REQ-303, 308a, 309, 317 in part, 318,
-  319; C68, C96, C121, C135; AC-02-44, 45, AC-04-08, 11, 24, 91, 92, 95, 96, 98, AC-08-06,
-  AC-11-05, 36…39, 68, 74…78; C179, C180): **the badge, then the number, at New** (ADR-571, the
-  user): the control ticket scanned or the next generated number shown, entered again, a typed one
-  with its reason; **the open list**: a ticket left at any step and resumed where it was left, kept
-  across sign-outs and restarts, several open, **never two for one truck** (its badge opens the one
-  open); a badge not in the lists warned, refreshed or keyed by hand; the debris type and field tag by
-  name; GPS and **waypoints** ("Mark waypoint"), **their server half first** (C180); the address
-  looked up or typed; normal or split, and the split chain; **photos at any step**, the review showing
-  the photos themselves; the phone's own duplicate check; cancel (the number kept, unsent); sealed
-  at submit; the harness's phone moved to the new order (C179). The number entered
-  twice as the user answered it at 3.1.4's prototype (WCAG 3.3.7; file 11, left 2).
-  ✅ done 2026-10-19 (ADR-581): **waypoints' server half** (`field_event_waypoint` and its guard,
-  the sync's `waypoints` up to the policy's most, intake, `correctWaypoint`, the review read and
-  the audit trail; `FIELD_EVENT_WAYPOINTS_AT_MOST`); **the lists' numbering and split setting**,
-  part of the setup version; **the phone's first block** asked in the run whose lists name it
-  (C184); **`PhoneTickets`** on the store's `tickets` shelf (opened at New under its number, one
-  per truck, kept across sign-outs and restarts, cancelled kept unsent with its number, sealed in
-  the outbox at submit with its photographs, a submit cut short finished, the duplicate check,
-  the control-range question, today's own count, two days' worth); **the screens**
-  (`new-collection`, `open-ticket`, `cancel-ticket`, `complete-collection`, `photo`, `submitted`:
-  "normal or split?", the badge and its truck or the warning, the number shown and typed again or
-  scanned or typed with its reason, waypoints, photos drawn on the review, debris type, field tag,
-  ROE and estimate on a split's property, GPS and the address, the review once, the split's next
-  property); the place opened to the app's own page; **the harness's phone at New (C179)**, every
-  story moved, 24 of 24; the browser world given P1's load form, two trucks and the PARKS
-  project. REQ-303 and 318 ticked; 308a, 309, 317, 319 in part. AC-11-36…39, 75, 77, 80 whole and
-  the eleven earlier scenarios' field app parts; AC-11-05, 68, 74, 76, 78, 79, 82 in part. What it
-  leaves: the tower, haul-out, unit rate, forms and certifying captures (3.5.2…3.5.5); the camera,
-  printing and scanning (3.6.1…3.6.3); C175 from 2026-10-21.
-- [x] **3.5.2 The tower and the haul-out** (REQ-304, 305, 124f, 321; C74, C83, C97, C100; AC-04-38,
-  44, AC-11-40, 41, 74, 75, 78): the site from the assignment; the badge, then the driver's ticket
-  scanned at New, and the open list as at the curb (ADR-571); the review's photos; the debris type picked on its own; one quantity
-  from the site's lookup (the load call typed 0–100, the scale weight and receipt, or the count of
-  tickets carried); no ticket list; the haul-out's call at its loading end, split piles; a
-  handwritten disposal receipt on a control-ticket project; a load turned away gets nothing.
-  ✅ done 2026-10-19 (ADR-582): **what a phone at a site asks**, one domain rule
-  (`PhoneQuantityAsks`: a haul-out's loading end always the load call; a disposal its site's row
-  for the debris type and the truck's prime, every prime's where the prime is unknown and they
-  agree, the lookup's own no-rule answer where none is held, C182); **the screens** (`new-disposal`,
-  `complete-disposal`, `new-haul-out`, `complete-haul-out`; New, the open ticket and submitted every
-  capture's): the driver's ticket scanned at New, the load call typed 0–100, the scale receipt
-  copied and kept with its disposal (`keepTogether`), a tandem's second pointing at the first's,
-  the count of tickets carried, nothing more, a split haul-out's piles with the load call so far,
-  a load turned away cancelled, the back of a control ticket; **the harness's tower asking its
-  lookup** (REQ-124f's phone half; C74, C97, C100's), every story passing so; the browser world
-  given Cypress Creek Landfill, P1's haul-out form and four pay items with their rules. REQ-304,
-  305, 308a, 319 ticked, 124f's Phase 3 part; 309, 317, 321 in part. AC-11-40, 41, 79 whole,
-  AC-04-38's and 44's field app parts; AC-11-05, 74, 78, 82 in part. C83, C182 done; C127's and
-  C177's tower parts. Loosenings 18 of 18 caught (one slipped first: its test added). What it
-  leaves: unit rate (3.5.3), forms, certifying; printing and the camera (3.6.x).
-- [x] **3.5.3 Unit rate** (REQ-306, 320, 112b; AC-04-70, AC-11-43, 74, 76): the crew badge kept and
-  confirmed; the number generated at New, right after the crew badge (ADR-571); open tickets, a crew
-  not held to one; the crew photo; the payable type by name; each kind of work's screen (a count, a
-  measurement, a stump, items, items with hours); the pay item from the domain's bands; ineligible
-  where the pay item allows; one GPS point.
-  ✅ done 2026-10-19 (ADR-583): **the lists say each kind of work's count shape and built-in key**
-  (contract, setup version, phone lists; the phone picked by name before); **what a phone asks of
-  unit rate work, one domain rule** (`PhoneUnitRate`: the payable types each once; the screen by
-  the kind; a count unless every pay item is always one; a tree measured where one asks or has a
-  band; Stumps by its key; items with counts or hours; the pay item from `SizeBands`; "ineligible"
-  where the pay item worked out allows it); **the working crew** from the monitor's own newest unit
-  rate ticket on the project, offered first at New and named on the review's submit; **the
-  screens** (`new-unit-rate`, `complete-unit-rate`; `PlaceFields` shared with the collection);
-  **the prototype gone (C177)**, its checks on every screen a test reaches (both themes, 320 CSS
-  px, 200% text: the keypad's keys made to give way); the browser world's unit rate pay items, two
-  crews and Jo Kim on P1's unit rate work, Sam Grant on PARKS's collections. REQ-306, 320, 112b
-  ticked; AC-11-43, 74, 76 whole, AC-04-70's field app part; AC-11-51, 52, 55, 56 on every screen.
-  C177's capture and prototype parts done (its Time left to 3.7.1). A bug the browser test found fixed (a step's change written from the screen's stale
-  copy of the ticket). Loosenings 20 caught (one slipped first: its test added).
-- [x] **3.5.4 Forms** (REQ-307; C66, C67, C69, C118's last part; AC-04-101): the ROE (a number from
-  the block or typed), pre- and post-work surveys (the post-work picks from ROEs whose pre-work
-  survey is done), the incident (type, sub-type, what its form offers), the citizen drop-off log,
-  the firm's own fields, "GPS required", photo fields.
-  ✅ done 2026-10-19 (ADR-584): **the phone's lists carry the forms its assignment makes**, each
-  with "GPS required" and the newest version of the firm's own fields, and each survey work type's
-  key (contract, setup version, `PhoneLists`); **the harness's phone answers them** (C69);
-  **`PhoneForms`** (a `forms` shelf: begun, left and finished from home, cancelled kept unsent,
-  sealed at submit with its photographs); **the screens** (`forms.tsx`: the ROE's number from the
-  ROE block or the paper's, typed again; a survey's work type and ROE, a post-work survey's by the
-  domain's `PhoneSurveys`, with the ROEs this phone made; an incident's type, sub-type and offers;
-  a drop-off log opening at once at the site; the firm's own fields of every type); the world's
-  forms on P1 and P2. REQ-307 ticked; AC-11-84…87 whole, AC-04-101's field app part. C66, C67 (c),
-  C69 done; C118's and C127's form parts. Two bugs the browser test found fixed. Loosenings 17 of 17
-  caught. What it leaves: certifying (3.5.5); C185 (an ROE's scope on a phone, the user's call).
-- [ ] **3.5.5 Certifying on a phone, and the truck keyed in by hand** (REQ-322, 317; C118, C127,
+### Milestone 3.5 — Capture (`adms-field-app` §4A; `adms-ticket-workflows`) ✅ complete 2026-10-19
+- [x] **3.5.1 The collection, and what every capture shares** ✅ done 2026-10-19 (ADR-581); its full tick in `ARCHIVE.md`, "Moved 2026-10-19 (ADR-585)".
+- [x] **3.5.2 The tower and the haul-out** ✅ done 2026-10-19 (ADR-582); its full tick there too.
+- [x] **3.5.3 Unit rate** ✅ done 2026-10-19 (ADR-583); its full tick there too.
+- [x] **3.5.4 Forms** ✅ done 2026-10-19 (ADR-584); its full tick there too.
+- [x] **3.5.5 Certifying on a phone, and the truck keyed in by hand** (REQ-322, 317; C118, C127,
   C129; AC-03-09, 14, 36, AC-11-42): the prime, the vehicle or crew type, each box's feature and the
   helpers picked from the lists, a sub typed with suggestions; the capacity from `Capacity`, shown
   and never typed; five views; the cert number from the block or the pre-printed sheet; the boxes
   sent; a hand-keyed truck's typed capacity, every detail not recorded `null`.
+  ✅ done 2026-10-19 (ADR-585): **`PhoneCertifications`** (the store's tenth shelf) and **the
+  screens** (`certify.tsx`: the number typed again, container or crew, the prime, a sub with the
+  prime's known subs offered, driver and tag, the vehicle or crew type, the boxes with the capacity
+  worked out by `Capacity` as entered, five views, a helper, a replacement, the review); each box
+  sent with `null` for what its shape doesn't hold (`Capacity.measurementsOf`); **a phone away from
+  its site told so** by the domain's new `SiteArea`, the worker's flag's rule (AC-11-88); the world's
+  Jo Kim certifying; **`pnpm field:try`** to try the build by hand. REQ-322, 317 ticked; AC-11-42,
+  88 whole; AC-03-09's, 14's, 36's field app parts. C118, C127, C128, C129, C166 done. Two older
+  tests' races put right. Loosenings 13 of 13 caught. What it leaves: nothing of its own.
 
 ### Milestone 3.6 — Photographs, printing and scanning, in the browser build (ARCHITECTURE §11, §12)
 - [ ] **3.6.1 Photographs** (REQ-316's browser half; AC-04-79, AC-11-44, 68, 78): from the camera only, at
@@ -613,17 +541,15 @@ stood here before 2026-10-15, done items and their history included, is in `agen
 - *None left: C174 (a) done by task 2.9.2 (ADR-554). 2.9.3's work is its own line above.*
 
 #### For Phase 3 (the field app)
-*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.6.1 (its place half done, 3.5.1, ADR-581) · C179, C180 done (3.5.1, ADR-581) · C177 → 3.7.1 (its capture and prototype parts done, 3.5.1…3.5.3, ADR-581…583) · C178 → 3.8.1, 3.9.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110, C111, C112 → 3.8.1, 3.9.1 (the browser build's parts done by 3.2.2, ADR-572; C112's `Authorization` across origins by 3.1.2, ADR-565) · C114, C115, C117 done (3.2.3…3.3.1, 3.5.1; ADR-574…576, 581) · C133 done (3.4.1, ADR-578) · C120, C143, C151 → 3.2.4 (done, ADR-575) · C122, C123, C124, C126 done (3.3.1, 3.3.2, ADR-576, 577) · C171 done (3.3.2, 3.5.1; ADR-577, 581) · C181 done (3.4.1, ADR-578) · C183 done (3.4.3, ADR-580) · C184 done (3.5.1, ADR-581) · C182 done (3.5.2, ADR-582) · C128, C130, C132, C152, C153 done (3.4.1, ADR-578) · C127's tower part done (3.5.2, ADR-582) · C166's capture part done (3.5.1, 3.5.4; ADR-581, 584) · C139, C168's turn-in parts done (3.4.3, ADR-580; their file parts 3.4.2, ADR-579) · C137, C138 → 3.8.2 (their sync parts done, 3.4.2, ADR-579) · C141, C170 done (3.2.4, 3.4.3, ADR-575, 580) · C69 done (its turn-in part 3.4.3, ADR-580; the phone's and the harness's form definitions 3.5.4, ADR-584) · C68, C96, C121 done (3.5.1, ADR-581); C135 closed by AC-08-06 (the user's, ADR-477: a ticket that stood open is not flagged for it; ADR-581) · C83 done, and C74's, C97's and C100's phone part (the harness's tower asking its lookup) done (3.5.2, ADR-582) · C66, C67 (c) done (3.5.4, ADR-584) · C118 → 3.5.5 (its post-work survey done, 3.5.4, ADR-584) · C185 → 3.10.3 · C127, C129 → 3.5.5.
+*Mapped to their tasks (task 3.0.1, ADR-558; by REQ before it, task 2.8.1, ADR-522):* C175 → the task that runs from 2026-10-21 · C176 → 3.6.1 (its place half done, 3.5.1, ADR-581) · C179, C180 done (3.5.1, ADR-581) · C177 → 3.7.1 (its capture and prototype parts done, 3.5.1…3.5.3, ADR-581…583) · C178 → 3.8.1, 3.9.1 · C41 → 3.10.2 (3.1.3's part done) · C156 → 3.8.1 (its checklist part done by 3.1.1, ADR-562) · C110, C111, C112 → 3.8.1, 3.9.1 (the browser build's parts done by 3.2.2, ADR-572; C112's `Authorization` across origins by 3.1.2, ADR-565) · C114, C115, C117 done (3.2.3…3.3.1, 3.5.1; ADR-574…576, 581) · C133 done (3.4.1, ADR-578) · C120, C143, C151 → 3.2.4 (done, ADR-575) · C122, C123, C124, C126 done (3.3.1, 3.3.2, ADR-576, 577) · C171 done (3.3.2, 3.5.1; ADR-577, 581) · C181 done (3.4.1, ADR-578) · C183 done (3.4.3, ADR-580) · C184 done (3.5.1, ADR-581) · C182 done (3.5.2, ADR-582) · C128, C130, C132, C152, C153 done (3.4.1, ADR-578) · C127's tower part done (3.5.2, ADR-582) · C166's capture part done (3.5.1, 3.5.4; ADR-581, 584) · C139, C168's turn-in parts done (3.4.3, ADR-580; their file parts 3.4.2, ADR-579) · C137, C138 → 3.8.2 (their sync parts done, 3.4.2, ADR-579) · C141, C170 done (3.2.4, 3.4.3, ADR-575, 580) · C69 done (its turn-in part 3.4.3, ADR-580; the phone's and the harness's form definitions 3.5.4, ADR-584) · C68, C96, C121 done (3.5.1, ADR-581); C135 closed by AC-08-06 (the user's, ADR-477: a ticket that stood open is not flagged for it; ADR-581) · C83 done, and C74's, C97's and C100's phone part (the harness's tower asking its lookup) done (3.5.2, ADR-582) · C66, C67 (c) done (3.5.4, ADR-584) · C118, C127, C128, C129, C166 done (their last parts 3.5.5, ADR-585) · C185 → 3.10.3.
 - **C41. Accessibility** (ADR-279). *The standard, the user's (ADR-559):* **WCAG 2.2 AA** on every screen, the field app's and later the back office's and the portal's; **a conformance report (VPAT format) for each app at its phase's end**. *Have:* every screen translatable (ADR-172). *Have:* the automated check beside the browser end-to-end tests (3.1.3, ADR-566). *Left:* each screen's own check in its task (automatic once its screen names itself); the hand review and the field app's report (3.10.2); the web apps' checks and their report: Phase 4 (its line below).
 - **C175.** React 19.3.1 (published 2026-10-14 on every React line at once) and Playwright 1.64.1 (2026-10-14) are read again once seven days old, from 2026-10-21: an advisory against 19.3.0 or 1.64.0 published by then, or what 19.3.1 fixes, decides whether to take them (ADR-563, 564). Whichever task runs then (3.1.3's checker ADR is a good moment).
 - **C176.** The field app's `Permissions-Policy` turns the camera off until a screen needs one (`apps/field/page.ts`, `servedHeaders`; ADR-565): *(the place opened to `(self)` with the collection, task 3.5.1, ADR-581)*; the camera with the photographs (3.6.1), with its scenario (AC-11-68). The microphone, payment and USB stay off.
 - **C177.** *(The user's answers to Q-215…Q-218 recorded, ADR-573, AC-11-79…82; the collection's, the tower's and the haul-out's and unit rate's parts done, tasks 3.5.1…3.5.3, ADR-581…583; the bottom menu's Sync, 3.4.1; **the prototype gone** with the last screens it showed, its checks on every screen a test reaches, ADR-583.)* Left: the bottom menu's Time, where the project has the time clock on (3.7.1).
 - **C185.** *(Agent default, ADR-584 (6): an ROE made on a phone carries no scope; the back office enters it from the paper, `correctRoeScope`.)* Should the user want the scope picked on the phone (ADR-293), it is Phase 3's own work, never moved on (ADR-519): the sync's ROE takes its scope picks (a debris type of the load form or a payable type, each with an optional count), intake writes `RoeScopeItem`, and the lists carry the project's payable types to a phone that makes ROEs. Asked with the phase exit's defaults (3.10.3); built in Phase 3 if it is wanted.
 - **C110, C111, C112.** The device key in real secure hardware (the Secure Enclave's 65-byte point needs the fixed 26-byte header; Android's Keystore gives SubjectPublicKeyInfo); both sign DER; the native `Keyring`s (`apps/field/src/store/keyring.ts`, ADR-572) on the Secure Enclave or Keystore and the Keychain or Keystore, this device only, their secrets kept there; attestation stays declined (ADR-240). *(The browser build: its WebCrypto key writing DER, its token in memory alone, proving again on `PHONE_NOT_PROVEN`, no attestation: done, task 3.2.2, ADR-572; `Authorization` across origins: task 3.1.2, ADR-565.)*
-- **C118 (the phone's part; the server's was 2.9.1, done by ADR-553).** Certifying on a phone picks the prime, a vehicle type or crew type, each box's feature and any helper from its lists (a sub typed, the prime's offered), and a tower monitor finds a truck from the same truck lists; the advisory "not at this site" from the site's place in the lists. *(A post-work survey picks from ROEs where `preWorkSurveyDone`, and those whose pre-work survey the phone made: done, task 3.5.4, ADR-584.)*
 - ~~**C120.**~~ *Done, task 3.2.4 (ADR-575): the list asked, kept and dropped as each answer says; the two slow hashes with @noble/hashes; the phone's own 5 and 10.*
 - ~~**C183.**~~ *Done, task 3.4.3 (ADR-580): such a record named at turn-in by the fingerprint of what stands in its place, so the phone is wiped over it only where the server holds it, and the screen says how many it can't read. Left to Q-167's upgrade design: how a release reads an earlier one's records.*
-- **C127, C128, C129, C166.** *(Task 3.4.1, ADR-578: the syncs split at the contract's counts and by weight (`fitByWeight`), `NOT_SAVED` shown with the words and kept, a kept record sent again by itself, the same fingerprint (ADR-470 (3) answered), `syncClientSuite` run against the app's own store through its own `PhoneOutbox` (C130), a wait waited out and sent again as it was, its retries spread, ten in a row a fault (C152, C153), a top-up not taken leaving its block: done.)* *(A hand-keyed truck at the tower sends the capacity typed, every detail not recorded `null`: done, task 3.5.2, ADR-582.)* *(A form's answers and words bounded as typed, so the capture never hands `PhoneOutbox.keep` one it refuses, its refusal said before anything is sealed: done, task 3.5.4, ADR-584; the collection's, task 3.5.1, ADR-581.)* Left: certifying with the domain's `Capacity`, the boxes sent, every measurement a shape doesn't hold `null` (3.5.5).
 - **C137, C138, C139, C168.** *(Task 3.4.1, ADR-578: what it holds said in every sync, the passcode's check taken in, the lists read again when the setup version answered isn't theirs (C133), and a kept record never changed by the phone: done. Task 3.4.2, ADR-579: `OWNER_NOT_SAVED` kept and sent again once the record is saved; no depth file kept without its `depthSha256`; parts no larger than `MEDIA_PART_BYTES_AT_MOST`, smaller on a poor signal; `photoFileEndpoint` asked after a restart, one file's bytes read at a time; a held record's photograph answered saved and its files sent, the record still shown not saved: done.)* *(A record sealed at submit, an unsubmitted one the monitor's across sign-outs, a cancelled one never in the outbox: done for the collection, task 3.5.1, ADR-581; each later capture keeps them through `PhoneTickets`.)* Left: the capture giving `depthSha256` exactly where it takes a depth file, and image kinds and sizes measured on real phones (3.8.2). *(Held things named by `sentCanonical`'s SHA-256 at turn-in, and the master user's sync of the files before it: done, task 3.4.3, ADR-580.)*
 - ~~**C141, C170.**~~ *Done: the offline sign-in reported first (task 3.2.4, ADR-575); the turn-in, its wipe, the server's words and what's missing, a refused proof after a turn-in ask, `MASTER_PASSCODE_NEEDED` answered with the passcode, the master user's sync (task 3.4.3, ADR-580). The suite's turn-in checks pass over the app's store since 3.4.1.*
 - ~~**C143, C151.**~~ *Done, task 3.2.4 (ADR-575): the story `offline-sign-in`.*

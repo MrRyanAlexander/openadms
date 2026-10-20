@@ -110,3 +110,11 @@ waits, the lock after inactivity) while its timers keep running.
   and `"run": ["sh", "-c", "cd apps/field && node_modules/.bin/playwright test"]`; `loosen.mjs`
   can't name the failed test from Playwright's output, so read each loosening's log for its `✘`.
 - **A test's name starts with the scenario IDs it proves**, as Vitest's do.
+
+**Since ADR-585 (certifying):** Jo Kim's assignment certifies too, so her phones take a cert block in
+the same sync as their unit rate block; a test never assumes a phone got a series' first number by
+run order (read the number the phone shows, or its sync's answer). **Wait for an answer, never only
+a request**: poll a recorded request's `status` or `answer`, not the count of requests (two older
+tests once read an answer still in flight). Labels that contain one another ("Tier 1 sub" inside
+"Tier 2 sub, under the tier 1 sub") are found by role with `exact: true`. `pnpm field:try` starts
+the same world by hand, at the same address: never beside a run.

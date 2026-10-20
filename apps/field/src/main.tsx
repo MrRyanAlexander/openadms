@@ -8,6 +8,7 @@ import { Policy, SignInTries } from '@open-adms/domain';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { PhoneCertifications } from './phone/certifications.ts';
 import { PhoneForms } from './phone/forms.ts';
 import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
@@ -76,10 +77,15 @@ const phone = BrowserStore.opened().then(async (store) => {
   const forms = await PhoneForms.opened(store, lists, outbox, {
     photoBytesAtMost: policy.mediaFileBytesAtMost,
   });
+  // The certifications begun on the phone (task 3.5.5, ADR-585), kept as forms are.
+  const certifications = await PhoneCertifications.opened(store, lists, outbox, {
+    photoBytesAtMost: policy.mediaFileBytesAtMost,
+  });
   return {
     capture: {
       tickets,
       forms,
+      certifications,
       lists,
       locator: new BrowserLocator(),
       lookup: new AddressLookup(monitor),

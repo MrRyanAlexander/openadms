@@ -36,9 +36,16 @@
 // tickets; the capture's screens take the place of the menu until the monitor goes home. The lock
 // after inactivity watches them too; nothing a ticket holds is lost to it. Task 3.5.2 (ADR-582):
 // home starts a disposal, a haul-out's collection and a haul-out's disposal the same way. Task
-// 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew.
+// 3.5.3 (ADR-583): unit rate work too, a crew's open tickets named by the crew. Task 3.5.5
+// (ADR-585): certifying, an open certification named by its number.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  CertificationCapture,
+  certificationStarted,
+  certificationTitle,
+  type Certifying,
+} from './certify.tsx';
 import { FormCapture, formBegun, formStarted, formTitle, type Filling } from './forms.tsx';
 import { Home } from './home.tsx';
 import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
@@ -159,6 +166,7 @@ export function SignedInPhone({
   const [moving, setMoving] = useState(false);
   const [capturing, setCapturing] = useState<Capturing | null>(null);
   const [filling, setFilling] = useState<Filling | null>(null);
+  const [certifying, setCertifying] = useState<Certifying | null>(null);
   const [numbersLow, setNumbersLow] = useState(false);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
@@ -446,15 +454,38 @@ export function SignedInPhone({
     );
   }
 
+  // A certification's screens, for the lists held of the assignment's project (task 3.5.5).
+  if (certifying !== null && signedIn.assignment !== null && heldNow !== undefined) {
+    return (
+      <CertificationCapture
+        parts={capture}
+        signedIn={signedIn}
+        assignment={signedIn.assignment}
+        held={heldNow}
+        standing={standing}
+        start={certifying}
+        onHome={() => {
+          setCertifying(null);
+          setWaiting(outbox.waiting());
+          setPlace('work');
+        }}
+        after={warning}
+      />
+    );
+  }
+
   if (place === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
-    const { tickets, forms } = capture;
+    const { tickets, forms, certifications } = capture;
     const open = tickets
       .openOf(signedIn.userId)
       .filter((ticket) => ticket.projectId === assignment.project.id);
     const openForms = forms
       .openOf(signedIn.userId)
       .filter((form) => form.projectId === assignment.project.id);
+    const openCertifications = certifications
+      .openOf(signedIn.userId)
+      .filter((certification) => certification.projectId === assignment.project.id);
     const said = words.home.open;
     // A drop-off log is made at the assignment's site: with none, it isn't started.
     const startsForms = [...formed.entries()]
@@ -466,10 +497,13 @@ export function SignedInPhone({
         project={assignment.project.name}
         site={assignment.site?.name ?? null}
         works={worksOf(assignment)}
-        startable={heldNow === undefined ? [] : [...captured.keys(), ...startsForms]}
+        startable={
+          heldNow === undefined ? [] : [...captured.keys(), 'certification', ...startsForms]
+        }
         onStart={(work) => {
           const kind = captured.get(work);
           if (kind !== undefined) setCapturing({ at: 'new', kind });
+          if (work === 'certification') setCertifying({ at: 'new' });
           const form = formed.get(work);
           if (form === undefined || heldNow === undefined) return;
           // A drop-off log picks nothing first: it opens straight away (ADR-584).
@@ -507,12 +541,20 @@ export function SignedInPhone({
             label: formTitle(form, heldNow),
             detail: formStarted(form),
           })),
+          ...openCertifications.map((certification) => ({
+            id: certification.id,
+            label: certificationTitle(certification),
+            detail: certificationStarted(certification),
+          })),
         ]}
         onOpen={(id) => {
           const ticket = tickets.ticket(id);
           if (ticket !== undefined) {
             setCapturing(ticket.step === 'open' ? { at: 'open', id } : { at: 'complete', id });
           } else if (forms.form(id) !== undefined) setFilling({ at: 'fill', id });
+          else if (certifications.certification(id) !== undefined) {
+            setCertifying({ at: 'fill', id });
+          }
         }}
         numbersLow={numbersLow}
         after={bottom}

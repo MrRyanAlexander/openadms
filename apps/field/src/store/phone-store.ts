@@ -20,6 +20,10 @@ export const shelves = [
   // drop-off log, each open as its monitor left it, its photographs' bytes beside it; a cancelled
   // one, kept unsent; and of each submitted one what a post-work survey's ROEs read.
   'forms',
+  // The certifications begun on the phone (ADR-585): each one open as its monitor left it, its five
+  // views' bytes beside it; a cancelled one, kept unsent with its number; and of each submitted one
+  // what a replacement is picked from.
+  'certifications',
   // The photographs waiting to go: each one's record, and a note of each of its files (ARCHITECTURE
   // §11).
   'photographs',

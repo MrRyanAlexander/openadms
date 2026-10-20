@@ -18,6 +18,7 @@ export {
   type CapacityRefusal,
   type CertificationKind,
   type MeasuredBox,
+  type Measurement,
 } from './capacity.ts';
 export {
   CertificationChecks,
@@ -80,12 +81,14 @@ export {
 export { Distance, type GpsPoint } from './geodesic.ts';
 export {
   PlaceChecks,
+  SiteArea,
   SiteChecks,
   type CheckedSite,
   type PlaceFound,
   type PlaceSetup,
   type PlacedFieldEvent,
   type ProjectMap,
+  type SiteAreaHeld,
   type ZoneAttached,
   type ZoneOnMap,
 } from './place.ts';

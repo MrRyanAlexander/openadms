@@ -203,6 +203,8 @@ test('AC-11-74, AC-11-82, AC-11-40, AC-11-79, AC-11-78, AC-11-05, AC-04-96, AC-0
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     filled(said.open.title, { kind: said.kinds.DISPOSAL, number: '101001' }),
   );
+  // At her site by the phone's fix: no word of being away from it (C118, ADR-585).
+  await expect(page.getByText(filled(said.open.notAtSite, { site: marshRoad }))).toBeHidden();
 
   // The network off from here: nothing waits on the server.
   await offline(context, page);
@@ -373,7 +375,7 @@ test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leavin
   expect(sent.answers).toEqual(['SAVED', 'SAVED']);
 });
 
-test('AC-04-38, AC-11-41, C182, REQ-305, REQ-124f, AC-05-10: Lee, set up for the Landfill’s tower, takes nothing more of a haul-out of Mulch; moved with no signal to Cypress Creek Landfill, whose lookup the phone doesn’t hold, it says so and takes the load call, the scale receipt added; at signal its lookup read, a load of Vegetative to FDS asks the scale weight and never a load call, the tandem’s second points at the first’s receipt, a load of white goods asks the count of its tickets, a haul-out of Mulch the weight', async ({
+test('AC-04-38, AC-11-41, AC-11-88, C182, C118, REQ-305, REQ-124f, AC-05-10: Lee, set up for the Landfill’s tower, is told the phone’s fix puts it away from the site and takes nothing more of a haul-out of Mulch; moved with no signal to Cypress Creek Landfill, whose lookup the phone doesn’t hold, it says so and takes the load call, the scale receipt added; at signal its lookup read, a load of Vegetative to FDS asks the scale weight and never a load call, the tandem’s second points at the first’s receipt, a load of white goods asks the count of its tickets, a haul-out of Mulch the weight', async ({
   page,
   context,
 }) => {
@@ -384,6 +386,10 @@ test('AC-04-38, AC-11-41, C182, REQ-305, REQ-124f, AC-05-10: Lee, set up for the
   // A haul-out of Mulch at the Landfill is paid by the CY from its loading end's call: nothing
   // more to take, the receipt only offered.
   await begun(page, english.home.start.haulOutDisposal, '730415', '201001');
+  // The phone is still at Marsh Road by its fix: the Landfill's tower is told so, and carries on
+  // (C118, ADR-585; the worker's check flags it).
+  await expect(page.getByText(filled(said.open.notAtSite, { site: landfill }))).toBeVisible();
+  await checkScreen(page);
   await page.getByRole('button', { name: said.open.complete }).click();
   await page.getByRole('option', { name: 'Mulch', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.nothing.title);

@@ -4,7 +4,7 @@
 // are spec/CONVENTIONS.md §6's. Nothing here comes from `development/`.
 import { describe, expect, it } from 'vitest';
 
-import { Capacity, type BoxSign, type MeasuredBox } from '../src/index.ts';
+import { boxShapes, Capacity, type BoxSign, type MeasuredBox } from '../src/index.ts';
 
 const blank = {
   length: null,
@@ -289,6 +289,18 @@ describe('measurements no capacity comes from (ADR-320)', () => {
     expect(withBox({ ...roundBottom(1, 'ADD', 90, 240), width: 0, height: null })).toBe(
       '763020.00',
     );
+  });
+
+  it('AC-11-42, C129: says which measurements each shape holds, in the sheet’s order, for the phone to ask for those and send null for the rest', () => {
+    expect(
+      Object.fromEntries(boxShapes.map((shape) => [shape, Capacity.measurementsOf(shape)])),
+    ).toEqual({
+      RECTANGLE: ['length', 'width', 'height'],
+      TRIANGLE: ['length', 'width', 'height'],
+      TWO_LENGTH_HOIST: ['length', 'secondLength', 'width', 'height'],
+      ROUND_BOTTOM: ['diameter', 'length'],
+      RADIUS_CORNER: ['radius', 'run', 'corners'],
+    });
   });
 
   it('boxes that subtract as much as the primary holds, or more, give no capacity, and the lines are shown', () => {

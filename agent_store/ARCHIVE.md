@@ -4912,3 +4912,112 @@ REQ in the same response (ADR-519's lesson).
   at a time, asked after (`photoFileEndpoint`) when the app opens again mid-file; `syncClientSuite`
   holds every client to it. **Next: task 3.4.3.** What each task did is its ADR and its `BACKLOG.md`
   tick.
+
+## Moved 2026-10-19 (ADR-585): `BACKLOG.md`, Milestone 3.5's ticks of tasks 3.5.1…3.5.4, word for word
+
+- [x] **3.5.1 The collection, and what every capture shares** (REQ-303, 308a, 309, 317 in part, 318,
+  319; C68, C96, C121, C135; AC-02-44, 45, AC-04-08, 11, 24, 91, 92, 95, 96, 98, AC-08-06,
+  AC-11-05, 36…39, 68, 74…78; C179, C180): **the badge, then the number, at New** (ADR-571, the
+  user): the control ticket scanned or the next generated number shown, entered again, a typed one
+  with its reason; **the open list**: a ticket left at any step and resumed where it was left, kept
+  across sign-outs and restarts, several open, **never two for one truck** (its badge opens the one
+  open); a badge not in the lists warned, refreshed or keyed by hand; the debris type and field tag by
+  name; GPS and **waypoints** ("Mark waypoint"), **their server half first** (C180); the address
+  looked up or typed; normal or split, and the split chain; **photos at any step**, the review showing
+  the photos themselves; the phone's own duplicate check; cancel (the number kept, unsent); sealed
+  at submit; the harness's phone moved to the new order (C179). The number entered
+  twice as the user answered it at 3.1.4's prototype (WCAG 3.3.7; file 11, left 2).
+  ✅ done 2026-10-19 (ADR-581): **waypoints' server half** (`field_event_waypoint` and its guard,
+  the sync's `waypoints` up to the policy's most, intake, `correctWaypoint`, the review read and
+  the audit trail; `FIELD_EVENT_WAYPOINTS_AT_MOST`); **the lists' numbering and split setting**,
+  part of the setup version; **the phone's first block** asked in the run whose lists name it
+  (C184); **`PhoneTickets`** on the store's `tickets` shelf (opened at New under its number, one
+  per truck, kept across sign-outs and restarts, cancelled kept unsent with its number, sealed in
+  the outbox at submit with its photographs, a submit cut short finished, the duplicate check,
+  the control-range question, today's own count, two days' worth); **the screens**
+  (`new-collection`, `open-ticket`, `cancel-ticket`, `complete-collection`, `photo`, `submitted`:
+  "normal or split?", the badge and its truck or the warning, the number shown and typed again or
+  scanned or typed with its reason, waypoints, photos drawn on the review, debris type, field tag,
+  ROE and estimate on a split's property, GPS and the address, the review once, the split's next
+  property); the place opened to the app's own page; **the harness's phone at New (C179)**, every
+  story moved, 24 of 24; the browser world given P1's load form, two trucks and the PARKS
+  project. REQ-303 and 318 ticked; 308a, 309, 317, 319 in part. AC-11-36…39, 75, 77, 80 whole and
+  the eleven earlier scenarios' field app parts; AC-11-05, 68, 74, 76, 78, 79, 82 in part. What it
+  leaves: the tower, haul-out, unit rate, forms and certifying captures (3.5.2…3.5.5); the camera,
+  printing and scanning (3.6.1…3.6.3); C175 from 2026-10-21.
+- [x] **3.5.2 The tower and the haul-out** (REQ-304, 305, 124f, 321; C74, C83, C97, C100; AC-04-38,
+  44, AC-11-40, 41, 74, 75, 78): the site from the assignment; the badge, then the driver's ticket
+  scanned at New, and the open list as at the curb (ADR-571); the review's photos; the debris type picked on its own; one quantity
+  from the site's lookup (the load call typed 0–100, the scale weight and receipt, or the count of
+  tickets carried); no ticket list; the haul-out's call at its loading end, split piles; a
+  handwritten disposal receipt on a control-ticket project; a load turned away gets nothing.
+  ✅ done 2026-10-19 (ADR-582): **what a phone at a site asks**, one domain rule
+  (`PhoneQuantityAsks`: a haul-out's loading end always the load call; a disposal its site's row
+  for the debris type and the truck's prime, every prime's where the prime is unknown and they
+  agree, the lookup's own no-rule answer where none is held, C182); **the screens** (`new-disposal`,
+  `complete-disposal`, `new-haul-out`, `complete-haul-out`; New, the open ticket and submitted every
+  capture's): the driver's ticket scanned at New, the load call typed 0–100, the scale receipt
+  copied and kept with its disposal (`keepTogether`), a tandem's second pointing at the first's,
+  the count of tickets carried, nothing more, a split haul-out's piles with the load call so far,
+  a load turned away cancelled, the back of a control ticket; **the harness's tower asking its
+  lookup** (REQ-124f's phone half; C74, C97, C100's), every story passing so; the browser world
+  given Cypress Creek Landfill, P1's haul-out form and four pay items with their rules. REQ-304,
+  305, 308a, 319 ticked, 124f's Phase 3 part; 309, 317, 321 in part. AC-11-40, 41, 79 whole,
+  AC-04-38's and 44's field app parts; AC-11-05, 74, 78, 82 in part. C83, C182 done; C127's and
+  C177's tower parts. Loosenings 18 of 18 caught (one slipped first: its test added). What it
+  leaves: unit rate (3.5.3), forms, certifying; printing and the camera (3.6.x).
+- [x] **3.5.3 Unit rate** (REQ-306, 320, 112b; AC-04-70, AC-11-43, 74, 76): the crew badge kept and
+  confirmed; the number generated at New, right after the crew badge (ADR-571); open tickets, a crew
+  not held to one; the crew photo; the payable type by name; each kind of work's screen (a count, a
+  measurement, a stump, items, items with hours); the pay item from the domain's bands; ineligible
+  where the pay item allows; one GPS point.
+  ✅ done 2026-10-19 (ADR-583): **the lists say each kind of work's count shape and built-in key**
+  (contract, setup version, phone lists; the phone picked by name before); **what a phone asks of
+  unit rate work, one domain rule** (`PhoneUnitRate`: the payable types each once; the screen by
+  the kind; a count unless every pay item is always one; a tree measured where one asks or has a
+  band; Stumps by its key; items with counts or hours; the pay item from `SizeBands`; "ineligible"
+  where the pay item worked out allows it); **the working crew** from the monitor's own newest unit
+  rate ticket on the project, offered first at New and named on the review's submit; **the
+  screens** (`new-unit-rate`, `complete-unit-rate`; `PlaceFields` shared with the collection);
+  **the prototype gone (C177)**, its checks on every screen a test reaches (both themes, 320 CSS
+  px, 200% text: the keypad's keys made to give way); the browser world's unit rate pay items, two
+  crews and Jo Kim on P1's unit rate work, Sam Grant on PARKS's collections. REQ-306, 320, 112b
+  ticked; AC-11-43, 74, 76 whole, AC-04-70's field app part; AC-11-51, 52, 55, 56 on every screen.
+  C177's capture and prototype parts done (its Time left to 3.7.1). A bug the browser test found fixed (a step's change written from the screen's stale
+  copy of the ticket). Loosenings 20 caught (one slipped first: its test added).
+- [x] **3.5.4 Forms** (REQ-307; C66, C67, C69, C118's last part; AC-04-101): the ROE (a number from
+  the block or typed), pre- and post-work surveys (the post-work picks from ROEs whose pre-work
+  survey is done), the incident (type, sub-type, what its form offers), the citizen drop-off log,
+  the firm's own fields, "GPS required", photo fields.
+  ✅ done 2026-10-19 (ADR-584): **the phone's lists carry the forms its assignment makes**, each
+  with "GPS required" and the newest version of the firm's own fields, and each survey work type's
+  key (contract, setup version, `PhoneLists`); **the harness's phone answers them** (C69);
+  **`PhoneForms`** (a `forms` shelf: begun, left and finished from home, cancelled kept unsent,
+  sealed at submit with its photographs); **the screens** (`forms.tsx`: the ROE's number from the
+  ROE block or the paper's, typed again; a survey's work type and ROE, a post-work survey's by the
+  domain's `PhoneSurveys`, with the ROEs this phone made; an incident's type, sub-type and offers;
+  a drop-off log opening at once at the site; the firm's own fields of every type); the world's
+  forms on P1 and P2. REQ-307 ticked; AC-11-84…87 whole, AC-04-101's field app part. C66, C67 (c),
+  C69 done; C118's and C127's form parts. Two bugs the browser test found fixed. Loosenings 17 of 17
+  caught. What it leaves: certifying (3.5.5); C185 (an ROE's scope on a phone, the user's call).
+
+## Moved 2026-10-19 (ADR-585): `NEXT.md`'s "Where things stand", Phase 3's bullet as it stood through ADR-584
+
+- **Phase 3 is open (ADR-557)**: 18 of 33 tasks done (ADR-557…584). **Milestones 3.1…3.4 are done**:
+  the plan, the scenarios (`spec/acceptance/11-field-app.md`), the checklist
+  (`spec/CHECKLIST-FIELD.md`), the shell at `https://field.adms.localhost` with `pnpm e2e` in the
+  chain and axe-core on every screen, the look, the prototype (the user's notes ADR-571, their
+  answers to Q-215…Q-218 ADR-573); the store, enrolment and its proof, sign-in online and offline;
+  setup, switching, moving and sessions under the master passcode (its ten wrong tries offline lock
+  the phone, the user, ADR-577); the phone's own sync, its photographs' files, and **"Sync and turn
+  in" with the wipe (ADR-580)**. **Milestone 3.5 begun: the collection (ADR-581)**, with
+  waypoints end to end, the phone's first block of numbers, and the harness's phone taking the
+  number at New; **the tower and the haul-out (ADR-582)**, each quantity from the site's lookup by
+  one domain rule (`PhoneQuantityAsks`), the harness's tower asking the same; **unit rate
+  (ADR-583)**, each kind of work's screen by the domain's `PhoneUnitRate`; **the prototype gone**,
+  its checks on every screen; **the forms (ADR-584)**: the ROE's number from the phone's ROE
+  block, surveys (a post-work survey's ROEs by the domain's `PhoneSurveys`), the incident's offers,
+  the drop-off log, and the firm's own fields, now in the phone's lists. **Next: task 3.5.5,
+  certifying.** What each
+  task did is its ADR and its `BACKLOG.md` tick; the earlier, longer account of these milestones is
+  `ARCHIVE.md`, "Moved 2026-10-19 (ADR-580)".

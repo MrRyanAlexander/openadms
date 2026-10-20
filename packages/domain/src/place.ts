@@ -49,6 +49,31 @@ export interface CheckedSite {
   readonly area: { readonly versionId: string; readonly shape: MapShape } | null;
 }
 
+// A site's area as it stands: the project's circle round its GPS, in metres, or its own shape.
+export type SiteAreaHeld =
+  | { readonly kind: 'CIRCLE'; readonly meters: number }
+  | { readonly kind: 'SHAPE'; readonly shape: MapShape };
+
+// Whether a GPS point is at a site (ADR-136, 142, 144, 346; invariant 14): in its own shape where
+// it has one, however far from its GPS; else within the project's circle round its GPS, by
+// geodesic distance. The worker's check flags by it (`PlaceChecks`), and a phone at the site says
+// so by it, an advisory, never a refusal (C118; ADR-552 (3)(d), 585).
+export class SiteArea {
+  private readonly gps: GpsPoint;
+  private readonly area: SiteAreaHeld;
+
+  constructor(gps: GpsPoint, area: SiteAreaHeld) {
+    this.gps = gps;
+    this.area = area;
+  }
+
+  holds(point: GpsPoint): boolean {
+    return this.area.kind === 'CIRCLE'
+      ? new Distance(point, this.gps).isWithin(this.area.meters)
+      : new ShapeArea(this.area.shape).holds(point);
+  }
+}
+
 // What the checks read of a field event, beside what grouping reads.
 export interface PlacedFieldEvent extends GroupedFieldEvent {
   // Where it ended; none when the phone had no fix (ADR-083).
@@ -167,11 +192,11 @@ export class PlaceChecks<E extends PlacedFieldEvent = PlacedFieldEvent> {
   private siteArea(subject: FlagSubject, event: E): FlagRaised[] {
     const { site, endGps } = event;
     if (site === null || endGps === null) return [];
-    const inside =
+    const area: SiteAreaHeld =
       site.area === null
-        ? new Distance(endGps, site.gps).isWithin(this.setup.siteCircleMeters)
-        : new ShapeArea(site.area.shape).holds(endGps);
-    if (inside) return [];
+        ? { kind: 'CIRCLE', meters: this.setup.siteCircleMeters }
+        : { kind: 'SHAPE', shape: site.area.shape };
+    if (new SiteArea(site.gps, area).holds(endGps)) return [];
     const facts: FlagFacts =
       site.area === null
         ? {

@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc --build && vite build",
-    "e2e": "tsc --build && vite build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && playwright install --only-shell chromium && playwright test"
+    "e2e": "tsc --build && vite build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && playwright install --only-shell chromium && playwright test",
+    "try": "tsc --build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && node e2e/try.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
