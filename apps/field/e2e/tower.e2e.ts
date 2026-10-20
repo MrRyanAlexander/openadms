@@ -291,7 +291,7 @@ test('AC-11-74, AC-11-82, AC-11-40, AC-11-79, AC-11-78, AC-11-05, AC-04-96, AC-0
   expect(sent.answers).toEqual(['SAVED']);
 });
 
-test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leaving Marsh Road TDSR, answers "split": 730415’s first pile opens as -A under the number the phone made, typed again; each pile gives its debris type, its field tag and the load call so far, the pile before’s shown; both go at the next sync', async ({
+test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leaving Marsh Road TDSR, answers "split": 730415’s first pile opens as -A under the number the phone made, typed again; each pile gives its debris type and the load call so far, the pile before’s shown, and no field tag (ADR-591); both go at the next sync', async ({
   page,
   context,
 }) => {
@@ -313,16 +313,13 @@ test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leavin
     filled(said.open.split, { kind: said.kinds.HAUL_OUT_COLLECTION, number, suffix: 'A' }),
   );
 
-  const pile = async (suffix: string, tag: string, call: string, before: string | null) => {
+  const pile = async (suffix: string, call: string, before: string | null) => {
     await page.getByRole('button', { name: said.open.complete }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.debris.title);
     const mulch = page.getByRole('option', { name: 'Mulch', exact: true });
     if ((await mulch.getAttribute('aria-selected')) === 'true') {
       await page.getByRole('button', { name: said.next }).click();
     } else await mulch.click();
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.tag.title);
-    await checkScreen(page);
-    await page.getByRole('option', { name: tag, exact: true }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.call.pileTitle);
     if (before !== null) {
       await expect(
@@ -334,20 +331,20 @@ test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leavin
     await page.getByRole('button', { name: said.next }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(said.photos.title);
     await page.getByRole('button', { name: said.next }).click();
-    for (const value of [`${number}-${suffix}`, 'Mulch', tag, `${call}%`]) {
+    for (const value of [`${number}-${suffix}`, 'Mulch', `${call}%`]) {
       await expect(page.locator('.facts').getByText(value, { exact: true })).toBeVisible();
     }
     await expect(page.locator('.facts').getByText(said.review.callSoFar)).toBeVisible();
     await page.getByRole('button', { name: said.review.submit }).click();
   };
-  await pile('A', 'Zone 1 pile', '10', null);
+  await pile('A', '10', null);
   await page
     .getByRole('button', { name: filled(said.submitted.nextPile, { number, suffix: 'B' }) })
     .click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     filled(said.open.split, { kind: said.kinds.HAUL_OUT_COLLECTION, number, suffix: 'B' }),
   );
-  await pile('B', 'Mixed', '35', '10');
+  await pile('B', '35', '10');
   await page.getByRole('button', { name: said.submitted.home }).click();
 
   const from = await syncedNow(page, asked);
@@ -366,7 +363,7 @@ test('AC-11-74, AC-11-79, REQ-305, ADR-295: Lee, set up for the haul-outs leavin
     ['HAUL_OUT_COLLECTION', number, 'A', 10],
     ['HAUL_OUT_COLLECTION', number, 'B', 35],
   ]);
-  expect(events[0]?.fieldTagId).not.toBe(events[1]?.fieldTagId);
+  expect(events.map(({ fieldTagId }) => fieldTagId)).toEqual([null, null]);
   expect(sent.answers).toEqual(['SAVED', 'SAVED']);
 });
 

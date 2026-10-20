@@ -47,8 +47,8 @@ assignment**, never picked (ADR-195, 240).
 1. **New**: scan the badge, then the number, scanned, or made and opening at once. GPS at load start and
    load end; **"Mark waypoint"** as the truck loads (Q-104, ADR-571); photos from the start of
    loading.
-2. **Complete**: the **debris type** from the load form's list, and optionally a **field tag**
-   (ADR-211, 218); on an ROE project the **ROE**; on a split the property's **estimate**; on a load
+2. **Complete**: the **debris type** from the load form's list (ADR-211; no field tag on a phone,
+   the user, ADR-591); on an ROE project the **ROE**; on a split the property's **estimate**; on a load
    that carries tickets, each carried ticket **by its number** (ADR-192, 204). **Capture GPS**, then
    **Look up address** (our own Nominatim server when online; else the street number and name typed)
    (ADR-111, 119). No load call, no zone, no destination: the system checks where debris went,
@@ -102,31 +102,38 @@ empty bed (ADR-223, 243). **A haul-out never dumps at a TDSR** (ADR-226).
 
 **A split haul-out** (ADR-295), where the project allows split loads: debris kept apart at the TDSR by
 the area it came from is loaded from several piles. Each pile is a haul-out collection event of its
-own, `-A`, `-B`, `-C`…, started like a new property on a split load, with its own debris type and
-field tag. Instead of an estimate the monitor gives **the load call so far**: 10% after the first
+own, `-A`, `-B`, `-C`…, started like a new property on a split load, with its own debris type (no field
+tag, ADR-591). Instead of an estimate the monitor gives **the load call so far**: 10% after the first
 pile, 35% after the second, 85% after the third. The last is the haul-out's load call; each pile's
 part is what it added (10, 25, 50), which shares out the CY, or the scale weight where the haul-out
 is paid by weight.
 
 ## Workflow C — unit rate (`URT`, one event, no pairing)
 
-1. **New**: scan the **crew badge**; it stays on the phone until the monitor changes crew (ADR-111).
-   A crew is its certification (ADR-228). **The number** (always generated) opens the ticket at once
-   here, never typed again (ADR-571, 589).
-2. **The crew photo**, then pick the **payable type** by name (Hangers, Leaners, Stumps, White Goods,
-   Crew time…; each shown once). The phone **works out the pay item** from the size bands and prints
-   it; the monitor never sees a code or a rate (ADR-207, 213).
+1. **New: the crew, the first step** (the user, ADR-592): "Same crew" where the monitor has a
+   working crew, else (or for a new crew) scan the **crew badge**; it stays on the phone until the
+   monitor changes crew (ADR-111). A crew is its certification (ADR-228). **The number** (always
+   generated) opens the ticket at once, never typed again (ADR-571, 589), and it goes straight on:
+   a new crew to **the crew photo**, the crew kept to the work.
+2. **What work it is**: the **payable type** by name (Hangers, Leaners, Stumps, White Goods, Crew
+   time…; each shown once), so it sets up what comes next. The phone **works out the pay item**
+   from the size bands and prints it; the monitor never sees a code or a rate (ADR-207, 213). No
+   field tag (ADR-591).
 3. **Record the work** as its kind asks: hangers removed and one measurement; a leaner's measurement
    at chest height, **as a circumference or a diameter** (the monitor says which); a stump's diameter
    two feet up, root-ball diameter, "half or more exposed" and survey number; white goods or HHW as
    an item list (HHW pounds as the count); crew time as items with hours to the quarter hour
-   (ADR-126, 158, 177, 198). Optionally a field tag; the ROE on an ROE project. Where the pay item
-   allows it, the monitor may **mark the work ineligible** (flagged, ADR-210).
-   **Hangers, leaners and stumps are photographed by stage** (the user, ADR-590; the firm's setting
-   on the kind of work): a pre-work photo, then usually the ticket is left for the next tree; back
-   at it, the measurement and its photo (after the cut for a hanger, before it for a leaner), then
-   the post-work photo. Each stage is a button to do or done, by colour, icon and word; nothing is
-   held for a stage left out; the review shows the three large under their names.
+   (ADR-126, 158, 177, 198). The ROE on an ROE project. Where the pay item allows it, the monitor
+   may **mark the work ineligible** (flagged, ADR-210).
+   **Hangers, leaners and stumps are photographed by stage** (the user, ADR-590, 592; the firm's
+   setting on the kind of work): the work picked opens **the ticket's dashboard**, three buttons in
+   work order, each to do or done by colour, icon and word. **Pre-work** and **post-work** open the
+   camera and drop back to the dashboard; **measurement** takes its photo, then the measurement, and
+   drops back. Usually the ticket is left after the pre-work photo for the next tree and opened
+   again from home at its dashboard (the measurement after the cut for a hanger, before it for a
+   leaner). Nothing is held for a stage left out; **Complete** goes on to where the work was done
+   and the review, which shows the three large under their names. There is no step for other
+   photos; other work takes its photos before the review.
 4. **Print** the crew copy (Q-95).
 
 What each kind captures and bills, bands, stumps and fill: `adms-ticket-workflows` §4.5.

@@ -167,5 +167,6 @@ test('AC-11-89: signed in and left on home, Kim’s phone syncs on its own once 
   // Five: the phone syncs by itself, with nobody touching it.
   await page.clock.fastForward('01:00');
   await expect.poll(() => syncs(asked).length).toBe(2);
-  expect(syncs(asked)[1]?.status).toBe(200);
+  // Its answer, once it has come (the request is recorded before it is answered).
+  await expect.poll(() => syncs(asked)[1]?.status).toBe(200);
 });

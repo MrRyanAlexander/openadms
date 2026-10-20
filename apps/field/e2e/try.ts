@@ -7,6 +7,9 @@
 // policy, has the harness make the world, prints how to get in, and opens a Chrome of its own,
 // phone-sized, in a profile of its own, told to take the stack's own certificates and nothing else,
 // as the browser tests' Chromium is: the Mac's keychain and its own Chrome are never touched.
+// **Its GPS is the example world's**, 14 Heron St in Bayline County (spec/CONVENTIONS.md), allowed
+// for the app's page alone, so "Look up address" finds a street on the stack's map (Delaware, the
+// pinned extract) wherever the Mac is (ADR-593): Playwright opens it, over a pipe, never a port.
 // `--no-browser` opens none. Needs the local stack up; never while `pnpm e2e` runs, which serves
 // its own world at the same address.
 import { spawn } from 'node:child_process';
@@ -18,12 +21,15 @@ import process from 'node:process';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+import { chromium, type BrowserContext } from '@playwright/test';
+
 import { servedHeaders, servedPolicy } from '../page.ts';
 import { servedFolder, trustedKeys } from './stack.ts';
 import { worldApiOrigin, type CastMonitor } from './world.ts';
 
 const harness = fileURLToPath(new URL('../../../packages/scenarios/src/cli.ts', import.meta.url));
-const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// 14 Heron St's point, in Zone 2 of P1's map (spec/CONVENTIONS.md, the example world).
+const heronSt = { latitude: 39.1385, longitude: -75.5537 };
 
 // Each of the cast's work today, as the world's board has it.
 const work: Readonly<Record<string, string>> = {
@@ -67,25 +73,29 @@ for (const [key, monitor] of Object.entries(ready.cast)) {
 console.log('\nEnrol the phone first (any name, the master passcode), then sign in as a monitor.');
 console.log('Badges: trucks 730415 (65 CY) and 730416 (48 CY), crews 730417 and 730418.');
 
+let window: BrowserContext | undefined;
 if (!process.argv.includes('--no-browser')) {
   const keys = await trustedKeys([
     new URL(worldApiOrigin).hostname,
     'field.adms.localhost',
     'api.adms.localhost',
   ]);
-  spawn(
-    chrome,
-    [
-      `--user-data-dir=${mkdtempSync(join(tmpdir(), 'open-adms-try-'))}`,
+  window = await chromium.launchPersistentContext(mkdtempSync(join(tmpdir(), 'open-adms-try-')), {
+    channel: 'chrome',
+    headless: false,
+    viewport: null,
+    geolocation: heronSt,
+    args: [
       `--ignore-certificate-errors-spki-list=${keys.join(',')}`,
       '--window-size=430,932',
       '--no-first-run',
       '--no-default-browser-check',
-      `--app=${page.origin}`,
     ],
-    { stdio: 'ignore', detached: true },
-  ).unref();
-  console.log('\nA Chrome window of its own opened on it.');
+  });
+  await window.grantPermissions(['geolocation'], { origin: page.origin });
+  const [first] = window.pages();
+  await (first ?? (await window.newPage())).goto(page.origin);
+  console.log('\nA Chrome window of its own opened on it, its GPS at 14 Heron St, Bayline County.');
 }
 console.log('Ctrl-C here ends the world and drops its database.');
 
@@ -93,6 +103,7 @@ await new Promise<void>((done) => {
   process.once('SIGINT', done);
   process.once('SIGTERM', done);
 });
+await window?.close();
 made.stdin.end();
 await stopped;
 await page.close();

@@ -182,6 +182,8 @@ export class BrowserWorld {
         log: (line) => {
           if (/"level":(50|60)\b/.test(line)) errors.push(line.trim());
         },
+        // "Look up address" answered from the stack's own map, as an installation's is (ADR-593).
+        asksAddresses: true,
       });
       return new BrowserWorld(made, people, api, errors);
     } catch (problem) {

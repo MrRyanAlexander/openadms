@@ -20,7 +20,7 @@ import { SiteArea, ticketPhotosAtMost, type SiteAreaHeld } from '@open-adms/doma
 import { useState, type ReactNode } from 'react';
 
 import { TakePhoto } from './camera.tsx';
-import { PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx';
+import { CancelTicket, PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx';
 import { CompleteCollection } from './collection.tsx';
 import { Banner, Button, StatusStrip, type Standing } from './look/index.ts';
 import { NewTicket, nextSuffix } from './new-ticket.tsx';
@@ -124,7 +124,13 @@ export function TicketCapture({
           {...(at.split === undefined ? {} : { after: at.split.after })}
           onListsRead={setLists}
           onOpened={(opened, reopened) => {
-            setAt({ at: 'open', id: opened.id, reopened });
+            // Unit rate work goes straight on to its own steps, the crew first (the user,
+            // ADR-592): the open ticket is a load's and a haul-out's.
+            setAt(
+              opened.kind === 'UNIT_RATE'
+                ? { at: 'complete', id: opened.id }
+                : { at: 'open', id: opened.id, reopened },
+            );
           }}
           onCancel={onHome}
           below={after}
@@ -342,40 +348,22 @@ function OpenTicket({
     suffix: now.splitSuffix,
   });
   const full = now.waypoints.length >= parts.waypointsAtMost;
-  const disposal = now.kind === 'DISPOSAL' || now.kind === 'HAUL_OUT_DISPOSAL';
   // Begun away from the assignment's site, by the phone's fix at New: said, never refused (C118).
   const away = awayFrom(now, lists);
 
   if (cancelling) {
     return (
-      <main data-screen="cancel-ticket" className="screen">
-        <StatusStrip standing={standing} />
-        <div className="screen-body">
-          <h1>{say(said.open.cancelTitle, { number: now.ticketNumber })}</h1>
-          <p>{said.open.cancelAbout}</p>
-          {disposal ? <p>{said.open.turnedAway}</p> : null}
-        </div>
-        <div className="screen-actions">
-          <Button
-            main
-            wide
-            onPress={() => {
-              setCancelling(false);
-            }}
-          >
-            {said.open.cancelNo}
-          </Button>
-          <Button
-            wide
-            onPress={() => {
-              void parts.tickets.cancel(now.id).then(onLeave);
-            }}
-          >
-            {said.open.cancelYes}
-          </Button>
-        </div>
-        {below}
-      </main>
+      <CancelTicket
+        ticket={now}
+        standing={standing}
+        onKeep={() => {
+          setCancelling(false);
+        }}
+        onCancel={() => {
+          void parts.tickets.cancel(now.id).then(onLeave);
+        }}
+        below={below}
+      />
     );
   }
 

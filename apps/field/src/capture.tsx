@@ -87,6 +87,44 @@ export function Step({
   );
 }
 
+// "Cancel the ticket?", asked before a ticket started by mistake is cancelled: kept on the phone,
+// never sent, its number never used again (ADR-056, 571). A disposal is told a load turned away
+// gets nothing (ADR-155).
+export function CancelTicket({
+  ticket,
+  standing,
+  onKeep,
+  onCancel,
+  below,
+}: {
+  readonly ticket: Pick<PhoneTicket, 'ticketNumber' | 'kind'>;
+  readonly standing: Standing;
+  readonly onKeep: () => void;
+  readonly onCancel: () => void;
+  readonly below?: ReactNode;
+}) {
+  const disposal = ticket.kind === 'DISPOSAL' || ticket.kind === 'HAUL_OUT_DISPOSAL';
+  return (
+    <main data-screen="cancel-ticket" className="screen">
+      <StatusStrip standing={standing} />
+      <div className="screen-body">
+        <h1>{say(said.open.cancelTitle, { number: ticket.ticketNumber })}</h1>
+        <p>{said.open.cancelAbout}</p>
+        {disposal ? <p>{said.open.turnedAway}</p> : null}
+      </div>
+      <div className="screen-actions">
+        <Button main wide onPress={onKeep}>
+          {said.open.cancelNo}
+        </Button>
+        <Button wide onPress={onCancel}>
+          {said.open.cancelYes}
+        </Button>
+      </div>
+      {below}
+    </main>
+  );
+}
+
 // The truck or crew a badge's number finds in the phone's certifications: never the driver.
 export function TruckFacts({
   certNumber,

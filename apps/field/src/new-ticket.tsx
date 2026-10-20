@@ -13,11 +13,12 @@
 //   again, and never a number made there (ADR-019; REQ-308a). Either way a pre-printed barcode
 //   that won't read is typed, with a reason from the firm's list, and typed again (Q-218, ADR-573):
 //   the one number still copied by a person.
-// - **Unit rate** (ADR-111, 571, 583, 589; AC-04-70, AC-11-74): the crew's badge, then the phone's
-//   next number of the unit rate series, always made there (ADR-056), opening at once. **The
-//   working crew stays**: where the monitor has one, New offers it first, "Same crew" or "Change
-//   crew", so it is confirmed on every ticket. A crew isn't held to one open ticket (the user's
-//   rule is one per truck), and a crew is never keyed in by hand: it has no capacity to type.
+// - **Unit rate** (ADR-111, 571, 583, 589, 592; AC-04-70, AC-11-74): **the crew is the first
+//   step** (the user, ADR-592): where the monitor has a working crew, "Same crew" or a new crew's
+//   badge scanned; with none, the badge. The phone's next number of the unit rate series, always
+//   made there (ADR-056), opens the ticket at once, and it goes straight on to the work (a new
+//   crew's photo first), never to a load's open ticket. A crew isn't held to one open ticket (the
+//   user's rule is one per truck), and a crew is never keyed in by hand: it has no capacity to type.
 // - **A badge whose truck has a ticket open on this phone opens that ticket.** A badge the lists
 //   don't hold is warned, with how stale they are; the lists are read again where there is signal;
 //   the monitor carries on, or keys the truck in by hand, the capacity read off it typed (the user,
@@ -43,6 +44,7 @@ import type { HeldLists } from './phone/lists.ts';
 import type { SignedIn } from './phone/monitor.ts';
 import type { Fix, NumberFrom, NumberSaid, PhoneTicket, Workflow } from './phone/tickets.ts';
 import type { CaptureParts, CapturedKind } from './ticket-capture.tsx';
+import { unitRateStepsAtNew } from './unit-rate.tsx';
 import { listsRead, say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
@@ -192,8 +194,10 @@ export function NewTicket({
   const fix = useRef<Fix | null>(null);
   const placing = useRef<Promise<unknown>>(Promise.resolve());
   // The badge taken, as it was taken: "Same crew" opens the ticket in the same press that sets
-  // the badge, before the screen has it.
+  // the badge, before the screen has it; and whether it was the working crew kept, whose ticket
+  // goes straight on to the work (a new crew's to its photo first; ADR-592).
   const badgeTaken = useRef('');
+  const sameCrew = useRef(false);
   const certNumber = badge.trim();
   const known = lists.certifications.some((one) => one.certNumber === certNumber);
   const scanWords = makesNumber(kind)
@@ -217,9 +221,9 @@ export function NewTicket({
     step: 'open',
   });
 
-  // The next of a split's chain opens straight away under the same number and badge: a load's
-  // next property with its debris type and field tag, a haul-out's next pile with its debris
-  // type alone, since a pile is told apart by its field tag (ADR-295).
+  // The next of a split's chain opens straight away under the same number and badge, with the
+  // debris type of the property or pile before (ADR-295); no field tag is taken on a phone (the
+  // user, ADR-591).
   const chained = useRef(false);
   useEffect(() => {
     if (after === undefined || chained.current) return;
@@ -231,10 +235,7 @@ export function NewTicket({
         numberFrom: 'CHAINED',
         numberTypedReasonId: null,
         splitSuffix: nextSuffix(after.splitSuffix),
-        carried:
-          kind === 'COLLECTION'
-            ? { formDebrisTypeId: after.formDebrisTypeId, fieldTagId: after.fieldTagId }
-            : { formDebrisTypeId: after.formDebrisTypeId },
+        carried: { formDebrisTypeId: after.formDebrisTypeId },
       })
       .then((opened) => {
         onOpened(opened, false);
@@ -254,6 +255,7 @@ export function NewTicket({
       numberFrom: numbered.from,
       numberTypedReasonId: numbered.reasonId,
       splitSuffix: split ? 'A' : '',
+      ...(unitRate ? { step: sameCrew.current ? 'work' : 'crew' } : {}),
     });
     onOpened(opened, false);
   };
@@ -323,6 +325,9 @@ export function NewTicket({
     ...(step === 'question' ? (['question'] as const) : []),
   ];
   const place = Math.max(0, order.indexOf(step));
+  // Unit rate's New is all its first step, the crew, of the ticket's own steps (ADR-592).
+  const shownStep = unitRate ? 1 : place + 1;
+  const shownSteps = unitRate ? unitRateStepsAtNew(lists) : order.length;
   const back = () => {
     const before = order[place - 1];
     if (before === undefined) onCancel();
@@ -335,8 +340,8 @@ export function NewTicket({
         standing={standing}
         title={title}
         titleId={titleId}
-        step={place + 1}
-        steps={order.length}
+        step={shownStep}
+        steps={shownSteps}
         onBack={back}
         actions={actions}
       >
@@ -384,6 +389,7 @@ export function NewTicket({
             main
             wide
             onPress={() => {
+              sameCrew.current = true;
               setBadge(crew);
               badged(crew);
             }}
@@ -393,6 +399,7 @@ export function NewTicket({
           <Button
             wide
             onPress={() => {
+              sameCrew.current = false;
               setBadge('');
               setStep('badge');
             }}

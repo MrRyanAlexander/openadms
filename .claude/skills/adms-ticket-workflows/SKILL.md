@@ -201,8 +201,8 @@ disposal sites (ADR-156).
 - the certification, from the badge;
 - the start and end of loading: times, GPS (**Capture GPS**) and the address (**Look up address**
   when online, else the street number and name typed) (ADR-111);
-- the **debris type**, picked on Complete from the load form's list (ADR-207, 211), and optionally a
-  **field tag** (ADR-218);
+- the **debris type**, picked on Complete from the load form's list (ADR-207, 211); ⚠️ no **field
+  tag** on a phone since ADR-591 (the user; KD-80);
 - on an ROE project, the **ROE** (ADR-149); on a split, the property's **estimate** in CY (ADR-055);
 - on a load that carries tickets, **the tickets it carries**, by number (§4.2b);
 - **waypoints**, marked while the truck loads (**"Mark waypoint"**: the time and whatever fix, in
@@ -318,7 +318,7 @@ contrast, is judged at the tower after settling on the drive in.
 | Site | from the phone's assignment: the haul-out's **from site** (ADR-195) | from the phone's assignment (ADR-195) |
 | Certification | badge scan | badge scan |
 | Debris type | picked from the haul-out form (Mulch, Ash…) | picked on its own; compared |
-| Field tag | optional (agent default, ADR-218) | none |
+| Field tag | ⚠️ none on a phone since ADR-591 (was optional, ADR-218) | none |
 | Quantity | **the load call, always**: it can't know where the truck goes (ADR-013, 227) | none, or the **scale weight** where its site's lookup (§4.2, read from the haul-out form's rules) says the haul-out is paid by weight (ADR-223, 243) |
 | Also | makes the number; prints (ADR-115); start and end GPS and times; photos of the load | end GPS against the site's area; times; photos of the empty bed: it dumped and left empty |
 
@@ -351,9 +351,8 @@ gives. **User, 2026-10-01:** "Each new pile or whatever you wanna call it, they 
 
 - **N haul-out collection events, one haul-out disposal event**: `-A`, `-B`, `-C`…, grouped on the
   base number; the first is `-A`, never bare; the driver carries the base number (as §4.2a).
-- **Each pile's event** has its own times and GPS, its own debris type and, to tell the pile, its
-  **field tag** from the project's list (*agent default:* the firm adds its areas there; no new
-  list).
+- **Each pile's event** has its own times and GPS, its own debris type; ⚠️ a pile is told by its
+  suffix, never a field tag taken on the phone (the user, ADR-591; KD-80).
 - **Each records a running load call**: how full the container is after that pile. **The last one
   is the haul-out's load call.** No estimate is taken.
 - **A pile's part is what it added**: its call less the call before it. **Its share = that part ÷
@@ -387,7 +386,7 @@ Hangers, Leaners, Stumps…); then counts, measures or lists items as the kind o
 the work details (ADR-207, 213). **User, 2026-09-28 (Q-199):** "When a phone is setup for (LHS -
 leaning trees, hangers, stumps), the monitor only sees what you know they see (Leaner, Hanger,
 Stump) in a list of options. They measure it." Also on the field event: the GPS, times, photos, an
-optional field tag (ADR-218), the ROE on an ROE project (ADR-149), the survey number on a stump
+⚠️ no field tag (ADR-591), the ROE on an ROE project (ADR-149), the survey number on a stump
 (§4.5d). Where the pay item allows it, the monitor may **mark the work ineligible**, and the ticket
 is flagged (ADR-210).
 

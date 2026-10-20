@@ -3,8 +3,9 @@
 // 032, 055, 083, 111, 119, 207, 218, 477, 571, 573, 581). New, the open ticket and submitted are
 // every capture's (`new-ticket.tsx`, `ticket-capture.tsx`).
 //
-// **Complete**: the debris type and the field tag, each picked by name (ADR-207, 218; invariant
-// 20); for a split's property, its ROE and its estimate (ADR-032, 055); where it was collected
+// **Complete**: the debris type, picked by name (ADR-207; invariant 20), and never a field tag
+// (the user, ADR-591); for a split's property, its ROE and its estimate (ADR-032, 055); where it
+// was collected
 // (GPS, then the address looked up or typed: ADR-111, 119); photos; **the review, every value
 // once, the only "is this right?"** (the user, Q-215, ADR-573), the photographs themselves; then
 // **submitted, sealed for the monitor** (ADR-477).
@@ -30,7 +31,7 @@ import { counted, say, words } from './words.ts';
 
 const said = words.capture;
 
-const completeSteps = ['debris', 'tag', 'roe', 'estimate', 'place', 'photos', 'review'] as const;
+const completeSteps = ['debris', 'roe', 'estimate', 'place', 'photos', 'review'] as const;
 type CompleteStep = (typeof completeSteps)[number];
 
 // The steps a ticket's Complete takes: an ROE where it is a split's property or the phone holds
@@ -139,34 +140,6 @@ export function CompleteCollection({
           picked={now.formDebrisTypeId}
           onPick={(picked) => {
             void changed({ formDebrisTypeId: picked }).then(onward);
-          }}
-        />,
-      );
-    case 'tag':
-      return frame(
-        said.tag.title,
-        <>
-          {now.fieldTagId === null ? null : (
-            <Button main wide onPress={onward}>
-              {said.next}
-            </Button>
-          )}
-          <Button
-            main={now.fieldTagId === null}
-            wide
-            onPress={() => {
-              void changed({ fieldTagId: null }).then(onward);
-            }}
-          >
-            {said.tag.none}
-          </Button>
-        </>,
-        <ListPicker
-          labelledBy={titleId}
-          choices={lists.fieldTags.map(({ id, name }) => ({ key: id, label: name }))}
-          picked={now.fieldTagId}
-          onPick={(picked) => {
-            void changed({ fieldTagId: picked }).then(onward);
           }}
         />,
       );
@@ -317,8 +290,6 @@ export function CompleteCollection({
             </dd>
             <dt>{said.review.debris}</dt>
             <dd>{named(lists.debrisTypes.LOAD, now.formDebrisTypeId)}</dd>
-            <dt>{said.review.tag}</dt>
-            <dd>{named(lists.fieldTags, now.fieldTagId)}</dd>
             {steps.includes('roe') ? (
               <>
                 <dt>{said.review.roe}</dt>

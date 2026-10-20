@@ -553,10 +553,6 @@
     "debris": {
       "title": "Debris type"
     },
-    "tag": {
-      "title": "Field tag",
-      "none": "No field tag"
-    },
     "roe": {
       "title": "Which ROE is this load for?",
       "typeIt": "Or type the ROE number",
@@ -643,8 +639,7 @@
       "back": "Back to the ticket"
     },
     "stages": {
-      "title": "The work, stage by stage",
-      "about": "Take each photo when the work gets there. Leave the ticket between stages and come back to it from home.",
+      "about": "Do each part when the work gets there. Leave the ticket between them and open it again from home.",
       "names": {
         "PRE_WORK": "Pre-work",
         "MEASUREMENT": "Measurement",
@@ -668,14 +663,15 @@
         "MEASUREMENT": "Measurement photo: done. Take again",
         "POST_WORK": "Post-work photo: done. Take again"
       },
-      "measure": "The measurement: to do",
-      "measured": "The measurement: {measured}. Change",
+      "measure": "Measurement: to do",
+      "measured": "Measurement: {measured}. Change",
+      "measurePhotoTitle": "Measurement photo",
+      "measurePhotoAbout": "Photograph the tape on the work, then enter what it reads.",
       "open": "Open the {stage} photo",
       "next": "Next: {stage}",
       "allDone": "All three stages done",
       "photosTitle": "The work’s photos",
-      "notTaken": "No {stage} photo taken",
-      "otherPhotos": "Other photos"
+      "notTaken": "No {stage} photo taken"
     },
     "camera": {
       "title": "Camera",
@@ -694,7 +690,6 @@
       "number": "Ticket number",
       "typed": "Typed: {reason}",
       "debris": "Debris type",
-      "tag": "Field tag",
       "roe": "ROE",
       "estimate": "Estimate",
       "estimateCy": "{estimate} CY",
@@ -742,10 +737,10 @@
       "home": "Home"
     },
     "crew": {
-      "title": "The working crew",
-      "about": "Your working crew stays until you scan another crew’s badge.",
+      "title": "The crew",
+      "about": "Use the same crew as your last ticket, or scan a new crew’s badge.",
       "same": "Same crew: {number}",
-      "change": "Change crew",
+      "change": "New crew: scan its badge",
       "photoTitle": "Photo of the crew",
       "photoAbout": "Take a photo of the crew at work, with its truck or machine."
     },

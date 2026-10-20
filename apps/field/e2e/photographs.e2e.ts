@@ -110,7 +110,6 @@ test('AC-04-79, AC-11-44, AC-11-68, AC-11-78: Ana takes two photographs from the
   // Completed and submitted.
   await page.getByRole('button', { name: said.open.complete }).click();
   await page.getByRole('option', { name: 'Vegetative', exact: true }).click();
-  await page.getByRole('button', { name: said.tag.none }).click();
   await page.getByRole('button', { name: said.place.capture }).click();
   await page.getByLabel(said.place.typed).fill('14 Heron St');
   await page.getByRole('button', { name: said.next }).click();

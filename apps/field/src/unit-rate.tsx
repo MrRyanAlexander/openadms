@@ -1,32 +1,35 @@
-// A unit rate ticket's Complete, on the phone (adms-field-app §4A.4, §4A.6; adms-ticket-workflows
-// §4.5; BACKLOG 3.5.3; REQ-112b, 306, 320; AC-04-70, AC-11-43, 78, 79; ADR-111, 157, 177, 198,
-// 207, 210, 213, 477, 571, 573, 583). New, the open ticket and submitted are every capture's
-// (`new-ticket.tsx`, `ticket-capture.tsx`).
+// A unit rate ticket's steps, on the phone (adms-field-app §4A.4, §4A.6; adms-ticket-workflows
+// §4.5; BACKLOG 3.5.3; REQ-112b, 306, 320; AC-04-70, AC-11-43, 78, 79, 90, 91; ADR-111, 157, 177,
+// 198, 207, 210, 213, 477, 571, 573, 583, 590…592). New takes the crew (`new-ticket.tsx`), and the
+// ticket comes straight here, never to a load's open ticket (the user, ADR-592).
 //
-// **Complete**: the working crew shown, and its photo; **the work picked by its payable type, by
-// name**, each once (ADR-207, 213); its field tag; then **the kind of work's own screen** (the
-// domain's `PhoneUnitRate`, REQ-112b): a count where it isn't always one; a tree measured, around
-// or across, in inches to a tenth (ADR-177); a stump's diameter two feet up, its root ball, whether
-// half or more is exposed and its survey number (ADR-198); items with a count each, or with hours
-// each to the quarter hour (ADR-084). **The pay item is worked out from the bands as the work is
-// entered** and kept on the ticket to print: **never shown, nor any rate** (invariant 20;
-// AC-11-43). "Ineligible" is offered where that pay item allows the monitor to mark it (ADR-210);
-// an ROE where the phone holds the project's; **one point**, where the work was done (REQ-306);
-// photos; **the review, every value once, the crew first, and submitted for that crew**: its
-// confirmation on each completion (REQ-320; the user, Q-215, ADR-573).
+// **The steps** (the user, ADR-592): **the crew** (a new crew's photo; the working crew kept goes
+// on past it); **what work it is, by its payable type, by name**, each once (ADR-207, 213), so it
+// sets up what comes next; never a field tag (the user, ADR-591); then **the kind of work's own
+// screen** (the domain's `PhoneUnitRate`, REQ-112b): a count where it isn't always one; a tree
+// measured, around or across, in inches to a tenth (ADR-177); a stump's diameter two feet up, its
+// root ball, whether half or more is exposed and its survey number (ADR-198); items with a count
+// each, or with hours each to the quarter hour (ADR-084). **The pay item is worked out from the
+// bands as the work is entered** and kept on the ticket to print: **never shown, nor any rate**
+// (invariant 20; AC-11-43). "Ineligible" is offered where that pay item allows the monitor to mark
+// it (ADR-210); an ROE where the phone holds the project's; **one point**, where the work was done
+// (REQ-306); photos; **the review, every value once, the crew first, and submitted for that
+// crew**: its confirmation on each completion (REQ-320; the user, Q-215, ADR-573).
 //
-// **Work photographed by stage** (the user, ADR-590; AC-11-90, 91): where the kind of work says so
-// (Hangers, Leaners and Stumps as shipped), the work picked opens **its stages**: before the work,
-// the measurement and after it, each a button to do in the notice colour or done in the good
-// colour, with its word and icon (never colour alone), the next one to do edged. The ticket is
-// left between them and opened again from home where it was left, home saying the next stage;
-// the measurement's own steps go from its stage and come back to it. Each stage has one
-// photograph, taken again in its place. **The review shows each stage's photograph large, under
-// its stage**, then any others.
+// **Work photographed by stage** (the user, ADR-590, 592; AC-11-90, 91): where the kind of work
+// says so (Hangers, Leaners and Stumps as shipped), the work picked opens **the ticket's
+// dashboard**: its crew, its number and three buttons, pre-work, measurement and post-work, each
+// to do in the notice colour or done in the good colour, with its word and icon (never colour
+// alone), the next one to do edged. **Each opens its own part and drops back to the dashboard once
+// done**: the pre-work and post-work photos straight from the camera; the measurement its photo,
+// then the kind of work's own screen. The ticket is left between them and opened again from home
+// at its dashboard, home saying the next stage. Each stage has one photograph, taken again in its
+// place; there is no step for other photos. Complete goes on to where the work was done and the
+// review, which shows **each stage's photograph large, under its stage**.
 //
 // Nothing here waits on the server (ADR-030; AC-11-05), and nothing is refused (ADR-052): a value
-// left out is flagged after sync, and a stage left without its photograph never holds Next. Every
-// value entered is kept on the phone at once.
+// left out is flagged after sync, and a stage left without its photograph never holds Complete.
+// Every value entered is kept on the phone at once.
 import type { PhoneListsRecord } from '@open-adms/contracts';
 import {
   PhoneUnitRate,
@@ -40,6 +43,7 @@ import { Button as Pressable } from 'react-aria-components';
 
 import { TakePhoto } from './camera.tsx';
 import {
+  CancelTicket,
   PhotoDrawn,
   photoLabel,
   PlaceFields,
@@ -60,15 +64,15 @@ import {
 import type { HeldLists } from './phone/lists.ts';
 import type { PhoneTicket, TicketDetails, TicketItem } from './phone/tickets.ts';
 import type { CaptureParts } from './ticket-capture.tsx';
-import { say, words } from './words.ts';
+import { say, timeOfDay, words } from './words.ts';
 
 const said = words.capture;
 
 type UnitRateStep =
   | 'crew'
   | 'work'
-  | 'tag'
   | 'stages'
+  | 'measurePhoto'
   | 'count'
   | 'how'
   | 'inches'
@@ -103,27 +107,36 @@ function kindStepsOf(asked: UnitRateAsked | null): UnitRateStep[] {
   return kind;
 }
 
-// The steps this ticket takes, by the work picked and what was entered: work photographed by
-// stage opens its stages, and its own screen's steps go from the measurement's stage and come
-// back to it (ADR-590).
+// The steps this ticket takes, by the work picked and what was entered (ADR-592): the crew, the
+// work, then the ticket's dashboard where the work is photographed by stage (its measurement's
+// own steps go from it, `measuringOf`), or else the kind of work's own screen; where it was, and
+// the review. Photos are a step of their own only for work not photographed by stage.
 function stepsOf(
   asked: UnitRateAsked | null,
   ineligible: boolean,
   lists: PhoneListsRecord,
 ): UnitRateStep[] {
+  const staged = asked?.photosByStage === true;
   return [
     'crew',
     'work',
-    ...(lists.fieldTags.length === 0 ? [] : (['tag'] as const)),
-    ...(asked?.photosByStage === true ? (['stages'] as const) : []),
-    ...kindStepsOf(asked),
+    ...(staged ? (['stages'] as const) : kindStepsOf(asked)),
     ...(ineligible ? (['ineligible'] as const) : []),
     ...(lists.roes.length === 0 ? [] : (['roe'] as const)),
     'place',
-    'photos',
+    ...(staged ? [] : (['photos'] as const)),
     'review',
   ];
 }
+
+// How many steps New counts the crew as the first of, before the work is picked.
+export const unitRateStepsAtNew = (lists: PhoneListsRecord): number =>
+  stepsOf(null, false, lists).length;
+
+// The measurement's own steps, from the dashboard of work photographed by stage and back to it:
+// its photograph, then the kind of work's own screen (ADR-592).
+const measuringOf = (asked: UnitRateAsked | null): UnitRateStep[] =>
+  asked?.photosByStage === true ? ['measurePhoto', ...kindStepsOf(asked)] : [];
 
 // What the measurement's stage says was entered, in the review's words; none until the kind of
 // work's own screen has what it asks (a stump's survey number may stay blank).
@@ -190,7 +203,6 @@ export function CompleteUnitRate({
   ticket,
   held,
   standing,
-  onBackToTicket,
   onPhoto,
   onSubmitted,
   onLeave,
@@ -200,7 +212,6 @@ export function CompleteUnitRate({
   readonly ticket: PhoneTicket;
   readonly held: HeldLists;
   readonly standing: Standing;
-  readonly onBackToTicket: () => void;
   readonly onPhoto: (photoId: string) => void;
   readonly onSubmitted: () => void;
   readonly onLeave: () => void;
@@ -218,8 +229,10 @@ export function CompleteUnitRate({
   const ineligible =
     now.payableTypeId !== null && phone.mayMarkIneligible(now.payableTypeId, measurement);
   const steps = stepsOf(asked, ineligible, lists);
-  const left = steps.find((step) => step === ticket.step);
+  const measuring = measuringOf(asked);
+  const left = [...steps, ...measuring].find((step) => step === ticket.step);
   const [step, setStep] = useState<UnitRateStep>(left ?? 'crew');
+  const [cancelling, setCancelling] = useState(false);
   const [count, setCount] = useState(shown(now.unitCount));
   const [inches, setInches] = useState(shown(now.measurementInches));
   const [rootBall, setRootBall] = useState(shown(now.rootBallInches));
@@ -233,7 +246,8 @@ export function CompleteUnitRate({
   );
   const [submitting, setSubmitting] = useState(false);
   const [notKept, setNotKept] = useState<string | null>(null);
-  const place = Math.max(0, steps.indexOf(step));
+  // The measurement's own steps count as the dashboard's.
+  const place = Math.max(0, steps.indexOf(measuring.includes(step) ? 'stages' : step));
   const itemNames = lists.itemNames.filter(
     ({ kindOfWorkId }) => kindOfWorkId === asked?.kindOfWork.id,
   );
@@ -266,36 +280,38 @@ export function CompleteUnitRate({
     setStep(to);
     void changed({ step: to });
   };
-  // On to the step after this one, among the steps as they stand once a change is kept.
+  // On to the step after this one, among the steps as they stand once a change is kept: the
+  // measurement's last step back to the dashboard.
   const onward = (after: PhoneTicket = now) => {
     const askedNow = after.payableTypeId === null ? null : phone.asks(after.payableTypeId);
     const measuredNow =
       after.measurementInches === null || after.measuredAs === null
         ? null
         : { inches: after.measurementInches, measuredAs: after.measuredAs };
+    const measuringNow = measuringOf(askedNow);
+    if (measuringNow.includes(step)) {
+      go(measuringNow[measuringNow.indexOf(step) + 1] ?? 'stages');
+      return;
+    }
     const stepsNow = stepsOf(
       askedNow,
       after.payableTypeId !== null && phone.mayMarkIneligible(after.payableTypeId, measuredNow),
       lists,
     );
-    // Work photographed by stage: its own screen's last step goes back to the stages, and the
-    // stages on past that screen's steps.
-    const kindNow = kindStepsOf(askedNow);
-    if (askedNow?.photosByStage === true && kindNow.length > 0 && step === kindNow.at(-1)) {
-      go('stages');
+    go(stepsNow[stepsNow.indexOf(step) + 1]);
+  };
+  // Back a step: the measurement's first back to the dashboard. The crew has none: it is the
+  // first step, and the ticket is left or cancelled from it.
+  const back = () => {
+    if (measuring.includes(step)) {
+      go(measuring[measuring.indexOf(step) - 1] ?? 'stages');
       return;
     }
-    const from = step === 'stages' ? (kindNow.at(-1) ?? step) : step;
-    go(stepsNow[stepsNow.indexOf(from) + 1]);
+    go(steps[place - 1]);
   };
-  const back = () => {
-    const before = steps[place - 1];
-    const kind = kindStepsOf(asked);
-    if (before === undefined) onBackToTicket();
-    else if (asked?.photosByStage === true && kind.includes(before) && !kind.includes(step)) {
-      go('stages');
-    } else go(before);
-  };
+  // A screen of the ticket's: its actions, then "Leave it for now", and on the crew, the work and
+  // the dashboard "Cancel the ticket" too.
+  const cancellable = step === 'crew' || step === 'work' || step === 'stages';
   const frame = (title: string, actions: ReactNode, children?: ReactNode) => (
     <main data-screen="complete-unit-rate" className="screen">
       <Step
@@ -304,13 +320,23 @@ export function CompleteUnitRate({
         titleId={titleId}
         step={place + 1}
         steps={steps.length}
-        onBack={back}
+        onBack={step === 'crew' ? undefined : back}
         actions={
           <>
             {actions}
             <Button wide onPress={onLeave}>
               {said.leave}
             </Button>
+            {cancellable ? (
+              <Button
+                wide
+                onPress={() => {
+                  setCancelling(true);
+                }}
+              >
+                {said.open.cancel}
+              </Button>
+            ) : null}
           </>
         }
       >
@@ -338,8 +364,8 @@ export function CompleteUnitRate({
     if (after !== undefined) setNow(after);
     return kept;
   };
-  // Work photographed by stage: its stages' photographs apart, the strip showing the others in
-  // what is left of the ticket's eight.
+  // Work photographed by stage: its stages' photographs apart, the strip showing the others (the
+  // crew's) in what is left of the ticket's eight.
   const staged = asked?.photosByStage === true;
   const stagesTaken = staged ? now.photos.filter(({ stage }) => stage !== undefined) : [];
   const others = { ...now, photos: now.photos.filter((photo) => !stagesTaken.includes(photo)) };
@@ -354,6 +380,25 @@ export function CompleteUnitRate({
         onPhoto(photo.id);
       }}
     />
+  );
+  // The photographs that are no stage's (the crew's), each pressed to open it full size; nothing
+  // more taken here.
+  const othersShown = (
+    <ul className="photo-strip-photos">
+      {others.photos.map((photo) => (
+        <li key={photo.id}>
+          <Pressable
+            className="photo-open"
+            aria-label={say(said.photos.open, { number: now.photos.indexOf(photo) + 1 })}
+            onPress={() => {
+              onPhoto(photo.id);
+            }}
+          >
+            <PhotoDrawn tickets={parts.tickets} photo={photo} label={photoLabel(now, photo)} />
+          </Pressable>
+        </li>
+      ))}
+    </ul>
   );
   // A stage's photograph, pressed to open it full size.
   const stageShown = (stage: PhotoStage, large: boolean) => {
@@ -437,6 +482,22 @@ export function CompleteUnitRate({
   const named = (list: readonly { id: string; name: string }[], id: string | null) =>
     list.find((one) => one.id === id)?.name ?? said.review.none;
 
+  if (cancelling) {
+    return (
+      <CancelTicket
+        ticket={now}
+        standing={standing}
+        onKeep={() => {
+          setCancelling(false);
+        }}
+        onCancel={() => {
+          void parts.tickets.cancel(now.id).then(onLeave);
+        }}
+        below={below}
+      />
+    );
+  }
+
   switch (step) {
     case 'crew':
       return frame(
@@ -461,56 +522,47 @@ export function CompleteUnitRate({
           : next(true, () => {
               onward();
             }),
-        <ListPicker
-          labelledBy={titleId}
-          choices={phone.payableTypes().map(({ id, name }) => ({ key: id, label: name }))}
-          picked={now.payableTypeId}
-          onPick={picked}
-        />,
-      );
-    case 'tag':
-      return frame(
-        said.tag.title,
         <>
-          {now.fieldTagId === null
-            ? null
-            : next(true, () => {
-                onward();
-              })}
-          <Button
-            main={now.fieldTagId === null}
-            wide
-            onPress={() => {
-              void changed({ fieldTagId: null }).then(onward);
-            }}
-          >
-            {said.tag.none}
-          </Button>
+          <Banner tone="info">
+            <p>{say(words.home.open.crew, { truck: now.certNumber, number: now.ticketNumber })}</p>
+          </Banner>
+          <ListPicker
+            labelledBy={titleId}
+            choices={phone.payableTypes().map(({ id, name }) => ({ key: id, label: name }))}
+            picked={now.payableTypeId}
+            onPick={picked}
+          />
         </>,
-        <ListPicker
-          labelledBy={titleId}
-          choices={lists.fieldTags.map(({ id, name }) => ({ key: id, label: name }))}
-          picked={now.fieldTagId}
-          onPick={(tag) => {
-            void changed({ fieldTagId: tag }).then(onward);
-          }}
-        />,
       );
     case 'stages': {
-      const kind = kindStepsOf(asked);
       const measured = measuredOf(now, asked);
       const nextStage = photoStages.find((stage) => !stageDone(now, asked, stage));
       return frame(
-        said.stages.title,
-        next(true, () => {
-          onward();
+        say(said.open.title, {
+          kind: named(phone.payableTypes(), now.payableTypeId),
+          number: now.ticketNumber,
         }),
+        <Button
+          main
+          wide
+          onPress={() => {
+            onward();
+          }}
+        >
+          {said.open.complete}
+        </Button>,
         <>
+          <TruckFacts certNumber={now.certNumber} lists={lists} />
+          <p>
+            {say(said.open.started, { time: timeOfDay(new Date(now.startedAt), now.timeZone) })}
+          </p>
           <p>{said.stages.about}</p>
           <ol className="stages">
             {photoStages.map((stage, index) => {
               const photo = stagePhoto(now, stage);
               const done = stageDone(now, asked, stage);
+              const tone = done ? 'done' : 'toDo';
+              const icon = done ? <Tick /> : stage === 'MEASUREMENT' ? <Clock /> : <CameraIcon />;
               return (
                 <li key={stage} className={stage === nextStage ? 'stage stage-next' : 'stage'}>
                   <div className="stage-head">
@@ -530,33 +582,63 @@ export function CompleteUnitRate({
                     </span>
                   </div>
                   {stageShown(stage, false)}
-                  <TakePhoto
-                    camera={parts.camera}
-                    tone={photo === undefined ? 'toDo' : 'done'}
-                    icon={photo === undefined ? <CameraIcon /> : <Tick />}
-                    isDisabled={photo === undefined && now.photos.length >= ticketPhotosAtMost}
-                    onTaken={(bytes) => taken(bytes, stage)}
-                  >
-                    {photo === undefined ? said.stages.take[stage] : said.stages.again[stage]}
-                  </TakePhoto>
-                  {stage === 'MEASUREMENT' && kind[0] !== undefined ? (
+                  {stage === 'MEASUREMENT' ? (
+                    // The measurement's own part: its photograph, then what it measured, and back.
                     <Button
                       wide
-                      tone={measured === null ? 'toDo' : 'done'}
-                      icon={measured === null ? <Clock /> : <Tick />}
+                      tone={tone}
+                      icon={icon}
                       onPress={() => {
-                        go(kind[0]);
+                        go('measurePhoto');
                       }}
                     >
                       {measured === null
                         ? said.stages.measure
                         : say(said.stages.measured, { measured })}
                     </Button>
-                  ) : null}
+                  ) : (
+                    // Before and after the work: the camera straight away, and back here.
+                    <TakePhoto
+                      camera={parts.camera}
+                      tone={tone}
+                      icon={icon}
+                      isDisabled={photo === undefined && now.photos.length >= ticketPhotosAtMost}
+                      onTaken={(bytes) => taken(bytes, stage)}
+                    >
+                      {photo === undefined ? said.stages.take[stage] : said.stages.again[stage]}
+                    </TakePhoto>
+                  )}
                 </li>
               );
             })}
           </ol>
+        </>,
+      );
+    }
+    case 'measurePhoto': {
+      const photo = stagePhoto(now, 'MEASUREMENT');
+      return frame(
+        said.stages.measurePhotoTitle,
+        next(true, () => {
+          onward();
+        }),
+        <>
+          <p>{said.stages.measurePhotoAbout}</p>
+          {stageShown('MEASUREMENT', true)}
+          <TakePhoto
+            camera={parts.camera}
+            tone={photo === undefined ? 'toDo' : 'done'}
+            icon={photo === undefined ? <CameraIcon /> : <Tick />}
+            isDisabled={photo === undefined && now.photos.length >= ticketPhotosAtMost}
+            onTaken={async (bytes) => {
+              const kept = await taken(bytes, 'MEASUREMENT');
+              // Taken: on to what it measured (or back to the dashboard where nothing is asked).
+              if (kept) onward();
+              return kept;
+            }}
+          >
+            {photo === undefined ? said.stages.take.MEASUREMENT : said.stages.again.MEASUREMENT}
+          </TakePhoto>
         </>,
       );
     }
@@ -787,7 +869,7 @@ export function CompleteUnitRate({
       );
     case 'photos':
       return frame(
-        staged ? said.stages.otherPhotos : said.photos.title,
+        said.photos.title,
         next(true, () => {
           onward();
         }),
@@ -840,12 +922,6 @@ export function CompleteUnitRate({
             </dd>
             <dt>{said.review.work}</dt>
             <dd>{named(phone.payableTypes(), now.payableTypeId)}</dd>
-            {lists.fieldTags.length === 0 ? null : (
-              <>
-                <dt>{said.review.tag}</dt>
-                <dd>{named(lists.fieldTags, now.fieldTagId)}</dd>
-              </>
-            )}
             {itemized ? null : (
               <>
                 <dt>{said.review.howMany}</dt>
@@ -949,8 +1025,12 @@ export function CompleteUnitRate({
                   </figure>
                 ))}
               </div>
-              <h2>{said.stages.otherPhotos}</h2>
-              {others.photos.length === 0 ? <p>{said.review.none}</p> : photos}
+              {others.photos.length === 0 ? null : (
+                <>
+                  <h2>{said.review.photos}</h2>
+                  {othersShown}
+                </>
+              )}
             </>
           ) : (
             <>

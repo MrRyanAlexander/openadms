@@ -77,6 +77,7 @@ import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
 import type { Actor, Database, Prisma } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
+import { localMapServers } from './map-servers.ts';
 import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
 import { ToldToWait, type PhoneServer } from './device.ts';
 import type { SoftwareKey } from './software-key.ts';
@@ -109,7 +110,8 @@ interface Clock {
   now(): Date;
 }
 
-// No story looks an address up through its API: the address server is the API's own tests'.
+// No story looks an address up through its API: the address server is the API's own tests', and
+// the field app's browser world's (ADR-593), which asks the local stack's.
 const noAddresses: Addresses = {
   addressOf: () => Promise.reject(new Error('A story’s API asks no address server.')),
 };
@@ -574,6 +576,10 @@ export interface ListeningParts {
   readonly log: (line: string) => void;
   // How long each piece of work waited for a connection, where a story counts it (ADR-524).
   readonly waited?: number[];
+  // Whether a phone's address lookup asks the local stack's own address server, as an
+  // installation's API asks its own: the field app's browser world's (`pnpm field:try`, the
+  // browser tests; ADR-593). None for a story's phones.
+  readonly asksAddresses?: boolean;
 }
 
 // The API's own process, `ApiProcess` with `ApiModule` as `apps/api/src/main.ts` starts it, on a
@@ -582,6 +588,7 @@ export interface ListeningParts {
 // port is told so.
 export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
   const { database, policy, media, clock, corsOrigins, log, waited } = parts;
+  const map = parts.asksAddresses === true ? localMapServers() : undefined;
   // The policy's pool, as an installation's API runs on (ADR-419, 524).
   const pool = {
     maxConnections: policy.databasePoolConnections,
@@ -612,8 +619,8 @@ export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
       smtpAddress: undefined,
       smtpCaFile: null,
       mailFrom: 'open-adms@adms.localhost',
-      addressesUrl: 'https://addresses.adms.localhost',
-      mapCaFile: null,
+      addressesUrl: map?.addresses ?? 'https://addresses.adms.localhost',
+      mapCaFile: map?.caFile ?? null,
       mapServersAt: undefined,
       esriPrivateHosts: [],
       esriCaFile: null,
@@ -635,7 +642,7 @@ export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
       viewerDatabase: database.openViewer(pool),
       mail: new NoMail(),
       clock,
-      addresses: noAddresses,
+      ...(map === undefined ? { addresses: noAddresses } : {}),
       media,
     },
   );

@@ -241,7 +241,7 @@ Every step writes `AuditRecord`. A unit rate ticket skips pairing; a form never 
 | **Dispatch board** | The back office's daily plan of assignments (replaces the dispatch spreadsheet); shows planned against actual as views, never ticket flags (ADR-240) |
 | **Disposal site** | A **site type** (TDSR/DMS · Final Disposal · Transfer Station · Other) plus facts: **Haul-outs leave here** (haul-outs leave from it), **Takes loads** (loads end there), **Charges a tipping fee** (the firm writes the site's tipping fee pay item from it), **Ineligible site** (flagged, still bills). A permit, GPS, an area (circle or shape), activation and close dates. A ticket at a site without the matching fact is flagged (ADR-111, 136, 145, 173, 215, 222) |
 | **Field event** | What one monitor records under a ticket number: one thing witnessed at one place and time. Kinds: collection `COL`, disposal `DIS`, haul-out collection `HOC`, haul-out disposal `HOD`, unit rate `URT`. Evidence: received at sync, never edited by the monitor after, corrected in place by permission. Everything the system writes is drawn from events. Never a bare "event" (the disaster is the *declaration event*) (ADR-236) |
-| **Field tag** | The legacy "Special Class": a project list the firm fills, starting empty; the collecting or unit rate monitor may pick one (e.g. Mixed); read only by the *Field tag* rule criterion and exports (ADR-216, 218, 234) |
+| **Field tag** | The legacy "Special Class": a project list the firm fills, starting empty (e.g. Mixed); read only by the *Field tag* rule criterion and exports. **No monitor picks one on a phone** (the user, ADR-591); whether it stays as a back-office label is KD-80 (ADR-216, 218, 234, 591) |
 | **FDS / TDSR** | Final Disposal Site / Temporary Debris **Staging** and Reduction Site (DMS means the same). Debris is reduced at a TDSR and hauled out to an FDS; a haul-out never dumps at a TDSR (ADR-091, 226) |
 | **Flag** | How every problem is raised after setup: a plain message ("Ticket 101008: debris type mismatch. Flagged for review."), never a refusal. A reviewer fixes it or **accepts** it with a reason (ADR-052, 166) |
 | **Form** | The legacy "Document Format": a project picks one per document type (load, haul-out, unit rate, truck certificate…); debris types are added to it. Surveys, ROE forms and incidents may carry the firm's own fields (ADR-160, 211) |
@@ -378,6 +378,7 @@ What this page used to say, and why it changed. Never build from the left-hand s
   left and resumed, one open per truck on a phone (the user, ADR-209 → 571).
 - A number the phone made "shown and typed again" (ADR-573) → opens the ticket at once; only a
   pre-printed number typed by hand is typed again (the user, ADR-589).
+- "The collecting or unit rate monitor may pick a field tag" → no phone takes one (the user, ADR-591; KD-80).
 - "Reopenable until the monitor ends the shift", the phone's edit log (ADR-072, 240 (6)) → **sealed for
   the monitor once submitted on the phone**, synced or not; only the back office changes it; one not
   yet submitted stays open and theirs to adjust (ADR-477, the user, 2026-10-12).

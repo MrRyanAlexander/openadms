@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590; no field tag on a phone, unit rate's crew first and its dashboard, ADR-591, 592) -->
 
-> **This page states today's rules** (last changed by ADR-590, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-592, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -301,7 +301,7 @@ the current one, with fresh time and location; each asks **"what ROE is this tic
 monitor's **estimate** in CY for that property (ADR-032, 055). The chain closes out the way any
 collection does. **The driver carries one barcode, the base number**; the tower never sees the
 suffixes (`adms-exceptions` Scenario D). **A haul-out collection splits the same way** (ADR-295): each
-pile is the next event in the chain, with its own debris type and field tag, and instead of an
+pile is the next event in the chain, with its own debris type (no field tag, ADR-591), and instead of an
 estimate the monitor gives **the load call so far**; the last is the haul-out's.
 
 ## 4A.4 Capture rules
@@ -320,7 +320,7 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 | **Collection address**: "Capture GPS", then "Look up address" (our API asks our Nominatim server when online), else the street number and name typed | ADR-111, 119 |
 | A number **typed** because the barcode won't read is flagged, with a reason from the firm's list | ADR-111, 173 |
 | **A load that carries tickets**: the loading monitor adds each carried ticket by its number (painted on a stump, or the white goods ticket's); the tower counts | ADR-192, 204, 243 |
-| **Field tag**: optional, right after the debris type (collection, haul-out's loading end, unit rate); the tower doesn't take one | ADR-216, 218 |
+| **No field tag on a phone** (the user, ADR-591): **User, 2026-10-20:** "get rid of field tag on all ticket flow options **this is not how we want things**". No capture asks one; every field event a phone makes has none. The firm's list and the *Field tag* criterion stay for the back office until the user says (KD-80) | ADR-216, 218, 591 |
 | **Unit rate**: a crew badge scanned once stays the working crew until the monitor changes it; shown clearly and confirmed on each completion; where the pay item allows it the monitor may **mark the work ineligible** (flagged) | ADR-111, 210 |
 | **Measurement**: at chest height, the monitor says whether it's a **circumference or a diameter**; a stump is its diameter two feet up, never a circumference; the stump screen also takes the root ball's diameter, "half or more exposed" and the survey number | ADR-177, 187, 198 |
 | **Crew time**: items with hours to the quarter hour, the same screen shape as white goods | ADR-084 |
@@ -365,8 +365,7 @@ the monitor's newest unit rate ticket on the project on that phone** (whatever b
 New offers it first, "Same crew" or "Change crew", and the review submits "for crew 730417": its
 confirmation on each completion; a crew isn't held to one open ticket and is never keyed in by hand.
 The number is the phone's next of the unit rate series, always made there, opening at once (ADR-589). Complete:
-the crew shown with its photo, **the payable types each once, by name**, a field tag where the
-project has them, then **what the domain's `PhoneUnitRate` says the kind of work asks**: a count
+the crew shown with its photo, **the payable types each once, by name** (no field tag since ADR-591), then **what the domain's `PhoneUnitRate` says the kind of work asks**: a count
 unless every pay item of the payable type is always one; a tree measured around or across where one
 of them asks for it or has a band; Stumps (by its key) the diameter two feet up, the root ball,
 "half or more exposed" and the survey number; items with a count each, whole unless decimals are
@@ -394,6 +393,26 @@ stage**; one photograph a stage, taken again in its place; **nothing is held** f
 out; **the review shows each stage's photograph large under its name**. *Agent defaults:* where the
 setting lives; the measurement's steps from its stage; home's next stage; no flag yet for a missing
 stage.
+
+**Unit rate's steps, as the user laid them out** (ADR-592, amending ADR-583's New → open ticket →
+Complete and ADR-590's stages screen). **User, 2026-10-20:** "here is how it should go after
+clicking new unit rate ticket 1. the crew (take photo of crew or select use same crew (this should
+be the first step) 2. what work is it? (this should be the 2nd step so it sets up what shows next)
+… 3. we should see the view from #2 above, but it should have buttons for (pre, measure, post)
+that when clicked open that photo flow this should look like a dashboard … and when each part is
+done the user drops back to that dashboard page 4. where the work was done … 5. ***we do not need
+an add'l "other photos" option … 6. check the ticket". Built so: **the crew is step 1** ("Same
+crew: N", or "New crew: scan its badge"); the number made opens the ticket and it goes **straight
+on to its own steps, never to a load's open ticket**: a new crew to its photo, the kept crew to the
+work. **The work, step 2.** Work by stage then opens **the ticket's dashboard** ("Hangers 301001",
+the crew, when it began): **Pre-work and Post-work open the camera and drop back once taken;
+Measurement opens its photograph's screen, then the kind of work's own steps, then drops back**;
+Leave and Cancel on it (and on the crew and the work); home reopens it there; **Complete** goes on to
+"ineligible" where allowed, an ROE where held, where the work was done and the review. **No "Other
+photos" step** for work by stage; the review shows the stages' photographs large and the crew's
+below. Work not by stage keeps its steps in line (its screen, where, photos, the review). *Agent
+readings and defaults:* the kept crew's photo is not asked again (Back from the work reaches it);
+the dashboard's title and facts; the measurement's photograph before its numbers.
 
 ## 4A.5 Numbers, printing and scanning
 

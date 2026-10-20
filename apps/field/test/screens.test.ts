@@ -14,6 +14,8 @@ const tsx = (path: string, text: string) => ({ path, text });
 describe('AC-11-51: the screens of the field app', () => {
   it('AC-11-51: are read from its source, each named once by a literal', () => {
     expect(screensIn()).toEqual([
+      // A ticket cancelled, shared by the open ticket and unit rate's own steps (ADR-592).
+      'cancel-ticket',
       // Certifying (task 3.5.5, ADR-585).
       'certification-photo',
       'certification-submitted',
@@ -66,7 +68,6 @@ describe('AC-11-51: the screens of the field app', () => {
       // (task 3.5.2, ADR-582).
       'photo',
       'submitted',
-      'cancel-ticket',
       'open-ticket',
       'complete-disposal',
       'complete-haul-out',

@@ -1,26 +1,21 @@
 // Unit rate work, through the field app's screens (BACKLOG 3.5.3; ADR-111, 207, 213, 571, 573,
-// 583, 589, 590), in the run's own world (e2e/world-setup.ts) against the real API: Jo Kim on P1's
+// 583, 589…593), in the run's own world (e2e/world-setup.ts) against the real API: Jo Kim on P1's
 // unit rate work, every one of its unit rate pay items hers, with its two crews certified, the
 // bucket truck crew 730417 and the skid steer crew 730418 (the golden mission's 301001…301007, here
-// each phone's own block). Each ticket opens at New under the crew's badge, at once under the
-// phone's next number, never typed again (ADR-589); the crew stays hers and is confirmed on the
-// next; the work is picked by name, **hangers, leaners and stumps photographed by stage** (before,
-// the measurement, after: ADR-590), its kind of work's screen asks what it records, and the phone
-// works its pay item out from the bands, never showing it or a rate; it goes at the next sync as
-// the contract carries it, each stage's photograph saying its stage.
+// each phone's own block). **The crew is the first step** (the user, ADR-592): the working crew
+// kept, or a new crew's badge and its photo; the ticket opens at once under the phone's next
+// number, never typed again (ADR-589), and goes straight on to the work, never to a load's open
+// ticket; the work is picked by name, never a field tag (ADR-591); **hangers, leaners and stumps
+// open the ticket's dashboard**, pre-work, measurement and post-work, each dropping back to it
+// once done (ADR-590, 592); its kind of work's screen asks what it records, and the phone works
+// its pay item out from the bands, never showing it or a rate; where the work was done looked up
+// on the stack's own map (ADR-593); it goes at the next sync as the contract carries it, each
+// stage's photograph saying its stage.
 import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import {
-  enrolled,
-  filled,
-  openedUnder,
-  photographed,
-  recorded,
-  toApi,
-  type Asked,
-} from './phone-page.ts';
+import { enrolled, filled, photographed, recorded, toApi, type Asked } from './phone-page.ts';
 import { worldCast, worldOrigin, type CastMonitor } from './world.ts';
 
 const said = english.capture;
@@ -123,62 +118,82 @@ async function syncedNow(page: Page, asked: readonly Asked[]): Promise<number> {
   return before;
 }
 
-// New: the crew, either the working crew kept ("Same crew") or a badge scanned; the ticket opens
-// at once under the phone's next number, never typed again (ADR-589). The number it opened under.
+// A heading that is one of several words.
+const oneOf = (...said: readonly string[]) =>
+  new RegExp(`^(${said.map((one) => one.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})$`);
+
+// The number a unit rate ticket opened under, as its crew's line on its screen says it.
+async function openedFor(page: Page, crew: string): Promise<string> {
+  const line = page.getByText(
+    new RegExp(
+      `^${english.home.open.crew.replace('{truck}', crew).replace('{number}', String.raw`\d{6}`)}$`,
+    ),
+  );
+  await expect(line).toBeVisible();
+  return /\d{6}$/.exec((await line.textContent()) ?? '')?.[0] ?? '';
+}
+
+// New: the crew, the first step (ADR-592): the working crew kept ("Same crew"), straight on to the
+// work, or a new crew's badge scanned and its photo's step passed. The ticket opens at once under
+// the phone's next number, never typed again (ADR-589). The number it opened under.
 async function begun(page: Page, crew: { readonly same: string } | { readonly scan: string }) {
   await page.getByRole('button', { name: english.home.start.unitRate }).click();
   if ('same' in crew) {
     await expect(heading(page)).toHaveText(said.crew.title);
     await page.getByRole('button', { name: filled(said.crew.same, { number: crew.same }) }).click();
-  } else {
-    if ((await heading(page).textContent()) === said.crew.title) {
-      await page.getByRole('button', { name: said.crew.change }).click();
-    }
-    await expect(heading(page)).toHaveText(said.badge.crewTitle);
-    await page.getByLabel(said.badge.label).fill(crew.scan);
-    await page.getByRole('button', { name: said.badge.crewStart }).click();
+    await expect(heading(page)).toHaveText(said.work.title);
+    return openedFor(page, crew.same);
   }
-  const number = await openedUnder(page);
-  await expect(heading(page)).toHaveText(
-    filled(said.open.title, { kind: said.kinds.UNIT_RATE, number }),
-  );
+  await expect(heading(page)).toHaveText(oneOf(said.crew.title, said.badge.crewTitle));
+  if ((await heading(page).textContent()) === said.crew.title) {
+    await page.getByRole('button', { name: said.crew.change }).click();
+  }
+  await expect(heading(page)).toHaveText(said.badge.crewTitle);
+  await page.getByLabel(said.badge.label).fill(crew.scan);
+  await page.getByRole('button', { name: said.badge.crewStart }).click();
+  await expect(heading(page)).toHaveText(said.crew.photoTitle);
+  const number = await openedFor(page, crew.scan);
+  await page.getByRole('button', { name: said.next }).click();
+  await expect(heading(page)).toHaveText(said.work.title);
   return number;
 }
 
-// Complete, from the open ticket: the crew's photo step passed, the work picked, no field tag.
+// The work picked by name: no field tag is asked (ADR-591).
 async function workPicked(page: Page, work: string) {
-  await page.getByRole('button', { name: said.open.complete }).click();
-  await expect(heading(page)).toHaveText(said.crew.photoTitle);
-  await page.getByRole('button', { name: said.next }).click();
   await expect(heading(page)).toHaveText(said.work.title);
   await page.getByRole('option', { name: work, exact: true }).click();
-  await expect(heading(page)).toHaveText(said.tag.title);
-  await page.getByRole('button', { name: said.tag.none }).click();
 }
 
-// From its stages, the stage's photograph taken (ADR-590).
-async function staged(page: Page, stage: keyof typeof said.stages.take) {
-  await expect(heading(page)).toHaveText(said.stages.title);
+// The ticket's dashboard, for work photographed by stage (ADR-590, 592): its heading the work and
+// the number.
+async function onDashboard(page: Page, work: string, number: string) {
+  await expect(heading(page)).toHaveText(filled(said.open.title, { kind: work, number }));
+}
+
+// From the dashboard, a stage's photograph taken straight from the camera, and back on it.
+async function staged(page: Page, stage: 'PRE_WORK' | 'POST_WORK') {
   await photographed(page, page.getByRole('button', { name: said.stages.take[stage] }));
   await expect(page.getByRole('button', { name: said.stages.again[stage] })).toBeVisible();
 }
 
-// A tree measured from its stages: around or across, then the inches on the keypad, and back to
-// the stages.
-async function measured(page: Page, way: string, inches: string) {
-  await expect(heading(page)).toHaveText(said.stages.title);
+// From the dashboard, the measurement: its photograph (taken, or passed with Next: never held),
+// then a tree measured around or across, the inches on the keypad, and back on the dashboard.
+async function measured(page: Page, way: string, inches: string, photo = true) {
   await page.getByRole('button', { name: said.stages.measure }).click();
+  await expect(heading(page)).toHaveText(said.stages.measurePhotoTitle);
+  if (photo) {
+    await photographed(page, page.getByRole('button', { name: said.stages.take.MEASUREMENT }));
+  } else await page.getByRole('button', { name: said.next }).click();
   await expect(heading(page)).toHaveText(said.measure.howTitle);
   await page.getByRole('option', { name: way, exact: true }).click();
   await expect(heading(page)).toHaveText(said.measure.inchesTitle);
   await keyed(page, inches);
   await page.getByRole('button', { name: said.next }).click();
-  await expect(heading(page)).toHaveText(said.stages.title);
 }
 
-// Where the work was done (the phone's fix), photos (none more: for work by stage, its other
-// photos), the review showing each value given, never a code or a rate, and submitted for the
-// crew.
+// Where the work was done (the phone's fix, and the address looked up where there is signal: the
+// stack's own map, ADR-593), photos (none more; work by stage has no such step, ADR-592), the
+// review showing each value given, never a code or a rate, and submitted for the crew.
 async function submitted(
   page: Page,
   crew: string,
@@ -190,8 +205,10 @@ async function submitted(
   await page.getByRole('button', { name: said.place.capture }).click();
   await expect(page.getByText(/^GPS: /)).toBeVisible();
   await page.getByRole('button', { name: said.next }).click();
-  await expect(heading(page)).toHaveText(byStage ? said.stages.otherPhotos : said.photos.title);
-  await page.getByRole('button', { name: said.next }).click();
+  if (!byStage) {
+    await expect(heading(page)).toHaveText(said.photos.title);
+    await page.getByRole('button', { name: said.next }).click();
+  }
   await expect(heading(page)).toHaveText(said.review.title);
   for (const value of [filled(said.badge.crew, { number: crew }), number, ...shown]) {
     await expect(page.locator('.facts').getByText(value, { exact: true }).first()).toBeVisible();
@@ -204,7 +221,7 @@ async function submitted(
   await page.getByRole('button', { name: said.submitted.home }).click();
 }
 
-test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-112b: Jo scans the bucket truck crew 730417 and the ticket opens at once under her phone’s next number (the golden mission’s 301001 on the first phone), never typed again; a hanger is photographed by stage, its pre-work photo taken and left while the next tree’s is taken, then come back to for its measurement 3 in across and its photo, and the post-work photo, each stage to do then done; the review shows the three large under their stages; leaners go with the pay item the phone worked out from the bands, never shown, nor a rate; the crew stays hers, confirmed on each; two open at once for one crew; a stage left without its photo never holds Next; "ineligible" offered only where the pay item allows it', async ({
+test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-306, REQ-320, REQ-112b: Jo scans the bucket truck crew 730417, the first step, and the ticket opens at once under her phone’s next number (the golden mission’s 301001 on the first phone), never typed again, straight on to the crew’s photo and the work, never a load’s open ticket and never a field tag; a hanger opens its dashboard, its pre-work photo taken and left while the next tree’s is taken, then come back to for its measurement 3 in across with its photo, and the post-work photo, each part dropping back to the dashboard, to do then done; where the work was done is looked up on the stack’s map; the review shows the three large under their stages, with no step for other photos; leaners go with the pay item the phone worked out from the bands, never shown, nor a rate; the crew stays hers, confirmed on each; two open at once for one crew; a stage left without its photo never holds Complete; "ineligible" offered only where the pay item allows it', async ({
   page,
   context,
 }) => {
@@ -216,35 +233,30 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
   await expect(page.getByText('Bayline County ROW, Hurricane Delphine')).toBeVisible();
   await expect(page.getByRole('button', { name: english.home.start.unitRate })).toBeEnabled();
 
-  // New: no working crew yet, so the crew's badge first; the ticket opens at once under the
-  // number made right after it, never typed again (ADR-589).
+  // New: no working crew yet, so the crew's badge, the ticket's first step (ADR-592).
   await page.getByRole('button', { name: english.home.start.unitRate }).click();
   await expect(heading(page)).toHaveText(said.badge.crewTitle);
+  await expect(page.getByText(/^Step 1 of /)).toBeVisible();
   await page.getByLabel(said.badge.label).fill('730417');
   await expect(page.getByText(filled(said.badge.crew, { number: '730417' }))).toBeVisible();
   await checkScreen(page);
   await page.getByRole('button', { name: said.badge.crewStart }).click();
-  // The first of this phone's own block, whichever of Jo's phones synced first (ADR-585: her
-  // certifying phones take unit rate blocks too).
-  const first = Number(await openedUnder(page));
+  // Opened at once under the number made, never typed again (ADR-589), and straight on to the
+  // crew's photo: no load's open ticket, no Complete to find (ADR-592). The first of this phone's
+  // own block, whichever of Jo's phones synced first (ADR-585: her certifying phones take unit
+  // rate blocks too).
+  await expect(heading(page)).toHaveText(said.crew.photoTitle);
+  const first = Number(await openedFor(page, '730417'));
   expect(first).toBeGreaterThanOrEqual(301001);
   const n = (after: number) => String(first + after);
-  await expect(heading(page)).toHaveText(
-    filled(said.open.title, { kind: said.kinds.UNIT_RATE, number: n(0) }),
-  );
   await expect(page.getByText(said.number.againTitle)).toHaveCount(0);
-  await checkScreen(page);
-
-  // Complete: the crew shown and its photograph, then the work by name, each payable type once.
-  await page.getByRole('button', { name: said.open.complete }).click();
-  await expect(heading(page)).toHaveText(said.crew.photoTitle);
-  await expect(
-    page.getByText(filled(english.home.open.crew, { truck: '730417', number: n(0) })),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: said.open.complete })).toHaveCount(0);
   await photographed(page);
   await expect(page.getByRole('img')).toHaveCount(1);
   await checkScreen(page);
   await page.getByRole('button', { name: said.next }).click();
+
+  // The work by name, each payable type once; no field tag after it (ADR-591).
   await expect(heading(page)).toHaveText(said.work.title);
   await expect(page.getByRole('option')).toHaveText([
     'Hangers',
@@ -254,19 +266,20 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
     'Crew time',
   ]);
   await checkScreen(page);
-  await page.getByRole('option', { name: 'Hangers', exact: true }).click();
-  await expect(heading(page)).toHaveText(said.tag.title);
-  await page.getByRole('button', { name: said.tag.none }).click();
+  await workPicked(page, 'Hangers');
 
-  // A hanger is photographed by stage (ADR-590): each stage to do, then the pre-work photo, done.
-  await expect(heading(page)).toHaveText(said.stages.title);
-  for (const stage of ['PRE_WORK', 'MEASUREMENT', 'POST_WORK'] as const) {
+  // The hanger's dashboard (ADR-590, 592): its crew and number, each part to do.
+  await onDashboard(page, 'Hangers', n(0));
+  await expect(page.getByText('Field tag')).toHaveCount(0);
+  for (const stage of ['PRE_WORK', 'POST_WORK'] as const) {
     await expect(page.getByRole('button', { name: said.stages.take[stage] })).toBeVisible();
   }
   await expect(page.getByRole('button', { name: said.stages.measure })).toBeVisible();
   await expect(page.getByText(said.stages.toDo, { exact: true })).toHaveCount(3);
   await checkScreen(page);
+  // The pre-work photo straight from the camera, and back on the dashboard, done.
   await staged(page, 'PRE_WORK');
+  await onDashboard(page, 'Hangers', n(0));
   await expect(page.getByText(said.stages.done, { exact: true })).toHaveCount(1);
   await checkScreen(page);
   // Stepped out of it for the next tree: home says the hanger waits on its measurement.
@@ -281,34 +294,38 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
   ).toBeVisible();
   await checkScreen(page);
 
-  // The next tree, a leaner: the working crew offered first and confirmed; its pre-work photo,
-  // and stepped out of it in turn.
+  // The next tree, a leaner: the working crew offered first and kept, straight on to the work;
+  // its pre-work photo, and stepped out of it in turn.
   const leaner = await begun(page, { same: '730417' });
   expect(leaner).toBe(n(1));
   await workPicked(page, 'Leaners');
+  await onDashboard(page, 'Leaners', n(1));
   await staged(page, 'PRE_WORK');
   await page.getByRole('button', { name: said.leave }).click();
 
-  // Back to the hanger, where it was left: its limb measured across and photographed, then the
-  // post-work photo; every stage done.
+  // Back to the hanger, at its dashboard: the measurement's photo, then its limb measured across,
+  // and back on the dashboard; then the post-work photo; every part done.
   await hangerRow.click();
-  await expect(heading(page)).toHaveText(said.stages.title);
+  await onDashboard(page, 'Hangers', n(0));
   await measured(page, said.measure.across, '3');
+  await onDashboard(page, 'Hangers', n(0));
   await expect(
     page.getByRole('button', { name: filled(said.stages.measured, { measured: '3 in across' }) }),
   ).toBeVisible();
-  await staged(page, 'MEASUREMENT');
   await staged(page, 'POST_WORK');
   await expect(page.getByText(said.stages.done, { exact: true })).toHaveCount(3);
   await checkScreen(page);
-  await page.getByRole('button', { name: said.next }).click();
-  // No "ineligible": the hanger's pay item doesn't allow it.
+  await page.getByRole('button', { name: said.open.complete }).click();
+  // No "ineligible": the hanger's pay item doesn't allow it. Where: the fix, then the street
+  // looked up on the stack's own map (ADR-593).
   await expect(heading(page)).toHaveText(said.place.workTitle);
   await page.getByRole('button', { name: said.place.capture }).click();
+  await page.getByRole('button', { name: said.place.lookUp }).click();
+  await expect(page.getByText(/^Address found: \S/)).toBeVisible();
+  await checkScreen(page);
   await page.getByRole('button', { name: said.next }).click();
-  await expect(heading(page)).toHaveText(said.stages.otherPhotos);
-  await page.getByRole('button', { name: said.next }).click();
-  // The review: each stage's photograph large under its stage, then the crew's among the others.
+  // No step for other photos (ADR-592): the review, each stage's photograph large under its
+  // stage, then the crew's.
   await expect(heading(page)).toHaveText(said.review.title);
   await expect(page.getByRole('heading', { name: said.stages.photosTitle })).toBeVisible();
   for (const stage of ['PRE_WORK', 'MEASUREMENT', 'POST_WORK'] as const) {
@@ -318,7 +335,8 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
     await expect(shown).toBeVisible();
     expect((await shown.boundingBox())?.width ?? 0).toBeGreaterThan(240);
   }
-  await expect(page.getByRole('heading', { name: said.stages.otherPhotos })).toBeVisible();
+  await expect(page.getByRole('heading', { name: said.review.photos, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: english.look.photos.take })).toHaveCount(0);
   await checkScreen(page);
   await page
     .getByRole('button', { name: said.stages.open.replace('{stage}', 'post-work') })
@@ -341,14 +359,14 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
   await expect(page.getByText(filled(said.submitted.saved, { number: n(0) }))).toBeVisible();
   await page.getByRole('button', { name: said.submitted.home }).click();
 
-  // The leaner finished from home: measured around, and its last two photos.
+  // The leaner finished from home, at its dashboard: measured around, and its last two photos.
   await page
     .getByText(filled(english.home.open.crew, { truck: '730417', number: n(1) }), { exact: true })
     .click();
+  await onDashboard(page, 'Leaners', n(1));
   await measured(page, said.measure.around, '56.5');
-  await staged(page, 'MEASUREMENT');
   await staged(page, 'POST_WORK');
-  await page.getByRole('button', { name: said.next }).click();
+  await page.getByRole('button', { name: said.open.complete }).click();
   await submitted(page, '730417', n(1), ['Leaners', '56.5 in around'], true);
 
   // Two open at once for the same crew: a crew isn't held to one; the first left for now.
@@ -365,18 +383,20 @@ test('AC-11-74, AC-11-82, AC-11-90, AC-11-91, AC-04-70, AC-11-43, AC-11-76, REQ-
     ).toBeVisible();
   }
   await checkScreen(page);
-  // The first finished with no stage photographed: Next is never held. A leaner 80 in around
+  // The first finished with no stage photographed: Complete is never held. A leaner 80 in around
   // falls in 24.1–99 in, whose pay item lets the monitor mark it ineligible: offered, and marked.
   await page.getByText(filled(english.home.open.crew, { truck: '730417', number: big })).click();
   await workPicked(page, 'Leaners');
-  await measured(page, said.measure.around, '80');
-  await page.getByRole('button', { name: said.next }).click();
+  await measured(page, said.measure.around, '80', false);
+  await onDashboard(page, 'Leaners', big);
+  await page.getByRole('button', { name: said.open.complete }).click();
   await expect(heading(page)).toHaveText(said.ineligible.title);
   await checkScreen(page);
   await page.getByRole('option', { name: said.ineligible.mark, exact: true }).click();
   await submitted(page, '730417', big, ['Leaners', '80 in around', said.review.ineligible], true);
-  // The other cancelled: kept on the phone, never sent.
+  // The other cancelled from its work's step: kept on the phone, never sent.
   await page.getByText(filled(english.home.open.crew, { truck: '730417', number: spare })).click();
+  await expect(heading(page)).toHaveText(said.work.title);
   await page.getByRole('button', { name: said.open.cancel }).click();
   await page.getByRole('button', { name: said.open.cancelYes }).click();
   await expect(heading(page)).toHaveText(english.home.title);
@@ -424,12 +444,15 @@ test('REQ-112b, REQ-306, AC-04-70: on another phone the skid steer crew 730418�
   await enrolled(page, 'P1-UR-E2E-2');
   await signedIn(page, jo);
 
-  // A stump: photographed by stage, its measurement from its stage (ADR-590); one each, its
-  // diameter across two feet up, never around.
+  // A stump: its dashboard, its measurement from it (ADR-590, 592), the photo passed with Next;
+  // its diameter across two feet up, never around.
   const stump = await begun(page, { scan: '730418' });
   await workPicked(page, 'Stumps');
-  await expect(heading(page)).toHaveText(said.stages.title);
+  await onDashboard(page, 'Stumps', stump);
   await page.getByRole('button', { name: said.stages.measure }).click();
+  await expect(heading(page)).toHaveText(said.stages.measurePhotoTitle);
+  await checkScreen(page);
+  await page.getByRole('button', { name: said.next }).click();
   await expect(heading(page)).toHaveText(said.stump.title);
   await expect(page.getByText(said.stump.about)).toBeVisible();
   await keyed(page, '30');
@@ -445,14 +468,15 @@ test('REQ-112b, REQ-306, AC-04-70: on another phone the skid steer crew 730418�
   await page.getByLabel(said.stump.surveyLabel).fill('APN 14-0321-007');
   await checkScreen(page);
   await page.getByRole('button', { name: said.next }).click();
-  // Back at its stages, the measurement done and no photograph taken: Next is never held.
-  await expect(heading(page)).toHaveText(said.stages.title);
+  // Back on its dashboard, the measurement entered and no photograph taken: Complete is never
+  // held.
+  await onDashboard(page, 'Stumps', stump);
   await expect(
     page.getByRole('button', {
       name: filled(said.stages.measured, { measured: '30 in across, two feet up' }),
     }),
   ).toBeVisible();
-  await page.getByRole('button', { name: said.next }).click();
+  await page.getByRole('button', { name: said.open.complete }).click();
   await submitted(
     page,
     '730418',

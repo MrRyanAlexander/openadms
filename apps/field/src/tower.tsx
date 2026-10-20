@@ -15,8 +15,8 @@
 //   with the first, never a second copy (ADR-175). **Where the phone holds no row of the lookup
 //   that answers** (its lists read for another site: C182), it says so and asks what the lookup
 //   says where no rule pays: the load call, the scale receipt offered.
-// - **A haul-out's collection** (`complete-haul-out`): the debris type, the field tag (a pile is
-//   told apart by it), and **the load call at the loading end, always** (ADR-013); a split
+// - **A haul-out's collection** (`complete-haul-out`): the debris type, never a field tag (the
+//   user, ADR-591), and **the load call at the loading end, always** (ADR-013); a split
 //   haul-out's pile gives **the load call so far**, the pile before's shown (ADR-295).
 // - Then photos (the empty bed at the tower, the load at the loading end), **the review, every
 //   value once, the only check** (the user, Q-215, ADR-573), the photographs themselves; then
@@ -653,8 +653,8 @@ export function CompleteDisposal({
   }
 }
 
-type HaulOutStep = 'debris' | 'tag' | 'call' | 'photos' | 'review';
-const haulOutSteps: readonly HaulOutStep[] = ['debris', 'tag', 'call', 'photos', 'review'];
+type HaulOutStep = 'debris' | 'call' | 'photos' | 'review';
+const haulOutSteps: readonly HaulOutStep[] = ['debris', 'call', 'photos', 'review'];
 
 export function CompleteHaulOut({
   parts,
@@ -728,37 +728,7 @@ export function CompleteHaulOut({
           choices={lists.debrisTypes.HAUL_OUT.map(({ id, name }) => ({ key: id, label: name }))}
           picked={now.formDebrisTypeId}
           onPick={(picked) => {
-            void changed({ formDebrisTypeId: picked }).then(() => {
-              go('tag');
-            });
-          }}
-        />,
-      );
-    case 'tag':
-      return frame(
-        said.tag.title,
-        <>
-          {now.fieldTagId === null ? null : next(true, onward)}
-          <Button
-            main={now.fieldTagId === null}
-            wide
-            onPress={() => {
-              void changed({ fieldTagId: null }).then(() => {
-                go('call');
-              });
-            }}
-          >
-            {said.tag.none}
-          </Button>
-        </>,
-        <ListPicker
-          labelledBy={titleId}
-          choices={lists.fieldTags.map(({ id, name }) => ({ key: id, label: name }))}
-          picked={now.fieldTagId}
-          onPick={(picked) => {
-            void changed({ fieldTagId: picked }).then(() => {
-              go('call');
-            });
+            void changed({ formDebrisTypeId: picked }).then(onward);
           }}
         />,
       );
@@ -824,8 +794,6 @@ export function CompleteHaulOut({
             </dd>
             <dt>{said.review.debris}</dt>
             <dd>{named(lists.debrisTypes.HAUL_OUT, now.formDebrisTypeId)}</dd>
-            <dt>{said.review.tag}</dt>
-            <dd>{named(lists.fieldTags, now.fieldTagId)}</dd>
             <dt>{split ? said.review.callSoFar : said.review.call}</dt>
             <dd>
               {now.loadCall === null

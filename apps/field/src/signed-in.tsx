@@ -571,7 +571,12 @@ export function SignedInPhone({
         onOpen={(id) => {
           const ticket = tickets.ticket(id);
           if (ticket !== undefined) {
-            setCapturing(ticket.step === 'open' ? { at: 'open', id } : { at: 'complete', id });
+            // Unit rate work has no open ticket of a load's: it opens where it was left (ADR-592).
+            setCapturing(
+              ticket.step === 'open' && ticket.kind !== 'UNIT_RATE'
+                ? { at: 'open', id }
+                : { at: 'complete', id },
+            );
           } else if (forms.form(id) !== undefined) setFilling({ at: 'fill', id });
           else if (certifications.certification(id) !== undefined) {
             setCertifying({ at: 'fill', id });
