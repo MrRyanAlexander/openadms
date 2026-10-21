@@ -131,7 +131,7 @@ describe('the write boundaries (AGENTS.md)', () => {
     join(root, 'packages', 'db', 'prisma', 'schema', 'evidence.prisma'),
     join(root, 'infra', 'local', 'compose.yaml'),
     join(root, 'spec', 'DATA-MODEL.md'),
-    join(root, 'agent_store', 'NEXT.md'),
+    join(root, 'agent_store', 'PLAN.md'),
     join(root, 'apps', 'api', 'README.md'),
     join(root, 'package.json'),
   ])('lets through a write to %s', (path) => {

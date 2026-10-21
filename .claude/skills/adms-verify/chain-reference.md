@@ -103,7 +103,7 @@ Docker Desktop's engine is stuck: quit and reopen it (ADR-282).
 
 **Start it for the task, stop it at the end** (ADR-277): `pnpm local:up` when a task needs it (the
 installer, the db tests, `pnpm scenarios` and `pnpm security` do), and `pnpm local:down` at
-close-out (`adms-close-out` §0), unless `NEXT.md`'s Handoff says why it stays up. Expect it stopped
+close-out (`adms-close-out` §0), unless a run goes on to the next milestone (`adms-work`). Expect it stopped
 at the start of a session. One-off containers run with `--rm`.
 
 Never print `infra/local/.env`, and never pass a key as a curl argument that could be echoed: load it

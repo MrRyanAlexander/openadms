@@ -6,7 +6,7 @@ description: Open ADMS data model, in today's rules. Covers the records and how 
 
 > **This page states today's rules** (last changed by ADR-363, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
-> `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
+> `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md` (§3 for code names).
 > The words are defined once, in `adms-domain` Part 2.
 

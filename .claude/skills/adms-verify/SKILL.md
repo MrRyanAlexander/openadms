@@ -1,13 +1,19 @@
 ---
 name: adms-verify
-description: Run the Open ADMS verification chain and report real observed output. Covers Node 24 through fnm, targeted runs while building, `pnpm chain` once in the background (by the verifier agent), rerunning only what failed, `pnpm chain record` for the counts in CHAIN.md, loosenings, Docker trouble, and which page beside it to read for the layer you touch. Use after any code or config edit, before closing out a code task, or whenever asked to verify, test or confirm the build is green.
+description: Run the Open ADMS verification chain and report real observed output. Covers Node 24 through fnm, targeted runs while building, `pnpm chain test scenarios` after shared code changes, the whole `pnpm chain` at a milestone's gate in the background (by the verifier agent), rerunning only what failed, `pnpm chain record` for the counts in CHAIN.md, loosenings, Docker trouble, and which page beside it to read for the layer you touch. Use after any code or config edit, before closing out a code task, or whenever asked to verify, test or confirm the build is green.
 ---
-<!-- skill-status: current (the rebuild's chain, ADR-259; cut to the chain, ADR-445; `pnpm chain`, ADR-533; cut to the loop and its body moved word for word to `chain-reference.md`, the counts recorded by the chain, the verifier agent, ADR-594) -->
+<!-- skill-status: current (the rebuild's chain, ADR-259; cut to the chain, ADR-445; `pnpm chain`, ADR-533; cut to the loop and its body moved word for word to `chain-reference.md`, the counts recorded by the chain, the verifier agent, ADR-594; the whole chain at a milestone's gate, ADR-599) -->
 
 > **The rule never changes: report real observed output, never "should pass".** Never relax a
 > threshold or a unique constraint, never skip, `.only` or delete a failing test to get green.
 
-## The loop (ADR-594): fast while building, whole once at the end
+## The loop (ADR-594, 599): fast while building, whole at the milestone's gate
+
+**When the whole chain runs (ADR-599):** each item is proven by its targeted runs (step 2); an item
+that touched shared code (`packages/domain`, `contracts`, `db`, `scenarios`, a shared UI package)
+also gets `pnpm chain test scenarios` (and `e2e` for a screen's package) before it is ticked; **the
+whole chain (step 3) runs at a milestone's gate**, then `pnpm chain record`. Steps 4…7 apply to
+every run.
 
 1. **Every command starts with** `eval "$(fnm env --shell zsh)"` (an agent's shell finds Node 25
    otherwise; ADR-233). **First, `pnpm ready`** (the stack up, then `installer:check`): a `✗
@@ -18,7 +24,7 @@ description: Run the Open ADMS verification chain and report real observed outpu
    `./node_modules/.bin/tsc --build <workspace>`. After a change to `apps/api` or `apps/worker`,
    `pnpm local:up` again (the containers run what was built when they started). After an endpoint
    change, `pnpm openapi`.
-3. **Then the whole chain once**: hand it to the **`verifier` agent** (Sonnet; `.claude/agents/`)
+3. **Then the whole chain, at the gate**: hand it to the **`verifier` agent** (Sonnet; `.claude/agents/`)
    in the background and carry on with the close-out while it runs (about eleven minutes:
    test 4¼ min, scenarios 3¼, e2e 1–2½, security 1½, lint 1¼). It runs `pnpm chain`, reads the
    logs of what failed and answers with a short report; it never edits. Without the agent, run
@@ -31,7 +37,7 @@ description: Run the Open ADMS verification chain and report real observed outpu
    one your task explains (tests you added) is fine; one it doesn't is a finding. Then
    **`pnpm chain record`** writes them (nothing is run; never edit the table by hand). Say which
    counts moved and why in your report.
-6. **Loosenings** (ADR-445): each branch of a rule or guard this task added, as one plan, in one
+6. **Loosenings** (ADR-445): each branch of a rule or guard this item added, as one plan, in one
    command: `node .claude/skills/adms-verify/loosen.mjs <plan.json>` (shape in its header;
    `chain-reference.md` §1.5a). A `SLIPPED` is a finding. A database guard is loosened on a
    throw-away copy (`database-tests.md`). The verifier can run the plan you write.

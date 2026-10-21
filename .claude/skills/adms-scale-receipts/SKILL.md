@@ -6,7 +6,7 @@ description: Open ADMS scale receipts, in today's rules. Covers when a scale rec
 
 > **This page states today's rules** (last changed by ADR-331, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
-> `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). Names and examples
+> `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). Names and examples
 > follow `spec/CONVENTIONS.md`. The industry says "scale ticket"; **it is not a ticket** and never
 > pairs, so this system says **scale receipt**.
 

@@ -7,7 +7,7 @@ description: Open ADMS domain grounding and glossary. Read this before your firs
 
 > **This page states today's rules** (last changed by ADR-589, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
-> `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
+> `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). The worked example
 > of all of it is `spec/golden/MISSION.md`. **Names and examples** follow `spec/CONVENTIONS.md`
 > (ADR-234, 235): the industry's keyword or plain English, never a legacy screen label; examples from
 > its example world, never the retired ones (its §7).
@@ -317,9 +317,11 @@ Breaking one is a defect whatever the tests say. Numbers are stable; other docs 
 
 # PART 8 — WHERE IT'S HEADED
 
-- **Where the product ends up and the road there:** `agent_store/ROADMAP.md` (ADR-594) and
+- **Where the product ends up and the road there:** `agent_store/PLAN.md` (ADR-599, 600) and
   `spec/VISION.md` (approved, ADR-269). Phases: 0 foundation → 1 data core and engine → 2 API and sync → 3 field
-  app → 4 back office → 5 later features. Later requirements: `agent_store/REQUIREMENTS-LATER.md`.
+  app → 4 back office → 5 later features; since ADR-600 the plan finishes the web apps first (the
+  field app's browser build, the back office, the portal) and takes the iPhone and Android builds
+  as one milestone after. Every open requirement is carried in `PLAN.md`.
 - **There is no USACE mode** (ADR-077): every project runs the same rules, plus an optional "USACE
   approved" flag on the load call.
 - The two long documents in `development/` (the USACE-style requirements worksheet and the target

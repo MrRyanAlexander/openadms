@@ -22,7 +22,7 @@ what's still open.
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
 | **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
-| **Build** the next thing, or see where it ends up | Chapter 4: the next task is `agent_store/BACKLOG.md`'s first unticked box; the road to done is `agent_store/ROADMAP.md` (ADR-594) |
+| **Build** the next thing, or see where it ends up | Chapter 4: `agent_store/PLAN.md`, where things stand, the road to done, and the next item (its first unticked box; ADR-599, 600) |
 | **Maintain** it: fix, change, or answer a question | Chapter 5 |
 
 ---
@@ -142,10 +142,8 @@ Each page in `spec/parts/` has the same shape, so you always know where to look:
 
 | File | What it holds |
 |---|---|
-| `agent_store/NEXT.md` | The active phase, its scope and exit criteria, where things stand (the next task: `BACKLOG.md`'s first unticked box, ADR-594) |
-| `agent_store/BACKLOG.md` | Milestones and sub-tasks for the active phase |
-| `agent_store/REQUIREMENTS.md` | Phase 0 and Phase 1 checklist (REQ-0xx, REQ-1xx) — tick only when observed |
-| `agent_store/REQUIREMENTS-LATER.md` | Phases 2–5, gated |
+| `agent_store/PLAN.md` | The one plan (ADR-599, 600): where things stand, the milestones and their items (the next is its first unticked box), every open requirement and carried concern, the gates, what waits on the user |
+| `agent_store/history/` | Everything older, grep only: the old backlog and register, requirements, roadmap, next-page and archive, and ADR-001…598 |
 | `spec/ARCHITECTURE.md` §18 | The rebuild's layout (`apps/`, `packages/`, `infra/`, `tools/`); `database/AGENTS.md` describes only the historical tree |
 | `adms-verify` skill | How to prove it works — real output only |
 
@@ -170,7 +168,7 @@ built, how the layers connect, and the security rules each must meet:
 - sync, time, photos, printing and scanning;
 - the worker, testing, and the standards we test against.
 
-Code is written against it in `BACKLOG.md` order, each dependency pinned by an ADR (ADR-143).
+Code is written against it in `PLAN.md` order, each dependency pinned by an ADR (ADR-143).
 
 ---
 
@@ -180,10 +178,10 @@ Code is written against it in `BACKLOG.md` order, each dependency pinned by an A
 |---|---|
 | You don't know how something behaves | Load the owning skill (table in `AGENTS.md`), then check `spec/QUESTIONS.md`. Never guess |
 | The user answers a question | Record it as an ADR, update the skill **and the part page** it changes, flip the entry in `QUESTIONS.md` |
-| You need what's decided **now** | `agent_store/SUMMARY.md`: current rules by topic, ADRs to cite, superseded ones, open gaps |
-| You make an engineering judgment call | Append an ADR to `agent_store/DECISIONS.md` in the same response, and update `SUMMARY.md` (`adms-decisions`) |
-| Code disagrees with a skill, or a page disagrees with a skill | Append a KD to `agent_store/DEVIATIONS.md` and update `SUMMARY.md`; don't silently fix either side |
-| A step gets built | Update the part page's **Where it will live** section and tick the REQ |
+| You need what's decided **now** | `agent_store/DECISIONS.md` (ADR-599 on), then `agent_store/SUMMARY.md` (frozen at ADR-598): rules by topic, ADRs to cite, superseded ones |
+| You make a real decision (product, money, evidence, security, a dependency, the architecture) | Append a short ADR to `agent_store/DECISIONS.md` in the same work (`adms-decisions`) |
+| Code disagrees with a skill, or a page disagrees with a skill | Append a KD to `agent_store/DEVIATIONS.md`; don't silently fix either side |
+| A step gets built | Update the part page's **Where it will live** section and tick the item and its REQ in `PLAN.md` |
 
 ---
 
@@ -211,8 +209,9 @@ Code is written against it in `BACKLOG.md` order, each dependency pinned by an A
 | `spec/CHECKLIST-FIELD.md` | The field app's security checklist: OWASP MASVS v2.1.0, every control and every MASWE weakness under it, at the profile MAS-L2 + MAS-P, each with the scenario that answers it, its owner phase, a departure or "not taken" | **Draft** (ADR-562); for the user's approval |
 | `spec/CHECKLIST-API.md` | The API's security checklist: every ASVS 5.0 Level 1 and 2 item and the API Top 10 (2023), each with the scenario that answers it, the test that built it, its owner phase, or open | **Draft** (ADR-509, 510); for the user's approval |
 | `.claude/skills/adms-*/SKILL.md` | Domain rules and their reasons, one topic each | User-owned; agent edits only to record a user decision, marked with its ADR |
-| `agent_store/SUMMARY.md` | What's decided and open **now**, on one page | Agent, kept current |
-| `agent_store/*.md` | Build state, decisions, deviations, requirements | Agent |
+| `agent_store/SUMMARY.md` | What was decided, by topic, through ADR-598 (frozen, ADR-599) | Nobody: read by topic |
+| `agent_store/*.md` | The plan, decisions from ADR-599 on, deviations, the chain's counts; `history/` for everything older | Agent |
+| `.claude/skills/adms-build/SKILL.md` | How code is written here: the recipes for endpoints, tables, tests, stories and screens (ADR-599) | Agent |
 | `database/` | **Historical** early code (ADR-093); reference only | Nobody (read-only) |
 | `development/` | Reference specs (USACE, First Principles). Read-only | Nobody |
 | `README.md` | Human quick start | User |

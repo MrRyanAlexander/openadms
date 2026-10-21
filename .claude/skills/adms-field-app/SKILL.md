@@ -6,7 +6,7 @@ description: Open ADMS field app and phones, in today's rules. Covers enrolling 
 
 > **This page states today's rules** (last changed by ADR-596, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
-> `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). How each piece is
+> `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
 > §2 (its phones and assignments); names and examples follow `spec/CONVENTIONS.md`.
 > **The word is "setup", never "provisioning", "provision" or "provisioned"** (ADR-095), in docs,
@@ -16,7 +16,7 @@ description: Open ADMS field app and phones, in today's rules. Covers enrolling 
 
 **Scope.** §4A.0 (enrolment, the assignment, sign-in, the phone itself) is **Phase 0** scope: its
 models are REQ-019…021 and BACKLOG 0.4.3 (built 2026-10-01, ADR-281). The rest is **Phase 3** (the capture screens): build it
-when `NEXT.md` opens that phase, from these notes and the ADRs they cite. **Each monitor records a
+in `agent_store/PLAN.md`'s order, from these notes and the ADRs they cite. **Each monitor records a
 field event** on the phone (`adms-domain` §1.2; ADR-236); **the monitor enters only the main ticket,
 fast**; fees, pricing, zones, mileage and checks are the system's work, after sync (ADR-224).
 

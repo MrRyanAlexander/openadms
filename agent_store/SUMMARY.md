@@ -1,5 +1,12 @@
 # Open ADMS — Current decisions and gaps, at a glance
 
+> **⏸ Frozen at ADR-598 (ADR-599, 2026-10-21).** Read it by topic as before; it is no longer kept
+> per task. Decisions from ADR-599 on are in `agent_store/DECISIONS.md` and override this page;
+> ADR-001…598 are in `agent_store/history/DECISIONS-001-598.md`. Where this page names `BACKLOG.md`,
+> `NEXT.md`, `ROADMAP.md`, `REQUIREMENTS*.md` or `ARCHIVE.md`, read the copy in
+> `agent_store/history/`; the live plan is `agent_store/PLAN.md`. The instructions below about
+> keeping this page current no longer apply.
+
 **The present tense of the project.** `DECISIONS.md` and `DEVIATIONS.md` are the full history (598 ADRs, 80 KDs, many superseded). This page says what is true **now** and which ADRs to cite; the reasons live in the ADRs and the skills. **If this page and an ADR disagree, the newest ADR wins:** fix this page and say so.
 
 - **Read it by topic, never whole** (ADR-445, 532): this header, then the one or two topics below that your task touches (`grep -n '^### ' agent_store/SUMMARY.md` for their lines). §4 only when your task touches a default the user may overturn.

@@ -6,7 +6,7 @@ description: Open ADMS checks, flags, statuses, how rules run, and the quantity 
 
 > **This page states today's rules** (last changed by ADR-301, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
-> `agent_store/SUMMARY.md` disagree, SUMMARY wins: log a KD (`adms-decisions`). The worked example
+> `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). The worked example
 > is `spec/golden/MISSION.md`; names and examples follow `spec/CONVENTIONS.md`. The words (field
 > event, ticket, completed load, pay item, payable type, debris type, flag) are defined once, in
 > `adms-domain` Part 2.

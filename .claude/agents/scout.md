@@ -12,9 +12,10 @@ and `git log --oneline`. Never read or print an env file (`.env*`).
 
 How to search: `grep -rn` (or `grep -rln` first to list files) with `--include` filters, `find`,
 and `sed -n 'a,bp'` for a few lines around a hit. Skip `node_modules`, `dist`, `.cache`,
-`src/generated`, `development/` and `.claude/worktrees/`. Never read `agent_store/DECISIONS.md`
-or `agent_store/ARCHIVE.md` whole (over 1 MB): grep them, e.g.
-`grep -n '^| \*\*ADR-519' agent_store/DECISIONS.md`.
+`src/generated`, `development/` and `.claude/worktrees/`. ADR-599 on are in
+`agent_store/DECISIONS.md`; ADR-001…598 and the old backlog, register, requirements, roadmap and
+archive are in `agent_store/history/` (over 1 MB each, some of them): never read those whole, grep
+them, e.g. `grep -n '^| \*\*ADR-519' agent_store/history/DECISIONS-001-598.md`.
 
 Answer with what you found and nothing else (under about 40 lines):
 
