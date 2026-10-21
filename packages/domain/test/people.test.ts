@@ -65,9 +65,13 @@ describe('who holds a permission', () => {
     expect(
       new Access({ ...dispatch, granted: ['DISPATCH', 'VIEW_DISPATCH'] }).holds('DISPATCH'),
     ).toBe(true);
-    // A view and approving hours need nothing beside them.
+    // A view needs nothing beside it; approving hours reads the board's days (ADR-598).
     expect(new Access({ ...luis, granted: ['VIEW_SETUP'] }).holds('VIEW_SETUP')).toBe(true);
-    expect(new Access({ ...luis, granted: ['APPROVE_HOURS'] }).holds('APPROVE_HOURS')).toBe(true);
+    expect(new Access({ ...luis, granted: ['APPROVE_HOURS'] }).holds('APPROVE_HOURS')).toBe(false);
+    expect(
+      new Access({ ...luis, granted: ['APPROVE_HOURS', 'VIEW_DISPATCH'] }).holds('APPROVE_HOURS'),
+    ).toBe(true);
+    expect(grantsInWords('APPROVE_HOURS')).toBe('"approve hours" and "view dispatch"');
     expect(grantsInWords('QC')).toBe('"QC" and "view review"');
     expect(grantsInWords('VIEW_DISPATCH')).toBe('"view dispatch"');
   });

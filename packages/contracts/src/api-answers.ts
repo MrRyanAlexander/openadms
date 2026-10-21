@@ -4,6 +4,7 @@ import {
   assignmentFormDocumentTypes,
   builtInKeys,
   certificationViews,
+  clockEntryKinds,
   countShapes,
   fieldEventKinds,
   flagCodes,
@@ -577,6 +578,86 @@ export const assignmentsAnswerSchema = z.strictObject({
 
 export type AssignmentsAnswer = z.infer<typeof assignmentsAnswerSchema>;
 
+// A manager's approval of a worker's day (REQ-310; ADR-241 (4), 598): whose assignment, who
+// approved it and when, and the unlock where there was one: who, when and why.
+export const dayApprovalRecordSchema = z.strictObject({
+  id: z.uuid(),
+  assignmentId: z.uuid(),
+  approvedBy: named,
+  approvedAt: z.iso.datetime(),
+  unlockedBy: named.nullable(),
+  unlockedAt: z.iso.datetime().nullable(),
+  unlockNote: z.string().nullable(),
+});
+
+export type DayApprovalRecord = z.infer<typeof dayApprovalRecordSchema>;
+
+// A worker's day on the time clock, as the export of hours reads it (REQ-310; AC-02-50, 53, 55;
+// ADR-063, 100, 241, 598): whose assignment it is and which day (the project's own); each entry
+// as the worker's phone sent it, in field-time order, with when the server received it; the
+// activity lines their clock-out carried, each a field event (named by the id its phone made,
+// with what the server has saved under it, if anything) or one of the firm's activities, with a
+// note; what the hours come to by the domain's one rule (worked and on a break inside the day,
+// what fell outside it, still clocked in, entries that fit no stretch), in whole minutes; and
+// the approval in force, with whether anything of the day was received after it. **Never a rate
+// or a pay, and never crew time's hours** (ADR-241 (5), (7)).
+const clockEntryRead = z.strictObject({
+  id: z.uuid(),
+  kind: z.enum(clockEntryKinds),
+  at: z.iso.datetime(),
+  deviceUtcOffsetMinutes: z.number().int(),
+  receivedAt: z.iso.datetime(),
+  phone: named,
+});
+const activityLineRead = z.strictObject({
+  id: z.uuid(),
+  clockEntryId: z.uuid(),
+  position: z.number().int().min(1),
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(),
+  activity: named.nullable(),
+  fieldEventId: z.uuid().nullable(),
+  // What the server has saved under that id: a field event of the project, or nothing (not yet
+  // sent, held, or waiting in quarantine).
+  fieldEvent: z
+    .strictObject({
+      kind: z.enum(fieldEventKinds),
+      ticketNumber: z.string(),
+      splitSuffix: z.string(),
+    })
+    .nullable(),
+  note: z.string().nullable(),
+});
+export const dayHoursSchema = z.strictObject({
+  assignmentId: z.uuid(),
+  person: z.strictObject({ id: z.uuid(), name: z.string(), monitorId: z.string().nullable() }),
+  workDate: z.iso.date(),
+  withdrawn: z.boolean(),
+  entries: z.array(clockEntryRead),
+  activityLines: z.array(activityLineRead),
+  hours: z.strictObject({
+    workedMinutes: z.number().int().min(0),
+    breakMinutes: z.number().int().min(0),
+    outsideTheDayMinutes: z.number().int().min(0),
+    stillClockedIn: z.boolean(),
+    unmatchedEntries: z.number().int().min(0),
+  }),
+  approval: dayApprovalRecordSchema.nullable(),
+  // Something of the day reached the server after the approval in force: offline is normal.
+  receivedAfterApproval: z.boolean(),
+});
+
+export type DayHoursRecord = z.infer<typeof dayHoursSchema>;
+
+// A page of a project's workers' days, by day and then by assignment. `next` is what to send as
+// `after` for the page that follows; null when this is the last.
+export const hoursAnswerSchema = z.strictObject({
+  days: z.array(dayHoursSchema),
+  next: z.uuid().nullable(),
+});
+
+export type HoursAnswer = z.infer<typeof hoursAnswerSchema>;
+
 // The master passcode was changed: the version now current. Never the passcode or its hash.
 export const masterPasscodeAnswerSchema = z.strictObject({
   status: z.literal('ok'),
@@ -951,6 +1032,12 @@ export const setupShownSchema = z.strictObject({
   primes,
   // A row for each live site, debris type a phone holds and prime.
   quantityLookup: z.array(z.strictObject({ siteId: z.uuid(), ...quantityAsk })),
+  // The project's time clock (REQ-310; ADR-241, 598): whether its workers are offered it, and the
+  // firm's activities a day's line is picked from where the app can't know (travel, standby,
+  // training). Off in lists a phone kept before it came.
+  timeClock: z
+    .strictObject({ enabled: z.boolean(), activities: z.array(named) })
+    .default({ enabled: false, activities: [] }),
 });
 
 export type SetupShownRecord = z.infer<typeof setupShownSchema>;
@@ -1029,6 +1116,9 @@ export const phoneListsSchema = z.strictObject({
   helpers: z.array(named),
   // For a phone at a site: a row for each debris type the phone holds and each prime.
   quantityLookup: z.array(z.strictObject(quantityAsk)),
+  // The project's time clock, for anyone with an assignment (ADR-241, 598): whether it is on,
+  // and the firm's activities. Off in lists a phone kept before it came.
+  timeClock: setupShownSchema.shape.timeClock,
 });
 
 export type PhoneListsRecord = z.infer<typeof phoneListsSchema>;

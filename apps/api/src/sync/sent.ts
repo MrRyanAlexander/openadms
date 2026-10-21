@@ -6,6 +6,7 @@
 import type {
   IntakeNote as NoteAnswered,
   ReceivedCertification,
+  ReceivedClockEntry,
   ReceivedDropOffLog,
   ReceivedFieldEvent,
   ReceivedIncident,
@@ -81,6 +82,10 @@ export type SentRoe = Readonly<ReceivedRoe> & FromAPhone;
 // intake's to write. It is handed to `Certifications.received`, the one way one is made.
 export type SentCertification = Readonly<ReceivedCertification> & Pick<FromAPhone, 'deviceId'>;
 
+// A worker's own time-clock entry, with the lines a clock-out carries (ADR-598): written as
+// they are, from their phone.
+export type SentClockEntry = Readonly<ReceivedClockEntry> & Pick<FromAPhone, 'deviceId'>;
+
 // A photograph's record as the server read it (`syncedPhotoSchema`, sent after the records:
 // ARCHITECTURE §9 (2); ADR-101, 481), with the phone it came from. Its two fingerprints are the
 // phone's word; where its files are kept is never the phone's to say, and is made by the server
@@ -95,7 +100,8 @@ export type SentRecord =
   | { readonly record: 'INCIDENT'; readonly incident: SentIncident }
   | { readonly record: 'DROP_OFF_LOG'; readonly dropOffLog: SentDropOffLog }
   | { readonly record: 'SURVEY'; readonly survey: SentSurvey }
-  | { readonly record: 'ROE'; readonly roe: SentRoe };
+  | { readonly record: 'ROE'; readonly roe: SentRoe }
+  | { readonly record: 'CLOCK_ENTRY'; readonly clockEntry: SentClockEntry };
 
 // Something intake did with a record it saved that the sender should know: nothing was refused
 // for it, and the flag is the worker's (ADR-052, 329). The contract's own shape.

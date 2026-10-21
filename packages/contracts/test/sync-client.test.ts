@@ -604,10 +604,11 @@ describe('what a client reads of what it was answered', () => {
   });
 
   it('a record’s id and its assignment are read off any kind; a scale receipt names no assignment', () => {
-    expect(records.map(syncedRecordId)).toEqual(['1', '3', '4', '5', '6', '7', '8'].map(made));
+    expect(records.map(syncedRecordId)).toEqual(['1', '3', '4', '5', '6', '7', '8', 'a'].map(made));
     expect(records.map(syncedRecordAssignment)).toEqual([
       assignment,
       null,
+      assignment,
       assignment,
       assignment,
       assignment,

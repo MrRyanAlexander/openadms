@@ -2,7 +2,8 @@
 // spec/parts/05-sync.md steps 3…6; spec/acceptance/05-sync.md; AC-10-35, 36; T-12; BACKLOG 2.6.1,
 // C69, C84 (9); ADR-022, 052, 100, 236, 329, 338, 466; REQ-004, 203): a field event with its item
 // lines and the tickets it carries, a scale receipt, an incident, a drop-off log, a survey, an
-// ROE made on a phone, and a certification of a container or a crew (ADR-469). Each carries the
+// ROE made on a phone, a certification of a container or a crew (ADR-469), and a time-clock entry
+// (ADR-598). Each carries the
 // id its phone made when the record began, its project and the monitor who made it.
 //
 // **A schema says what a record can be at all, and nothing about whether the work was right**
@@ -25,6 +26,7 @@ import {
   boxShapes,
   boxSigns,
   certificationViews,
+  clockEntryKinds,
   type CertificationKind,
   FieldEventDetails,
   fieldEventKinds,
@@ -355,6 +357,49 @@ export const syncedCertificationSchema = z
     });
   });
 
+// A line of the day's activity, as the worker approved it at clock-out (REQ-310; ADR-241 (3),
+// 598): from when to when, and what: the field event it was pre-filled from, by the id its phone
+// made (the server keeps that id as named, whether or not that field event is saved), or what the
+// app can't know, picked from the firm's list; with a note where the worker wrote one. When it
+// started and ended are the worker's, taken as sent.
+export const syncedActivityLineSchema = z
+  .strictObject({
+    startedAt: instant,
+    endedAt: instant,
+    fieldEventId: id.nullable(),
+    activityId: id.nullable(),
+    note: words.regex(/\S/).nullable(),
+  })
+  .refine((line) => (line.fieldEventId === null) !== (line.activityId === null), {
+    message: 'A line is one field event or one activity of the firm’s list, never both.',
+    path: ['activityId'],
+  });
+
+// As many lines as a day could hold.
+export const clockActivityLinesAtMost = 200;
+
+// One entry of a worker's own time clock, made by hand on their phone on their assignment
+// (REQ-310; ADR-063, 100, 241, 598): a clock-in, a break's start or end, or a clock-out, at the
+// phone's clock with its offset. **A clock-out carries the day's activity lines** the worker
+// approved as they clocked out; no other entry carries any. Whose hours they are is the
+// assignment's person, who is the one signed in. Never a rate, a pay or crew time's hours
+// (ADR-241 (5), (7)).
+export const syncedClockEntrySchema = z
+  .strictObject({
+    id,
+    projectId: id,
+    assignmentId: id,
+    workerId: id,
+    kind: z.enum(clockEntryKinds),
+    at: instant,
+    deviceUtcOffsetMinutes: offset,
+    activityLines: z.array(syncedActivityLineSchema).max(clockActivityLinesAtMost).readonly(),
+  })
+  .refine((entry) => entry.kind === 'OUT' || entry.activityLines.length === 0, {
+    message: 'Only a clock-out carries the day’s activity lines.',
+    path: ['activityLines'],
+  });
+
 // The kinds of record a phone sends at a sync, in no order: arrival order means nothing
 // (ADR-030), except that a scale receipt is sent before the disposals that point at it. A
 // certification may arrive after field events that scanned its number: they are linked to it
@@ -367,6 +412,7 @@ export const syncedRecordKinds = [
   'SURVEY',
   'ROE',
   'CERTIFICATION',
+  'CLOCK_ENTRY',
 ] as const;
 
 // One record, named by its kind.
@@ -378,6 +424,7 @@ export const syncedRecordSchema = z.discriminatedUnion('record', [
   z.strictObject({ record: z.literal('SURVEY'), survey: syncedSurveySchema }),
   z.strictObject({ record: z.literal('ROE'), roe: syncedRoeSchema }),
   z.strictObject({ record: z.literal('CERTIFICATION'), certification: syncedCertificationSchema }),
+  z.strictObject({ record: z.literal('CLOCK_ENTRY'), clockEntry: syncedClockEntrySchema }),
 ]);
 
 // What a photograph belongs to: a record its phone made, by that record's id (ADR-101, 292).
@@ -448,6 +495,8 @@ export type SyncedDropOffLog = z.input<typeof syncedDropOffLogSchema>;
 export type SyncedSurvey = z.input<typeof syncedSurveySchema>;
 export type SyncedRoe = z.input<typeof syncedRoeSchema>;
 export type SyncedCertification = z.input<typeof syncedCertificationSchema>;
+export type SyncedActivityLine = z.input<typeof syncedActivityLineSchema>;
+export type SyncedClockEntry = z.input<typeof syncedClockEntrySchema>;
 export type SyncedRecord = z.input<typeof syncedRecordSchema>;
 export type SyncedRecordKind = (typeof syncedRecordKinds)[number];
 export type ReceivedItem = z.output<typeof syncedItemSchema>;
@@ -458,6 +507,8 @@ export type ReceivedDropOffLog = z.output<typeof syncedDropOffLogSchema>;
 export type ReceivedSurvey = z.output<typeof syncedSurveySchema>;
 export type ReceivedRoe = z.output<typeof syncedRoeSchema>;
 export type ReceivedCertification = z.output<typeof syncedCertificationSchema>;
+export type ReceivedActivityLine = z.output<typeof syncedActivityLineSchema>;
+export type ReceivedClockEntry = z.output<typeof syncedClockEntrySchema>;
 export type ReceivedRecord = z.output<typeof syncedRecordSchema>;
 export type PhotoOwnerKind = (typeof photoOwnerKinds)[number];
 export type SyncedPhoto = z.input<typeof syncedPhotoSchema>;

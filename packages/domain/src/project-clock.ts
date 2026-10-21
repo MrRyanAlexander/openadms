@@ -59,6 +59,21 @@ export class ProjectClock {
     return new Date(later);
   }
 
+  // When a calendar day begins and ends in the project's time zone: its first instant, and the
+  // first instant of the next day there (ADR-100: a day ends before midnight). From that day's
+  // noon there, so a day of 23 or 25 hours ends where its own zone says it does.
+  dayBounds(day: string): { readonly starts: Date; readonly ends: Date } {
+    const read = dayText.exec(day);
+    if (read === null) throw new Error(`Not a calendar day: ${day}.`);
+    const utcNoon = new Date(Date.UTC(Number(read[1]), Number(read[2]) - 1, Number(read[3]), 12));
+    const noon = new Date(utcNoon.getTime() - this.offsetMinutes(utcNoon) * 60_000);
+    if (this.day(noon) !== day) throw new Error(`Not a calendar day: ${day}.`);
+    return {
+      starts: this.dayEnds(new Date(noon.getTime() - 86_400_000)),
+      ends: this.dayEnds(noon),
+    };
+  }
+
   // 21:40.
   time(instant: Date): string {
     const { hour = '', minute = '' } = this.parts(instant);

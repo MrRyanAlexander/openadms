@@ -131,6 +131,8 @@ export interface PhoneListsHeld {
     readonly primeId: string;
     readonly asks: QuantityAskName;
   }[];
+  // The project's time clock, for anyone with an assignment (ADR-241, 598).
+  readonly timeClock: SetupShown['timeClock'];
 }
 
 export type PhoneListsTaken =
@@ -307,6 +309,7 @@ export class PhoneLists {
               primeId,
               asks,
             })),
+          timeClock: shown.timeClock,
         },
       };
     });

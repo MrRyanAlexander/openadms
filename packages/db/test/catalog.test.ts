@@ -76,6 +76,10 @@ const domains: Record<string, string> = {
   survey: 'RECORDS',
   incident: 'RECORDS',
   drop_off_log: 'RECORDS',
+  // The time clock: a worker's own entries and activity lines, and a day's approval (ADR-598).
+  clock_entry: 'RECORDS',
+  clock_activity_line: 'RECORDS',
+  day_approval: 'RECORDS',
   master_passcode: 'SECURITY',
   // The firm's own settings (ADR-530).
   firm_settings: 'SECURITY',
@@ -158,12 +162,14 @@ export const closedProjectTables = [
   'assignment',
   'assignment_pay_item',
   'certification',
+  'clock_entry',
   'completed_haul_out',
   'completed_haul_out_collection',
   'completed_load',
   'completed_load_collection',
   'contract',
   'control_range',
+  'day_approval',
   'disposal_site',
   'disposal_site_tipping_fee',
   'drop_off_log',
@@ -205,6 +211,7 @@ export const closedProjectChildren: readonly (readonly [string, string, string])
   ['carried_ticket', 'field_event', 'field_event_id'],
   ['certification_box', 'certification', 'certification_id'],
   ['certification_helper', 'certification', 'certification_id'],
+  ['clock_activity_line', 'clock_entry', 'clock_entry_id'],
   ['disposal_site_label', 'disposal_site', 'site_id'],
   ['field_event_item', 'field_event', 'field_event_id'],
   ['field_event_waypoint', 'field_event', 'field_event_id'],
@@ -323,6 +330,15 @@ const triggers = [
   `CREATE TRIGGER sync_from_its_phone BEFORE INSERT OR UPDATE ON public.sync FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER synced_record_from_its_phone BEFORE INSERT ON public.synced_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
   `CREATE TRIGGER held_record_from_its_phone BEFORE INSERT ON public.held_record FOR EACH ROW EXECUTE FUNCTION sync_from_its_phone_guard()`,
+  // A time-clock record is its worker's own, from the phone it names; what an entry is of never
+  // changes, and nothing of a day approved changes until it is unlocked (ADR-598). A day's
+  // approval is never the worker's own; what was approved never changes, and once unlocked the
+  // row is history.
+  `CREATE TRIGGER clock_entry_guard BEFORE INSERT OR UPDATE ON public.clock_entry FOR EACH ROW EXECUTE FUNCTION clock_record_guard()`,
+  `CREATE TRIGGER clock_activity_line_guard BEFORE INSERT OR UPDATE ON public.clock_activity_line FOR EACH ROW EXECUTE FUNCTION clock_record_guard()`,
+  `CREATE TRIGGER day_approval_not_own BEFORE INSERT ON public.day_approval FOR EACH ROW EXECUTE FUNCTION day_approval_not_own_guard()`,
+  `CREATE TRIGGER day_approval_refuse_approval_edit BEFORE UPDATE OF id, project_id, assignment_id, approved_by_id, approved_at ON public.day_approval FOR EACH ROW EXECUTE FUNCTION refuse_edit()`,
+  `CREATE TRIGGER day_approval_refuse_edit_once_unlocked BEFORE UPDATE ON public.day_approval FOR EACH ROW WHEN ((old.unlocked_at IS NOT NULL)) EXECUTE FUNCTION refuse_edit()`,
   // An unplanned assignment is made as the master passcode's actor for the phone it names;
   // whether one was planned never changes (ADR-457).
   `CREATE TRIGGER assignment_unplanned BEFORE INSERT OR UPDATE ON public.assignment FOR EACH ROW EXECUTE FUNCTION assignment_unplanned_guard()`,
@@ -525,6 +541,36 @@ describe('the guards in the catalog', () => {
         name: 'certification_vehicle_type_check',
         definition:
           "CHECK ((((num_nonnulls(vehicle_type_id, vehicle_type_other) <= 1) AND ((vehicle_type_other IS NULL) OR (btrim(vehicle_type_other) <> ''::text))) IS TRUE))",
+      },
+      // The time clock (ADR-598): a phone's offset, a worker who is a person, a line carried by a
+      // clock-out and one thing; an approval and its unlock by a person, the unlock whole.
+      {
+        name: 'clock_activity_line_check',
+        definition:
+          "CHECK ((((clock_entry_kind = 'OUT'::clock_entry_kind) AND (num_nonnulls(activity_id, field_event_id) = 1) AND (\"position\" >= 1) AND ((note IS NULL) OR (btrim(note) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'clock_entry_device_utc_offset_check',
+        definition:
+          "CHECK (((device_utc_offset_minutes >= '-720'::integer) AND (device_utc_offset_minutes <= 840)))",
+      },
+      {
+        name: 'clock_entry_worker_check',
+        definition: "CHECK ((worker_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'day_approval_approved_by_check',
+        definition: "CHECK ((approved_by_id <> '00000000-0000-7000-8000-000000000001'::uuid))",
+      },
+      {
+        name: 'day_approval_unlock_check',
+        definition:
+          "CHECK ((((num_nonnulls(unlocked_by_id, unlocked_at, unlock_note) = ANY (ARRAY[0, 3])) AND ((unlock_note IS NULL) OR (btrim(unlock_note) <> ''::text))) IS TRUE))",
+      },
+      {
+        name: 'day_approval_unlocked_by_check',
+        definition:
+          "CHECK ((unlocked_by_id IS DISTINCT FROM '00000000-0000-7000-8000-000000000001'::uuid))",
       },
       {
         name: 'contractor_merged_into_another_check',
@@ -1558,6 +1604,11 @@ describe('the guards in the catalog', () => {
       // In force once (ADR-363): a ticket has one lock not unlocked at most, and one void not
       // lifted.
       // A flag has one acceptance in force (ADR-534 (8)).
+      // A day has one approval in force (ADR-598).
+      {
+        name: 'day_approval_approved_once',
+        definition: 'EXCLUDE USING btree (assignment_id WITH =) WHERE ((unlocked_at IS NULL))',
+      },
       {
         name: 'flag_acceptance_accepted_once',
         definition: 'EXCLUDE USING btree (flag_id WITH =) WHERE ((withdrawn_at IS NULL))',

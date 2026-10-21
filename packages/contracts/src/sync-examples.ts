@@ -206,6 +206,7 @@ export const listsAfterwards: PhoneListsRecord = {
   ],
   helpers: [],
   quantityLookup: [],
+  timeClock: { enabled: false, activities: [] },
 };
 
 // Coastline's bucket truck crew as 730417: nothing measured.
@@ -347,6 +348,36 @@ export const records: SyncedRecord[] = [
     },
   },
   { record: 'CERTIFICATION', certification },
+  // Ana clocks out at 18:50 (ADR-598): her day's lines, the collection her phone pre-filled one
+  // from and the drive back she picked from the firm's list.
+  {
+    record: 'CLOCK_ENTRY',
+    clockEntry: {
+      id: made('a'),
+      projectId: p1,
+      assignmentId: assignment,
+      workerId: ana,
+      kind: 'OUT',
+      at: '2026-10-12T22:50:00.000Z',
+      deviceUtcOffsetMinutes: -240,
+      activityLines: [
+        {
+          startedAt: '2026-10-12T13:05:00.000Z',
+          endedAt: '2026-10-12T13:40:00.000Z',
+          fieldEventId: made('1'),
+          activityId: null,
+          note: null,
+        },
+        {
+          startedAt: '2026-10-12T22:20:00.000Z',
+          endedAt: '2026-10-12T22:50:00.000Z',
+          fieldEventId: null,
+          activityId: made('f7'),
+          note: 'Back to the yard',
+        },
+      ],
+    },
+  },
 ];
 
 // Tariq had no assignment on Monday: the tower's phone was set up for him under the passcode.

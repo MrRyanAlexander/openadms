@@ -72,6 +72,7 @@ const listsOf = (setupVersion: number): PhoneListsRecord => ({
   primes: [],
   helpers: [],
   quantityLookup: [],
+  timeClock: { enabled: false, activities: [] },
 });
 
 interface Sent {

@@ -1027,9 +1027,11 @@ project's load form; a count is 1 or more; a debris type and a payable type are 
 ROE. That a payable type is among the project's unit rate pay items is not held by the database.
 **Viewers:** a client user and an auditor see their projects' ROEs and scope lines, every column but the owner's name (`viewer_roe`); the owner's name through `viewer_roe_citizen`, only where the firm lets that viewer see private citizens by name (§2.2; ADR-336).
 
-### The time clock (Phases 3–4; ADR-241)
+### The time clock (Phases 3–4; ADR-241; built, task 3.7.1, ADR-598)
 
-**No field links any of it to crew time**, and no rate or pay is held.
+**No field links any of it to crew time**, and no rate or pay is held. No read-only viewer sees
+any of it (ADR-241 (8)). While a day's approval is in force, nothing of its entries or lines is
+changed; a phone's entry that arrives after is still taken (ADR-598).
 
 #### `ClockEntry`
 
@@ -1038,10 +1040,10 @@ ROE. That a payable type is among the project's unit rate pay items is not held 
 | Field | Type | Notes |
 |---|---|---|
 | **id** | uuid | From the phone |
-| **assignmentId** | → `Assignment` | |
+| **projectId**, **assignmentId**, **workerId** | → `Assignment` (project, id, person), and → `User` | The worker is the assignment's own person (ADR-598) |
+| **deviceId** | → `Device` | The phone it was made on; written only as the worker from it |
 | **kind** | enum `ClockEntryKind` | `IN` · `BREAK_START` · `BREAK_END` · `OUT` |
 | **at** | instant | With its offset and `receivedAt` |
-| deviceId | → `Device` | |
 
 #### `ClockActivityLine`
 
@@ -1049,23 +1051,25 @@ ROE. That a payable type is among the project's unit rate pay items is not held 
 
 | Field | Type | Notes |
 |---|---|---|
-| **assignmentId** | → `Assignment` | |
-| **startedAt**, **endedAt** | instant | |
+| **clockEntryId**, **clockEntryKind** | → `ClockEntry` (id, kind) | The clock-out that carried it: kind `OUT` (ADR-598) |
+| **position** | int | Its place among its clock-out's lines, from 1 |
+| **startedAt**, **endedAt** | instant | The worker's, taken as sent |
 | activityId | → `ClockActivity` | What the app can't know; this, or `fieldEventId` |
-| fieldEventId | → `FieldEvent` | Pre-filled from the day's field events |
-| note | text | |
+| fieldEventId | uuid | Pre-filled from the day's field events: **the id the phone made, no key**, kept whatever became of that field event (ADR-598) |
+| note | text | Never blank |
 
-#### `ApprovedDay`
+#### `DayApproval`
 
-*Mark.*
+*Mark.* A day has **one approval in force** (an exclusion among those not unlocked); approving
+again after an unlock is a new row, so every approval is kept (as `InvoiceLock`, C17). Never the
+worker's own day (ADR-598; this table was drafted as `ApprovedDay`, unique on its assignment).
 
 | Field | Type | Notes |
 |---|---|---|
-| **assignmentId** | → `Assignment`, unique | |
-| **approvedById** | → `User` | |
+| **projectId**, **assignmentId** | → `Assignment` | |
+| **approvedById** | → `User` | A person, never the worker |
 | **approvedAt** | instant | |
-| unlockedById | → `User` | |
-| unlockedAt | instant | |
+| unlockedById, unlockedAt, unlockNote | → `User`, instant, text | All three or none |
 
 ---
 

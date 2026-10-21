@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 
 import { CertificationsController } from '../certification/certifications.controller.ts';
 import { AssignmentsController } from '../dispatch/assignments.controller.ts';
+import { HoursController } from '../time-clock/hours.controller.ts';
 import { PhonesController } from '../dispatch/phones.controller.ts';
 import { PeopleController } from '../people/people.controller.ts';
 import { EnrolmentController } from '../phone/enrolment.controller.ts';
@@ -80,6 +81,7 @@ import { HealthController } from './health.controller.ts';
     PhotographFilesController,
     BackOfficePhotographsController,
     AssignmentsController,
+    HoursController,
     ReviewMarksController,
     CorrectionsController,
     ReviewRecordsController,

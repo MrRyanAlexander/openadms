@@ -117,6 +117,8 @@ model Project {
   surveys                     Survey[]
   incidents                   Incident[]
   dropOffLogs                 DropOffLog[]
+  clockEntries                ClockEntry[]
+  dayApprovals                DayApproval[]
   quarantinedRecords          QuarantinedRecord[]
   // The numbered versions of its setup as its phones were shown it (evidence.prisma).
   setupManifests              SetupManifest[]
@@ -1082,6 +1084,9 @@ model User {
   incidentsCreated            Incident[]            @relation("IncidentCreatedBy")
   dropOffLogs                 DropOffLog[]          @relation("DropOffLogMonitor")
   dropOffLogsCreated          DropOffLog[]          @relation("DropOffLogCreatedBy")
+  clockEntries                ClockEntry[]          @relation("ClockEntryWorker")
+  dayApprovals                DayApproval[]         @relation("DayApprovalApprovedBy")
+  dayApprovalsUnlocked        DayApproval[]         @relation("DayApprovalUnlockedBy")
   quarantinedRecords          QuarantinedRecord[]   @relation("QuarantinedRecordMonitor")
   syncedRecordsNamed          SyncedRecord[]        @relation("SyncedRecordMonitor")
   quarantinedRecordsResolved  QuarantinedRecord[]   @relation("QuarantinedRecordResolvedBy")
@@ -1434,6 +1439,7 @@ model Device {
   surveys            Survey[]
   incidents          Incident[]
   dropOffLogs        DropOffLog[]
+  clockEntries       ClockEntry[]
   quarantinedRecords QuarantinedRecord[]
   syncs              Sync[]
   securityEvents     SecurityEvent[]
@@ -1596,9 +1602,13 @@ model Assignment {
   surveys        Survey[]
   incidents      Incident[]
   dropOffLogs    DropOffLog[]
+  clockEntries   ClockEntry[]
+  dayApprovals   DayApproval[]
 
   // So its pay items can only be its own project's (their relation's target).
   @@unique([projectId, id])
+  // So a time-clock entry's worker can only be its assignment's own person (ADR-598).
+  @@unique([projectId, id, personId])
   @@index([workDate, projectId])
   @@index([personId, workDate])
   @@map("assignment")
@@ -2261,8 +2271,9 @@ model ClockActivity {
   name     String
   position Int
 
-  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  archivedAt DateTime? @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  archivedAt DateTime?           @map("archived_at") @db.Timestamptz(3)
+  lines      ClockActivityLine[]
 
   @@map("clock_activity")
 }

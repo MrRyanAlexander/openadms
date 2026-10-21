@@ -89,6 +89,11 @@ Decides who can do what, and on which phone:
     activity lines are pre-filled from the day's field events; a **manager approves the day**
     (locked, unlock audited); hours are exported for payroll and client billing. It's never related
     to crew-time billing (ADR-100, 241).
+    *(Built on the server, task 3.7.1, ADR-598: each entry syncs as the worker's own from their
+    phone, the day's lines with the clock-out; the phone is told whether the clock is on; a
+    manager, never the worker, approves the day and unlocks it with a note; the export reads each
+    day's entries, lines and hours, the day ending before midnight in the project's time zone,
+    no cap. The phone's screens: task 3.7.2; the approval screen and the export: Phase 4.)*
 11. **Sync whenever there's a connection**, records first, photos after ([Part 5](05-sync.md)); the
     phone is topped up with numbers and fresh lists. A phone needn't be handed in for its work to
     arrive (ADR-240).

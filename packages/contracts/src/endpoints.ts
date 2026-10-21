@@ -34,6 +34,8 @@ import { z } from 'zod';
 import {
   assignmentRecordSchema,
   assignmentsAnswerSchema,
+  dayApprovalRecordSchema,
+  hoursAnswerSchema,
   csrfAnswerSchema,
   firmSettingsAnswerSchema,
   healthAnswerSchema,
@@ -4104,6 +4106,55 @@ export const searchBoardEndpoint = endpoint({
   answer: boardSearchAnswerSchema,
 });
 
+// The time clock's hours (REQ-310; spec/acceptance/02-people-and-devices.md AC-02-50, 53…55;
+// BACKLOG 3.7.1; ADR-063, 100, 241, 598): the read the export of hours makes, and a manager's
+// approval of a worker's day and its unlock. **Approving takes "approve hours" beside "view
+// dispatch"**, the area whose people's days these are; the read takes "view dispatch". No
+// read-only viewer reads hours, and none of it is ever a rate, a pay or crew time's hours.
+export const listHoursEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_DISPATCH',
+  name: 'listHours',
+  summary:
+    'A project’s workers’ days on the time clock, from one day to another (62 days at most), a page at a time by day and then by assignment: each assignment with an entry, standing or withdrawn; its entries and the activity lines its clock-out carried, as the worker’s phone sent them; what its hours come to (worked and on a break inside the day, which ends before midnight in the project’s time zone, what fell outside it, whether still clocked in, entries that fit no stretch), in whole minutes, with no limit on hours; and its approval in force, with whether anything of it arrived after. What the export of hours reads. Never a rate or a pay, and never crew time’s hours.',
+  method: 'GET',
+  path: '/projects/:projectId/hours',
+  params: projectId,
+  query: z.strictObject({ from: day, to: day, after: z.uuid().optional(), limit: readPage }).refine(
+    (query) => {
+      const days = (Date.parse(query.to) - Date.parse(query.from)) / 86_400_000;
+      return days >= 0 && days <= 61;
+    },
+    { message: 'From one day to another, 62 days at most.', path: ['to'] },
+  ),
+  answer: hoursAnswerSchema,
+});
+
+const hours = { access: 'SIGNED_IN', roles: backOfficeRoles, permission: 'APPROVE_HOURS' } as const;
+
+export const approveDayEndpoint = endpoint({
+  ...hours,
+  name: 'approveDay',
+  summary:
+    'A worker’s day on the time clock is approved, and so locked: nothing of its entries or activity lines changes until it is unlocked. A phone’s entry that arrives after is still taken, and the hours read say so. Refused for one’s own day and for a day already approved.',
+  method: 'POST',
+  path: '/assignments/:assignmentId/day-approvals',
+  params: assignmentId,
+  answer: savedAnswer(dayApprovalRecordSchema),
+});
+
+export const unlockDayEndpoint = endpoint({
+  ...hours,
+  name: 'unlockDay',
+  summary:
+    'An approved day is unlocked, with a note saying why; the approval is kept and says who unlocked it and when, and the day is approved again as a new approval. Refused for a day that isn’t approved.',
+  method: 'POST',
+  path: '/assignments/:assignmentId/day-unlocks',
+  params: assignmentId,
+  body: z.strictObject({ note: z.string().trim().min(1).max(500) }),
+  answer: savedAnswer(dayApprovalRecordSchema),
+});
+
 export const listPhoneSessionsEndpoint = endpoint({
   ...read,
   permission: 'VIEW_DISPATCH',
@@ -4636,6 +4687,9 @@ export const endpoints: readonly Endpoint[] = [
   withdrawAssignmentEndpoint,
   reinstateAssignmentEndpoint,
   searchBoardEndpoint,
+  listHoursEndpoint,
+  approveDayEndpoint,
+  unlockDayEndpoint,
   voidTicketEndpoint,
   unvoidTicketEndpoint,
   acceptFlagEndpoint,

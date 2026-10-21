@@ -16,37 +16,37 @@ below (51 browser tests). The table was carried over from the hand-written page 
 <!-- counts: written by `pnpm chain record`, never by hand -->
 | Step | Its newest run | Took | Passed |
 |---|---|---|---|
-| `local:up` | 2026-10-20 20:59 UTC | 22s | ✓ |
-| `installer:check` | 2026-10-20 20:59 UTC | 1s | ✓ |
-| `install` | 2026-10-20 20:59 UTC | 0s | ✓ |
-| `typecheck` | 2026-10-20 20:59 UTC | 2s | ✓ |
-| `test` | 2026-10-20 20:59 UTC | 4m 17s | ✓ |
-| `scenarios` | 2026-10-20 21:03 UTC | 3m 37s | ✓ |
-| `e2e` | 2026-10-20 21:07 UTC | 1m 09s | ✓ |
-| `security` | 2026-10-20 21:08 UTC | 9s | ✓ |
-| `lint` | 2026-10-20 21:08 UTC | 59s | ✓ |
-| `licences` | 2026-10-20 21:09 UTC | 1s | ✓ |
+| `local:up` | 2026-10-21 00:41 UTC | 9s | ✓ |
+| `installer:check` | 2026-10-21 00:42 UTC | 1s | ✓ |
+| `install` | 2026-10-21 00:42 UTC | 0s | ✓ |
+| `typecheck` | 2026-10-21 00:42 UTC | 2s | ✓ |
+| `test` | 2026-10-21 00:42 UTC | 4m 26s | ✓ |
+| `scenarios` | 2026-10-21 00:46 UTC | 5m 29s | ✓ |
+| `e2e` | 2026-10-21 00:52 UTC | 1m 07s | ✓ |
+| `security` | 2026-10-21 00:53 UTC | 9s | ✓ |
+| `lint` | 2026-10-21 00:53 UTC | 1m 12s | ✓ |
+| `licences` | 2026-10-21 00:54 UTC | 1s | ✓ |
 
 | Step | Count | Today |
 |---|---|---|
 | `installer:check` | installer:check ✓ | 38 |
-| `installer:check` | migrations at head | 149 |
-| `test` | test files | 213 |
-| `test` | tests | 3634 |
-| `test` | tests in apps/api | 765 |
-| `test` | files in apps/api | 58 |
+| `installer:check` | migrations at head | 151 |
+| `test` | test files | 216 |
+| `test` | tests | 3676 |
+| `test` | tests in apps/api | 772 |
+| `test` | files in apps/api | 59 |
 | `test` | tests in apps/field | 255 |
 | `test` | files in apps/field | 20 |
 | `test` | tests in apps/worker | 51 |
 | `test` | files in apps/worker | 6 |
 | `test` | tests in infra/local | 77 |
 | `test` | files in infra/local | 6 |
-| `test` | tests in packages/contracts | 98 |
+| `test` | tests in packages/contracts | 102 |
 | `test` | files in packages/contracts | 9 |
-| `test` | tests in packages/db | 1095 |
-| `test` | files in packages/db | 49 |
-| `test` | tests in packages/domain | 915 |
-| `test` | files in packages/domain | 49 |
+| `test` | tests in packages/db | 1113 |
+| `test` | files in packages/db | 50 |
+| `test` | tests in packages/domain | 928 |
+| `test` | files in packages/domain | 50 |
 | `test` | tests in packages/receipts | 32 |
 | `test` | files in packages/receipts | 2 |
 | `test` | tests in packages/scenarios | 163 |
@@ -57,7 +57,7 @@ below (51 browser tests). The table was carried over from the hand-written page 
 | `test` | files in tools/security | 3 |
 | `test` | tests in tools/setup | 20 |
 | `test` | files in tools/setup | 3 |
-| `scenarios` | story migrations | 149 |
+| `scenarios` | story migrations | 151 |
 | `scenarios` | checks in ticket-101001 | 16 |
 | `scenarios` | checks in dispatch-monday | 22 |
 | `scenarios` | checks in setup | 52 |
@@ -85,8 +85,8 @@ below (51 browser tests). The table was carried over from the hand-written page 
 | `scenarios` | stories | 24 |
 | `e2e` | browser tests | 55 |
 | `e2e` | screens | 55 |
-| `security` | grant test files | 49 |
-| `security` | grant tests | 1095 |
+| `security` | grant test files | 50 |
+| `security` | grant tests | 1113 |
 | `security` | security checks | 16 |
 | `licences` | licensed packages | 472 |
 <!-- end of counts -->

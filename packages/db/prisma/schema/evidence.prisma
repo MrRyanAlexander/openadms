@@ -729,6 +729,81 @@ model DropOffLog {
   @@map("drop_off_log")
 }
 
+// What one time-clock entry records (ADR-241): the domain's clockEntryKinds.
+enum ClockEntryKind {
+  IN
+  BREAK_START
+  BREAK_END
+  OUT
+
+  @@map("clock_entry_kind")
+}
+
+// One entry of a worker's own time clock, made by hand on the phone on their assignment: a
+// clock-in, a break's start or end, a clock-out (REQ-310; spec/DATA-MODEL.md §3, "The time
+// clock"; ADR-063, 100, 241, 598). Evidence, the worker's own word: written as they are, from
+// the phone that made it, at the phone's clock with its offset, and the time the server received
+// it. Whose hours they are is the assignment's own person (its relation holds the two to agree);
+// the day is the assignment's. While a manager's approval of the day is in force nothing of it
+// is changed (the guard migration). **Never related to crew time:** nothing here names a field
+// event, its items or their hours, and nothing of theirs names this (ADR-241 (7)). Never deleted.
+model ClockEntry {
+  // Made on the phone, so a retried sync is the same entry (KD-56): no default.
+  id           String         @id @db.Uuid
+  projectId    String         @map("project_id") @db.Uuid
+  assignmentId String         @map("assignment_id") @db.Uuid
+  // Whose hours: the assignment's person.
+  workerId     String         @map("worker_id") @db.Uuid
+  deviceId     String         @map("device_id") @db.Uuid
+  kind         ClockEntryKind
+
+  // The phone's clock, as a UTC instant plus its offset; and when the server received it (ADR-100).
+  at                     DateTime @db.Timestamptz(3)
+  deviceUtcOffsetMinutes Int      @map("device_utc_offset_minutes")
+  receivedAt             DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment    Assignment          @relation(fields: [projectId, assignmentId, workerId], references: [projectId, id, personId], onDelete: Restrict, onUpdate: Restrict)
+  worker        User                @relation("ClockEntryWorker", fields: [workerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  device        Device              @relation(fields: [deviceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  activityLines ClockActivityLine[]
+
+  // What an activity line points at, so it is carried only by a clock-out.
+  @@unique([id, kind])
+  @@index([assignmentId])
+  @@map("clock_entry")
+}
+
+// One line of the day's activity, approved by the worker as they clocked out, and so carried by
+// that clock-out (REQ-310; ADR-241 (3), 598): from when to when, and what: pre-filled from one of
+// the day's field events, or what the app can't know (travel, standby, training) picked from the
+// firm's list, with a note. Evidence, written with its clock-out. **The field event is named as
+// the phone named it, by the id its phone made, and is no foreign key:** a line is the worker's
+// statement of their own time, kept whole even where that field event is held, in quarantine or
+// not yet sent; a reader finds the field event saved under that id, if there is one. Never crew
+// time (ADR-241 (7)). Never deleted.
+model ClockActivityLine {
+  id             String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  clockEntryId   String         @map("clock_entry_id") @db.Uuid
+  // The clock-out's kind, again: OUT (a check in the guard migration).
+  clockEntryKind ClockEntryKind @map("clock_entry_kind")
+  // Its place among the clock-out's lines: 1, 2, 3…
+  position       Int
+
+  startedAt    DateTime @map("started_at") @db.Timestamptz(3)
+  endedAt      DateTime @map("ended_at") @db.Timestamptz(3)
+  // One of the two: an activity from the firm's list, or a field event (a check).
+  activityId   String?  @map("activity_id") @db.Uuid
+  fieldEventId String?  @map("field_event_id") @db.Uuid
+  note         String?
+
+  clockEntry ClockEntry     @relation(fields: [clockEntryId, clockEntryKind], references: [id, kind], onDelete: Restrict, onUpdate: Restrict)
+  activity   ClockActivity? @relation(fields: [activityId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([clockEntryId, position])
+  @@map("clock_activity_line")
+}
+
 // Why a record a phone sent is in quarantine and not saved: the number it carries is held by
 // another record (ADR-022, 338).
 enum QuarantineReason {

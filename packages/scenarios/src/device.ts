@@ -269,6 +269,8 @@ export function onTheWire(held: HeldRecord): SyncedRecord {
         return { record: held.record, roe: said(held.roe) };
       case 'CERTIFICATION':
         return { record: held.record, certification: said(held.certification) };
+      case 'CLOCK_ENTRY':
+        return { record: held.record, clockEntry: said(held.clockEntry) };
     }
   };
   return JSON.parse(JSON.stringify(wire())) as SyncedRecord;
@@ -293,6 +295,8 @@ export function fromPhone(deviceId: string, read: ReceivedRecord): HeldRecord {
       return { record: read.record, roe: { ...read.roe, ...phone } };
     case 'CERTIFICATION':
       return { record: read.record, certification: { ...read.certification, deviceId } };
+    case 'CLOCK_ENTRY':
+      return { record: read.record, clockEntry: { ...read.clockEntry, deviceId } };
   }
 }
 

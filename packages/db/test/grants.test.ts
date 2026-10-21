@@ -112,6 +112,11 @@ const tableGrants: Record<string, Record<string, string>> = {
   survey: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   incident: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   drop_off_log: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  // The time clock: a worker's entries and activity lines are evidence, a day's approval a mark
+  // (ADR-598).
+  clock_entry: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  clock_activity_line: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
+  day_approval: { adms_api: 'INSERT SELECT UPDATE', adms_worker: 'SELECT' },
   // A record waiting in quarantine: evidence, kept as the phone sent it (ADR-338).
   quarantined_record: { adms_api: 'INSERT SELECT', adms_worker: 'SELECT' },
   completed_load: { adms_api: 'SELECT', adms_worker: 'INSERT SELECT UPDATE' },
@@ -269,6 +274,27 @@ const correctable: Record<string, string[]> = {
     'roe_id',
   ],
   drop_off_log: [...formShared, 'site_id', 'resident_name', 'origin_address'],
+  // The time clock's evidence: what an entry is of is refused any change by its trigger, and
+  // nothing of a day approved changes (ADR-598).
+  clock_entry: [
+    'project_id',
+    'assignment_id',
+    'worker_id',
+    'device_id',
+    'kind',
+    'at',
+    'device_utc_offset_minutes',
+  ],
+  clock_activity_line: [
+    'clock_entry_id',
+    'clock_entry_kind',
+    'position',
+    'started_at',
+    'ended_at',
+    'activity_id',
+    'field_event_id',
+    'note',
+  ],
   // Each with the mark that takes it off (ADR-364).
   field_event_item: [
     'field_event_id',

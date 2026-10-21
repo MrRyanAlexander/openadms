@@ -243,5 +243,9 @@ export const unseenTables = [
   'synced_record',
   // A file set aside is the API's, for the back office (ADR-482).
   'set_aside_file',
+  // No viewer sees anyone's hours (ADR-241 (8), 598).
+  'clock_entry',
+  'clock_activity_line',
+  'day_approval',
   'audit_record',
 ];

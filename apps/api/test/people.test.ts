@@ -279,6 +279,8 @@ describe('permissions, read from the database on every request', () => {
     ]);
     expect(byView('VIEW_DISPATCH')).toEqual([
       'listAssignments',
+      // A project's workers' days on the time clock, as the export of hours reads them (ADR-598).
+      'listHours',
       'listPeople',
       'listPhoneSessions',
       'listPhones',
@@ -295,13 +297,15 @@ describe('permissions, read from the database on every request', () => {
     // setup-endpoints.test.ts's), Dispatch (task 2.4.3; phones.test.ts's) and those of review's
     // marks (task 2.4.4, part 1; review-marks.test.ts's), then correct and renumber (part 2;
     // corrections.test.ts's). A reprocess with nothing changed takes correct: no permission of
-    // its own (reprocesses.test.ts; ADR-498).
+    // its own (reprocesses.test.ts; ADR-498). Approving a worker's day and unlocking it take
+    // approve hours (task 3.7.1; time-clock.test.ts's; ADR-598).
     expect([...new Set(endpoints.flatMap(({ permission }) => permission ?? []))]).toEqual([
       'VIEW_DISPATCH',
       'SETUP',
       'VIEW_REVIEW',
       'VIEW_SETUP',
       'DISPATCH',
+      'APPROVE_HOURS',
       'VOID',
       'ACCEPT_FLAG',
       'QC',

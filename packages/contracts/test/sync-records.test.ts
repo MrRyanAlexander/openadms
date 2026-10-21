@@ -9,7 +9,9 @@ import { z } from 'zod';
 import {
   certificationBoxesAtMost,
   certificationHelpersAtMost,
+  setupShownSchema,
   syncedCertificationSchema,
+  syncedClockEntrySchema,
   syncedDropOffLogSchema,
   syncedFieldEventSchema,
   syncedIncidentSchema,
@@ -412,5 +414,60 @@ describe('the records a phone sends', () => {
     for (const signedDate of ['2026-10-09T00:00:00Z', '9 October 2026', '2026-13-01']) {
       expect(syncedRoeSchema.safeParse({ ...roe.roe, signedDate }).success, signedDate).toBe(false);
     }
+  });
+});
+
+describe('a time-clock entry (REQ-310; AC-02-50, 52; ADR-241, 598)', () => {
+  const sent = records.find((one) => one.record === 'CLOCK_ENTRY');
+  if (sent?.record !== 'CLOCK_ENTRY') throw new Error('No clock entry among the examples.');
+  const out = sent.clockEntry;
+  const [fromAFieldEvent, picked] = out.activityLines;
+  if (fromAFieldEvent === undefined || picked === undefined) throw new Error('Two lines.');
+
+  it('a clock-in, a break’s start and end and a clock-out, at the phone’s clock with its offset; a clock-out carries the day’s lines', () => {
+    expect(refusals(syncedClockEntrySchema, out)).toEqual([]);
+    for (const kind of ['IN', 'BREAK_START', 'BREAK_END']) {
+      expect(refusals(syncedClockEntrySchema, { ...out, kind, activityLines: [] }), kind).toEqual(
+        [],
+      );
+      expect(refusals(syncedClockEntrySchema, { ...out, kind }), kind).toEqual([
+        'activityLines: Only a clock-out carries the day’s activity lines.',
+      ]);
+    }
+    expect(syncedClockEntrySchema.safeParse({ ...out, kind: 'LUNCH' }).success).toBe(false);
+    expect(syncedClockEntrySchema.parse(out).at).toEqual(new Date('2026-10-12T22:50:00Z'));
+    expect(syncedClockEntrySchema.safeParse({ ...out, at: '2026-10-12T18:50:00' }).success).toBe(
+      false,
+    );
+  });
+
+  it('a line is one field event, by the id its phone made, or one activity of the firm’s list; a note isn’t blank', () => {
+    const one = (line: unknown): string[] =>
+      refusals(syncedClockEntrySchema, { ...out, activityLines: [line] });
+    expect(one(fromAFieldEvent)).toEqual([]);
+    expect(one(picked)).toEqual([]);
+    const neither =
+      'activityLines.0.activityId: A line is one field event or one activity of the firm’s list, never both.';
+    expect(one({ ...picked, fieldEventId: made('1') })).toEqual([neither]);
+    expect(one({ ...picked, activityId: null })).toEqual([neither]);
+    expect(one({ ...picked, note: '   ' })).toHaveLength(1);
+    // When a line started and ended is the worker's, taken as sent.
+    expect(one({ ...picked, endedAt: picked.startedAt, startedAt: picked.endedAt })).toEqual([]);
+  });
+
+  it('never a rate, a pay or crew time’s hours; never the phone it is from (AC-10-35)', () => {
+    const names = fieldNames(syncedClockEntrySchema);
+    expect(
+      names.filter((name) => /rate|pay|amount|hours|item|deviceId|source/i.test(name)),
+    ).toEqual([]);
+    expect(syncedClockEntrySchema.safeParse({ ...out, hourlyRate: 18 }).success).toBe(false);
+  });
+
+  it('the phone is told whether its project has the time clock on, and the firm’s activities; lists kept before say it is off', () => {
+    const shape = setupShownSchema.shape.timeClock;
+    expect(shape.parse(undefined)).toEqual({ enabled: false, activities: [] });
+    expect(
+      shape.parse({ enabled: true, activities: [{ id: made('f7'), name: 'Travel' }] }),
+    ).toEqual({ enabled: true, activities: [{ id: made('f7'), name: 'Travel' }] });
   });
 });

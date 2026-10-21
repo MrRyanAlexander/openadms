@@ -40,6 +40,8 @@ import { apiCertifications } from '../certification/certifications.controller.ts
 import { Certifications } from '../certification/certifications.ts';
 import { apiAssignments } from '../dispatch/assignments.controller.ts';
 import { Assignments } from '../dispatch/assignments.ts';
+import { apiHours } from '../time-clock/hours.controller.ts';
+import { Hours } from '../time-clock/hours.ts';
 import { MasterPasscode } from '../dispatch/master-passcode.ts';
 import { apiMasterPasscode, apiPhones } from '../dispatch/phones.controller.ts';
 import { Phones } from '../dispatch/phones.ts';
@@ -554,6 +556,8 @@ export class ApiProcess {
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],
           [apiAssignments, new Assignments(database, clock)],
+          // The time clock's hours, approved and read (task 3.7.1).
+          [apiHours, new Hours(database, clock)],
           // Review's marks (task 2.4.4): each queues the run its action needs.
           [apiVoids, new Voids(database, clock, policy)],
           [apiAcceptances, new Acceptances(database, clock, policy)],

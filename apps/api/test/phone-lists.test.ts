@@ -129,6 +129,31 @@ async function leeOnP1(served: Served, tx: Tx, more: object = {}) {
 }
 
 describe('the lists a phone takes', () => {
+  it('AC-02-50 on a project with the time clock on, the phone of anyone with an assignment is told so, with the firm’s activities in their order (ADR-598)', async () => {
+    await world(async (served, tx) => {
+      const { priced, token, signIn, assigned } = await leeOnP1(served, tx);
+      // The firm switches it on for P1, as its setup's settings do.
+      await tx.project.update({
+        where: { id: priced.project.id },
+        data: { timeClockEnabled: true },
+      });
+      await assigned({});
+      const signedIn = await signIn();
+      const held = await read(served, token, signedIn.token);
+      expect(held.lists?.timeClock).toEqual({
+        enabled: true,
+        activities: (await tx.clockActivity.findMany({ orderBy: { position: 'asc' } })).map(
+          ({ id, name }) => ({ id, name }),
+        ),
+      });
+      expect(held.lists?.timeClock.activities.map(({ name }) => name)).toEqual([
+        'Travel',
+        'Standby',
+        'Training',
+      ]);
+    });
+  });
+
   it('AC-02-37 (in part), AC-01-26, AC-07-91 Lee Morgan’s phone reads the lists of the assignment it took: the load form’s debris types without C&D, which is Hidden on phones; the field tags; the unit rate pay item the assignment names and not the project’s other; never a rate, a load’s pay item or its code; they are the project’s setup version 1, made by this first read and by no read after it', async () => {
     // The exact list of what a monitor's phone may call: a new one is added here on purpose.
     expect(
@@ -228,6 +253,8 @@ describe('the lists a phone takes', () => {
         helpers: [],
         // The assignment is at no site.
         quantityLookup: [],
+        // P1's time clock is off, as a new project's is (ADR-303): no activity is sent.
+        timeClock: { enabled: false, activities: [] },
       });
       expect(held.lists?.typedNumberReasons.length).toBeGreaterThan(0);
       // Nothing sent says what anything pays: no rate, no load's code, no other pay item, no
@@ -550,7 +577,8 @@ describe('the lists a phone takes', () => {
       expect(first?.kept).not.toMatch(
         /"\w*(rate|rule|transaction|price|amount|fee|permit|ineligible|cert|roe|block|helper)\w*":/i,
       );
-      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(19);
+      // The time clock's setting and activities among them (ADR-598).
+      expect(Object.keys(setupShownSchema.parse(JSON.parse(first?.kept ?? '')))).toHaveLength(20);
 
       // The board moves Lee to the curb: the sites stay, the lookup goes. The project's setup
       // is as it was, so the version is too.

@@ -50,6 +50,16 @@ export {
 } from './flags.ts';
 export { ProjectClock } from './project-clock.ts';
 export {
+  ClockDay,
+  DayApprovals,
+  clockEntryKinds,
+  type ClockEntryAt,
+  type ClockEntryKind,
+  type DayApprovalRefusal,
+  type DayAsked,
+  type DayHours,
+} from './time-clock.ts';
+export {
   QuantityChecks,
   type CarriedTicketRead,
   type CheckedReceipt,
@@ -208,6 +218,7 @@ export {
 export {
   Access,
   DispatchRights,
+  HoursRights,
   PeopleRules,
   SetupRights,
   actorOnly,

@@ -519,10 +519,10 @@ describe('a reprocess a person asks for with nothing changed (ADR-498)', () => {
 describe('what a sync held, resolved (ADR-526 (2), (3))', () => {
   const id = '0199c2d4-1a00-7000-8000-000000101022';
 
-  it('AC-10-74 a held record is saved under the id its phone made, as the kind it was sent as; a report and one with no id are not saved so', () => {
+  it('AC-10-74 a held record is saved under the id its phone made, as the kind it was sent as; a report, a time-clock entry and one with no id are not saved so', () => {
     const waiting = new HeldResolution(null);
     expect(waiting.refusal()).toBeNull();
-    for (const kind of heldSentAs.filter((one) => one !== 'REPORT')) {
+    for (const kind of heldSentAs.filter((one) => one !== 'REPORT' && one !== 'CLOCK_ENTRY')) {
       expect(waiting.savingRefusal({ sentId: id, sentAs: kind }, { id, kind }), kind).toBeNull();
     }
     // What was sent may say no kind: then it is saved as the reviewer says.
@@ -537,6 +537,9 @@ describe('what a sync held, resolved (ADR-526 (2), (3))', () => {
         ),
         waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' }),
         waiting.savingRefusal({ sentId: id, sentAs: 'PHOTO' }, { id, kind: 'CERTIFICATION' }),
+        // A worker's own hours are never saved for them (ADR-598), sent so or saved so.
+        waiting.savingRefusal({ sentId: id, sentAs: 'CLOCK_ENTRY' }, { id, kind: 'CLOCK_ENTRY' }),
+        waiting.savingRefusal({ sentId: id, sentAs: null }, { id, kind: 'CLOCK_ENTRY' }),
       ].map((refusal) => refusal?.code),
     ).toEqual([
       'CLOSED_ONLY',
@@ -544,6 +547,8 @@ describe('what a sync held, resolved (ADR-526 (2), (3))', () => {
       'NOT_THE_ID_SENT',
       'NOT_THE_KIND_SENT',
       'NOT_THE_KIND_SENT',
+      'CLOSED_ONLY',
+      'CLOSED_ONLY',
     ]);
     expect(
       waiting.savingRefusal({ sentId: id, sentAs: 'FIELD_EVENT' }, { id, kind: 'ROE' })?.message,

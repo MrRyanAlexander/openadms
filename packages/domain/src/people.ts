@@ -53,8 +53,8 @@ export const viewPermissions = ['VIEW_REVIEW', 'VIEW_SETUP', 'VIEW_DISPATCH'] as
 
 export type ViewPermission = (typeof viewPermissions)[number];
 
-// The view an act needs beside its own grant: none for a view itself, nor for approving hours,
-// whose time clock has nothing to read yet (Phase 4).
+// The view an act needs beside its own grant: none for a view itself. Approving hours reads the
+// people's days of the dispatch board, so it takes "view dispatch" (ADR-598).
 const viewOfAct: Record<PermissionName, ViewPermission | null> = {
   CORRECT: 'VIEW_REVIEW',
   RENUMBER: 'VIEW_REVIEW',
@@ -63,7 +63,7 @@ const viewOfAct: Record<PermissionName, ViewPermission | null> = {
   QC: 'VIEW_REVIEW',
   LOCK_INVOICED: 'VIEW_REVIEW',
   UNLOCK_INVOICED: 'VIEW_REVIEW',
-  APPROVE_HOURS: null,
+  APPROVE_HOURS: 'VIEW_DISPATCH',
   SETUP: 'VIEW_SETUP',
   DISPATCH: 'VIEW_DISPATCH',
   VIEW_REVIEW: null,
@@ -219,6 +219,29 @@ export class DispatchRights {
     return {
       code: 'NOT_ALLOWED',
       message: `${this.name} may not dispatch: it takes an admin, or a manager/analyst granted ${grantsInWords('DISPATCH')}. Nothing was changed.`,
+    };
+  }
+}
+
+// Who may approve a worker's day and unlock it (REQ-310; ADR-241 (4), 598): an admin, or a
+// manager/analyst who holds "approve hours" and "view dispatch" now; nobody else. Asked inside the
+// service's own piece of work, as Dispatch is.
+export class HoursRights {
+  private readonly name: string;
+  private readonly access: Access | null;
+
+  // `person`: whoever asks, as the database has them now; null where it has nobody of that id.
+  constructor(person: (Holder & { readonly name: string }) | null) {
+    this.name = person?.name ?? 'Somebody the firm has no record of';
+    this.access = person === null ? null : new Access(person);
+  }
+
+  // Why this person may not approve hours, or nothing.
+  refusal(): DispatchRightsRefusal | null {
+    if (this.access?.holds('APPROVE_HOURS') === true) return null;
+    return {
+      code: 'NOT_ALLOWED',
+      message: `${this.name} may not approve hours: it takes an admin, or a manager/analyst granted ${grantsInWords('APPROVE_HOURS')}. Nothing was changed.`,
     };
   }
 }

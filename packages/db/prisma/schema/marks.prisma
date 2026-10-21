@@ -113,6 +113,31 @@ model InvoiceLock {
   @@map("invoice_lock")
 }
 
+// A manager's approval of a worker's day: their assignment's time clock, approved and so locked
+// (REQ-310; ADR-241 (4), 598). An unlock keeps the row and says who, when and why; approving
+// again is a new row, so a day has one approval in force at most (an exclusion in the guard
+// migration) and every approval it ever had is kept. Never the worker's own (a check). No rate
+// and no pay: hours only (ADR-241 (5)).
+model DayApproval {
+  id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  projectId    String    @map("project_id") @db.Uuid
+  assignmentId String    @map("assignment_id") @db.Uuid
+  approvedById String    @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime  @default(now()) @map("approved_at") @db.Timestamptz(3)
+  // The unlock: who, when and why, all three or none.
+  unlockedById String?   @map("unlocked_by_id") @db.Uuid
+  unlockedAt   DateTime? @map("unlocked_at") @db.Timestamptz(3)
+  unlockNote   String?   @map("unlock_note")
+
+  project    Project    @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  assignment Assignment @relation(fields: [projectId, assignmentId], references: [projectId, id], onDelete: Restrict, onUpdate: Restrict)
+  approvedBy User       @relation("DayApprovalApprovedBy", fields: [approvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  unlockedBy User?      @relation("DayApprovalUnlockedBy", fields: [unlockedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([assignmentId])
+  @@map("day_approval")
+}
+
 // A reviewer's acceptance of a flag that is right as it is: a reason from the firm's list, who
 // and when (ADR-166). The flag itself is the worker's and is never changed by it; a flag is
 // accepted once.

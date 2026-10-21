@@ -136,6 +136,8 @@ export function fromPhone(
       return { record: read.record, survey: { ...read.survey, ...phone } };
     case 'ROE':
       return { record: read.record, roe: { ...read.roe, ...phone } };
+    case 'CLOCK_ENTRY':
+      return { record: read.record, clockEntry: { ...read.clockEntry, deviceId } };
   }
 }
 

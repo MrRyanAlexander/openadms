@@ -155,6 +155,8 @@ function phoneOf(record: HeldRecord): string {
       return record.roe.deviceId;
     case 'CERTIFICATION':
       return record.certification.deviceId;
+    case 'CLOCK_ENTRY':
+      return record.clockEntry.deviceId;
   }
 }
 

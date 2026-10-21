@@ -142,6 +142,9 @@ export interface SetupShown {
     readonly primeId: string;
     readonly asks: QuantityAskName;
   }[];
+  // The project's time clock (ADR-241, 598): whether its workers are offered it, and the firm's
+  // activities a day's line picks from.
+  readonly timeClock: { readonly enabled: boolean; readonly activities: readonly Named[] };
 }
 
 const name = ({ id, name }: Named): Named => ({ id, name });
@@ -363,7 +366,7 @@ export class SetupVersions {
   static async shownIn(tx: Prisma.TransactionClient, projectId: string): Promise<SetupShown> {
     const project = await tx.project.findUniqueOrThrow({
       where: { id: projectId },
-      select: { ticketNumberSource: true, allowSplitLoads: true },
+      select: { ticketNumberSource: true, allowSplitLoads: true, timeClockEnabled: true },
     });
     const series = await tx.projectNumberSeries.findMany({
       where: { projectId },
@@ -434,6 +437,13 @@ export class SetupVersions {
     // has no row.
     const carried = new Set(entries.map((entry) => entry.id));
     const asks = await SetupStanding.quantityLookupOf(tx, projectId);
+    // The firm's activities, where the project has the time clock on: none to a phone offered none.
+    const activities = project.timeClockEnabled
+      ? await tx.clockActivity.findMany({
+          where: { archivedAt: null },
+          orderBy: { position: 'asc' },
+        })
+      : [];
     return {
       numbering: {
         ticketNumberSource: project.ticketNumberSource,
@@ -472,6 +482,7 @@ export class SetupVersions {
           primeId,
           asks,
         })),
+      timeClock: { enabled: project.timeClockEnabled, activities: activities.map(name) },
     };
   }
 

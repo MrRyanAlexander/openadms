@@ -30,6 +30,7 @@ export const noLists: PhoneListsRecord = {
   primes: [],
   helpers: [],
   quantityLookup: [],
+  timeClock: { enabled: false, activities: [] },
 };
 
 // The server's making of a check (apps/api's OfflineChecks): Argon2id of what is typed in NFC

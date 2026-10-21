@@ -341,6 +341,7 @@
       "SURVEY": "A survey",
       "ROE": "ROE {number}",
       "CERTIFICATION": "Certification {number}",
+      "CLOCK_ENTRY": "A time-clock entry",
       "photo": "A photograph",
       "unplannedAssignment": "A setup made on this phone",
       "passcodeUse": "A use of the master passcode"

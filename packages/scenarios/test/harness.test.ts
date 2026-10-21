@@ -79,6 +79,8 @@ function idOf(sent: PhoneRecord): string {
       return sent.survey.id;
     case 'ROE':
       return sent.roe.id;
+    case 'CLOCK_ENTRY':
+      return sent.clockEntry.id;
   }
 }
 

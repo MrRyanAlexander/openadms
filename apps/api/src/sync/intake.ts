@@ -42,6 +42,7 @@ import { photoPlaces } from '../media/photo-places.ts';
 import type {
   IntakeNote,
   PhotoTaken,
+  SentClockEntry,
   SentDropOffLog,
   SentFieldEvent,
   SentForm,
@@ -161,7 +162,65 @@ export class Intake {
         return this.survey(sent.survey, receivedAt, brought);
       case 'ROE':
         return this.roe(sent, sent.roe, receivedAt, brought);
+      case 'CLOCK_ENTRY':
+        return this.clockEntry(sent.clockEntry, receivedAt, brought);
     }
+  }
+
+  // A worker's own time-clock entry, with the lines a clock-out carries, in their order, in one
+  // piece of work (REQ-310; ADR-241, 598): written as the worker, from their phone, as sent. The
+  // database holds its worker to its assignment's own person. A line's field event is kept as
+  // the phone named it, saved or not. Nothing is queued: no ticket reads a worker's hours
+  // (ADR-241 (7)).
+  private clockEntry(
+    entry: SentClockEntry,
+    receivedAt: Date,
+    brought?: Brought,
+  ): Promise<SyncAnswer> {
+    return this.db.$write(
+      { actorId: entry.workerId, source: 'DEVICE', deviceId: entry.deviceId },
+      async (tx): Promise<SyncAnswer> => {
+        const saved = await tx.clockEntry.findUnique({
+          where: { id: entry.id },
+          select: { id: true },
+        });
+        if (saved !== null) return { answer: 'ALREADY_SAVED', id: entry.id };
+        await tx.clockEntry.create({
+          data: {
+            id: entry.id,
+            projectId: entry.projectId,
+            assignmentId: entry.assignmentId,
+            workerId: entry.workerId,
+            deviceId: entry.deviceId,
+            kind: entry.kind,
+            at: entry.at,
+            deviceUtcOffsetMinutes: entry.deviceUtcOffsetMinutes,
+            receivedAt,
+          },
+        });
+        for (const [index, line] of entry.activityLines.entries()) {
+          await tx.clockActivityLine.create({
+            data: {
+              clockEntryId: entry.id,
+              clockEntryKind: entry.kind,
+              position: index + 1,
+              startedAt: line.startedAt,
+              endedAt: line.endedAt,
+              activityId: line.activityId,
+              fieldEventId: line.fieldEventId,
+              note: line.note,
+            },
+          });
+        }
+        await ledgerRow(tx, brought, {
+          recordId: entry.id,
+          recordKind: 'CLOCK_ENTRY',
+          deviceId: entry.deviceId,
+          answer: 'SAVED',
+        });
+        return { answer: 'SAVED', id: entry.id, notes: [] };
+      },
+    );
   }
 
   // The reconciliation a stored record asks for, queued in its own piece of work: no person

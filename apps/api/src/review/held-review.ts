@@ -65,7 +65,7 @@ const ownerColumn = {
   ROE: 'roeId',
   CERTIFICATION: 'certificationId',
 } as const satisfies Record<
-  Exclude<HeldSentAs, 'PHOTO' | 'REPORT'>,
+  Exclude<HeldSentAs, 'PHOTO' | 'REPORT' | 'CLOCK_ENTRY'>,
   keyof Prisma.PhotoUncheckedUpdateManyInput
 >;
 
@@ -85,6 +85,8 @@ const idOf = (corrected: CorrectedRecord): string => {
       return corrected.roe.id;
     case 'CERTIFICATION':
       return corrected.certification.id;
+    case 'CLOCK_ENTRY':
+      return corrected.clockEntry.id;
     case 'PHOTO':
       return corrected.photo.id;
   }
@@ -106,6 +108,8 @@ const projectOf = (corrected: CorrectedRecord): string => {
       return corrected.roe.projectId;
     case 'CERTIFICATION':
       return corrected.certification.projectId;
+    case 'CLOCK_ENTRY':
+      return corrected.clockEntry.projectId;
     case 'PHOTO':
       return corrected.photo.projectId;
   }
@@ -156,7 +160,7 @@ export class HeldReview extends ReviewService {
       // the resolution, since a photograph leaves a held record only once a person resolved it.
       const { tickets, projectRecords } = await this.written(tx, held, corrected);
       await this.resolved(tx, person, held.id, resolution.saved(kind));
-      if (kind !== 'PHOTO' && kept.length > 0) {
+      if (kind !== 'PHOTO' && kind !== 'CLOCK_ENTRY' && kept.length > 0) {
         await tx.photo.updateMany({
           where: { heldRecordId: held.id },
           data: { heldRecordId: null, [ownerColumn[kind]]: id },
@@ -292,6 +296,9 @@ export class HeldReview extends ReviewService {
           projectRecords: photo.owner.kind === 'CERTIFICATION',
         };
       }
+      // Refused before: a worker's own hours are never saved for them (ADR-598).
+      case 'CLOCK_ENTRY':
+        throw new Error('A time-clock entry is closed, never saved from a held record.');
       case 'SCALE_RECEIPT':
       case 'INCIDENT':
       case 'DROP_OFF_LOG':

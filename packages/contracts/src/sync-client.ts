@@ -33,6 +33,8 @@ export function syncedRecordId(record: SyncedRecord | ReceivedRecord): string {
       return record.roe.id;
     case 'CERTIFICATION':
       return record.certification.id;
+    case 'CLOCK_ENTRY':
+      return record.clockEntry.id;
   }
 }
 
@@ -54,6 +56,8 @@ export function syncedRecordAssignment(record: SyncedRecord | ReceivedRecord): s
       return record.roe.assignmentId;
     case 'CERTIFICATION':
       return record.certification.assignmentId;
+    case 'CLOCK_ENTRY':
+      return record.clockEntry.assignmentId;
   }
 }
 
@@ -74,6 +78,8 @@ export function syncedRecordProject(record: SyncedRecord | ReceivedRecord): stri
       return record.roe.projectId;
     case 'CERTIFICATION':
       return record.certification.projectId;
+    case 'CLOCK_ENTRY':
+      return record.clockEntry.projectId;
   }
 }
 

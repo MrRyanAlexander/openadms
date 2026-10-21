@@ -165,7 +165,13 @@ export interface RecordNames {
   readonly monitorId: string | null;
 }
 
-const monitorFields = ['monitorId', 'enteredById', 'madeById', 'certifiedById'] as const;
+const monitorFields = [
+  'monitorId',
+  'enteredById',
+  'madeById',
+  'certifiedById',
+  'workerId',
+] as const;
 
 const idIn = (part: object, field: string): string | null => {
   const read = id.safeParse((part as Record<string, unknown>)[field]);

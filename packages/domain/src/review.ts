@@ -288,6 +288,7 @@ export const heldSentAs = [
   'SURVEY',
   'ROE',
   'CERTIFICATION',
+  'CLOCK_ENTRY',
   'PHOTO',
   'REPORT',
 ] as const;
@@ -301,6 +302,7 @@ const sentAsInWords: Record<HeldSentAs, string> = {
   SURVEY: 'a survey',
   ROE: 'an ROE',
   CERTIFICATION: 'a certification',
+  CLOCK_ENTRY: 'a time-clock entry',
   PHOTO: 'a photograph’s record',
   REPORT: 'a report',
 };
@@ -332,6 +334,15 @@ export class HeldResolution {
     held: { readonly sentId: string | null; readonly sentAs: HeldSentAs | null },
     given: { readonly id: string; readonly kind: HeldSentAs },
   ): ReviewRefusal | null {
+    // A worker's time clock is their own word from their phone (ADR-598): nobody saves it for
+    // them; their hours are put right where their day is approved.
+    if (held.sentAs === 'CLOCK_ENTRY' || given.kind === 'CLOCK_ENTRY') {
+      return {
+        code: 'CLOSED_ONLY',
+        message:
+          'A time-clock entry the server couldn’t keep is the worker’s own, and is closed, never saved for them: their hours are put right where their day is approved. Nothing was changed.',
+      };
+    }
     if (held.sentAs === 'REPORT') {
       return {
         code: 'CLOSED_ONLY',
