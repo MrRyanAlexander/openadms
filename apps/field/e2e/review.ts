@@ -8,8 +8,7 @@ import { appendFileSync } from 'node:fs';
 
 import type { Page } from '@playwright/test';
 
-import { walkFocus, type FocusStop } from './focus-walk.ts';
-import { screenAttribute } from './screens.ts';
+import { screenAttribute, walkFocus, type FocusStop } from '@open-adms/look/testing';
 
 export interface ScreenReview {
   readonly screen: string;

@@ -3,9 +3,7 @@
 // drawn for the eye; the words say the same to a screen reader. Its title takes the focus as each
 // question comes (`ScreenTitle`).
 import { say, words } from '../words.ts';
-import { Button } from './button.tsx';
-import { Backward } from './icons.tsx';
-import { ScreenTitle } from './screen-title.tsx';
+import { Backward, Button, ScreenTitle } from '@open-adms/look';
 
 export function ProgressHeader({
   titleId,

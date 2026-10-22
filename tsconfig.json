@@ -41,6 +41,12 @@
       "path": "packages/contracts/test"
     },
     {
+      "path": "packages/look"
+    },
+    {
+      "path": "packages/look/test"
+    },
+    {
       "path": "packages/receipts"
     },
     {

@@ -142,20 +142,63 @@ export async function walkFocus(page: Page): Promise<Walk> {
     w.log = [];
     if (w.rec === true) return;
     w.rec = true;
-    const name = () => (document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '').slice(0, 20);
-    addEventListener('scroll', () => { w.log.push(`scroll y=${String(scrollY)} at=${name()} t=${String(Math.round(performance.now()))}`); }, true);
-    document.addEventListener('focusin', (e) => { const c = e.target as Element; const a = document.querySelector('.screen-actions'); w.log.push(`focusin ${c.tagName} y=${String(scrollY)} fv=${String(c.matches(':focus-visible'))} pos=${a ? getComputedStyle(a).position : '-'} behind=${a ? String(Math.round(c.getBoundingClientRect().bottom - a.getBoundingClientRect().top)) : '-'} t=${String(Math.round(performance.now()))}`); }, true);
-    document.addEventListener('focusin', () => { w.log.push(`after-app y=${String(scrollY)}`); }, false);
-    document.addEventListener('focusin', () => { requestAnimationFrame(() => { w.log.push(`frame y=${String(scrollY)}`); }); }, false);
+    const name = () =>
+      (
+        document.activeElement?.getAttribute('aria-label') ??
+        document.activeElement?.textContent ??
+        ''
+      ).slice(0, 20);
+    addEventListener(
+      'scroll',
+      () => {
+        w.log.push(
+          `scroll y=${String(scrollY)} at=${name()} t=${String(Math.round(performance.now()))}`,
+        );
+      },
+      true,
+    );
+    document.addEventListener(
+      'focusin',
+      (e) => {
+        const c = e.target as Element;
+        const a = document.querySelector('.screen-actions');
+        w.log.push(
+          `focusin ${c.tagName} y=${String(scrollY)} fv=${String(c.matches(':focus-visible'))} pos=${a ? getComputedStyle(a).position : '-'} behind=${a ? String(Math.round(c.getBoundingClientRect().bottom - a.getBoundingClientRect().top)) : '-'} t=${String(Math.round(performance.now()))}`,
+        );
+      },
+      true,
+    );
+    document.addEventListener(
+      'focusin',
+      () => {
+        w.log.push(`after-app y=${String(scrollY)}`);
+      },
+      false,
+    );
+    document.addEventListener(
+      'focusin',
+      () => {
+        requestAnimationFrame(() => {
+          w.log.push(`frame y=${String(scrollY)}`);
+        });
+      },
+      false,
+    );
   });
   const stops: FocusStop[] = [];
   const passed: string[] = [];
   for (let pressed = 0; pressed < controls * 3 + 6; pressed += 1) {
-    await page.evaluate(() => { (window as unknown as { log: string[] }).log = [`before y=${String(scrollY)} vh=${String(innerHeight)} fs=${getComputedStyle(document.documentElement).fontSize}`]; });
+    await page.evaluate(() => {
+      (window as unknown as { log: string[] }).log = [
+        `before y=${String(scrollY)} vh=${String(innerHeight)} fs=${getComputedStyle(document.documentElement).fontSize}`,
+      ];
+    });
     await page.keyboard.press('Tab');
     const stop = await page.evaluate(focusedNow);
     if (!stop.seen && stop.what !== 'the page') {
-      const log = await page.evaluate(() => (window as unknown as { log: string[] }).log.join('\n  '));
+      const log = await page.evaluate(() =>
+        (window as unknown as { log: string[] }).log.join('\n  '),
+      );
       process.stderr.write(`NOTSEEN ${stop.what} ${stop.hiddenBy ?? ''}\n  ${log}\n`);
     }
     if (passed.length > 0 && stop.what === passed[0]) break;

@@ -2,7 +2,7 @@
   "name": "@open-adms/field",
   "version": "0.0.0",
   "private": true,
-  "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE §7–§12).",
+  "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE \u00a77\u2013\u00a712).",
   "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "@noble/hashes": "2.4.0",
     "@open-adms/contracts": "workspace:*",
     "@open-adms/domain": "workspace:*",
+    "@open-adms/look": "workspace:*",
     "@open-adms/receipts": "workspace:*",
     "react": "19.3.0",
     "react-aria-components": "1.22.1",

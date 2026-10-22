@@ -205,11 +205,6 @@
     "back": "Back",
     "step": "Step {step} of {steps}",
     "scan": "Scan",
-    "on": "On",
-    "off": "Off",
-    "search": "Search the list",
-    "nothingFound": "Nothing in the list matches.",
-    "pickToGoOn": "Pick one to go on.",
     "keypad": {
       "empty": "Nothing typed yet",
       "clear": "Clear",

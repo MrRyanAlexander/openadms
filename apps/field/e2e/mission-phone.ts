@@ -19,6 +19,7 @@ import { parseEnv } from 'node:util';
 
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { Policy } from '@open-adms/domain';
+import { screenAttribute } from '@open-adms/look/testing';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect } from './accessible.ts';
@@ -31,7 +32,6 @@ import {
   toApi,
   type Asked,
 } from './phone-page.ts';
-import { screenAttribute } from './screens.ts';
 import type { MissionMonitor, MissionWorld } from './mission-world.ts';
 
 const said = english.capture;

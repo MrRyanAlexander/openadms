@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-const tokens = readFileSync(new URL('../src/look/tokens.css', import.meta.url), 'utf8');
+const tokens = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8');
 
 // The custom properties a block of tokens.css defines, by name.
 function defined(block: string): Map<string, string> {

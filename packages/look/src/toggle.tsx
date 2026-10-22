@@ -2,7 +2,7 @@
 // words as well as in its look, never colour alone (ADR-561 (3)). As tall as a main button.
 import { SwitchButton, SwitchField } from 'react-aria-components';
 
-import { words } from '../words.ts';
+import { look } from './translation.ts';
 
 export function Toggle({
   label,
@@ -21,7 +21,7 @@ export function Toggle({
         </span>
         <span className="toggle-label">{label}</span>
         <span className="toggle-state" aria-hidden="true">
-          {on ? words.look.on : words.look.off}
+          {on ? look.words.on : look.words.off}
         </span>
       </SwitchButton>
     </SwitchField>

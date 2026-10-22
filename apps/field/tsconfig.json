@@ -15,6 +15,7 @@
   "references": [
     { "path": "../../packages/contracts" },
     { "path": "../../packages/domain" },
+    { "path": "../../packages/look" },
     { "path": "../../packages/receipts" }
   ]
 }

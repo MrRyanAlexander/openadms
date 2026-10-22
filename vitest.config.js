@@ -26,6 +26,8 @@ export default defineConfig({
       'packages/contracts',
       // The receipts (ADR-595): the content model, its PDF and ZPL, Code 128; they need nothing.
       'packages/receipts',
+      // The look every web app shares: its tokens' contrast and its translation layer.
+      { test: { name: '@open-adms/look', root: 'packages/look', include: ['test/**/*.test.ts'] } },
       'tools/setup',
       'tools/security',
       // The chain's one command (ADR-533): how it reads each step and CHAIN.md, needing nothing.

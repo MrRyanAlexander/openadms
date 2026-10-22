@@ -1,0 +1,32 @@
+{
+  "name": "@open-adms/look",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Open ADMS look: the tokens, the components every web app is built from on React Aria, the translation layer, and the browser tests' accessibility checks; shared by the field app, the back office and the viewer portal (ARCHITECTURE \u00a714, \u00a718).",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./components.css": "./src/components.css",
+    "./testing": "./testing/index.ts",
+    "./testing/words": "./testing/words-check.ts",
+    "./words/en.json": "./src/words/en.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "axe-core": "4.14.0",
+    "react": "19.3.0",
+    "react-aria-components": "1.22.1",
+    "react-dom": "19.3.0",
+    "typescript": "6.0.3"
+  },
+  "peerDependencies": {
+    "react": "19.3.0",
+    "react-aria-components": "1.22.1",
+    "react-dom": "19.3.0"
+  }
+}

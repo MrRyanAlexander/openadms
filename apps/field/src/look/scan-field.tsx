@@ -19,8 +19,7 @@ import { createContext, useContext, useEffect, useRef } from 'react';
 import { Input, Label, TextField } from 'react-aria-components';
 
 import { words } from '../words.ts';
-import { Button } from './button.tsx';
-import { Barcode } from './icons.tsx';
+import { Barcode, Button } from '@open-adms/look';
 
 // Where a key typed belongs to something else: another field, or a dialog over the screen.
 const elsewhere = 'input, textarea, select, [contenteditable="true"], [role="dialog"]';

@@ -7,6 +7,7 @@
 // the camera: a control ticket outside the ranges is questioned, one inside opens, and the same
 // one again (by the scanner) is one his phone already holds.
 import type { BrowserContext, Page } from '@playwright/test';
+import lookWords from '@open-adms/look/words/en.json' with { type: 'json' };
 import { Code128 } from '@open-adms/receipts';
 
 import english from '../src/words/en.json' with { type: 'json' };
@@ -71,7 +72,7 @@ test('AC-11-49, AC-11-47: Ana scans 730415’s badge with a scanner, never tappi
   // Complete and submit: its receipt prints, the PDF the browser saves.
   await page.getByRole('button', { name: said.open.complete }).click();
   // A pick that moves straight on says so first (WCAG 3.2.2; BUILD.md, settled 7).
-  await expect(page.getByRole('listbox')).toHaveAccessibleDescription(english.look.pickToGoOn);
+  await expect(page.getByRole('listbox')).toHaveAccessibleDescription(lookWords.pickToGoOn);
   await page.getByRole('option', { name: 'Vegetative', exact: true }).click();
   await page.getByRole('button', { name: said.place.capture }).click();
   await page.getByLabel(said.place.typed).fill('14 Heron St');

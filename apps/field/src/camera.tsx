@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 
 import { Banner, Button, type ButtonTone } from './look/index.ts';
-import { Camera as CameraIcon } from './look/icons.tsx';
+import { Camera as CameraIcon } from '@open-adms/look';
 import type { Camera, CameraView } from './phone/camera.ts';
 import { words } from './words.ts';
 

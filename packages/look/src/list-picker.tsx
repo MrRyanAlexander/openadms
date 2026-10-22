@@ -7,7 +7,7 @@
 import { useId, useState } from 'react';
 import { Input, Label, ListBox, ListBoxItem, SearchField, useFilter } from 'react-aria-components';
 
-import { words } from '../words.ts';
+import { look } from './translation.ts';
 import { Tick } from './icons.tsx';
 
 export interface Choice {
@@ -51,7 +51,7 @@ export function ListPicker({
   return (
     <>
       <p id={lineId} className="field-hint">
-        {words.look.pickToGoOn}
+        {look.words.pickToGoOn}
       </p>
       {rows}
     </>
@@ -98,7 +98,7 @@ function Rows({
     <div className="list-picker">
       {choices.length < searchFrom ? null : (
         <SearchField className="field" value={search} onChange={setSearch}>
-          <Label className="field-label">{words.look.search}</Label>
+          <Label className="field-label">{look.words.search}</Label>
           <Input className="field-input" />
         </SearchField>
       )}
@@ -115,7 +115,7 @@ function Rows({
             selection === 'all' ? choices.map(({ key }) => key) : [...selection].map(String),
           );
         }}
-        renderEmptyState={() => <p className="quiet">{words.look.nothingFound}</p>}
+        renderEmptyState={() => <p className="quiet">{look.words.nothingFound}</p>}
       >
         {(choice) => (
           <ListBoxItem id={choice.key} textValue={choice.label} className="list-picker-row">

@@ -16,7 +16,7 @@ import {
   StatusStrip,
   TextEntry,
 } from './look/index.ts';
-import { Backward } from './look/icons.tsx';
+import { Backward } from '@open-adms/look';
 import type { PhoneIdentity } from './phone/identity.ts';
 import { refusalWords } from './refusals.ts';
 import { words } from './words.ts';

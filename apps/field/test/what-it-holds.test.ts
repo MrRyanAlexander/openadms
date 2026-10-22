@@ -84,7 +84,7 @@ function shipped(name: string, from: string, found = new Map<string, string>()) 
 }
 
 describe('the field app holds', () => {
-  it('AC-11-69: no outside SDK: what it ships is React, React Aria, @noble/hashes (the login list’s slow hashes, ADR-575), the three workspaces of the rules, the payloads and the receipts (ADR-595), and what they bring', () => {
+  it('AC-11-69: no outside SDK: what it ships is React, React Aria, @noble/hashes (the login list’s slow hashes, ADR-575), the four workspaces of the rules, the payloads, the receipts (ADR-595) and the look every web app shares, and what they bring', () => {
     const manifest = JSON.parse(readFileSync(join(field, 'package.json'), 'utf8')) as {
       dependencies: Record<string, string>;
     };
@@ -92,6 +92,7 @@ describe('the field app holds', () => {
       '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@open-adms/look',
       '@open-adms/receipts',
       'react',
       'react-aria-components',
@@ -106,6 +107,7 @@ describe('the field app holds', () => {
       '@noble/hashes',
       '@open-adms/contracts',
       '@open-adms/domain',
+      '@open-adms/look',
       '@open-adms/receipts',
       '@react-types/shared',
       '@swc/helpers',
@@ -125,7 +127,7 @@ describe('the field app holds', () => {
     ]);
   });
 
-  it('AC-11-06: no rule of its own: it imports only React, React Aria, @noble/hashes’ Argon2id, HMAC and SHA-256, the rules, the payloads, the receipts and its own files, and declares no name the rules or the receipts use', () => {
+  it('AC-11-06: no rule of its own: it imports only React, React Aria, @noble/hashes’ Argon2id, HMAC and SHA-256, the rules, the payloads, the receipts, the shared look and its own files, and declares no name the rules or the receipts use', () => {
     const allowed = [
       '@noble/hashes/argon2.js',
       '@noble/hashes/hmac.js',
@@ -136,6 +138,9 @@ describe('the field app holds', () => {
       '@open-adms/contracts',
       '@open-adms/domain',
       '@open-adms/receipts',
+      '@open-adms/look',
+      '@open-adms/look/tokens.css',
+      '@open-adms/look/components.css',
     ];
     // The receipts' names too: what a receipt says is its package's, never the app's (ADR-595).
     const rules = new Set([...Object.keys(domain), ...Object.keys(receipts)]);

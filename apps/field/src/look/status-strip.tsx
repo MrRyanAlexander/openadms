@@ -3,7 +3,7 @@
 // spinner waiting on the network; a change to what waits is announced (WCAG 4.1.3). Times are the
 // project's, in its time zone (ADR-100).
 import { counted, dayOf, sameDay, say, timeOfDay, words } from '../words.ts';
-import { Clock, Person, Tick, Waiting } from './icons.tsx';
+import { Clock, Person, Tick, Waiting } from '@open-adms/look';
 
 export interface Standing {
   readonly signedIn: string | null;

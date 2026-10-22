@@ -7,7 +7,7 @@
 import { Button as Pressable } from 'react-aria-components';
 
 import { words } from '../words.ts';
-import { Erase } from './icons.tsx';
+import { Erase } from '@open-adms/look';
 
 const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
 

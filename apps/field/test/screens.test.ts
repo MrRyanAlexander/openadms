@@ -6,14 +6,24 @@ import axe from 'axe-core';
 import type { FullResult, TestCase, TestResult } from '@playwright/test/reporter';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import ScreensReached, { attachmentName, screensIn, type ScreenCheck } from '../e2e/screens.ts';
-import { rules, wcagLevels } from '../e2e/wcag.ts';
+import {
+  attachmentName,
+  modulesIn,
+  rules,
+  screensIn,
+  wcagLevels,
+  type ScreenCheck,
+} from '@open-adms/look/testing';
+
+import FieldScreens, { sources } from '../e2e/screens.ts';
+
+const fieldScreens = () => screensIn(modulesIn(sources));
 
 const tsx = (path: string, text: string) => ({ path, text });
 
 describe('AC-11-51: the screens of the field app', () => {
   it('AC-11-51: are read from its source, each named once by a literal', () => {
-    expect(screensIn()).toEqual([
+    expect(fieldScreens()).toEqual([
       // A ticket cancelled, shared by the open ticket and unit rate's own steps (ADR-592).
       'cancel-ticket',
       // Certifying (task 3.5.5, ADR-585).
@@ -138,7 +148,7 @@ describe('AC-11-51: the run', () => {
   });
 
   const ran = (screens: readonly string[], violations: ScreenCheck['violations'] = []) => {
-    const reporter = new ScreensReached();
+    const reporter = new FieldScreens();
     for (const screen of screens) {
       const checked: ScreenCheck = { screen, rules: rules.length, violations, incomplete: [] };
       reporter.onTestEnd(
@@ -158,7 +168,7 @@ describe('AC-11-51: the run', () => {
   };
 
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
-    expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
+    expect(await ran([...fieldScreens(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
       '\nAccessibility: 60 of 60 screens checked, in 61 checks; 0 found.',
     );

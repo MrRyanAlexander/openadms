@@ -53,7 +53,7 @@ import {
   TruckFacts,
   typedAddressChange,
 } from './capture.tsx';
-import { Camera as CameraIcon, Clock, Tick } from './look/icons.tsx';
+import { Camera as CameraIcon, Clock, Tick } from '@open-adms/look';
 import {
   Banner,
   Button,
