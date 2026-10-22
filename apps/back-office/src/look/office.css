@@ -355,6 +355,9 @@
 }
 
 .check {
+  /* Its visually hidden input stays beside its box, so a focused box is never scrolled out of a
+     table's own region (WCAG 2.4.11). */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);

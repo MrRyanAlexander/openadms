@@ -192,7 +192,12 @@
       "jobs": "Jobs set aside",
       "surveys": "Surveys",
       "incidents": "Incidents",
-      "dropOffLogs": "Citizen drop-off logs"
+      "dropOffLogs": "Citizen drop-off logs",
+      "ledger": "Ledger",
+      "qc": "QC and invoice lock",
+      "batches": "Invoice batches",
+      "audit": "Audit trail",
+      "closing": "Close the project"
     }
   },
   "home": {
@@ -1208,7 +1213,8 @@
       "amount": "Amount",
       "rule": "Rule",
       "history": "History",
-      "showHistory": "Show the history"
+      "showHistory": "Show the history",
+      "ticketNamed": "ticket {number}"
     },
     "event": {
       "title": "{kind} {number}",
@@ -1487,5 +1493,142 @@
       "origin": "Where the debris came from"
     },
     "ownFields": "The firm’s own fields"
+  },
+  "billings": {
+    "ledger": {
+      "title": "Ledger",
+      "workflow": "Workflow",
+      "payItem": "Pay item",
+      "prime": "Prime",
+      "batch": "Invoice batch",
+      "locked": "Invoice lock",
+      "every": "Every one",
+      "lockedOnly": "Locked as invoiced",
+      "notLockedOnly": "Not locked",
+      "total": "{lines}, {amount} in all",
+      "lines": {
+        "none": "No lines",
+        "one": "1 line",
+        "other": "{count} lines"
+      },
+      "ticket": "Ticket and line",
+      "day": "Ticket date",
+      "quantity": "Quantity",
+      "rate": "Rate",
+      "amount": "Amount",
+      "primeAndSub": "{prime} (work by {sub})",
+      "contract": "Contract",
+      "rule": "Rule",
+      "status": "Status",
+      "qc": "QC",
+      "lock": "Lock",
+      "notLocked": "Not locked",
+      "lockedNoBatch": "Locked",
+      "lockedIn": "Locked, in {batch}",
+      "mileage": "Mileage"
+    },
+    "tickets": {
+      "title": "QC and invoice lock",
+      "about": "Pick tickets to set their QC status, or to lock them as invoiced in a batch. Only a completed, QC Approved ticket locks; each one that can’t says why.",
+      "workflow": "Workflow",
+      "status": "Status",
+      "qc": "QC status",
+      "noMark": "No mark yet (QC Review)",
+      "locked": "Invoice lock",
+      "every": "Every one",
+      "lockedOnly": "Locked as invoiced",
+      "notLockedOnly": "Not locked",
+      "picked": {
+        "none": "No ticket picked",
+        "one": "1 ticket picked",
+        "other": "{count} tickets picked"
+      },
+      "setQc": "Set the QC status",
+      "lock": "Lock as invoiced",
+      "caption": "{workflow}: every ticket",
+      "pick": "Pick",
+      "pickTicket": "Pick {number}",
+      "ticket": "Ticket",
+      "day": "Ticket date",
+      "amount": "What it comes to",
+      "amountOn": "{amount} on {lines}",
+      "lines": {
+        "none": "no line",
+        "one": "1 line",
+        "other": "{count} lines"
+      },
+      "lockColumn": "Lock, or why not",
+      "lockedNoBatch": "Locked as invoiced",
+      "lockedIn": "Locked as invoiced, in {batch}",
+      "mayLock": "Can be locked",
+      "moveBatch": "Move to a batch",
+      "unlock": "Unlock",
+      "unlockAbout": "The lock is kept, marked unlocked with your name. The ticket is worked again as the setup stands now.",
+      "batch": "Invoice batch",
+      "lockAbout": "A batch is optional: a ticket is locked all the same. Each ticket is locked on its own; one that can’t be is said, and the rest are locked.",
+      "setQcOn": "Set the QC status of {tickets}",
+      "lockOn": "Lock {tickets} as invoiced",
+      "ticketsCounted": {
+        "none": "no ticket",
+        "one": "1 ticket",
+        "other": "{count} tickets"
+      },
+      "outcome": "{saved} done; {refused} not.",
+      "refused": "{ticketNumber}: {message}",
+      "qcTo": "Set it to"
+    },
+    "batches": {
+      "title": "Invoice batches",
+      "about": "A batch is a name and its tickets, kept for ever: renamed, never archived. Tickets are locked into a batch on the QC and invoice lock screen.",
+      "add": "Name a batch",
+      "name": "Name",
+      "made": "Made",
+      "madeBy": "By {person}, {at}",
+      "tickets": "Tickets locked in it",
+      "ticketsCounted": {
+        "none": "None",
+        "one": "1 ticket",
+        "other": "{count} tickets"
+      },
+      "open": "Open",
+      "rename": "Rename",
+      "comesTo": "Its lines: {lines}, {amount} in all.",
+      "ticketsIn": "Tickets in {name}",
+      "ticket": "Ticket",
+      "lockedBy": "Locked"
+    },
+    "audit": {
+      "title": "Audit trail",
+      "about": "Every change to this project’s records, newest first, as the database wrote it: who, when, from where, the values before and after, and why. Read only.",
+      "domain": "Domain",
+      "domains": {
+        "SECURITY": "Security",
+        "BILLING": "Billing",
+        "OPERATIONS": "Operations",
+        "RECORDS": "Records"
+      },
+      "every": "Every domain",
+      "actor": "Who",
+      "everyone": "Everyone"
+    },
+    "closing": {
+      "title": "Close the project",
+      "about": "A closed project changes no more, whoever writes: its assignments are withdrawn and its phones’ unused numbers retired. Nothing in it is deleted. An admin reopens it with a reason.",
+      "open": "This project is open.",
+      "adminsOnly": "Only an admin closes or reopens a project.",
+      "nothingOpen": "Nothing is still open: every phone is turned in, every ticket QC Approved and locked, nothing waits for a person.",
+      "stillOpen": "Still open",
+      "item": "What is still open",
+      "close": "Close the project",
+      "closeAbout": "What is still open is said with the close; it doesn’t stop it. Field work for this project that arrives later is held for a person.",
+      "closedAt": "Closed {at}.",
+      "reopen": "Reopen the project",
+      "reason": "Why it is reopened"
+    },
+    "qcMark": {
+      "set": "Set QC",
+      "status": "QC status",
+      "about": "QC is the back office’s own mark: it changes nothing on the record and reruns nothing. Only a QC Approved ticket can be locked as invoiced."
+    }
   }
 }

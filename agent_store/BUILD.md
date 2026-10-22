@@ -45,7 +45,7 @@ exist; and the golden mission run through the screens to the approved numbers.
 - [x] **Review and correct:** the review queue by workflow and cause; a ticket's page (field events
       side by side, photos, history); corrections, renumber, void, accept; quarantine resolution;
       held records and jobs; records made in the back office.
-- [ ] **Money, the lock, the close:** the ledger; QC; invoice locks and batches; the audit trail
+- [x] **Money, the lock, the close:** the ledger; QC; invoice locks and batches; the audit trail
       viewer; closing and reopening a project.
 - [ ] **Reports and exports:** debris totals; the daily report PDF and email summary; exports (CSV,
       Excel-compatible, JSON); photo PDFs; the receipt batch.
@@ -89,6 +89,16 @@ exist; and the golden mission run through the screens to the approved numbers.
 
 *(one line each: what, and where it lives in the code)*
 
+- The daily report's map is drawn as plain lines, no map tiles: the project's boundary and zones
+  from its newest map, its sites, and each field event where it was recorded, so nothing leaves the
+  installation (`apps/api/src/reports/daily-report.ts`).
+- Debris totals count a load or a haul-out once its completed record stands, on its collection's
+  day, at its properties' or piles' CY and tons (a split is one load); a unit rate ticket on its own
+  day; a void ticket nowhere; hours (crew time) are never added to units; an incident is "open"
+  until someone sets QC Approved or QC Void on it (`apps/api/src/reports/debris-totals.ts`).
+- The address printed on the daily report's last page is a firm setting, `reportContactEmail`, set
+  by whoever holds Setup; with none set, the page says to ask whoever sent the report
+  (`apps/api/src/firm/firm-settings.ts`).
 - A held record is saved as corrected by editing what its phone sent, as the sync's own JSON,
   checked against the sync contract before it is sent (`apps/back-office/src/review/waiting.tsx`).
 - An address a reviewer types or corrects on a field event is marked typed, never looked up

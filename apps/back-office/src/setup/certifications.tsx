@@ -31,6 +31,8 @@ import { Banner, Button, ScreenTitle, TextEntry } from '@open-adms/look';
 import { useState } from 'react';
 import { Link } from 'react-aria-components';
 
+import { QcMark } from '../billings/qc-mark.tsx';
+
 import type { NotAnswered } from '../api.ts';
 import { SelectField } from '../look/fields.tsx';
 import {
@@ -632,6 +634,14 @@ export function CertificationPage({
                       </Button>
                     ) : null}
                   </>
+                ) : null}
+                {holds(session, 'QC') ? (
+                  <QcMark
+                    record={{ certificationId }}
+                    name={say(said.page, { number: cert.certNumber })}
+                    mark={answer.qcMark}
+                    onDone={done}
+                  />
                 ) : null}
                 {holds(session, 'QC') ? (
                   <Button

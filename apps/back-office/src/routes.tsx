@@ -9,7 +9,7 @@ import { Account } from './screens/account.tsx';
 import { Home } from './screens/home.tsx';
 import { NotFound } from './screens/not-found.tsx';
 import { Project } from './screens/project.tsx';
-import { holds, type Signed } from './session.tsx';
+import { holds, isAdmin, type Signed } from './session.tsx';
 import { DispatchBoard } from './people/dispatch.tsx';
 import { FirmSettings } from './people/firm-settings.tsx';
 import { Hours } from './people/hours.tsx';
@@ -25,6 +25,11 @@ import { ProjectSetup } from './setup/project-setup.tsx';
 import { Roes, SetupCheck } from './setup/roes.tsx';
 import { RuleBuilder, Rules } from './setup/rules.tsx';
 import { Sites } from './setup/sites.tsx';
+import { AuditTrail } from './billings/audit.tsx';
+import { InvoiceBatches } from './billings/batches.tsx';
+import { Closing } from './billings/closing.tsx';
+import { Ledger } from './billings/ledger.tsx';
+import { QcAndLock } from './billings/tickets.tsx';
 import { DropOffLogs, Incidents, Surveys } from './review/form-records.tsx';
 import { ReviewQueue } from './review/queue.tsx';
 import { TicketPage } from './review/ticket.tsx';
@@ -94,6 +99,11 @@ const projectScreens: readonly (readonly [
   ['/quarantine', (projectId) => <Quarantine projectId={projectId} />],
   ['/held', (projectId) => <HeldRecords projectId={projectId} />],
   ['/set-aside-jobs', (projectId) => <SetAsideJobs projectId={projectId} />],
+  ['/ledger', (projectId) => <Ledger projectId={projectId} />],
+  ['/qc', (projectId) => <QcAndLock projectId={projectId} />],
+  ['/invoice-batches', (projectId) => <InvoiceBatches projectId={projectId} />],
+  ['/audit', (projectId) => <AuditTrail projectId={projectId} />],
+  ['/closing', (projectId) => <Closing projectId={projectId} />],
   ['/dispatch', (projectId) => <DispatchBoard projectId={projectId} />],
   ['/hours', (projectId) => <Hours projectId={projectId} />],
 ];
@@ -153,6 +163,20 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
         { label: said.links.surveys, href: inProject('/surveys'), shown: viewReview },
         { label: said.links.incidents, href: inProject('/incidents'), shown: viewReview },
         { label: said.links.dropOffLogs, href: inProject('/drop-off-logs'), shown: viewReview },
+      ],
+    },
+    {
+      label: said.sections.billings,
+      links: [
+        { label: said.links.ledger, href: inProject('/ledger'), shown: viewReview },
+        { label: said.links.qc, href: inProject('/qc'), shown: viewReview },
+        { label: said.links.batches, href: inProject('/invoice-batches'), shown: viewReview },
+        {
+          label: said.links.audit,
+          href: inProject('/audit'),
+          shown: viewReview || viewSetup || viewDispatch,
+        },
+        { label: said.links.closing, href: inProject('/closing'), shown: isAdmin(session) },
       ],
     },
     {

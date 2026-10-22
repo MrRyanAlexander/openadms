@@ -40,6 +40,8 @@ export interface Person {
 
 export interface WorldIds {
   readonly p1: string;
+  // The golden mission's world's alone.
+  readonly p2?: string;
   readonly dana: string;
   readonly luis: string;
 }

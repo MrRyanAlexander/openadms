@@ -29,6 +29,7 @@ import { PagedTable, Table } from '../look/paged-table.tsx';
 import { Trouble, useApi, useRead } from '../reading.tsx';
 import { holds, useSigned } from '../session.tsx';
 import { day, number, say, words } from '../words.ts';
+import { QcMark } from '../billings/qc-mark.tsx';
 import { nameIn, useListOptions, useTold, yesNo, type SetupWritten } from './common.tsx';
 
 type Entry = RoesAnswer['roes'][number];
@@ -43,6 +44,7 @@ export function Roes({ projectId }: { readonly projectId: string }) {
   const said = words.roes;
   const { session } = useSigned();
   const mayCorrect = holds(session, 'CORRECT');
+  const mayQc = holds(session, 'QC');
   const [forms] = useRead(listFormsEndpoint, { params: { projectId } });
   const debrisTypes = useListOptions('debris-types');
   const payableTypes = useListOptions('payable-types');
@@ -130,6 +132,13 @@ export function Roes({ projectId }: { readonly projectId: string }) {
           },
           { label: said.source, cell: (entry) => said.sources[entry.roe.source] },
           {
+            label: words.billings.qcMark.status,
+            cell: (entry) =>
+              entry.qcMark === null
+                ? words.review.qc.QC_REVIEW
+                : words.review.qc[entry.qcMark.status],
+          },
+          {
             label: said.scope,
             cell: (entry) => {
               const lines = entry.scope.filter((line) => line.takenOffAt === null);
@@ -143,51 +152,72 @@ export function Roes({ projectId }: { readonly projectId: string }) {
                     .join(', ');
             },
           },
-          ...(mayCorrect
+          ...(mayCorrect || mayQc
             ? [
                 {
                   label: words.common.actions,
                   cell: (entry: Entry) => (
                     <div className="row-actions">
-                      <Button
-                        onPress={() => {
-                          setOpen({ kind: 'scope', entry });
-                        }}
-                      >
-                        {say(words.common.of, { what: said.addScope, name: entry.roe.roeNumber })}
-                      </Button>
-                      <Button
-                        onPress={() => {
-                          setOpen({ kind: 'correct', entry });
-                        }}
-                      >
-                        {say(words.common.of, { what: said.correct, name: entry.roe.roeNumber })}
-                      </Button>
-                      {entry.scope
-                        .filter((line) => line.takenOffAt === null)
-                        .map((line) => (
+                      {mayQc ? (
+                        <QcMark
+                          record={{ roeId: entry.roe.id }}
+                          name={say(said.page, { number: entry.roe.roeNumber })}
+                          mark={entry.qcMark}
+                          onDone={done}
+                        />
+                      ) : null}
+                      {mayCorrect ? (
+                        <>
                           <Button
-                            key={line.id}
                             onPress={() => {
-                              setFailed(null);
-                              const pick =
-                                line.formDebrisTypeId !== null
-                                  ? { formDebrisTypeId: line.formDebrisTypeId }
-                                  : { payableTypeId: line.payableTypeId ?? '' };
-                              void api
-                                .ask(correctRoeScopeEndpoint, {
-                                  params: { roeId: entry.roe.id },
-                                  body: { pick, inScope: false },
-                                })
-                                .then((reply) => {
-                                  if (reply.kind === 'answered') done(reply.answer);
-                                  else setFailed(reply);
-                                });
+                              setOpen({ kind: 'scope', entry });
                             }}
                           >
-                            {say(words.common.of, { what: said.takeOff, name: scopeName(line) })}
+                            {say(words.common.of, {
+                              what: said.addScope,
+                              name: entry.roe.roeNumber,
+                            })}
                           </Button>
-                        ))}
+                          <Button
+                            onPress={() => {
+                              setOpen({ kind: 'correct', entry });
+                            }}
+                          >
+                            {say(words.common.of, {
+                              what: said.correct,
+                              name: entry.roe.roeNumber,
+                            })}
+                          </Button>
+                          {entry.scope
+                            .filter((line) => line.takenOffAt === null)
+                            .map((line) => (
+                              <Button
+                                key={line.id}
+                                onPress={() => {
+                                  setFailed(null);
+                                  const pick =
+                                    line.formDebrisTypeId !== null
+                                      ? { formDebrisTypeId: line.formDebrisTypeId }
+                                      : { payableTypeId: line.payableTypeId ?? '' };
+                                  void api
+                                    .ask(correctRoeScopeEndpoint, {
+                                      params: { roeId: entry.roe.id },
+                                      body: { pick, inScope: false },
+                                    })
+                                    .then((reply) => {
+                                      if (reply.kind === 'answered') done(reply.answer);
+                                      else setFailed(reply);
+                                    });
+                                }}
+                              >
+                                {say(words.common.of, {
+                                  what: said.takeOff,
+                                  name: scopeName(line),
+                                })}
+                              </Button>
+                            ))}
+                        </>
+                      ) : null}
                     </div>
                   ),
                 },

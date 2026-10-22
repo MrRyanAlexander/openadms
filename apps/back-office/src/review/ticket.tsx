@@ -32,6 +32,7 @@ import { navigate, useWhere } from '../router.tsx';
 import { holds, useSigned } from '../session.tsx';
 import { useTold, type SetupWritten } from '../setup/common.tsx';
 import { money, number, say, words } from '../words.ts';
+import { QcMark, type QcRecord } from '../billings/qc-mark.tsx';
 import { FieldEventCard } from './field-event-card.tsx';
 import { AuditEntries, Decisions } from './history.tsx';
 import { NewFieldEvent } from './made-here.tsx';
@@ -175,6 +176,7 @@ function TicketOf({
             mayRenumber={holds(session, 'RENUMBER')}
             mayVoid={holds(session, 'VOID')}
             mayAccept={holds(session, 'ACCEPT_FLAG')}
+            mayQc={holds(session, 'QC')}
             onDone={done}
             onFailed={setFailed}
             onMoved={(to) => {
@@ -194,6 +196,7 @@ function TicketWhole({
   mayRenumber,
   mayVoid,
   mayAccept,
+  mayQc,
   onDone,
   onFailed,
   onMoved,
@@ -204,6 +207,7 @@ function TicketWhole({
   readonly mayRenumber: boolean;
   readonly mayVoid: boolean;
   readonly mayAccept: boolean;
+  readonly mayQc: boolean;
   readonly onDone: (written: SetupWritten) => void;
   readonly onFailed: (reply: NotAnswered) => void;
   // A field event renumbered away: the page follows it to its ticket.
@@ -224,6 +228,16 @@ function TicketWhole({
   const voidInForce = answer.voids.find((each) => each.liftedAt === null) ?? null;
   const isVoid = voidInForce !== null || answer.statuses.includes('VOID');
   const ticket = { workflow: answer.workflow, ticketNumber: answer.ticketNumber };
+  // What a QC mark is set on: the completed load or haul-out (a split as one), or the unit rate
+  // ticket's one field event; none while a load or a haul-out has no completed record.
+  const qcRecord: QcRecord | null =
+    answer.workflow === 'UNIT_RATE'
+      ? { unitRateTicketId: answer.fieldEvents[0]?.id ?? '' }
+      : answer.completed === null
+        ? null
+        : answer.workflow === 'LOAD'
+          ? { completedLoadId: answer.completed.id }
+          : { completedHaulOutId: answer.completed.id };
   const noteField: FieldSpec = {
     kind: 'text',
     key: 'note',
@@ -331,6 +345,14 @@ function TicketWhole({
           >
             {said.makeHere}
           </Button>
+        ) : null}
+        {mayQc && !locked && qcRecord !== null ? (
+          <QcMark
+            record={qcRecord}
+            name={say(said.ticketNamed, { number: answer.ticketNumber })}
+            mark={answer.qcMark}
+            onDone={onDone}
+          />
         ) : null}
       </div>
 

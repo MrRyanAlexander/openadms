@@ -40,6 +40,7 @@ import { Trouble, useApi } from '../reading.tsx';
 import { holds, useSigned } from '../session.tsx';
 import { useTold, type SetupWritten } from '../setup/common.tsx';
 import { say, words } from '../words.ts';
+import { QcMark } from '../billings/qc-mark.tsx';
 import { AddPhoto } from './add-photo.tsx';
 import { answerFields, answersOf, answerValues, definitionFor } from './answers.tsx';
 import {
@@ -80,6 +81,10 @@ interface Kind<R extends FormRecord> {
   readonly add: string;
   readonly named: (record: R) => string;
   readonly owner: 'SURVEY' | 'INCIDENT' | 'DROP_OFF_LOG';
+  // What its QC mark is set on.
+  readonly qcOf: (
+    record: R,
+  ) => { surveyId: string } | { incidentId: string } | { dropOffLogId: string };
   readonly list: Endpoint;
   readonly rowsOf: (answer: never) => readonly Row<R>[];
   readonly columns: (reviewing: Reviewing) => readonly Column<Row<R>>[];
@@ -163,6 +168,7 @@ function FormRecords<R extends FormRecord>({
   const { names, clock } = reviewing;
   const { session } = useSigned();
   const mayCorrect = holds(session, 'CORRECT');
+  const mayQc = holds(session, 'QC');
   const [open, setOpen] = useState<{ readonly record: R | null } | null>(null);
   const [reloaded, setReloaded] = useState(0);
   const [failed, setFailed] = useState<NotAnswered | null>(null);
@@ -254,18 +260,33 @@ function FormRecords<R extends FormRecord>({
               </div>
             ),
           },
-          ...(mayCorrect
+          ...(mayCorrect || mayQc
             ? [
                 {
                   label: words.common.actions,
                   cell: (row: Row<R>) => (
-                    <Button
-                      onPress={() => {
-                        setOpen({ record: row.record });
-                      }}
-                    >
-                      {say(words.common.of, { what: said.correct, name: kind.named(row.record) })}
-                    </Button>
+                    <div className="row-actions">
+                      {mayCorrect ? (
+                        <Button
+                          onPress={() => {
+                            setOpen({ record: row.record });
+                          }}
+                        >
+                          {say(words.common.of, {
+                            what: said.correct,
+                            name: kind.named(row.record),
+                          })}
+                        </Button>
+                      ) : null}
+                      {mayQc ? (
+                        <QcMark
+                          record={kind.qcOf(row.record)}
+                          name={kind.named(row.record)}
+                          mark={row.qcMark}
+                          onDone={done}
+                        />
+                      ) : null}
+                    </div>
                   ),
                 },
               ]
@@ -374,6 +395,7 @@ const surveys: Kind<Survey> = {
   named: (record) =>
     say(words.forms2.surveys.named, { number: record.surveyNumber ?? record.roeNumber ?? '' }),
   owner: 'SURVEY',
+  qcOf: (record) => ({ surveyId: record.id }),
   list: listSurveysEndpoint,
   rowsOf: (answer: SurveysAnswer) =>
     answer.surveys.map((entry) => ({ ...entry, record: entry.survey })),
@@ -423,6 +445,7 @@ const incidents: Kind<Incident> = {
   add: words.forms2.incidents.add,
   named: (record) => say(words.forms2.incidents.named, { what: record.description ?? '' }),
   owner: 'INCIDENT',
+  qcOf: (record) => ({ incidentId: record.id }),
   list: listIncidentsEndpoint,
   rowsOf: (answer: IncidentsAnswer) =>
     answer.incidents.map((entry) => ({ ...entry, record: entry.incident })),
@@ -510,6 +533,7 @@ const dropOffLogs: Kind<DropOffLog> = {
   add: words.forms2.dropOffLogs.add,
   named: (record) => say(words.forms2.dropOffLogs.named, { name: record.residentName ?? '' }),
   owner: 'DROP_OFF_LOG',
+  qcOf: (record) => ({ dropOffLogId: record.id }),
   list: listDropOffLogsEndpoint,
   rowsOf: (answer: DropOffLogsAnswer) =>
     answer.dropOffLogs.map((entry) => ({ ...entry, record: entry.dropOffLog })),
