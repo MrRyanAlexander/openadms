@@ -62,7 +62,8 @@ exist; and the golden mission run through the screens to the approved numbers.
   a monitor must do also gets one line under "Defaults taken" below, for the user to overturn.
 - Targeted tests while building; the whole chain at the end. Never loosen a test or a threshold
   to get green.
-- Commits on the work branch as each part lands; never on main, never pushed.
+- Commits as each part lands, one branch per phase: "Field app finished" on `phase3-field-app`;
+  every part after it on `phase4-back-office`, started from it. Never on main, never pushed.
 
 ## Settled (the user, 2026-10-22: "take your recommendation on every open question")
 

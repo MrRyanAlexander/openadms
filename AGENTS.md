@@ -83,7 +83,9 @@ spec drafts. The schema is the source of truth for every field, enum and model n
 ## Git
 
 Commit your own work on the work branch as each part lands (`git add <paths>`, `git commit`;
-`git checkout -b <name>` to start a branch). **Never commit on `main`; never push, pull, merge,
+`git checkout -b <name>` to start a branch). **One branch per phase:** finishing the field app
+stays on `phase3-field-app`; the back office, the portal and bringing it all up start
+`phase4-back-office` from it (`git checkout -b phase4-back-office`). The user merges. **Never commit on `main`; never push, pull, merge,
 rebase, reset, restore, stash, clean, `rm` or delete a branch**: those are the user's. Enforced by
 `.claude/hooks/guard.sh` (tested in `tools/security/test/guard-hook.test.ts`; change both together).
 End each commit message with the attribution lines the session gives. Stage named paths or check
