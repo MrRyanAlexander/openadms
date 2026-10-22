@@ -13,9 +13,10 @@
 //                                  the golden mission's own world, for the page at that origin:
 //                                  asked a line at a time until its standard input ends (ADR-603;
 //                                  apps/field/e2e/mission-world.ts)
-//   node packages/scenarios/src/cli.ts office <origin>
+//   node packages/scenarios/src/cli.ts office <origin> [mission]
 //                                  the back office's browser tests' own world, for the page at
-//                                  that origin, until stopped (apps/back-office/e2e/world-setup.ts)
+//                                  that origin, until stopped (apps/back-office/e2e/world-setup.ts):
+//                                  P1 set up for the field, or the golden mission to its review
 // Exits 1 when a check fails or a story stops early.
 import process from 'node:process';
 import { createInterface } from 'node:readline';
@@ -41,7 +42,7 @@ async function main(args: readonly string[]): Promise<number> {
     return 0;
   }
   if (command === 'world') return world(args[1]);
-  if (command === 'office') return office(args[1]);
+  if (command === 'office') return office(args[1], args[2] === 'mission' ? 'mission' : 'field');
   if (command === 'mission') return mission(args[1]);
   const keep = args.includes('--keep');
   const named = args.filter((arg) => arg !== '--keep');
@@ -116,12 +117,12 @@ async function world(pageOrigin: string | undefined): Promise<number> {
 // The back office's world: made, then one line on standard output saying it is ready, as JSON (its
 // database's name and its control's origin, where the tests ask it for people and read its mail);
 // held until the process is told to stop or its standard input ends, then closed and dropped.
-async function office(pageOrigin: string | undefined): Promise<number> {
+async function office(pageOrigin: string | undefined, kind: 'field' | 'mission'): Promise<number> {
   if (pageOrigin === undefined || !URL.canParse(pageOrigin)) {
     console.error('office takes the origin of the page that tests it.');
     return 1;
   }
-  const made = await OfficeWorld.opened(pageOrigin);
+  const made = await OfficeWorld.opened(pageOrigin, kind);
   try {
     const control = await made.listening();
     console.log(

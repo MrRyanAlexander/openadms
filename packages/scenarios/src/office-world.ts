@@ -43,6 +43,8 @@ import { storiesHostname } from './over-https.ts';
 import { StoryStage } from './runner.ts';
 import { assigned, synced, taken } from './stories/board.ts';
 import { danasEmail, p1TimeZone } from './stories/p1.ts';
+import { tellGoldenMission } from './stories/golden-mission.ts';
+import type { QueueRuns } from './stories/p1-office.ts';
 import { setUpP1ForTheField, type P1Field } from './stories/p1-field-setup.ts';
 import { StoryDatabase } from './story-database.ts';
 import { StoryMail } from './story-mail.ts';
@@ -74,8 +76,9 @@ export class OfficeWorld {
   private readonly made: StoryDatabase;
   private readonly stage: StoryStage;
   private readonly mail: StoryMail;
-  private readonly field: P1Field;
+  private readonly ids: Readonly<Record<string, string>>;
   private readonly dana: OfficeBrowser;
+  private readonly stopWorker: () => Promise<void>;
   private control: Server | undefined;
   private count = 0;
   // The control answers one ask at a time: Dana's browser is one browser.
@@ -85,20 +88,25 @@ export class OfficeWorld {
     made: StoryDatabase,
     stage: StoryStage,
     mail: StoryMail,
-    field: P1Field,
+    ids: Readonly<Record<string, string>>,
     dana: OfficeBrowser,
+    stopWorker: () => Promise<void>,
   ) {
     this.made = made;
     this.database = made.name;
     this.stage = stage;
     this.mail = mail;
-    this.field = field;
+    this.ids = ids;
     this.dana = dana;
+    this.stopWorker = stopWorker;
   }
 
   // The world made, its API listening for the one page origin given, and its control listening on
   // this machine's loopback. The caller closes it.
-  static async opened(pageOrigin: string): Promise<OfficeWorld> {
+  static async opened(
+    pageOrigin: string,
+    kind: 'field' | 'mission' = 'field',
+  ): Promise<OfficeWorld> {
     const made = await StoryDatabase.create();
     let stage: StoryStage | undefined;
     try {
@@ -117,11 +125,23 @@ export class OfficeWorld {
         mail,
       });
       const story = stage.context;
+      if (kind === 'mission') {
+        const told = await tellGoldenMission(story, 'beforeReview');
+        const dana = await story.backOffice.admin({ id: told.dana, email: danasEmail });
+        const ids = { p1: told.p1, p2: told.p2, dana: told.dana, luis: told.luis };
+        return new OfficeWorld(made, stage, mail, ids, dana, OfficeWorld.workerLoop(told.queue));
+      }
       const yard = (await story.enrolled('P1-YARD')).id;
       const field = await setUpP1ForTheField(story, yard);
       const dana = await story.backOffice.admin({ id: field.dana, email: danasEmail });
       await OfficeWorld.anasHours(stage, field, dana, yard);
-      return new OfficeWorld(made, stage, mail, field, dana);
+      const ids = {
+        p1: field.p1,
+        dana: field.dana,
+        luis: field.luis,
+        ana: field.monitors['Ana Brooks'].id,
+      };
+      return new OfficeWorld(made, stage, mail, ids, dana, () => Promise.resolve());
     } catch (problem) {
       await stage?.close();
       await made.drop();
@@ -219,12 +239,7 @@ export class OfficeWorld {
       return { now: clock.now().toISOString() };
     }
     if (asked.method === 'GET' && url.pathname === '/world') {
-      return {
-        p1: this.field.p1,
-        dana: this.field.dana,
-        luis: this.field.luis,
-        ana: this.field.monitors['Ana Brooks'].id,
-      };
+      return this.ids;
     }
     throw new Error(`Nothing is asked at ${asked.method ?? ''} ${url.pathname}.`);
   }
@@ -269,7 +284,24 @@ export class OfficeWorld {
     return { userId: made.id, name: asked.name, email, ...browser.handedOver() };
   }
 
+  // The worker's job loop behind the world: a pass every half second, one at a time; stopped, the
+  // pass under way is waited for.
+  private static workerLoop(queue: QueueRuns): () => Promise<void> {
+    let running = true;
+    const loop = (async () => {
+      while (running) {
+        await queue.pass();
+        await new Promise((done) => setTimeout(done, 500));
+      }
+    })();
+    return async () => {
+      running = false;
+      await loop;
+    };
+  }
+
   async close(): Promise<void> {
+    await this.stopWorker();
     await new Promise<void>((done) => {
       if (this.control === undefined) done();
       else
