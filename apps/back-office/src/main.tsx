@@ -18,6 +18,7 @@ import { createRoot } from 'react-dom/client';
 
 import { Api } from './api.ts';
 import { ApiContext } from './reading.tsx';
+import { isViewer, portalRouteOf, portalSectionsOf } from './portal/portal.tsx';
 import { routeOf, sectionsOf } from './routes.tsx';
 import { navigate, Routed, useWhere } from './router.tsx';
 import { PasswordForm } from './screens/password-form.tsx';
@@ -117,7 +118,11 @@ function App({ api }: { readonly api: Api }) {
   if (path === '/password-reset') navigate('/', { replace: true });
   return (
     <SignedContext.Provider value={signed}>
-      <Shell sections={sectionsOf}>{routeOf(path)}</Shell>
+      {isViewer(session) ? (
+        <Shell sections={portalSectionsOf}>{portalRouteOf(path)}</Shell>
+      ) : (
+        <Shell sections={sectionsOf}>{routeOf(path)}</Shell>
+      )}
     </SignedContext.Provider>
   );
 }

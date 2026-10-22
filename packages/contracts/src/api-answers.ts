@@ -191,6 +191,9 @@ export const sessionAnswerSchema = z.strictObject({
     id: z.uuid(),
     name: z.string(),
     role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER']),
+    // A read-only viewer's kind, so the portal shows them only what they may read: a client
+    // user, a contractor user or an auditor; none for the back office.
+    viewerKind: z.enum(['CLIENT', 'CONTRACTOR', 'AUDITOR']).nullable(),
   }),
   // The permissions a manager/analyst holds now (an admin needs none granted; a viewer holds
   // none): what the back office shows them of itself. The API asks again on every request.

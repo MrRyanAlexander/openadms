@@ -64,7 +64,7 @@ describe('signing in', () => {
       // Typed in other capitals, with a space after it.
       const { answer, cookies, csrf } = await served.signedIn(' Dana.Reyes@GATES.example ', long);
       expect(answer.body).toEqual({
-        user: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
+        user: { id: dana, name: 'Dana Reyes', role: 'ADMIN', viewerKind: null },
         granted: [],
         passwordChangeRequired: false,
         twoStepSetUp: true,

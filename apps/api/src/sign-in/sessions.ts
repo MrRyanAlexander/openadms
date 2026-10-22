@@ -45,6 +45,8 @@ export interface Caller {
   readonly userId: string;
   readonly name: string;
   readonly role: SignsInHere;
+  // A read-only viewer's kind (a client user, a contractor user, an auditor), or none.
+  readonly viewerKind: 'CLIENT' | 'CONTRACTOR' | 'AUDITOR' | null;
   // The permissions they hold now: one taken away isn't among them (ADR-315, 415).
   readonly granted: readonly string[];
   // Somebody else set their password: they set their own before anything else (ADR-410).
@@ -110,6 +112,7 @@ const sessionRead = {
       id: true,
       name: true,
       role: true,
+      viewerKind: true,
       archivedAt: true,
       permissions: { where: { archivedAt: null }, select: { permission: true } },
       credential: { select: { passwordChangeRequired: true, twoStepSecret: true } },
@@ -241,6 +244,7 @@ export class Sessions {
           userId: person.id,
           name: person.name,
           role: person.role,
+          viewerKind: person.viewerKind,
           granted: person.permissions.map(({ permission }) => permission),
           passwordChangeRequired: kept.passwordChangeRequired,
           ...this.twoStepOf(
@@ -391,6 +395,7 @@ export class Sessions {
               id: true,
               name: true,
               role: true,
+              viewerKind: true,
               email: true,
               permissions: { where: { archivedAt: null }, select: { permission: true } },
               credential: {
@@ -431,6 +436,7 @@ export class Sessions {
         userId: row.user.id,
         name: row.user.name,
         role: row.user.role,
+        viewerKind: row.user.viewerKind,
         granted: row.user.permissions.map(({ permission }) => permission),
         passwordChangeRequired: row.user.credential?.passwordChangeRequired ?? false,
         ...this.twoStepOf(

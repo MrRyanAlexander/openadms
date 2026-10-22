@@ -16,7 +16,7 @@
 // **What a test asks of it**, over a loopback control of its own (never the stack's, never a
 // browser's), since the tests run in several processes at once:
 // - `POST /people` a person of their own for the test (a name, a role, the grants of a
-//   manager/analyst), created by Dana at her browser as an admin creates anybody: given a password
+//   manager/analyst; a read-only viewer given every project of the world), created by Dana at her browser as an admin creates anybody: given a password
 //   by Dana and nothing more (they sign in through the screens, choose their own password and set
 //   their authenticator up there); or signed in already, their own password and authenticator set,
 //   with their session's cookies handed to the test's browser. A person of a test's own never
@@ -36,6 +36,7 @@ import {
   currentSessionEndpoint,
   setPermissionsEndpoint,
   setPersonPasswordEndpoint,
+  setViewerProjectsEndpoint,
   type SyncedClockEntry,
 } from '@open-adms/contracts';
 import { permissions, type PermissionName } from '@open-adms/domain';
@@ -57,7 +58,9 @@ export interface PersonAsked {
   readonly name: string;
   readonly role: 'ADMIN' | 'MANAGER_ANALYST' | 'READ_ONLY_VIEWER';
   readonly grants?: readonly PermissionName[];
-  readonly viewerKind?: 'CLIENT' | 'AUDITOR';
+  readonly viewerKind?: 'CLIENT' | 'AUDITOR' | 'CONTRACTOR';
+  // A contractor user's contractor, by name.
+  readonly contractor?: string;
   // Given a password by Dana and nothing more, or signed in already at the world's API.
   readonly as: 'givenPassword' | 'signedIn';
 }
@@ -258,16 +261,38 @@ export class OfficeWorld {
       .replace(/[^a-z]+/g, '.')
       .replace(/^\.|\.$/g, '');
     const email = `${slug}.${String(this.count)}@gates.example`;
+    const viewerKind = asked.viewerKind ?? 'CLIENT';
+    // A contractor user belongs to its contractor, found by name.
+    const contractorId =
+      viewerKind === 'CONTRACTOR'
+        ? (
+            await this.stage.context.api.contractor.findFirstOrThrow({
+              where: { name: asked.contractor ?? '' },
+            })
+          ).id
+        : undefined;
     const body =
-      asked.role === 'READ_ONLY_VIEWER'
-        ? {
-            name: asked.name,
-            email,
-            role: asked.role,
-            viewerKind: asked.viewerKind ?? ('CLIENT' as const),
-          }
-        : { name: asked.name, email, role: asked.role };
+      asked.role !== 'READ_ONLY_VIEWER'
+        ? { name: asked.name, email, role: asked.role }
+        : contractorId === undefined
+          ? { name: asked.name, email, role: asked.role, viewerKind: viewerKind === 'AUDITOR' ? ('AUDITOR' as const) : ('CLIENT' as const) }
+          : {
+              name: asked.name,
+              email,
+              role: asked.role,
+              viewerKind: 'CONTRACTOR' as const,
+              contractorId,
+            };
     const made = await this.dana.answered(createPersonEndpoint, { json: body });
+    // A read-only viewer is given every project of the world.
+    if (asked.role === 'READ_ONLY_VIEWER') {
+      await this.dana.answered(setViewerProjectsEndpoint, {
+        ids: { userId: made.id },
+        json: {
+          projectIds: [this.ids['p1'], this.ids['p2']].filter((id) => id !== undefined),
+        },
+      });
+    }
     const grants = (asked.grants ?? []).filter((grant) => permissions.includes(grant));
     if (asked.role === 'MANAGER_ANALYST' && grants.length > 0) {
       await this.dana.answered(setPermissionsEndpoint, {

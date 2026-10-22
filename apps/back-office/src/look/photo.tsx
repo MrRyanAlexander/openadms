@@ -2,14 +2,23 @@
 // cookies, as bytes, and shown from those bytes (`blob:`, the page's policy's one way in for an
 // image); never opened as a page of the API's. Shown small, and larger on asking; its words say what
 // it shows and when it was taken.
-import { photographFileEndpoint } from '@open-adms/contracts';
+import { photographFileEndpoint, viewerPhotographFileEndpoint } from '@open-adms/contracts';
 import { Button } from '@open-adms/look';
 import { useEffect, useState } from 'react';
 
 import { useApi } from '../reading.tsx';
 import { words } from '../words.ts';
 
-export function Photo({ photoId, label }: { readonly photoId: string; readonly label: string }) {
+export function Photo({
+  photoId,
+  label,
+  viewer = false,
+}: {
+  readonly photoId: string;
+  readonly label: string;
+  // Read by a read-only viewer, through their own read (`/viewer/…`).
+  readonly viewer?: boolean;
+}) {
   const api = useApi();
   const [url, setUrl] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
@@ -17,7 +26,10 @@ export function Photo({ photoId, label }: { readonly photoId: string; readonly l
   useEffect(() => {
     let shown = true;
     let made: string | null = null;
-    void api.file(photographFileEndpoint, { params: { photoId, file: 'photo' } }).then((read) => {
+    const reading = viewer
+      ? api.file(viewerPhotographFileEndpoint, { params: { photoId, file: 'photo' } })
+      : api.file(photographFileEndpoint, { params: { photoId, file: 'photo' } });
+    void reading.then((read) => {
       if (!shown) return;
       if (read.kind !== 'file') {
         setMissing(true);
@@ -30,7 +42,7 @@ export function Photo({ photoId, label }: { readonly photoId: string; readonly l
       shown = false;
       if (made !== null) URL.revokeObjectURL(made);
     };
-  }, [api, photoId]);
+  }, [api, photoId, viewer]);
   return (
     <figure className={large ? 'photo photo-large' : 'photo'}>
       {url === null ? (

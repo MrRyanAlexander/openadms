@@ -49,7 +49,7 @@ exist; and the golden mission run through the screens to the approved numbers.
       viewer; closing and reopening a project.
 - [x] **Reports and exports:** debris totals; the daily report PDF and email summary; exports (CSV,
       Excel-compatible, JSON); photo PDFs; the receipt batch.
-- [ ] **The viewer portal:** a viewer's projects, tickets and history, read-only, over `/viewer/…`.
+- [x] **The viewer portal:** a viewer's projects, tickets and history, read-only, over `/viewer/…`.
 - [ ] **Up and proven:** the one command; the golden mission through every screen (done when 2);
       the chain green and recorded; SECURITY.md; the conformance notes.
 

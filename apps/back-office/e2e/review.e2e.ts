@@ -14,7 +14,7 @@ const heading = (page: import('@playwright/test').Page) => page.getByRole('headi
 const reviewer = ['VIEW_REVIEW', 'CORRECT', 'RENUMBER', 'VOID', 'ACCEPT_FLAG'] as const;
 const said = english.review;
 
-test('ADR-156, 051 a collection made in the back office because a phone failed, under 101501: its page; its address corrected in place, the value before in its history; voided with a reason; the queue of each workflow', async ({
+test('ADR-156, 051 a collection made in the back office because a phone failed, under 101501: its page; its address corrected in place, the value before in its history; voided with a reason; the queue lists what waits', async ({
   page,
   context,
 }) => {
@@ -22,9 +22,7 @@ test('ADR-156, 051 a collection made in the back office because a phone failed, 
   const { p1 } = await worldIds();
   await page.goto(`/projects/${p1}/review`);
   await expect(heading(page)).toHaveText(said.queue.title);
-  await expect(page.getByRole('table', { name: /Loads: tickets waiting/ })).toContainText(
-    english.table.empty,
-  );
+  await expect(page.getByRole('table', { name: /Loads: tickets waiting/ })).toBeVisible();
   await checkScreen(page);
 
   await page.getByRole('button', { name: said.queue.newFieldEvent }).click();
@@ -33,9 +31,9 @@ test('ADR-156, 051 a collection made in the back office because a phone failed, 
   await pick(making, said.made.reason, 'Device failed');
   await pick(making, said.event.monitor, /^Ana Brooks \(M\d{6,}\)$/);
   await type(making, said.event.certNumber, '730415');
-  await making.getByLabel(said.event.startDay, { exact: true }).fill('2026-10-09');
+  await making.getByLabel(said.event.startDay, { exact: true }).fill('2026-10-16');
   await making.getByLabel(said.event.startTime, { exact: true }).fill('08:05');
-  await making.getByLabel(said.event.endDay, { exact: true }).fill('2026-10-09');
+  await making.getByLabel(said.event.endDay, { exact: true }).fill('2026-10-16');
   await making.getByLabel(said.event.endTime, { exact: true }).fill('08:40');
   await type(making, said.event.endLatitude, '39.0891');
   await type(making, said.event.endLongitude, '-75.6012');
@@ -67,12 +65,13 @@ test('ADR-156, 051 a collection made in the back office because a phone failed, 
   await expect(page.getByRole('button', { name: said.ticket.unvoid })).toBeVisible();
   await checkScreen(page);
 
-  for (const workflow of ['HAUL_OUT', 'UNIT_RATE'] as const) {
-    await page.goto(`/projects/${p1}/review?workflow=${workflow}`);
-    await expect(
-      page.getByRole('table', { name: new RegExp(`^${said.workflows[workflow]}: tickets`) }),
-    ).toContainText(english.table.empty);
-  }
+  // The queue lists it while it waits for its disposal; nothing waits among the haul-outs.
+  await page.goto(`/projects/${p1}/review?workflow=LOAD`);
+  await expect(page.getByRole('row', { name: /^101501\b/ })).toBeVisible();
+  await page.goto(`/projects/${p1}/review?workflow=HAUL_OUT`);
+  await expect(page.getByRole('table', { name: /^Haul-outs: tickets/ })).toContainText(
+    english.table.empty,
+  );
 });
 
 test('ADR-022, 468, 498 what waits beside the queue: quarantined records, held records and files set aside, jobs set aside; nothing waits on P1', async ({

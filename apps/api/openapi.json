@@ -256,9 +256,20 @@
                         "role": {
                           "type": "string",
                           "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        },
+                        "viewerKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
-                      "required": ["id", "name", "role"],
+                      "required": ["id", "name", "role", "viewerKind"],
                       "additionalProperties": false
                     },
                     "granted": {
@@ -409,9 +420,20 @@
                         "role": {
                           "type": "string",
                           "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        },
+                        "viewerKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
-                      "required": ["id", "name", "role"],
+                      "required": ["id", "name", "role", "viewerKind"],
                       "additionalProperties": false
                     },
                     "granted": {
@@ -540,9 +562,20 @@
                         "role": {
                           "type": "string",
                           "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        },
+                        "viewerKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
-                      "required": ["id", "name", "role"],
+                      "required": ["id", "name", "role", "viewerKind"],
                       "additionalProperties": false
                     },
                     "granted": {
@@ -870,9 +903,20 @@
                         "role": {
                           "type": "string",
                           "enum": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"]
+                        },
+                        "viewerKind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": ["CLIENT", "CONTRACTOR", "AUDITOR"]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       },
-                      "required": ["id", "name", "role"],
+                      "required": ["id", "name", "role", "viewerKind"],
                       "additionalProperties": false
                     },
                     "granted": {

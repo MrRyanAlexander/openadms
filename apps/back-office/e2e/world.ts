@@ -87,10 +87,14 @@ export async function signedIn(
   name: string,
   role: Role,
   grants: readonly string[] = [],
+  viewer: {
+    readonly viewerKind?: 'CLIENT' | 'AUDITOR' | 'CONTRACTOR';
+    readonly contractor?: string;
+  } = {},
 ): Promise<Person> {
   const person = await asked<Person>('/people', {
     method: 'POST',
-    body: JSON.stringify({ name, role, grants, as: 'signedIn' }),
+    body: JSON.stringify({ name, role, grants, ...viewer, as: 'signedIn' }),
   });
   await context.addCookies(
     person.cookies.map(({ name: cookie, value }) => ({

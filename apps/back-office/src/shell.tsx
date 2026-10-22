@@ -5,7 +5,7 @@
 // (the user's ask). Its sections are those of the work: the firm's, then the project's Tickets,
 // Reports and Forms, and Billings (never "Money"), then Setup and People and phones, each link shown
 // only to a person who may open it. The screen beneath is the one the address names.
-import { listProjectsEndpoint, type ProjectRecord } from '@open-adms/contracts';
+import { listProjectsEndpoint, viewerProjectsEndpoint } from '@open-adms/contracts';
 import { Button } from '@open-adms/look';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-aria-components';
@@ -157,9 +157,17 @@ export function Shell({
 // The project picker: the firm's open projects by name; picking one moves to the same screen of
 // that project where the screen is a project's, else to the project's first screen.
 function ProjectPicker({ projectId }: { readonly projectId: string | null }) {
-  const [read] = useRead(listProjectsEndpoint, { query: { closed: 'false', limit: '200' } });
+  // A read-only viewer picks among the projects they are given, through their own read.
+  const viewer = useSigned().session.user.role === 'READ_ONLY_VIEWER';
+  const [firm] = useRead(
+    listProjectsEndpoint,
+    viewer ? null : { query: { closed: 'false', limit: '200' } },
+  );
+  const [given] = useRead(viewerProjectsEndpoint, viewer ? { query: { limit: '200' } } : null);
+  const read = viewer ? given : firm;
   const { path } = useWhere();
-  const projects: readonly ProjectRecord[] = read.kind === 'answered' ? read.answer.projects : [];
+  const projects: readonly { readonly id: string; readonly name: string }[] =
+    read.kind === 'answered' ? read.answer.projects : [];
   const known = projectId !== null && projects.some(({ id }) => id === projectId);
   return (
     <div className="project-picker">

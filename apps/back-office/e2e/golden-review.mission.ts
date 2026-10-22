@@ -240,3 +240,35 @@ test('REQ-409 P1’s mission days on the Reports screen, never a cost: six compl
   await expect(page.getByText(/^In all: 5 tickets, /)).toBeVisible();
   await checkScreen(page);
 });
+
+test('REQ-408, AC-10-29 the mission through the viewer portal: Bayline County’s client user reads 101002 with its two lines and their money, who recorded each field event, and its history; Coastline’s contractor user reads its own 101001 with its line', async ({
+  page,
+  context,
+  browser,
+}) => {
+  await signedIn(context, 'Morgan Ellis', 'READ_ONLY_VIEWER', [], { viewerKind: 'CLIENT' });
+  await page.goto(`/projects/${p1}/tickets/LOAD/101002`);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Loads ticket 101002');
+  const lines = page.getByRole('table', { name: english.portal.ticket.lines });
+  await expect(lines).toContainText('$297.00');
+  await expect(lines).toContainText('$144.00');
+  await expect(page.getByRole('region', { name: 'Collection (COL) 101002' })).toContainText(
+    /Recorded by.*\(M\d{6,}\)/,
+  );
+  await expect(page.getByRole('table', { name: english.portal.ticket.history })).toContainText(
+    'field_event',
+  );
+  await checkScreen(page);
+
+  const coastline = await browser.newContext();
+  await signedIn(coastline, 'Quinn Harlow', 'READ_ONLY_VIEWER', [], {
+    viewerKind: 'CONTRACTOR',
+    contractor: 'Coastline Haulers LLC',
+  });
+  const theirs = await coastline.newPage();
+  await theirs.goto(`/projects/${p1}/tickets/LOAD/101001`);
+  await expect(theirs.getByRole('table', { name: english.portal.ticket.lines })).toContainText(
+    '$390.00',
+  );
+  await coastline.close();
+});

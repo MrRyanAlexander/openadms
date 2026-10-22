@@ -49,7 +49,10 @@ const world = worldOn(() => db);
 
 // What a viewer may send that isn't a GET: their own sign-in's, and nothing of the firm's
 // records. (Keeping a session going and signing out go by the refresh token, not a role.)
+// What a viewer changes of their own: one of their own sessions ended, their password, their
+// authenticator.
 const aViewersOwn = [
+  'endOwnSession',
   'changePassword',
   'beginTwoStepSetup',
   'confirmTwoStepSetup',
