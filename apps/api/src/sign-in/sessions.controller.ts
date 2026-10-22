@@ -43,7 +43,12 @@ export const apiSessionTokens = Symbol('the API’s session tokens');
 // Who is signed in, as an answer says it.
 export function sessionAnswer(caller: Caller, tokens: SessionTokens): SessionAnswer {
   return sessionAnswerSchema.parse({
-    user: { id: caller.userId, name: caller.name, role: caller.role, viewerKind: caller.viewerKind },
+    user: {
+      id: caller.userId,
+      name: caller.name,
+      role: caller.role,
+      viewerKind: caller.viewerKind,
+    },
     granted: caller.granted,
     passwordChangeRequired: caller.passwordChangeRequired,
     twoStepSetUp: caller.twoStepSetUp,

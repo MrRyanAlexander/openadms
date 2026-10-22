@@ -366,15 +366,14 @@ function TicketWhole({
               const acceptance = standing(flag);
               return (
                 <li key={flag.id} className="flag">
-                  <p>
-                    <strong>{flag.message}</strong>{' '}
+                  <p className="spaced">
+                    <strong>{flag.message}</strong>
                     {flag.clearedAt === null
                       ? acceptance === null
                         ? said.flagOpen
                         : said.flagAccepted
                       : said.flagCleared}
-                    {' · '}
-                    {said.billing[flag.billing]}
+                    <span>{said.billing[flag.billing]}</span>
                   </p>
                   {flag.acceptances.map((each) => (
                     <p key={each.id} className="quiet">

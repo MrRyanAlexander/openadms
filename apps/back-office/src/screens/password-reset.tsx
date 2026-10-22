@@ -112,7 +112,7 @@ export function PasswordReset() {
             problem={problemOf('code')}
           />
           <TextEntry
-            label={said.password}
+            label={said.passwordLabel}
             value={password}
             onChange={setPassword}
             secret

@@ -26,7 +26,8 @@ const bytesOf = (...parts: readonly (readonly number[])[]): Uint8Array =>
   Uint8Array.from(parts.flat());
 const be16 = (value: number): number[] => [(value >> 8) & 0xff, value & 0xff];
 const be32 = (value: number): number[] => [...be16(value >>> 16), ...be16(value & 0xffff)];
-const asciiOf = (text: string): number[] => Array.from(text, (character) => character.charCodeAt(0));
+const asciiOf = (text: string): number[] =>
+  Array.from(text, (character) => character.charCodeAt(0));
 
 // A JPEG's markers: its start, an Exif segment saying how the camera was held (big-endian, one
 // directory entry), a baseline frame of `width` × `height` with `components`, and its end.

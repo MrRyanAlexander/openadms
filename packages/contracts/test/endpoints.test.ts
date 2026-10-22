@@ -29,6 +29,10 @@ import {
   phoneLoginListEndpoint,
   photoFileAnswerSchema,
   photographFileEndpoint,
+  dailyReportFileEndpoint,
+  exportFileEndpoint,
+  photoPdfEndpoint,
+  receiptBatchEndpoint,
   sendMapFileEndpoint,
   setAsideFileEndpoint,
   siteShapeFileEndpoint,
@@ -355,14 +359,26 @@ describe('the endpoints that take a file', () => {
   });
 });
 
-describe('the two endpoints that answer a file', () => {
-  it('AC-10-48, ADR-483, 526, 535 are the back office’s reads of a photograph’s file, of a file set aside and of a kept map’s file, and a viewer’s read of a photograph’s file: each a GET that takes no file and is described as bytes of the kinds of image a file is kept as, or a map’s file’s', () => {
+describe('the endpoints that answer a file', () => {
+  it('AC-10-48, ADR-483, 526, 535 are the back office’s reads of a photograph’s file, of a file set aside and of a kept map’s file, the documents it makes (the daily report, the exports, photo PDFs, the receipt batch), and a viewer’s read of a photograph’s file: each a GET that takes no file and is described as bytes of the kinds of image a file is kept as, or a map’s file’s', () => {
     expect(endpoints.filter(({ answersFile }) => answersFile === true)).toEqual([
+      dailyReportFileEndpoint,
+      exportFileEndpoint,
+      photoPdfEndpoint,
+      receiptBatchEndpoint,
       siteShapeFileEndpoint,
       mapVersionFileEndpoint,
       photographFileEndpoint,
       setAsideFileEndpoint,
       viewerPhotographFileEndpoint,
+    ]);
+    // The documents the server makes (REQ-410, 412…414): a PDF, or a table as CSV or JSON.
+    for (const each of [dailyReportFileEndpoint, photoPdfEndpoint, receiptBatchEndpoint]) {
+      expect(each.answersFileOf, each.name).toEqual(['application/pdf']);
+    }
+    expect(exportFileEndpoint.answersFileOf).toEqual([
+      'text/csv; charset=utf-8',
+      'application/json; charset=utf-8',
     ]);
     expect([
       viewerPhotographFileEndpoint.method,
@@ -382,6 +398,10 @@ describe('the two endpoints that answer a file', () => {
       [mapVersionFileEndpoint, 'VIEW_SETUP'],
       [photographFileEndpoint, 'VIEW_REVIEW'],
       [setAsideFileEndpoint, 'VIEW_REVIEW'],
+      [dailyReportFileEndpoint, 'VIEW_REVIEW'],
+      [exportFileEndpoint, 'VIEW_REVIEW'],
+      [photoPdfEndpoint, 'VIEW_REVIEW'],
+      [receiptBatchEndpoint, 'VIEW_REVIEW'],
     ] as const) {
       expect([each.method, each.access, each.roles, each.permission], each.name).toEqual([
         'GET',

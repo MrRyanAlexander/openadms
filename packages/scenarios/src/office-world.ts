@@ -275,7 +275,12 @@ export class OfficeWorld {
       asked.role !== 'READ_ONLY_VIEWER'
         ? { name: asked.name, email, role: asked.role }
         : contractorId === undefined
-          ? { name: asked.name, email, role: asked.role, viewerKind: viewerKind === 'AUDITOR' ? ('AUDITOR' as const) : ('CLIENT' as const) }
+          ? {
+              name: asked.name,
+              email,
+              role: asked.role,
+              viewerKind: viewerKind === 'AUDITOR' ? ('AUDITOR' as const) : ('CLIENT' as const),
+            }
           : {
               name: asked.name,
               email,
@@ -318,15 +323,15 @@ export class OfficeWorld {
   // The worker's job loop behind the world: a pass every half second, one at a time; stopped, the
   // pass under way is waited for.
   private static workerLoop(queue: QueueRuns): () => Promise<void> {
-    let running = true;
+    const state = { running: true };
     const loop = (async () => {
-      while (running) {
+      while (state.running) {
         await queue.pass();
         await new Promise((done) => setTimeout(done, 500));
       }
     })();
     return async () => {
-      running = false;
+      state.running = false;
       await loop;
     };
   }

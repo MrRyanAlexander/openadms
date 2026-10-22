@@ -176,13 +176,21 @@ describe('an endpoint that asks for a session, before anything is read', () => {
       endpoints
         .filter(({ beforePasswordChange }) => beforePasswordChange === true)
         .map(({ name }) => name),
-    ).toEqual(['currentSession', 'changePassword']);
+      // Their own sessions too, read and ended (the back office's account page).
+    ).toEqual(['listOwnSessions', 'currentSession', 'endOwnSession', 'changePassword']);
     // And one who must first set an authenticator up, only what that takes (ADR-412).
     expect(
       endpoints
         .filter(({ beforeTwoStepSetup }) => beforeTwoStepSetup === true)
         .map(({ name }) => name),
-    ).toEqual(['currentSession', 'changePassword', 'beginTwoStepSetup', 'confirmTwoStepSetup']);
+    ).toEqual([
+      'listOwnSessions',
+      'currentSession',
+      'endOwnSession',
+      'changePassword',
+      'beginTwoStepSetup',
+      'confirmTwoStepSetup',
+    ]);
   });
 
   it.each([

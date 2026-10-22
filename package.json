@@ -13,7 +13,7 @@
     "generate": "pnpm --filter @open-adms/db generate",
     "typecheck": "pnpm generate && tsc --build",
     "test": "pnpm generate && tsc --build && vitest run",
-    "lint": "pnpm generate && NODE_OPTIONS=--max-old-space-size=4096 eslint --max-warnings 0 apps packages infra tools eslint.config.js vitest.config.js && prettier --check apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
+    "lint": "pnpm generate && NODE_OPTIONS=--max-old-space-size=4096 eslint --max-warnings 0 apps && NODE_OPTIONS=--max-old-space-size=4096 eslint --max-warnings 0 packages infra tools eslint.config.js vitest.config.js && prettier --check apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
     "format": "prettier --write apps packages infra tools package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json eslint.config.js vitest.config.js",
     "licences": "pnpm licenses list --json | node tools/licences/src/index.ts",
     "security": "pnpm generate && tsc --build && pnpm --filter @open-adms/field build && pnpm --filter @open-adms/back-office build && node tools/security/src/index.ts",

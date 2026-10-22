@@ -309,7 +309,7 @@ export function PersonPage({ userId }: { readonly userId: string }) {
                           setOpen('password');
                         }}
                       >
-                        {said.setPassword}
+                        {said.passwordToGive}
                       </Button>
                       <Button
                         busy={busy}
@@ -516,12 +516,12 @@ export function PersonPage({ userId }: { readonly userId: string }) {
             ) : null}
             {open === 'password' ? (
               <FormDialog
-                title={said.setPassword}
+                title={said.passwordToGive}
                 fields={[
                   {
                     kind: 'secret',
                     key: 'password',
-                    label: said.newPassword,
+                    label: said.passwordLabel,
                     hint: said.setPasswordAbout,
                     autoComplete: 'new-password',
                   },

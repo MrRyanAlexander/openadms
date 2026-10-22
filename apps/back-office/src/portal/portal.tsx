@@ -352,8 +352,8 @@ function TicketWhole({
           <ul className="flag-list">
             {answer.flags.map((flag) => (
               <li key={flag.id} className="flag">
-                <p>
-                  {flag.message}{' '}
+                <p className="spaced">
+                  <span>{flag.message}</span>
                   {flag.clearedAt !== null
                     ? said.cleared
                     : flag.accepted

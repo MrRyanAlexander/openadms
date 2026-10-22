@@ -49,9 +49,9 @@ test('people: Ana Brooks’s card with her assignments; a manager added, granted
   await tick(page, said.permissionNames.DISPATCH);
   await page.getByRole('button', { name: said.savePermissions }).click();
   await expect(page.getByText(english.common.saved)).toBeVisible();
-  await page.getByRole('button', { name: said.setPassword }).click();
-  const setting = dialog(page, said.setPassword);
-  await setting.getByLabel(said.newPassword).fill('egret point ferry crossing');
+  await page.getByRole('button', { name: said.passwordToGive }).click();
+  const setting = dialog(page, said.passwordToGive);
+  await setting.getByLabel(said.passwordLabel).fill('egret point ferry crossing');
   await setting.getByRole('button', { name: english.common.save }).click();
   await expect(page.getByText(said.passwordSet)).toBeVisible();
   await page.getByRole('button', { name: said.endSessions }).click();
@@ -80,7 +80,7 @@ test('the firm’s settings and its phones: a monitor’s session to 10 hours; t
   await expect(page.getByText(english.common.saved)).toBeVisible();
   await page.getByRole('button', { name: said.changePasscode }).click();
   const passcode = dialog(page, said.changePasscode);
-  await passcode.getByLabel(said.currentPassword).fill(admin.password);
+  await passcode.getByLabel(said.yourPasswordLabel).fill(admin.password);
   await passcode.getByLabel(said.newPasscode).fill('marsh-heron-delphine-second');
   await passcode.getByRole('button', { name: english.common.save }).click();
   await expect(page.getByText(/The master passcode is changed: version \d+\./)).toBeVisible();

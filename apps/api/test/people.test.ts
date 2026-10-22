@@ -229,6 +229,8 @@ describe('permissions, read from the database on every request', () => {
       'readProject',
       // A record's history: by the area it belongs to, asked inside (ADR-544).
       'readRecordHistory',
+      // A project's audit trail: each reader shown what their areas let them read (REQ-407).
+      'readProjectAuditTrail',
       'listListValues',
     ]);
     // Every other read of the back office takes its area's view (the user, ADR-539): the review
@@ -241,25 +243,34 @@ describe('permissions, read from the database on every request', () => {
         .map(({ name }) => name)
         .sort();
     expect(byView('VIEW_REVIEW')).toEqual([
+      'dailyReportFile',
+      'exportFile',
       'listCertifications',
       'listDropOffLogs',
       'listFlags',
       'listHeldRecords',
       'listIncidents',
       'listInvoiceBatches',
+      'listProjectTickets',
       'listQuarantinedRecords',
       'listRoes',
       'listSetAsideFiles',
       'listSetAsideJobs',
       'listSurveys',
+      'photoPdf',
       'photographFile',
       'readCertification',
+      'readDebrisTotals',
+      'readEmailSummary',
       'readFieldEvent',
       'readInvoiceBatch',
+      'readLedger',
       'readScaleReceipt',
       'readTicket',
       'readTicketDecisions',
       'readTicketHistory',
+      'receiptBatch',
+      'reviewNames',
       'reviewQueue',
       'setAsideFile',
     ]);

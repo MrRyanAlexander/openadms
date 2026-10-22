@@ -12,6 +12,9 @@ minimumReleaseAge: 10080
 overrides:
   # GHSA-68fv-2mgg-jv7q (ADR-356): vitest → vite → postcss asks for 1.2.1; 1.2.2 is the fix.
   source-map-js: 1.2.2
+  # GHSA-389g-gv7q-r4x8: @nestjs/platform-fastify 12.1.2 asks for fastify 5.12.5; 5.12.6 is the fix,
+  # and the API names 5.12.7 itself.
+  fastify: 5.12.7
 # No dependency runs an install script unless it is allowed here, by name, in an ADR.
 strictDepBuilds: true
 allowBuilds:

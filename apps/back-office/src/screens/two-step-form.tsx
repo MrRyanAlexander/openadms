@@ -76,7 +76,7 @@ export function TwoStepForm({ onSetUp }: { readonly onSetUp: (session: SessionAn
         void confirm();
       }}
     >
-      <p>{said.secret}</p>
+      <p>{said.keyToType}</p>
       <dl className="facts">
         <dt>{said.secretLabel}</dt>
         <dd className="secret-key">{begun.secret}</dd>

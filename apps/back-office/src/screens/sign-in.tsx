@@ -75,7 +75,7 @@ export function SignIn({
           required
         />
         <TextEntry
-          label={said.password}
+          label={said.passwordLabel}
           value={password}
           onChange={setPassword}
           secret

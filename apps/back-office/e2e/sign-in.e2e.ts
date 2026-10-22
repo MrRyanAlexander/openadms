@@ -20,12 +20,12 @@ test('a manager whose password an admin set signs in, chooses their own, sets up
 
   // A wrong password: the same words whatever was wrong.
   await page.getByLabel(english.signIn.email).fill(person.email);
-  await page.getByLabel(english.signIn.password).fill('not the password at all');
+  await page.getByLabel(english.signIn.passwordLabel).fill('not the password at all');
   await page.getByRole('button', { name: english.signIn.signIn }).click();
   await expect(page.getByText(english.signIn.refused)).toBeVisible();
 
   // The password Dana set: their own chosen first.
-  await page.getByLabel(english.signIn.password).fill(person.password);
+  await page.getByLabel(english.signIn.passwordLabel).fill(person.password);
   await page.getByRole('button', { name: english.signIn.signIn }).click();
   await expect(heading(page)).toHaveText(english.password.title);
   await expect(page.getByText(english.password.required)).toBeVisible();
@@ -62,7 +62,7 @@ test('a manager whose password an admin set signs in, chooses their own, sets up
   // In again: the password, then the code (a code is good once: the world's clock moves on).
   await later(30);
   await page.getByLabel(english.signIn.email).fill(person.email);
-  await page.getByLabel(english.signIn.password).fill(own);
+  await page.getByLabel(english.signIn.passwordLabel).fill(own);
   await page.getByRole('button', { name: english.signIn.signIn }).click();
   await expect(page.getByText(english.signIn.codeNeeded)).toBeVisible();
   await page.getByLabel(english.signIn.code).fill(await codeNow(key));
@@ -88,7 +88,7 @@ test('a reset by email: the address typed, the code read from the message, a new
 
   await page.getByLabel(english.reset.code).fill('not-the-code');
   const fresh = 'cypress knees in the slough';
-  await page.getByLabel(english.reset.password, { exact: true }).fill(fresh);
+  await page.getByLabel(english.reset.passwordLabel, { exact: true }).fill(fresh);
   await page.getByLabel(english.reset.again).fill(fresh);
   await page.getByRole('button', { name: english.reset.complete }).click();
   await expect(page.getByText(english.reset.refusedCode)).toBeVisible();
@@ -99,7 +99,7 @@ test('a reset by email: the address typed, the code read from the message, a new
 
   await page.getByRole('link', { name: english.reset.toSignIn }).click();
   await page.getByLabel(english.signIn.email).fill(person.email);
-  await page.getByLabel(english.signIn.password).fill(fresh);
+  await page.getByLabel(english.signIn.passwordLabel).fill(fresh);
   await page.getByRole('button', { name: english.signIn.signIn }).click();
   // A manager with no authenticator sets one up before anything else.
   await expect(heading(page)).toHaveText(english.twoStep.title);

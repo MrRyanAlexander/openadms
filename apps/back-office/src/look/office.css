@@ -700,3 +700,10 @@ fieldset {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Words side by side in a line, a space between them drawn by the layout, never typed. */
+.spaced {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.35em;
+}

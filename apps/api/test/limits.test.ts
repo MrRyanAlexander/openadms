@@ -107,7 +107,9 @@ describe('one address sending requests faster than the policy allows', () => {
     const fourth = await asks();
     expect(fourth.statusCode).toBe(429);
     expect(fourth.headers['access-control-allow-origin']).toBe(listedOrigin);
-    expect(fourth.headers['access-control-expose-headers']).toBe('x-request-id, retry-after, content-disposition');
+    expect(fourth.headers['access-control-expose-headers']).toBe(
+      'x-request-id, retry-after, content-disposition',
+    );
     expect(fourth.headers['access-control-allow-methods']).toBeUndefined();
   });
 

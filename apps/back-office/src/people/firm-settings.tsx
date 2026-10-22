@@ -240,7 +240,7 @@ function PasscodeDialog({
         {
           kind: 'secret',
           key: 'currentPassword',
-          label: said.currentPassword,
+          label: said.yourPasswordLabel,
           autoComplete: 'current-password',
         },
         { kind: 'secret', key: 'passcode', label: said.newPasscode, autoComplete: 'new-password' },

@@ -133,7 +133,7 @@ export function ProjectMap({ projectId }: { readonly projectId: string }) {
               longest: 2000,
             },
             { kind: 'text', key: 'nameField', label: said.zoneNameField, longest: 200 },
-            { kind: 'text', key: 'token', label: said.token, longest: 4096 },
+            { kind: 'text', key: 'token', label: said.accessTokenLabel, longest: 4096 },
           ]}
           initial={{}}
           save={async (values) => {

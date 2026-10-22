@@ -273,12 +273,12 @@ function Totals({ answer }: { readonly answer: DebrisTotalsAnswer }) {
             { label: said.cyColumn, numeric: true, cell: (row) => cy(row.cy) },
           ]}
         />
-        <p>
+        <p className="spaced">
           {say(said.total, {
             loads: counted(said.loadsCounted, answer.loads.total.loads),
             cy: cy(answer.loads.total.cy),
-          })}{' '}
-          {say(said.equipment, { equipment: equipment(answer.loads.equipment) })}
+          })}
+          <span>{say(said.equipment, { equipment: equipment(answer.loads.equipment) })}</span>
         </p>
       </section>
       <section aria-labelledby="totals-haul-outs">
@@ -294,12 +294,12 @@ function Totals({ answer }: { readonly answer: DebrisTotalsAnswer }) {
             { label: said.cyColumn, numeric: true, cell: (row) => cy(row.cy) },
           ]}
         />
-        <p>
+        <p className="spaced">
           {say(said.total, {
             loads: counted(said.loadsCounted, answer.haulOuts.total.loads),
             cy: cy(answer.haulOuts.total.cy),
-          })}{' '}
-          {say(said.equipment, { equipment: equipment(answer.haulOuts.equipment) })}
+          })}
+          <span>{say(said.equipment, { equipment: equipment(answer.haulOuts.equipment) })}</span>
         </p>
       </section>
       <section aria-labelledby="totals-unit-rate">
@@ -332,13 +332,13 @@ function Totals({ answer }: { readonly answer: DebrisTotalsAnswer }) {
             },
           ]}
         />
-        <p>
+        <p className="spaced">
           {say(said.unitTotal, {
             tickets: counted(said.ticketsCounted, answer.unitRate.total.tickets),
             units: number(Number(answer.unitRate.total.units)),
             hours: number(Number(answer.unitRate.total.hours)),
-          })}{' '}
-          {say(said.equipment, { equipment: equipment(answer.unitRate.equipment) })}
+          })}
+          <span>{say(said.equipment, { equipment: equipment(answer.unitRate.equipment) })}</span>
         </p>
       </section>
       <section aria-labelledby="totals-stats">
