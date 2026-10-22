@@ -71,6 +71,9 @@ export function Forms({ projectId }: { readonly projectId: string }) {
   const debrisTypes = useListOptions('debris-types');
   const methods = useListOptions('reduction-methods');
   const [open, setOpen] = useState<Open | null>(null);
+  // The kind of document a new form is for, as it is picked: what the form may state beside its
+  // name ("GPS required" on an ROE form, what an incident offers on an incident form, no other).
+  const [kindPicked, setKindPicked] = useState<DocumentType>('LOAD');
   const [told, tell] = useTold();
 
   const done = (answer: SetupWritten): null => {
@@ -80,6 +83,7 @@ export function Forms({ projectId }: { readonly projectId: string }) {
   };
 
   const formDialog = (form: FormEntry['form'] | null) => {
+    const documentType = form?.documentType ?? kindPicked;
     const fields: FieldSpec[] = [
       ...(form === null
         ? [
@@ -96,21 +100,36 @@ export function Forms({ projectId }: { readonly projectId: string }) {
           ]
         : []),
       { kind: 'text', key: 'name', label: said.name, required: true, longest: 200 },
-      { kind: 'check', key: 'gpsRequired', label: said.gpsRequired },
-      {
-        kind: 'picks',
-        key: 'incidentOffers',
-        label: said.incidentOffers,
-        options: incidentOffers.map((offer) => ({ id: offer, label: said.offers[offer] })),
-      },
+      ...(documentType === 'ROE'
+        ? [{ kind: 'check', key: 'gpsRequired', label: said.gpsRequired } as const]
+        : []),
+      ...(documentType === 'INCIDENT'
+        ? [
+            {
+              kind: 'picks',
+              key: 'incidentOffers',
+              label: said.incidentOffers,
+              options: incidentOffers.map((offer) => ({ id: offer, label: said.offers[offer] })),
+            } as const,
+          ]
+        : []),
     ];
+    // What only an ROE form or an incident form states.
+    const stated = (values: Values) => ({
+      ...(documentType === 'ROE' ? { gpsRequired: checked(values, 'gpsRequired') } : {}),
+      ...(documentType === 'INCIDENT'
+        ? {
+            incidentOffers: picks(values, 'incidentOffers') as (typeof incidentOffers)[number][],
+          }
+        : {}),
+    });
     return (
       <FormDialog
         title={form === null ? said.add : say(said.edit, { name: form.name })}
         fields={fields}
         initial={
           form === null
-            ? {}
+            ? { documentType: 'LOAD' }
             : {
                 name: form.name,
                 gpsRequired: form.gpsRequired === true,
@@ -118,30 +137,27 @@ export function Forms({ projectId }: { readonly projectId: string }) {
               }
         }
         save={async (values: Values): Promise<NotAnswered | null> => {
-          const offers = picks(values, 'incidentOffers') as (typeof incidentOffers)[number][];
           const reply =
             form === null
               ? await api.ask(createFormEndpoint, {
                   params: { projectId },
-                  body: {
-                    documentType: (picked(values, 'documentType') ?? 'LOAD') as DocumentType,
-                    name: text(values, 'name'),
-                    gpsRequired: checked(values, 'gpsRequired'),
-                    incidentOffers: offers,
-                  },
+                  body: { documentType, name: text(values, 'name'), ...stated(values) },
                 })
               : await api.ask(changeFormEndpoint, {
                   params: { formId: form.id },
-                  body: {
-                    name: text(values, 'name'),
-                    gpsRequired: checked(values, 'gpsRequired'),
-                    incidentOffers: offers,
-                  },
+                  body: { name: text(values, 'name'), ...stated(values) },
                 });
           return reply.kind === 'answered' ? done(reply.answer) : reply;
         }}
+        onValues={(values) => {
+          if (form !== null) return;
+          setKindPicked(
+            formDocumentTypes.find((type) => type === picked(values, 'documentType')) ?? 'LOAD',
+          );
+        }}
         onClose={() => {
           setOpen(null);
+          setKindPicked('LOAD');
         }}
       />
     );
