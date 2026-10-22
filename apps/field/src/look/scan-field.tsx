@@ -7,12 +7,15 @@
 //   where it has the focus; and **wherever else on the screen the focus is**, outside any other
 //   field or a dialog, what it types goes into this field from its first key (a new scan starts
 //   the field afresh) and its Enter takes it, so the monitor needn't tap the field first. Nothing
-//   is timed or guessed: keys typed by hand outside a field are taken the same way.
+//   is timed or guessed: keys typed by hand outside a field are taken the same way. **A phone
+//   setting turns this off** (WCAG 2.1.4; BUILD.md, settled 7): "Take a scanner's keys anywhere
+//   on the screen", on by default, given here by `ScannerKeysAnywhere`; off, keys go only into
+//   the field that has the focus.
 // - **The Scan button** opens the camera's scanner (`scan.tsx`), which the screen gives.
 // - **`keyboard={false}`** (a ticket's number, where "The barcode won't read" takes a typed one):
 //   the field opens no keyboard on a phone, so a number comes by a scanner, the camera or a paste,
 //   and one typed by hand goes the way that is flagged with its reason (Q-105, ADR-111).
-import { useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import { Input, Label, TextField } from 'react-aria-components';
 
 import { words } from '../words.ts';
@@ -21,6 +24,10 @@ import { Barcode } from './icons.tsx';
 
 // Where a key typed belongs to something else: another field, or a dialog over the screen.
 const elsewhere = 'input, textarea, select, [contenteditable="true"], [role="dialog"]';
+
+// The phone's setting "Take a scanner's keys anywhere on the screen" (`PhoneSettings`), on unless a
+// screen above says otherwise.
+export const ScannerKeysAnywhere = createContext(true);
 
 export function ScanField({
   label,
@@ -41,7 +48,9 @@ export function ScanField({
   // What the field holds and what to tell, as of the last render, for the keys typed elsewhere.
   const now = useRef({ value, onChange, onEnter });
   now.current = { value, onChange, onEnter };
+  const anywhere = useContext(ScannerKeysAnywhere);
   useEffect(() => {
+    if (!anywhere) return;
     // Whether the keys typed since the last Enter came here from elsewhere on the screen.
     let catching = false;
     const pressed = (key: KeyboardEvent) => {
@@ -73,7 +82,7 @@ export function ScanField({
     return () => {
       document.removeEventListener('keydown', pressed, true);
     };
-  }, []);
+  }, [anywhere]);
   return (
     <div className="scan-field">
       <TextField className="field" value={value} onChange={onChange}>

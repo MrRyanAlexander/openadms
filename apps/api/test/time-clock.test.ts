@@ -405,7 +405,7 @@ describe('the read the export of hours makes (AC-02-50, 53, 55)', () => {
       expect(kims?.hours).toEqual({
         workedMinutes: 740,
         breakMinutes: 30,
-        outsideTheDayMinutes: 0,
+        otherDays: [],
         stillClockedIn: false,
         unmatchedEntries: 0,
       });

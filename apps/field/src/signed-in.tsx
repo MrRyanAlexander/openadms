@@ -70,9 +70,11 @@ import {
   Banner,
   BottomMenu,
   Button,
+  ScannerKeysAnywhere,
   ScreenActions,
   ScreenTitle,
   StatusStrip,
+  Toggle,
   type MenuItem,
 } from './look/index.ts';
 import { Move } from './move.tsx';
@@ -86,6 +88,7 @@ import type { Enrolment } from './phone/identity.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { NotSavedShown, PhoneOutbox } from './phone/outbox.ts';
+import type { PhoneSettings } from './phone/settings.ts';
 import type { PhoneSetup } from './phone/setup.ts';
 import { SignedInRuns } from './phone/signed-in-runs.ts';
 import type { ListsAfter, PhoneSync, SyncRun } from './phone/sync.ts';
@@ -162,7 +165,36 @@ function whatNotSaved(shown: NotSavedShown): string {
   }
 }
 
+// The signed-in phone with its own settings given to every screen (BUILD.md, settled 7): a scan
+// field takes a scanner's keys anywhere on its screen unless the phone's setting says otherwise.
 export function SignedInPhone({
+  settings,
+  ...rest
+}: { readonly settings: PhoneSettings } & Omit<
+  Parameters<typeof SignedInScreens>[0],
+  'scannerKeysAnywhere' | 'onScannerKeysAnywhere'
+>) {
+  const [scannerKeysAnywhere, setScannerKeysAnywhere] = useState(
+    () => settings.now().scannerKeysAnywhere,
+  );
+  return (
+    <ScannerKeysAnywhere.Provider value={scannerKeysAnywhere}>
+      <SignedInScreens
+        {...rest}
+        scannerKeysAnywhere={scannerKeysAnywhere}
+        onScannerKeysAnywhere={(on) => {
+          void settings.keep({ scannerKeysAnywhere: on }).then((kept) => {
+            setScannerKeysAnywhere(kept.scannerKeysAnywhere);
+          });
+        }}
+      />
+    </ScannerKeysAnywhere.Provider>
+  );
+}
+
+function SignedInScreens({
+  scannerKeysAnywhere,
+  onScannerKeysAnywhere,
   enrolment,
   monitor,
   lists,
@@ -178,6 +210,8 @@ export function SignedInPhone({
   onHandedOver,
   onTurnIn,
 }: {
+  readonly scannerKeysAnywhere: boolean;
+  readonly onScannerKeysAnywhere: (on: boolean) => void;
   readonly enrolment: Enrolment;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
@@ -907,6 +941,12 @@ export function SignedInPhone({
         {signedIn.offline ? <p>{said.offline}</p> : null}
         {marked === null ? null : <p>{said.underPasscode[marked]}</p>}
         <p>{say(said.phone, { name: enrolment.name })}</p>
+        <Toggle
+          label={said.scannerKeysAnywhere}
+          on={scannerKeysAnywhere}
+          onChange={onScannerKeysAnywhere}
+        />
+        <p className="field-hint">{said.scannerKeysHint}</p>
       </div>
       <ScreenActions>
         <Button

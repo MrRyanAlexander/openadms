@@ -60,6 +60,7 @@ export {
   type DayApprovalRefusal,
   type DayAsked,
   type DayHours,
+  type OtherDayHours,
   type PrefilledLine,
   type TypedLine,
 } from './time-clock.ts';

@@ -135,6 +135,7 @@ export function CompleteCollection({
           </Button>
         ),
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={lists.debrisTypes.LOAD.map(({ id, name }) => ({ key: id, label: name }))}
           picked={now.formDebrisTypeId}

@@ -638,7 +638,15 @@ export const dayHoursSchema = z.strictObject({
   hours: z.strictObject({
     workedMinutes: z.number().int().min(0),
     breakMinutes: z.number().int().min(0),
-    outsideTheDayMinutes: z.number().int().min(0),
+    // What fell outside the assignment's own day, counted on the day it fell on (past midnight:
+    // the next day).
+    otherDays: z.array(
+      z.strictObject({
+        workDate: z.iso.date(),
+        workedMinutes: z.number().int().min(0),
+        breakMinutes: z.number().int().min(0),
+      }),
+    ),
     stillClockedIn: z.boolean(),
     unmatchedEntries: z.number().int().min(0),
   }),

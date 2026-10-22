@@ -480,6 +480,7 @@ export function CompleteDisposal({
               onward();
             }),
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={debrisTypes.map(({ id, name }) => ({ key: id, label: name }))}
           picked={now.formDebrisTypeId}
@@ -724,6 +725,7 @@ export function CompleteHaulOut({
         said.debris.title,
         now.formDebrisTypeId === null ? null : next(true, onward),
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={lists.debrisTypes.HAUL_OUT.map(({ id, name }) => ({ key: id, label: name }))}
           picked={now.formDebrisTypeId}

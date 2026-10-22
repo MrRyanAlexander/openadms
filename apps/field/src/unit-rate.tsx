@@ -546,6 +546,7 @@ export function CompleteUnitRate({
             <p>{say(words.home.open.crew, { truck: now.certNumber, number: now.ticketNumber })}</p>
           </Banner>
           <ListPicker
+            movesOn
             labelledBy={titleId}
             choices={phone.payableTypes().map(({ id, name }) => ({ key: id, label: name }))}
             picked={now.payableTypeId}
@@ -696,6 +697,7 @@ export function CompleteUnitRate({
         <>
           <p>{said.measure.about}</p>
           <ListPicker
+            movesOn
             labelledBy={titleId}
             choices={[
               { key: 'CIRCUMFERENCE', label: said.measure.around },
@@ -763,6 +765,7 @@ export function CompleteUnitRate({
               onward();
             }),
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={[
             { key: 'yes', label: said.stump.halfOrMore },

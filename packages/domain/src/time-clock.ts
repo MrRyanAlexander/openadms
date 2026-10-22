@@ -8,7 +8,9 @@
 // - **A day's hours** are read from its entries in field-time order (arrival order means
 //   nothing): from each clock-in to its clock-out, less the breaks in between. **The day ends
 //   before midnight in the project's time zone** (ADR-100): what fell outside the assignment's own
-//   day is said apart and never counted on it. **No cap is put on anyone's hours.** A stretch with
+//   day is never counted on it but on the day it fell on (BUILD.md, settled 1: a stretch past
+//   midnight stays on the assignment it was clocked in on, and its part after midnight counts on
+//   the next day; time says nothing extra). **No cap is put on anyone's hours.** A stretch with
 //   no clock-out counts nothing and is said to be still clocked in; an entry that fits no stretch
 //   (a second clock-in, a break ended that never started) is counted apart, never guessed at.
 //   Nothing here refuses or flags: the hours are the worker's statement, for a manager to approve.
@@ -45,14 +47,23 @@ export interface DayHours {
   readonly workedMinutes: number;
   // On a break, inside the day.
   readonly breakMinutes: number;
-  // Clocked in and not on a break, but before the day began or after it ended in the project's
-  // time zone: never counted on this day (ADR-100).
-  readonly outsideTheDayMinutes: number;
+  // What fell before the day began or after it ended in the project's time zone, by the day it
+  // fell on, in calendar order: counted on that day, never on this one (ADR-100; BUILD.md,
+  // settled 1). A day appears only where something of it was worked or on a break.
+  readonly otherDays: readonly OtherDayHours[];
   // The last clock-in, or a break, with no clock-out after it: counted to nothing.
   readonly stillClockedIn: boolean;
   // Entries that fit no stretch: a clock-in while clocked in, a break started on a break or
   // while clocked out, a break ended that never started, a clock-out while clocked out.
   readonly unmatchedEntries: number;
+}
+
+// What one assignment's stretches came to on a day other than its own.
+export interface OtherDayHours {
+  // 2026-10-15.
+  readonly workDate: string;
+  readonly workedMinutes: number;
+  readonly breakMinutes: number;
 }
 
 // Where a worker stands on their assignment's clock: clocked out (or never in), clocked in, or on a
@@ -115,30 +126,32 @@ export class ClockDay {
   }
 
   hours(entries: readonly ClockEntryAt[]): DayHours {
-    const { starts, ends } = this.clock.dayBounds(this.workDate);
     const ordered = inFieldTime(entries);
-    let worked = 0;
-    let onBreak = 0;
-    let outside = 0;
+    // Milliseconds worked and on a break, by the project day they fell on.
+    const byDay = new Map<string, { worked: number; onBreak: number }>();
+    const count = (from: number, to: number, which: 'worked' | 'onBreak'): void => {
+      let at = from;
+      while (at < to) {
+        const ends = Math.min(to, this.clock.dayEnds(new Date(at)).getTime());
+        const day = this.clock.day(new Date(at));
+        const held = byDay.get(day) ?? { worked: 0, onBreak: 0 };
+        held[which] += ends - at;
+        byDay.set(day, held);
+        at = ends;
+      }
+    };
     let unmatched = 0;
     let state: 'OUT' | 'IN' | 'BREAK' = 'OUT';
     let since = 0;
-    const inside = (from: number, to: number): number =>
-      Math.max(0, Math.min(to, ends.getTime()) - Math.max(from, starts.getTime()));
-    const work = (to: number): void => {
-      const within = inside(since, to);
-      worked += within;
-      outside += Math.max(0, to - since) - within;
-    };
     for (const entry of ordered) {
       const at = entry.at.getTime();
       if (state === 'OUT' && entry.kind === 'IN') {
         state = 'IN';
       } else if (state === 'IN' && (entry.kind === 'BREAK_START' || entry.kind === 'OUT')) {
-        work(at);
+        count(since, at, 'worked');
         state = entry.kind === 'OUT' ? 'OUT' : 'BREAK';
       } else if (state === 'BREAK' && (entry.kind === 'BREAK_END' || entry.kind === 'OUT')) {
-        onBreak += inside(since, at);
+        count(since, at, 'onBreak');
         state = entry.kind === 'OUT' ? 'OUT' : 'IN';
       } else {
         unmatched += 1;
@@ -146,10 +159,18 @@ export class ClockDay {
       }
       since = at;
     }
+    const own = byDay.get(this.workDate) ?? { worked: 0, onBreak: 0 };
     return {
-      workedMinutes: Math.round(worked / minute),
-      breakMinutes: Math.round(onBreak / minute),
-      outsideTheDayMinutes: Math.round(outside / minute),
+      workedMinutes: Math.round(own.worked / minute),
+      breakMinutes: Math.round(own.onBreak / minute),
+      otherDays: [...byDay]
+        .filter(([day]) => day !== this.workDate)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([workDate, { worked, onBreak }]) => ({
+          workDate,
+          workedMinutes: Math.round(worked / minute),
+          breakMinutes: Math.round(onBreak / minute),
+        })),
       stillClockedIn: state !== 'OUT',
       unmatchedEntries: unmatched,
     };

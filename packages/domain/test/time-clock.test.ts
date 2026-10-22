@@ -43,7 +43,7 @@ describe('a day’s hours', () => {
     ).toEqual({
       workedMinutes: 740,
       breakMinutes: 30,
-      outsideTheDayMinutes: 0,
+      otherDays: [],
       stillClockedIn: false,
       unmatchedEntries: 0,
     });
@@ -63,17 +63,27 @@ describe('a day’s hours', () => {
     expect(day.hours([entry('IN', '05:00'), entry('OUT', '23:30')]).workedMinutes).toBe(1110);
   });
 
-  it('AC-02-55 the day ends before midnight in the project’s time zone: 22:00 to 01:30 counts 2 h, and 1 h 30 min is said apart', () => {
-    expect(day.hours([entry('IN', '22:00'), entry('OUT', '01:30', '2026-10-14')])).toEqual({
-      workedMinutes: 120,
-      breakMinutes: 0,
-      outsideTheDayMinutes: 90,
+  it('AC-02-55 the day ends before midnight in the project’s time zone: 22:00 to 01:30 counts 2 h on its own day and 1 h 30 min on the next (BUILD.md, settled 1)', () => {
+    expect(
+      day.hours([
+        entry('IN', '22:00'),
+        entry('BREAK_START', '23:45'),
+        entry('BREAK_END', '00:15', '2026-10-14'),
+        entry('OUT', '01:30', '2026-10-14'),
+      ]),
+    ).toEqual({
+      workedMinutes: 105,
+      breakMinutes: 15,
+      otherDays: [{ workDate: '2026-10-14', workedMinutes: 75, breakMinutes: 15 }],
       stillClockedIn: false,
       unmatchedEntries: 0,
     });
-    // Before the day began, the same.
+    // Before the day began, the same: the hour before midnight counts on the day before.
     const early = day.hours([entry('IN', '23:00', '2026-10-12'), entry('OUT', '07:00')]);
-    expect([early.workedMinutes, early.outsideTheDayMinutes]).toEqual([420, 60]);
+    expect([early.workedMinutes, early.otherDays]).toEqual([
+      420,
+      [{ workDate: '2026-10-12', workedMinutes: 60, breakMinutes: 0 }],
+    ]);
   });
 
   it('AC-02-55 a day of 25 hours, where the clocks go back, ends where its own zone says', () => {
@@ -82,7 +92,7 @@ describe('a day’s hours', () => {
       { kind: 'IN', at: new Date('2026-11-01T00:00:00-04:00') },
       { kind: 'OUT', at: new Date('2026-11-01T23:59:00-05:00') },
     ]);
-    expect([longest.workedMinutes, longest.outsideTheDayMinutes]).toEqual([1499, 0]);
+    expect([longest.workedMinutes, longest.otherDays]).toEqual([1499, []]);
     expect(new ProjectClock(bayline).dayBounds('2026-11-01')).toEqual({
       starts: new Date('2026-11-01T04:00:00Z'),
       ends: new Date('2026-11-02T05:00:00Z'),
@@ -93,7 +103,7 @@ describe('a day’s hours', () => {
     expect(day.hours([entry('IN', '06:00')])).toEqual({
       workedMinutes: 0,
       breakMinutes: 0,
-      outsideTheDayMinutes: 0,
+      otherDays: [],
       stillClockedIn: true,
       unmatchedEntries: 0,
     });
@@ -113,7 +123,7 @@ describe('a day’s hours', () => {
     ).toEqual({
       workedMinutes: 420,
       breakMinutes: 45,
-      outsideTheDayMinutes: 0,
+      otherDays: [],
       stillClockedIn: false,
       unmatchedEntries: 0,
     });
@@ -133,7 +143,7 @@ describe('a day’s hours', () => {
     expect(odd).toEqual({
       workedMinutes: 510,
       breakMinutes: 30,
-      outsideTheDayMinutes: 0,
+      otherDays: [],
       stillClockedIn: false,
       unmatchedEntries: 4,
     });
@@ -143,7 +153,7 @@ describe('a day’s hours', () => {
     expect(day.hours([])).toEqual({
       workedMinutes: 0,
       breakMinutes: 0,
-      outsideTheDayMinutes: 0,
+      otherDays: [],
       stillClockedIn: false,
       unmatchedEntries: 0,
     });

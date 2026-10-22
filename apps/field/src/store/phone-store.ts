@@ -40,6 +40,8 @@ export const shelves = [
   'archivedQueues',
   // What the server answered that the phone keeps: a record not saved, a report until it is.
   'keptAnswers',
+  // The phone's own settings (BUILD.md, settled 7): never a monitor's, never sent.
+  'settings',
 ] as const;
 
 export type Shelf = (typeof shelves)[number];

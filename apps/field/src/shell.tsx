@@ -28,6 +28,7 @@ import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { PasscodeSessions } from './phone/passcode-sessions.ts';
 import type { PhoneOutbox } from './phone/outbox.ts';
 import type { PasscodeOnPhone } from './phone/passcode.ts';
+import type { PhoneSettings } from './phone/settings.ts';
 import type { PhoneSetup, SetupMonitor } from './phone/setup.ts';
 import type { SigningIn } from './phone/signing-in.ts';
 import type { PhoneSync } from './phone/sync.ts';
@@ -46,6 +47,8 @@ export interface OpenedPhone {
   readonly capture: CaptureParts;
   // The time clock, where the project has it on (task 3.7.2, ADR-601).
   readonly clock: PhoneClock;
+  // The phone's own settings (BUILD.md, settled 7).
+  readonly settings: PhoneSettings;
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
@@ -246,6 +249,7 @@ export function Shell({
           outbox={opened.outbox}
           capture={opened.capture}
           clock={opened.clock}
+          settings={opened.settings}
           inactivity={opened.inactivity}
           syncEveryMinutes={opened.syncEveryMinutes}
           setup={opened.setup}

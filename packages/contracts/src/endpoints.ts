@@ -4116,7 +4116,7 @@ export const listHoursEndpoint = endpoint({
   permission: 'VIEW_DISPATCH',
   name: 'listHours',
   summary:
-    'A project’s workers’ days on the time clock, from one day to another (62 days at most), a page at a time by day and then by assignment: each assignment with an entry, standing or withdrawn; its entries and the activity lines its clock-out carried, as the worker’s phone sent them; what its hours come to (worked and on a break inside the day, which ends before midnight in the project’s time zone, what fell outside it, whether still clocked in, entries that fit no stretch), in whole minutes, with no limit on hours; and its approval in force, with whether anything of it arrived after. What the export of hours reads. Never a rate or a pay, and never crew time’s hours.',
+    'A project’s workers’ days on the time clock, from one day to another (62 days at most), a page at a time by day and then by assignment: each assignment with an entry, standing or withdrawn; its entries and the activity lines its clock-out carried, as the worker’s phone sent them; what its hours come to (worked and on a break inside the day, which ends before midnight in the project’s time zone, and what fell outside it by the day it counts on (past midnight, the next), whether still clocked in, entries that fit no stretch), in whole minutes, with no limit on hours; and its approval in force, with whether anything of it arrived after. What the export of hours reads. Never a rate or a pay, and never crew time’s hours.',
   method: 'GET',
   path: '/projects/:projectId/hours',
   params: projectId,

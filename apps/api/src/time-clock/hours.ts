@@ -13,7 +13,7 @@
 // - **The read** is a project's assignments with an entry, from one day to another, by day and
 //   then by assignment, a page at a time: each with its entries and lines as sent, what its hours
 //   come to by the domain's one rule (`ClockDay`: the day ends before midnight in the project's
-//   time zone; no cap on hours), and the approval in force. It takes "view dispatch".
+//   time zone, and what fell past it counts on the day it fell on; no cap on hours), and the approval in force. It takes "view dispatch".
 //
 // Nothing here is a rate or a pay, nothing reads crew time and nothing is queued: no ticket reads
 // a worker's hours (ADR-241 (5), (7)). No read-only viewer reads any of it.
@@ -74,7 +74,11 @@ export interface DayHoursRead {
   readonly hours: {
     readonly workedMinutes: number;
     readonly breakMinutes: number;
-    readonly outsideTheDayMinutes: number;
+    readonly otherDays: readonly {
+      readonly workDate: string;
+      readonly workedMinutes: number;
+      readonly breakMinutes: number;
+    }[];
     readonly stillClockedIn: boolean;
     readonly unmatchedEntries: number;
   };

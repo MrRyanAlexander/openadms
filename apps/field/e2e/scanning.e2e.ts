@@ -70,6 +70,8 @@ test('AC-11-49, AC-11-47: Ana scans 730415’s badge with a scanner, never tappi
 
   // Complete and submit: its receipt prints, the PDF the browser saves.
   await page.getByRole('button', { name: said.open.complete }).click();
+  // A pick that moves straight on says so first (WCAG 3.2.2; BUILD.md, settled 7).
+  await expect(page.getByRole('listbox')).toHaveAccessibleDescription(english.look.pickToGoOn);
   await page.getByRole('option', { name: 'Vegetative', exact: true }).click();
   await page.getByRole('button', { name: said.place.capture }).click();
   await page.getByLabel(said.place.typed).fill('14 Heron St');
@@ -181,4 +183,36 @@ test('AC-11-49, AC-04-08, AC-04-96, Q-105: on PARKS Sam scans with the camera: h
   ).toBeVisible();
   await page.getByRole('button', { name: said.question.back }).click();
   await expect(heading(page)).toHaveText(said.number.controlTitle);
+});
+
+test('WCAG 2.1.4 (BUILD.md, settled 7): Ana turns off "Take a scanner’s keys anywhere on the screen" in Settings; a scanner’s keys then go only into the field she taps, and the phone keeps the setting through a sign-out', async ({
+  page,
+  context,
+}) => {
+  const { ana } = worldCast();
+  await placed(context);
+  await enrolled(page, 'P1-SCAN-SET-E2E');
+  await signedIn(page, ana);
+
+  await page.getByRole('button', { name: english.menu.settings }).click();
+  const anywhere = page.getByRole('switch', { name: english.settings.scannerKeysAnywhere });
+  await expect(anywhere).toBeChecked();
+  await checkScreen(page);
+  await page.getByText(english.settings.scannerKeysAnywhere).click();
+  await expect(anywhere).not.toBeChecked();
+  // The phone's own: signed out and in again, it stands.
+  await page.getByRole('button', { name: english.settings.signOut }).click();
+  await signedIn(page, ana);
+  await page.getByRole('button', { name: english.menu.settings }).click();
+  await expect(anywhere).not.toBeChecked();
+
+  // A scanner's keys typed with the focus elsewhere go nowhere; into the field tapped, they do.
+  await page.getByRole('button', { name: english.menu.work }).click();
+  await page.getByRole('button', { name: scanning.home }).click();
+  await expect(heading(page)).toHaveText(scanning.title);
+  await scannerTypes(page, '730415');
+  await expect(page.getByLabel(scanning.label)).toHaveValue('');
+  await page.getByLabel(scanning.label).click();
+  await scannerTypes(page, '730415');
+  await expect(page.getByText(filled(scanning.found.inLists, { number: '730415' }))).toBeVisible();
 });

@@ -205,8 +205,11 @@
     "back": "Back",
     "step": "Step {step} of {steps}",
     "scan": "Scan",
+    "on": "On",
+    "off": "Off",
     "search": "Search the list",
     "nothingFound": "Nothing in the list matches.",
+    "pickToGoOn": "Pick one to go on.",
     "keypad": {
       "empty": "Nothing typed yet",
       "clear": "Clear",
@@ -438,7 +441,9 @@
     },
     "handOver": "Hand this phone over",
     "move": "Move to another site",
-    "turnIn": "Sync and turn in"
+    "turnIn": "Sync and turn in",
+    "scannerKeysAnywhere": "Take a scanner’s keys anywhere on the screen",
+    "scannerKeysHint": "On, a scanner’s number goes into the number’s field wherever you are on the screen. Off, tap the field first."
   },
   "turnIn": {
     "title": "Sync and turn in",

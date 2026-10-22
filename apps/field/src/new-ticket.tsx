@@ -580,6 +580,7 @@ export function NewTicket({
         said.number.reasonTitle,
         null,
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={lists.typedNumberReasons.map(({ id, name }) => ({ key: id, label: name }))}
           picked={reasonId}

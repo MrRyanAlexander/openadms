@@ -28214,7 +28214,7 @@
     "/projects/{projectId}/hours": {
       "get": {
         "operationId": "listHours",
-        "summary": "A project’s workers’ days on the time clock, from one day to another (62 days at most), a page at a time by day and then by assignment: each assignment with an entry, standing or withdrawn; its entries and the activity lines its clock-out carried, as the worker’s phone sent them; what its hours come to (worked and on a break inside the day, which ends before midnight in the project’s time zone, what fell outside it, whether still clocked in, entries that fit no stretch), in whole minutes, with no limit on hours; and its approval in force, with whether anything of it arrived after. What the export of hours reads. Never a rate or a pay, and never crew time’s hours.",
+        "summary": "A project’s workers’ days on the time clock, from one day to another (62 days at most), a page at a time by day and then by assignment: each assignment with an entry, standing or withdrawn; its entries and the activity lines its clock-out carried, as the worker’s phone sent them; what its hours come to (worked and on a break inside the day, which ends before midnight in the project’s time zone, and what fell outside it by the day it counts on (past midnight, the next), whether still clocked in, entries that fit no stretch), in whole minutes, with no limit on hours; and its approval in force, with whether anything of it arrived after. What the export of hours reads. Never a rate or a pay, and never crew time’s hours.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "x-open-adms-permission": "VIEW_DISPATCH",
@@ -28494,10 +28494,30 @@
                                 "minimum": 0,
                                 "maximum": 9007199254740991
                               },
-                              "outsideTheDayMinutes": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 9007199254740991
+                              "otherDays": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "workDate": {
+                                      "type": "string",
+                                      "format": "date",
+                                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                                    },
+                                    "workedMinutes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "breakMinutes": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    }
+                                  },
+                                  "required": ["workDate", "workedMinutes", "breakMinutes"],
+                                  "additionalProperties": false
+                                }
                               },
                               "stillClockedIn": {
                                 "type": "boolean"
@@ -28511,7 +28531,7 @@
                             "required": [
                               "workedMinutes",
                               "breakMinutes",
-                              "outsideTheDayMinutes",
+                              "otherDays",
                               "stillClockedIn",
                               "unmatchedEntries"
                             ],

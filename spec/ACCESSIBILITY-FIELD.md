@@ -54,7 +54,7 @@
 | 1.4.13 Content on hover or focus | AA | Not applicable | I, S | Nothing appears on hover or focus |
 | 2.1.1 Keyboard | A | Supports | K | Every enabled control on every check reached by Tab; a list's rows by the arrow keys (React Aria); the number on the keypad's own keys; a time in the platform's time field |
 | 2.1.2 No keyboard trap | A | Supports | K | Tab comes round on every screen; the camera and the scanner's camera open as modal dialogs, closed by Escape or their own button |
-| 2.1.4 Character key shortcuts | A | **Partially supports** | S, D | §5 (1): a scan field takes keys typed anywhere on its screen, outside another field (ADR-596) |
+| 2.1.4 Character key shortcuts | A | Supports | S, D | §5 (1): a scan field takes keys typed anywhere on its screen, outside another field (ADR-596), unless the phone's setting "Take a scanner's keys anywhere on the screen" (on by default) is turned off (BUILD.md, settled 7; `e2e/scanning.e2e.ts`) |
 | 2.2.1 Timing adjustable | A | Supports | D, browser test | The lock after inactivity (30 minutes, the policy's) warns 60 seconds before and one tap keeps the session (AC-11-20, `e2e/offline-sign-in.e2e.ts`), nothing not yet submitted lost. A temporary passcode session ends at the project's midnight (AC-11-26): the day is its scope, a security limit the criterion's essential exception covers |
 | 2.2.2 Pause, stop, hide | A | Supports | S | Nothing moves, blinks or scrolls by itself; the camera's live view is the photograph being taken (essential) |
 | 2.3.1 Three flashes or below threshold | A | Supports | S | Nothing flashes |
@@ -75,7 +75,7 @@
 | 3.1.1 Language of page | A | Supports | A | The page names the build's language |
 | 3.1.2 Language of parts | AA | Not applicable | S | One language a build, every word the translation file's (ADR-172) |
 | 3.2.1 On focus | A | Supports | I | No focus changed a screen |
-| 3.2.2 On input | A | **Partially supports** | S, D | §5 (2): on some questions a pick moves straight on (ADR-573 (1)), with nothing said beforehand |
+| 3.2.2 On input | A | Supports | S, D | §5 (2): where a pick moves straight on (ADR-573 (1)), the question's line says "Pick one to go on." first, and the list is described by it (BUILD.md, settled 7) |
 | 3.2.3 Consistent navigation | AA | Supports | I | The menu is Work, (Time), Sync, Settings in that order wherever it is (ADR-573 (3)) |
 | 3.2.4 Consistent identification | AA | Supports | I | One word for one act: Back, Next, Submit, Cancel this…, Leave it for now |
 | 3.2.6 Consistent help | A | Not applicable | S | No screen offers help or a contact |
@@ -88,7 +88,7 @@
 | 4.1.2 Name, role, value | A | Supports | A, I | React Aria's components; the busy state said as unavailable (fix 2). *P:* heard on VoiceOver and TalkBack (AC-11-57) |
 | 4.1.3 Status messages | AA | Supports | I | What waits and sends in the strip (polite), a banner that appears as the monitor works announced, the sync's, the clock's and the passcode's outcomes in status lines, the keypad's value an output. *P:* heard as they change (AC-11-57) |
 
-**In all:** 41 supported, 2 partially supported (2.1.4, 3.2.2), 12 not applicable, none unsupported, in the browser build.
+**In all:** 43 supported, 12 not applicable, none partially supported or unsupported, in the browser build (2.1.4 and 3.2.2 were partly met until the user took the recommendations below, BUILD.md, settled 7).
 
 ---
 
@@ -113,8 +113,8 @@ Each fix is in the shared components (`apps/field/src/look/`), and each has a ch
 
 Neither is built, because each changes what a monitor sees or does; both are the plan's lines under P, where the conformance report is written.
 
-1. **2.1.4, a scan field's keys taken anywhere on its screen** (`ScanField`, ADR-596). A keyboard-style Bluetooth scanner types a number and Enter; so the monitor needn't tap the field, a printable key typed anywhere on the screen outside another field goes into it. WCAG asks that a shortcut of single character keys can be turned off, remapped, or works only where the field has the focus. A phone's dictation types only into a focused field, and nothing is taken until Enter, so the risk is small; but as built the criterion is only partly met. *Recommended:* a setting on the phone, **"Take a scanner's keys anywhere on the screen"**, on by default, which makes it "Supports"; or keep it and the report says why.
-2. **3.2.2, a pick that moves straight on** (ADR-573 (1): no confirmation after a value; the review checks everything once). Picking a debris type, a reason for a typed number, a survey, an incident's type or a unit rate ticket's work goes on to the next question at once, with nothing said beforehand. The next question's title now takes the focus (fix 1), so a screen reader hears the change, but WCAG asks that a change of context on input be said before it happens. *Recommended:* the question's own line beneath its title says so ("Pick one to go on."), in the translation file, on those questions only.
+1. **2.1.4, a scan field's keys taken anywhere on its screen** (`ScanField`, ADR-596). A keyboard-style Bluetooth scanner types a number and Enter; so the monitor needn't tap the field, a printable key typed anywhere on the screen outside another field goes into it. WCAG asks that a shortcut of single character keys can be turned off, remapped, or works only where the field has the focus. A phone's dictation types only into a focused field, and nothing is taken until Enter, so the risk is small; but as built the criterion is only partly met. *Recommended:* a setting on the phone, **"Take a scanner's keys anywhere on the screen"**, on by default, which makes it "Supports"; or keep it and the report says why. **Taken** (the user, 2026-10-22; BUILD.md, settled 7): built, in Settings.
+2. **3.2.2, a pick that moves straight on** (ADR-573 (1): no confirmation after a value; the review checks everything once). Picking a debris type, a reason for a typed number, a survey, an incident's type or a unit rate ticket's work goes on to the next question at once, with nothing said beforehand. The next question's title now takes the focus (fix 1), so a screen reader hears the change, but WCAG asks that a change of context on input be said before it happens. *Recommended:* the question's own line beneath its title says so ("Pick one to go on."), in the translation file, on those questions only. **Taken** (the user, 2026-10-22; BUILD.md, settled 7): `ListPicker`'s `movesOn`.
 
 ---
 
@@ -164,26 +164,26 @@ All 60 screens of `apps/field/src` (each names itself, `data-screen`), in the or
 | `clock-out-nudge` | Clock out? (at sign-out) | 1 (clock) | buttons | ✓ 3 stops | the strip | — |
 | `clock-out` | Clock-out: the day's activity | 1 (clock) | buttons | ✓ 4 stops | the strip | 3.3.4: the day checked before it is approved |
 | `activity-line` | An activity line: times, activity, note | 2 (clock) | fields, list | ✓ 6 stops | the strip; a status line | times typed in the phone's own time field (4.1.2 by the platform); a time that ends before it starts said (3.3.1, 3.3.3) |
-| `new-collection` | New collection: normal or split, the badge, the number | 6 (collection, scanning) | scan, fields | ✓ 5 stops | the strip; a status line | 2.1.4: the scan field takes a scanner's keys typed anywhere on the screen (partly, §5); 3.3.7: a typed number typed again (essential, ADR-569, 573, 589); 3.2.2: the reason for a typed number picked goes straight on (partly, §5) |
-| `new-disposal` | New disposal: the badge, the driver's ticket | 3 (keyboard, tower) | fields, scan | ✓ 5 stops | the strip | 2.1.4 (partly, §5); 3.3.7 as new-collection |
-| `new-haul-out` | New haul-out | 1 (tower) | buttons | ✓ 3 stops | the strip | 2.1.4 (partly, §5) |
-| `new-unit-rate` | New unit rate ticket: the crew's badge | 2 (unit-rate) | scan, fields | ✓ 4 stops | the strip | 2.1.4 (partly, §5) |
+| `new-collection` | New collection: normal or split, the badge, the number | 6 (collection, scanning) | scan, fields | ✓ 5 stops | the strip; a status line | 2.1.4: the scan field takes a scanner's keys typed anywhere on the screen, unless the phone's setting is off (met, settled 7); 3.3.7: a typed number typed again (essential, ADR-569, 573, 589); 3.2.2: the reason for a typed number picked goes straight on (met: the phone's setting, settled 7) |
+| `new-disposal` | New disposal: the badge, the driver's ticket | 3 (keyboard, tower) | fields, scan | ✓ 5 stops | the strip | 2.1.4 (met: the phone's setting, settled 7); 3.3.7 as new-collection |
+| `new-haul-out` | New haul-out | 1 (tower) | buttons | ✓ 3 stops | the strip | 2.1.4 (met: the phone's setting, settled 7) |
+| `new-unit-rate` | New unit rate ticket: the crew's badge | 2 (unit-rate) | scan, fields | ✓ 4 stops | the strip | 2.1.4 (met: the phone's setting, settled 7) |
 | `open-ticket` | An open ticket: waypoints, photographs, Complete | 6 (camera-refused, collection, photographs, tower) | camera | ✓ 6 stops | the strip; a status line | the camera opens in a modal dialog: the page behind it out of reach, Escape or Put the camera away closes it (2.1.2); its live view the photograph's own (2.2.2) |
-| `complete-collection` | Complete a collection: debris type, ROE, estimate, review | 7 (camera-refused, collection) | list, fields, keypad | ✓ 15 stops | the strip | 3.2.2: a debris type picked goes straight on (partly, §5); 3.3.4: the review before Submit; the keypad keeps the phone's keyboard closed (2.4.11) |
-| `complete-disposal` | Complete a disposal: debris type, load call or weight, receipt, review | 8 (tower) | list, keypad, fields | ✓ 14 stops | the strip; a status line | 3.2.2 (partly, §5); 3.3.1, 3.3.3: 101 said as no load call; 3.3.4: the review |
-| `complete-haul-out` | Complete a haul-out: load call, review | 2 (tower) | keypad | ✓ 15 stops | the strip | 3.2.2 (partly, §5); 3.3.4 |
-| `complete-unit-rate` | A unit rate ticket: its stages, measurement, review | 14 (unit-rate) | list, fields, keypad | ✓ 15 stops | the strip; a status line | 3.2.2: the work picked goes straight on (partly, §5); each stage's state a word and an icon, never colour alone (1.4.1); 3.3.4 |
+| `complete-collection` | Complete a collection: debris type, ROE, estimate, review | 7 (camera-refused, collection) | list, fields, keypad | ✓ 15 stops | the strip | 3.2.2: a debris type picked goes straight on (met: "Pick one to go on.", settled 7); 3.3.4: the review before Submit; the keypad keeps the phone's keyboard closed (2.4.11) |
+| `complete-disposal` | Complete a disposal: debris type, load call or weight, receipt, review | 8 (tower) | list, keypad, fields | ✓ 14 stops | the strip; a status line | 3.2.2 (met: "Pick one to go on.", settled 7); 3.3.1, 3.3.3: 101 said as no load call; 3.3.4: the review |
+| `complete-haul-out` | Complete a haul-out: load call, review | 2 (tower) | keypad | ✓ 15 stops | the strip | 3.2.2 (met: "Pick one to go on.", settled 7); 3.3.4 |
+| `complete-unit-rate` | A unit rate ticket: its stages, measurement, review | 14 (unit-rate) | list, fields, keypad | ✓ 15 stops | the strip; a status line | 3.2.2: the work picked goes straight on (met: "Pick one to go on.", settled 7); each stage's state a word and an icon, never colour alone (1.4.1); 3.3.4 |
 | `photo` | A ticket's photograph, large | 2 (collection, photographs) | buttons | ✓ 3 stops | the strip | 1.1.1: the photograph named by what it shows and when |
 | `submitted` | Submitted: the receipt printed | 4 (collection, receipts) | buttons | ✓ 3 stops | the strip; a status line | 4.1.3: the receipt printed, announced |
 | `cancel-ticket` | Cancel this ticket? | 1 (collection) | buttons | ✓ 2 stops | the strip | — |
 | `receipts` | Print a receipt again | 1 (receipts) | buttons | ✓ 2 stops | the strip | — |
-| `scan-back` | Scan a barcode: what the phone holds under it | 2 (scanning) | fields, scan | ✓ 3 stops | the strip; a status line | 2.1.4 (partly, §5); what the phone holds under the number in a status line |
+| `scan-back` | Scan a barcode: what the phone holds under it | 2 (scanning) | fields, scan | ✓ 3 stops | the strip; a status line | 2.1.4 (met: the phone's setting, settled 7); what the phone holds under the number in a status line |
 | `new-roe` | New ROE: its number | 2 (forms) | keypad | ✓ 16 stops; 1 of 2 after a control went (see §4) | the strip; a status line | 3.3.7: the number the phone made is written on the paper, then typed again (essential: it checks the copy) |
-| `new-survey` | New survey: which survey | 1 (forms) | list | ✓ 3 stops | the strip | 3.2.2: the survey picked goes straight on (partly, §5) |
-| `new-incident` | New incident: its type | 2 (forms) | list | ✓ 3 stops | the strip | 3.2.2: the type picked goes straight on (partly, §5) |
+| `new-survey` | New survey: which survey | 1 (forms) | list | ✓ 3 stops | the strip | 3.2.2: the survey picked goes straight on (met: "Pick one to go on.", settled 7) |
+| `new-incident` | New incident: its type | 2 (forms) | list | ✓ 3 stops | the strip | 3.2.2: the type picked goes straight on (met: "Pick one to go on.", settled 7) |
 | `fill-roe` | An ROE: parcel, owner, signed, address, review | 4 (forms) | fields, list | ✓ 7 stops | the strip; a status line | a day typed that isn't one said (3.3.1); 3.3.4: the review |
 | `fill-survey` | A survey: ROE, notes, photos, review | 6 (forms) | list, fields | ✓ 5 stops | the strip | 3.3.4 |
-| `fill-incident` | An incident: sub-type, parties, contractor, cert number, review | 5 (forms) | fields, list, scan | ✓ 6 stops | the strip | 2.1.4: the cert number's scan field (partly, §5); 3.3.4 |
+| `fill-incident` | An incident: sub-type, parties, contractor, cert number, review | 5 (forms) | fields, list, scan | ✓ 6 stops | the strip | 2.1.4: the cert number's scan field (met: the phone's setting, settled 7); 3.3.4 |
 | `fill-drop-off-log` | A drop-off log: resident, origin, the firm's own fields, review | 4 (forms) | fields, list, camera | ✓ 9 stops | the strip; a status line | the firm's own fields by their type; a required one unanswered holds Next and says so (3.3.1, 3.3.2) |
 | `form-photo` | A form's photograph, large | 1 (forms) | buttons | ✓ 3 stops | the strip | 1.1.1 |
 | `form-submitted` | A form submitted | 5 (forms) | buttons | ✓ 2 stops | the strip; a status line | 4.1.3 |

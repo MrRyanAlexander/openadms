@@ -28,7 +28,7 @@ exist; and the golden mission run through the screens to the approved numbers.
 
 ## The parts, in order (tick as done; the list doesn't grow)
 
-- [ ] **Field app finished:** the two settled items below (past midnight; WCAG 2.1.4's setting and
+- [x] **Field app finished:** the two settled items below (past midnight; WCAG 2.1.4's setting and
       3.2.2's line).
 - [ ] **Back office foundation:** the shared look as a workspace package (tokens, components, the
       a11y test helpers, the translation layer) used by both apps; `apps/back-office` (React +

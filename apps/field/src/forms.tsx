@@ -461,6 +461,7 @@ function NewForm({
         said.survey.typeTitle,
         null,
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={lists.surveyWorkTypes
             .filter(({ key }) => key !== 'ROE')
@@ -478,6 +479,7 @@ function NewForm({
           say(said.incident.subTypeTitle, { type: type.name }),
           null,
           <ListPicker
+            movesOn
             labelledBy={titleId}
             choices={type.subTypes.map(({ id, name }) => ({ key: id, label: name }))}
             picked={null}
@@ -494,6 +496,7 @@ function NewForm({
         said.incident.typeTitle,
         null,
         <ListPicker
+          movesOn
           labelledBy={titleId}
           choices={lists.incidentTypes.map(({ id, name }) => ({ key: id, label: name }))}
           picked={incidentTypeId}

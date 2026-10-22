@@ -687,3 +687,54 @@ h2 {
   gap: var(--space-3);
   margin-top: auto;
 }
+
+/* A setting turned on or off: the track, its knob, the label and the state in words. */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--height-main);
+  cursor: pointer;
+}
+
+.toggle-track {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 3.25rem;
+  height: 2rem;
+  padding: var(--space-1);
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: 1rem;
+  background: var(--colour-page);
+}
+
+.toggle-knob {
+  width: 1.375rem;
+  height: 1.375rem;
+  border-radius: 50%;
+  background: var(--colour-edge);
+}
+
+.toggle[data-selected] .toggle-track {
+  justify-content: flex-end;
+  border-color: var(--colour-main);
+  background: var(--colour-main);
+}
+
+.toggle[data-selected] .toggle-knob {
+  background: var(--colour-on-main);
+}
+
+.toggle[data-focus-visible] .toggle-track {
+  outline: var(--focus-ring) solid var(--colour-focus);
+  outline-offset: var(--focus-ring);
+}
+
+.toggle-label {
+  flex: 1;
+}
+
+.toggle-state {
+  font-weight: var(--weight-strong);
+}

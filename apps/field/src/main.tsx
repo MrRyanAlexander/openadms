@@ -22,6 +22,7 @@ import { PasscodeSessions } from './phone/passcode-sessions.ts';
 import { PasscodeOnPhone } from './phone/passcode.ts';
 import { AddressLookup, BrowserLocator } from './phone/place.ts';
 import { PhoneReports } from './phone/reports.ts';
+import { PhoneSettings } from './phone/settings.ts';
 import { PhoneSetup } from './phone/setup.ts';
 import { SigningIn } from './phone/signing-in.ts';
 import { PhoneSync } from './phone/sync.ts';
@@ -88,6 +89,7 @@ const phone = BrowserStore.opened().then(async (store) => {
   const clock = await PhoneClock.opened(store, outbox, tickets);
   return {
     clock,
+    settings: await PhoneSettings.opened(store),
     capture: {
       tickets,
       forms,
