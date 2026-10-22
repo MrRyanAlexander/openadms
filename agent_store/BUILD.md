@@ -36,7 +36,7 @@ exist; and the golden mission run through the screens to the approved numbers.
       policy; sign-in, two-step, password change and reset, own sessions, sign-out; the layout
       (sidebar closed by default, Tickets / Reports and Forms / Billings, the project picker, one
       paged table).
-- [ ] **Setting up a project:** clients, declaration events, projects; contractors, primes,
+- [x] **Setting up a project:** clients, declaration events, projects; contractors, primes,
       contracts; forms, debris types, payable types, the firm's lists; pay items (a rate per
       prime); the rule builder; sites and their quantity lookup; the project map; certification
       intake; ROEs from paper with their scope; the setup check's page.

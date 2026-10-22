@@ -45,12 +45,14 @@ import { setupRefusalOf } from './setup-service.ts';
 import {
   contractorPlaceRecord,
   contractRecord,
+  controlRangeRecord,
   crewDayStepsRecord,
   formDebrisTypeRecord,
   formDefinitionRecord,
   formRecord,
   listValueRecord,
   mapVersionRecord,
+  numberSeriesRecord,
   payItemRateRecord,
   payItemRecord,
   projectRecord,
@@ -156,7 +158,8 @@ export class SetupReads {
     });
   }
 
-  // One project's page: its record, kinds of work, contractors' places by name and contracts.
+  // One project's page: its record, kinds of work, contractors' places by name and contracts, and
+  // how it numbers its tickets: each series it started and the control ticket ranges entered.
   project(readerId: string, projectId: string): Promise<ProjectAnswer> {
     return this.db.$read(async (tx) => {
       await backOfficeReader(tx, readerId, null);
@@ -166,10 +169,13 @@ export class SetupReads {
           kindsOfWork: { orderBy: { kindOfWorkId: 'asc' } },
           contractors: { orderBy: { id: 'asc' }, include: { contractor: true } },
           contracts: { orderBy: [{ name: 'asc' }, { id: 'asc' }] },
+          numberSeries: { orderBy: { series: 'asc' } },
+          controlRanges: { orderBy: [{ series: 'asc' }, { firstNumber: 'asc' }] },
         },
       });
       if (project === null) throw notFound();
-      const { kindsOfWork, contractors, contracts, ...record } = project;
+      const { kindsOfWork, contractors, contracts, numberSeries, controlRanges, ...record } =
+        project;
       return {
         project: projectRecord(record),
         kindOfWorkIds: kindsOfWork.map((kind) => kind.kindOfWorkId),
@@ -178,6 +184,8 @@ export class SetupReads {
           name: contractor.name,
         })),
         contracts: contracts.map(contractRecord),
+        numberSeries: numberSeries.map(numberSeriesRecord),
+        controlRanges: controlRanges.map(controlRangeRecord),
       };
     });
   }

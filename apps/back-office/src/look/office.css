@@ -378,10 +378,227 @@
 .check[data-selected] .check-box {
   border-color: var(--colour-main);
   background: var(--colour-main);
-  color: var(--colour-on-main);
+}
+
+/* The tick, drawn: never a character a screen reader or a contrast check would read. */
+.check[data-selected] .check-box::after {
+  content: '';
+  width: 0.4rem;
+  height: 0.75rem;
+  border-right: 0.1875rem solid var(--colour-on-main);
+  border-bottom: 0.1875rem solid var(--colour-on-main);
+  transform: translateY(-0.0625rem) rotate(45deg);
 }
 
 .check[data-focus-visible] .check-box {
   outline: var(--focus-ring) solid var(--colour-focus);
   outline-offset: var(--focus-ring);
+}
+
+.checks-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+
+.field-date {
+  max-width: 14rem;
+}
+
+.form-heading {
+  margin-top: var(--space-2);
+  font-size: var(--type-base);
+}
+
+/* A dialog over the screen: the page dimmed beneath, the dialog as wide as its form allows and
+   scrolling within itself when taller than the screen. */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: rgb(0 0 0 / 0.45);
+}
+
+.dialog-modal {
+  width: min(44rem, 100%);
+  margin: auto 0;
+}
+
+.dialog {
+  padding: var(--space-5);
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: var(--radius);
+  background: var(--colour-page);
+  outline: none;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: var(--type-title);
+}
+
+/* A screen's tools above its table: a search, and its main action. */
+.page-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
+
+.page-tools .field {
+  flex: 1 1 16rem;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.page-tools .button-main {
+  width: auto;
+}
+
+.told {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.field-text {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+fieldset.panel {
+  margin: 0;
+}
+
+fieldset.panel legend {
+  padding: 0 var(--space-1);
+  font-weight: var(--weight-strong);
+}
+
+.form-wide {
+  max-width: 60rem;
+}
+
+fieldset.rule-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--edge) solid var(--colour-surface);
+  border-radius: var(--radius);
+}
+
+fieldset.rule-line legend {
+  padding: 0 var(--space-1);
+  font-weight: var(--weight-strong);
+}
+
+fieldset.rule-line > .field {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-list li {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field-file {
+  max-width: 100%;
+  font: inherit;
+}
+
+/* The project's map, drawn as lines: the boundary in the words' colour, each zone in the main
+   colour, and each site a point; nothing from outside the installation. */
+.map-drawing {
+  max-width: 48rem;
+  padding: var(--space-3);
+  border: var(--edge) solid var(--colour-surface);
+  border-radius: var(--radius);
+}
+
+.map-drawing svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.map-boundary {
+  fill: none;
+  stroke: var(--colour-words);
+  stroke-width: 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-zone {
+  fill: var(--colour-picked);
+  stroke: var(--colour-main);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-site {
+  fill: var(--colour-problem);
+  stroke: var(--colour-page);
+  stroke-width: 2;
+}
+
+.photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.photo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 12rem;
+  max-width: 100%;
+}
+
+.photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius);
+}
+
+.photo-large {
+  width: 40rem;
+}
+
+.photo figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* A fieldset is no wider than its screen: the browser's own minimum is its content's width. */
+fieldset {
+  min-width: 0;
 }

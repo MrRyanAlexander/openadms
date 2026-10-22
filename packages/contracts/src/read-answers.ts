@@ -44,12 +44,14 @@ import {
   billingUnits,
   contractRecordSchema,
   contractorPlaceRecordSchema,
+  controlRangeRecordSchema,
   formDebrisTypeRecordSchema,
   formDefinitionRecordSchema,
   formDocumentTypes,
   formRecordSchema,
   listValueRecordSchema,
   mapVersionRecordSchema,
+  numberSeriesRecordSchema,
   payItemRateRecordSchema,
   payItemRecordSchema,
   projectRecordSchema,
@@ -90,6 +92,9 @@ export const projectAnswerSchema = z.strictObject({
   kindOfWorkIds: z.array(id),
   contractors: z.array(contractorPlaceRecordSchema.extend({ name: z.string() })),
   contracts: z.array(contractRecordSchema),
+  // How it numbers its tickets: each series started, and the control ticket ranges entered.
+  numberSeries: z.array(numberSeriesRecordSchema),
+  controlRanges: z.array(controlRangeRecordSchema),
 });
 
 export type ProjectAnswer = z.infer<typeof projectAnswerSchema>;

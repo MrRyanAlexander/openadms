@@ -3,9 +3,11 @@
 // (a checkbox), and a day. Each is React Aria's, labelled, with a line of help and what the server
 // refused of it said beneath it (WCAG 3.3.1, 3.3.2). A pick-list's values are picked, never typed
 // (invariant 6).
+import { useId } from 'react';
 import {
   CheckboxButton,
   CheckboxField,
+  CheckboxGroup,
   FieldError,
   Label,
   ListBox,
@@ -18,6 +20,8 @@ import {
   Select,
   SelectValue,
   Text,
+  TextArea,
+  TextField,
   type Key,
 } from 'react-aria-components';
 
@@ -131,9 +135,7 @@ export function CheckField({
   return (
     <CheckboxField className="check-field" isSelected={value} onChange={onChange}>
       <CheckboxButton className="check">
-        <span className="check-box" aria-hidden="true">
-          {value ? '✓' : ''}
-        </span>
+        <span className="check-box" aria-hidden="true" />
         <span>{label}</span>
       </CheckboxButton>
       {hint === undefined ? null : (
@@ -142,5 +144,160 @@ export function CheckField({
         </Text>
       )}
     </CheckboxField>
+  );
+}
+
+// Several picked from a short list: one checkbox each, the group labelled (WCAG 1.3.1).
+export function ChecksField({
+  label,
+  options,
+  value,
+  onChange,
+  hint,
+}: {
+  readonly label: string;
+  readonly options: readonly Option[];
+  readonly value: readonly string[];
+  readonly onChange: (value: readonly string[]) => void;
+  readonly hint?: string | undefined;
+}) {
+  return (
+    <CheckboxGroup className="choices" value={[...value]} onChange={onChange}>
+      <Label className="field-label">{label}</Label>
+      <div className="checks-row">
+        {options.map((option) => (
+          <CheckboxField key={option.id} value={option.id} className="check-field">
+            <CheckboxButton className="check">
+              <span className="check-box" aria-hidden="true" />
+              <span>{option.label}</span>
+            </CheckboxButton>
+          </CheckboxField>
+        ))}
+      </div>
+      {hint === undefined ? null : (
+        <Text slot="description" className="field-hint">
+          {hint}
+        </Text>
+      )}
+    </CheckboxGroup>
+  );
+}
+
+// A calendar day, in the browser's own date field (no date library): 2026-10-12 as the API takes
+// it. Read as a day only, never as an instant.
+export function DateEntry({
+  label,
+  value,
+  onChange,
+  hint,
+  problem,
+  required = false,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly hint?: string | undefined;
+  readonly problem?: string | undefined;
+  readonly required?: boolean;
+}) {
+  const id = useId();
+  const hintId = `${id}-hint`;
+  const problemId = `${id}-problem`;
+  const described = [hint === undefined ? null : hintId, problem === undefined ? null : problemId]
+    .filter((part) => part !== null)
+    .join(' ');
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        className="field-input field-date"
+        type="date"
+        value={value}
+        required={required}
+        aria-invalid={problem === undefined ? undefined : true}
+        {...(described === '' ? {} : { 'aria-describedby': described })}
+        onChange={(event) => {
+          onChange(event.currentTarget.value);
+        }}
+      />
+      {hint === undefined ? null : (
+        <p id={hintId} className="field-hint">
+          {hint}
+        </p>
+      )}
+      {problem === undefined ? null : (
+        <p id={problemId} className="field-problem">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// A few lines of text: notes, or a pick's choices one per line.
+export function TextBlock({
+  label,
+  value,
+  onChange,
+  hint,
+  longest,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly hint?: string;
+  readonly longest?: number;
+}) {
+  return (
+    <TextField className="field" value={value} onChange={onChange}>
+      <Label className="field-label">{label}</Label>
+      <TextArea
+        className="field-input field-text"
+        rows={4}
+        {...(longest === undefined ? {} : { maxLength: longest })}
+      />
+      {hint === undefined ? null : (
+        <Text slot="description" className="field-hint">
+          {hint}
+        </Text>
+      )}
+    </TextField>
+  );
+}
+
+// A file picked from the person's computer (a map's file): the browser's own file field, labelled;
+// the file handed to the screen as it is picked.
+export function FileField({
+  label,
+  accept,
+  busy = false,
+  onFile,
+}: {
+  readonly label: string;
+  readonly accept: string;
+  readonly busy?: boolean;
+  readonly onFile: (file: File) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        className="field-file"
+        type="file"
+        accept={accept}
+        aria-busy={busy}
+        onChange={(event) => {
+          const chosen = event.currentTarget.files?.[0];
+          if (chosen !== undefined) onFile(chosen);
+        }}
+      />
+    </div>
   );
 }

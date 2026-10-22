@@ -2,12 +2,14 @@
 // project's name the way into it. Every screen of a project is reached from here or from the
 // project picker in the header.
 import { listProjectsEndpoint, type ProjectRecord } from '@open-adms/contracts';
-import { ScreenTitle } from '@open-adms/look';
+import { Button, ScreenTitle } from '@open-adms/look';
 import { useState } from 'react';
 import { Link } from 'react-aria-components';
 
 import { ChoiceField } from '../look/fields.tsx';
 import { PagedTable } from '../look/paged-table.tsx';
+import { holds, useSigned } from '../session.tsx';
+import { NewProject } from '../setup/new-project.tsx';
 import { day, words } from '../words.ts';
 
 type Which = 'false' | 'true' | 'every';
@@ -15,10 +17,31 @@ type Which = 'false' | 'true' | 'every';
 export function Home() {
   const said = words.home;
   const [which, setWhich] = useState<Which>('false');
+  const [adding, setAdding] = useState(false);
+  const { session } = useSigned();
   return (
     <main data-screen="projects" className="page" id="content">
       <ScreenTitle>{said.title}</ScreenTitle>
       <p>{said.about}</p>
+      {holds(session, 'SETUP') ? (
+        <div className="page-tools">
+          <Button
+            main
+            onPress={() => {
+              setAdding(true);
+            }}
+          >
+            {words.newProject.add}
+          </Button>
+        </div>
+      ) : null}
+      {adding ? (
+        <NewProject
+          onClose={() => {
+            setAdding(false);
+          }}
+        />
+      ) : null}
       <ChoiceField
         label={said.whichProjects}
         value={which}

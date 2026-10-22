@@ -63,7 +63,8 @@ export function Table<Row>({
             rows.map((row) => (
               <tr key={keyOf(row)}>
                 {columns.map((column) =>
-                  column.names === true ? (
+                  // A row header only where it names the cells beside it (WCAG 1.3.1).
+                  column.names === true && columns.length > 1 ? (
                     <th key={column.label} scope="row">
                       {column.cell(row)}
                     </th>

@@ -524,3 +524,4 @@ export {
 
 // The wiring probe of BACKLOG 0.2.2: `contracts` proves it resolves this package by reading it.
 export const workspace = 'domain';
+export { UsUnits } from './units.ts';
