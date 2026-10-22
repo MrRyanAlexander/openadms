@@ -94,11 +94,20 @@ interface Ready {
   readonly outcomes: MissionOutcomes;
 }
 
+// How Dana Reyes and Luis Ortega sign in at the back office's screens.
+export interface BackOfficeSignIn {
+  readonly email: string;
+  readonly password: string;
+  readonly secret: string;
+}
+
 type Answer =
   | {
       readonly ok: true;
       readonly standing?: { p1: MissionStanding; p2: MissionStanding };
       readonly audit?: Readonly<Record<string, readonly string[]>>;
+      readonly people?: Readonly<Record<'dana' | 'luis', BackOfficeSignIn>>;
+      readonly cast?: Readonly<Record<MissionMonitorName, MissionMonitor>>;
     }
   | { readonly ok: false; readonly error: string };
 
@@ -106,7 +115,7 @@ export class MissionWorld {
   // Where the mission's page is, and its made-up master passcode, as a phone is enrolled there.
   readonly origin: string;
   readonly passcode: string;
-  readonly cast: Readonly<Record<MissionMonitorName, MissionMonitor>>;
+  cast: Readonly<Record<MissionMonitorName, MissionMonitor>>;
   readonly outcomes: MissionOutcomes;
   private readonly made: ChildProcessByStdio<Writable, Readable, null>;
   private readonly answers: Interface;
@@ -127,13 +136,16 @@ export class MissionWorld {
     this.outcomes = ready.outcomes;
   }
 
-  // The page served and the world made for it, set up to Saturday 10 October.
-  static async opened(): Promise<MissionWorld> {
+  // The page served and the world made for it: set up to Saturday 10 October by the stories, or,
+  // set up by the back office's screens (at `officeOrigin`), holding only Dana, Luis and the yard's
+  // phone until the test adopts what the screens made.
+  static async opened(officeOrigin?: string): Promise<MissionWorld> {
     const page = await servedFolder(fileURLToPath(new URL('../dist/world', import.meta.url)), {
       'content-security-policy': servedPolicy(worldApiOrigin),
       ...servedHeaders,
     });
-    const made = spawn(process.execPath, [harness, 'mission', page.origin], {
+    const asked = officeOrigin === undefined ? [] : ['screens', officeOrigin];
+    const made = spawn(process.execPath, [harness, 'mission', page.origin, ...asked], {
       stdio: ['pipe', 'pipe', 'inherit'],
     });
     const answers = createInterface({ input: made.stdout });
@@ -161,6 +173,21 @@ export class MissionWorld {
   // The time now, by the world's clock: its API's and its worker's.
   async at(time: string): Promise<void> {
     await this.asked({ do: 'at', time });
+  }
+
+  // How Dana and Luis sign in at the back office's screens (the world set up by them).
+  async people(): Promise<Readonly<Record<'dana' | 'luis', BackOfficeSignIn>>> {
+    const answer = await this.asked({ do: 'people' });
+    if (answer.people === undefined) throw new Error('The world named nobody.');
+    return answer.people;
+  }
+
+  // What the back office's screens set up, adopted: the monitors created on the yard's phone and
+  // Saturday's certifications made, as the stories do; the cast is theirs.
+  async adopt(): Promise<void> {
+    const answer = await this.asked({ do: 'adopt' });
+    if (answer.cast === undefined) throw new Error('The world adopted no cast.');
+    this.cast = answer.cast;
   }
 
   // Luis writes P1's boards for Monday and Tuesday and P2's for Monday, naming the phones the

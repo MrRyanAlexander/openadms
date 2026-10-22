@@ -20,8 +20,11 @@
 import { test, expect } from './accessible.ts';
 import { MissionPhone, type Place } from './mission-phone.ts';
 import { MissionWorld, type MissionMonitorName } from './mission-world.ts';
+import { OfficeDesk, officeOrigin, pick, tick, type } from './office-desk.ts';
 
 const on = (day: string, time: string): string => `2026-10-${day}T${time}:00-04:00`;
+const thursday = (time: string) => on('08', time);
+const friday = (time: string) => on('09', time);
 const saturday = (time: string) => on('10', time);
 const sunday = (time: string) => on('11', time);
 const monday = (time: string) => on('12', time);
@@ -58,6 +61,9 @@ const phoneNames = {
 type PhoneName = keyof typeof phoneNames;
 
 let world: MissionWorld;
+// Dana's and Luis's sign-ins at the back office, and the projects' ids its screens made.
+let people: Awaited<ReturnType<MissionWorld['people']>>;
+const projectIds = { p1: '', p2: '' };
 const phones = new Map<PhoneName, MissionPhone>();
 const phone = (name: PhoneName): MissionPhone => {
   const found = phones.get(name);
@@ -91,7 +97,7 @@ async function outForTheDay(
 test.describe.configure({ mode: 'serial' });
 
 test.beforeAll(async () => {
-  world = await MissionWorld.opened();
+  world = await MissionWorld.opened(officeOrigin);
 });
 
 // The phones put away, then the world closed and its process ended, so the stories' address is
@@ -100,6 +106,339 @@ test.afterAll(async () => {
   test.setTimeout(120_000);
   for (const each of phones.values()) await each.close();
   await world.close();
+});
+
+// P1's map as its file came: three zones side by side, which bound the project between them.
+const zone = (name: string, west: number, east: number) => ({
+  type: 'Feature',
+  properties: { ZONE_NAME: name },
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [west, 38.9],
+        [east, 38.9],
+        [east, 39.3],
+        [west, 39.3],
+        [west, 38.9],
+      ],
+    ],
+  },
+});
+const p1Map = {
+  name: 'bayline-row-zones-v1.geojson',
+  geojson: JSON.stringify({
+    type: 'FeatureCollection',
+    features: [
+      zone('Zone 1', -75.8, -75.67),
+      zone('Zone 2', -75.67, -75.53),
+      zone('Zone 3', -75.53, -75.4),
+    ],
+  }),
+};
+
+test('the golden mission §1 on the back office’s screens: on Thursday Dana Reyes sets P1 up (Bayline County, Hurricane Delphine, Coastline and its contract, three sites, the forms and debris types, field tags, the pay items with Coastline’s rates, the rules, the map) and grants Luis Ortega review; on Friday P2', async ({
+  browser,
+}) => {
+  test.setTimeout(1_200_000);
+  people = await world.people();
+  await world.at(thursday('08:01'));
+  let dana = await OfficeDesk.signedIn(browser, people.dana, thursday('08:01'));
+  const coastline = 'Coastline Haulers LLC';
+  const rates = { [coastline]: '' };
+  const rate = (value: string) => ({ ...rates, [coastline]: value });
+
+  await dana.client('Bayline County');
+  await dana.declarationEvent('Hurricane Delphine', 'DR-9001-FL', 'FEMA disaster (DR)');
+  await dana.contractor(coastline);
+  await dana.listValue('Incident sub-types', 'Mailbox struck', 'Property damage');
+  await dana.listValue('Payable types', 'Stump fill');
+  await dana.listValue('Payable types', 'Freon recovery');
+
+  const p1Id = await dana.project({
+    name: p1,
+    client: 'Bayline County',
+    event: 'Hurricane Delphine (DR-9001-FL)',
+    programType: 'ROW',
+    activeTo: '2027-01-31',
+    workflows: ['Loads', 'Haul-outs', 'Unit rate work'],
+    kindsOfWork: ['Hangers', 'Leaners', 'Stumps', 'White Goods', 'Crew time'],
+    numbersFrom: {
+      Loads: '101001',
+      'Haul-outs': '201001',
+      'Unit rate tickets': '301001',
+      Certifications: '730415',
+    },
+  });
+  await dana.allowSplitLoads(p1Id);
+  await dana.primeAndContract(p1Id, coastline, 'Coastline, Bayline ROW 2026');
+  await dana.site(p1Id, {
+    name: 'Marsh Road TDSR',
+    type: 'TDSR/DMS',
+    facts: ['Takes loads', 'Haul-outs leave here'],
+    permit: 'FDEP-DMS-2026-0117',
+    latitude: '39.09000000',
+    longitude: '-75.62000000',
+  });
+  await dana.site(p1Id, {
+    name: 'Bayline County Landfill',
+    shortCode: 'BCL',
+    type: 'Final Disposal',
+    facts: ['Takes loads', 'Charges a tipping fee'],
+    permit: 'FDEP-SW-0098',
+    latitude: '39.00000000',
+    longitude: '-75.58000000',
+  });
+  await dana.site(p1Id, {
+    name: 'Cypress Creek Landfill',
+    shortCode: 'CCL',
+    type: 'Final Disposal',
+    facts: ['Takes loads'],
+    permit: 'FDEP-SW-0131',
+    latitude: '39.24000000',
+    longitude: '-75.60000000',
+  });
+  await dana.form(p1Id, 'Load', 'Load');
+  await dana.form(p1Id, 'Haul-out', 'Haul-out');
+  await dana.form(p1Id, 'Unit rate', 'Unit rate');
+  await dana.form(p1Id, 'Incident', 'Incident', ['The contractor involved', 'A cert number']);
+  await dana.form(p1Id, 'Citizen drop-off log', 'Drop-off log');
+  await dana.debrisType(p1Id, 'Load', { library: 'Vegetative' });
+  await dana.debrisType(p1Id, 'Load', { library: 'C&D' });
+  await dana.debrisType(p1Id, 'Haul-out', { added: 'Mulch', reducedBy: 'Grinding' });
+  await dana.fieldTags(p1Id, ['Mixed', 'Zone 1 pile', 'Zone 2 pile', 'Zone 3 pile']);
+
+  // The unit rate work Jo's phone falls to, each with Coastline's rate (golden mission §1).
+  const each = (
+    code: string,
+    description: string,
+    work: string,
+    value: string,
+    band?: readonly [string, string],
+  ) =>
+    dana.payItem(p1Id, {
+      code,
+      description,
+      payableType: work,
+      kindOfWork: work,
+      unit: 'Each',
+      ...(band === undefined ? {} : { band }),
+      flags: [
+        'The count is always one',
+        ...(band === undefined ? [] : ['A measurement required']),
+        'Photos required',
+      ],
+      rates: rate(value),
+    });
+  await each('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00');
+  await each('LNR-RMV-EA-24', 'Leaner removal 6–24 in', 'Leaners', '95.00', ['6', '24']);
+  await each('LNR-RMV-EA-99', 'Leaner removal 24.1–99 in', 'Leaners', '185.00', ['24.1', '99']);
+  await each('STP-RMV-EA-36', 'Stump removal 24–36 in', 'Stumps', '110.00', ['24', '36']);
+  await each('STP-RMV-EA-48', 'Stump removal 36.1–48 in', 'Stumps', '175.00', ['36.1', '48']);
+  await dana.payItem(p1Id, {
+    code: 'WG-RMV-EA',
+    description: 'White good removed',
+    payableType: 'White Goods',
+    kindOfWork: 'White Goods',
+    unit: 'Each',
+    flags: ['Photos required'],
+    rates: rate('40.00'),
+  });
+  await dana.payItem(p1Id, {
+    code: 'CREW-TIME-HR',
+    description: 'Crew time, skid steer crew',
+    payableType: 'Crew time',
+    kindOfWork: 'Crew time',
+    unit: 'Hours',
+    flags: ['Decimals allowed', 'Photos required'],
+    crewTimePaid: 'By the hour',
+    rates: rate('150.00'),
+  });
+
+  // The load, haul-out, fee, fill and freon pay items, Thursday at 08:40, with the map.
+  // Her session went quiet while the clock moved on: she signs in again.
+  await world.at(thursday('08:40'));
+  await dana.close();
+  dana = await OfficeDesk.signedIn(browser, people.dana, thursday('08:40'));
+  await dana.map(p1Id, p1Map);
+  const priced: readonly (readonly [string, string, string, string, string])[] = [
+    ['VEG-HAUL-CY-15', 'ROW VEG haul 0–15 mi', 'Vegetative', 'Cubic yards', '7.50'],
+    ['VEG-HAUL-CY-30', 'ROW VEG haul 15.1–30 mi', 'Vegetative', 'Cubic yards', '8.90'],
+    ['CD-HAUL-CY-15', 'ROW C&D haul 0–15 mi', 'C&D', 'Cubic yards', '8.25'],
+    ['MULCH-HO-CY', 'Mulch haul-out to FDS', 'Vegetative', 'Cubic yards', '5.10'],
+    ['MULCH-HO-TN', 'Mulch haul-out to FDS, by weight', 'Vegetative', 'Tons', '20.00'],
+    [
+      'TIP-FEE-CY-BCL',
+      'Tipping fee, Bayline County Landfill',
+      'Tipping fee',
+      'Cubic yards',
+      '4.00',
+    ],
+    ['STP-FILL-CY', 'Stump hole fill', 'Stump fill', 'Cubic yards', '22.00'],
+    ['WG-FRN-EA', 'Freon recovered', 'Freon recovery', 'Each', '25.00'],
+  ];
+  for (const [code, description, payableType, unit, value] of priced) {
+    await dana.payItem(p1Id, { code, description, payableType, unit, rates: rate(value) });
+  }
+  await dana.tippingFee(
+    p1Id,
+    'Bayline County Landfill',
+    'TIP-FEE-CY-BCL, Tipping fee, Bayline County Landfill',
+  );
+
+  // Every rule, each naming Coastline's contract (spec/RULES.md; golden mission §1).
+  const contract = 'Coastline, Bayline ROW 2026';
+  const named = Object.fromEntries(
+    priced.map(([code, description]) => [code, `${code}, ${description}`]),
+  );
+  const unitRate: Readonly<Record<string, string>> = {
+    'HNG-RMV-EA': 'HNG-RMV-EA, Hanger removal',
+    'LNR-RMV-EA-24': 'LNR-RMV-EA-24, Leaner removal 6–24 in',
+    'LNR-RMV-EA-99': 'LNR-RMV-EA-99, Leaner removal 24.1–99 in',
+    'STP-RMV-EA-36': 'STP-RMV-EA-36, Stump removal 24–36 in',
+    'STP-RMV-EA-48': 'STP-RMV-EA-48, Stump removal 36.1–48 in',
+    'WG-RMV-EA': 'WG-RMV-EA, White good removed',
+    'CREW-TIME-HR': 'CREW-TIME-HR, Crew time, skid steer crew',
+  };
+  const debris = (value: string) => ({ criterion: 'Debris type', test: 'is', value });
+  const dumpedAt = (value: string) => ({ criterion: 'Disposal site', test: 'is', value });
+  const payItemIs = (code: string) => ({
+    criterion: 'Pay item',
+    test: 'is',
+    value: unitRate[code] ?? '',
+  });
+  const rule = (
+    code: string,
+    form: string,
+    ifs: Parameters<OfficeDesk['rule']>[1]['ifs'],
+    slot = 1,
+    items?: readonly string[],
+  ) =>
+    dana.rule(p1Id, {
+      name: `${code} on ${form}`,
+      form,
+      contract,
+      ifs,
+      then: {
+        slot,
+        payItem: named[code] ?? unitRate[code] ?? '',
+        ...(items === undefined ? {} : { items }),
+      },
+    });
+  await rule('VEG-HAUL-CY-15', 'Load', [
+    debris('Vegetative'),
+    { criterion: 'Mileage', test: 'is at most', number: '15' },
+  ]);
+  await rule('VEG-HAUL-CY-30', 'Load', [
+    debris('Vegetative'),
+    { criterion: 'Mileage', test: 'is between', number: '15.1', to: '30' },
+  ]);
+  await rule('CD-HAUL-CY-15', 'Load', [
+    debris('C&D'),
+    { criterion: 'Mileage', test: 'is at most', number: '15' },
+  ]);
+  await rule('TIP-FEE-CY-BCL', 'Load', [dumpedAt('Bayline County Landfill')], 2);
+  await rule('TIP-FEE-CY-BCL', 'Haul-out', [dumpedAt('Bayline County Landfill')], 2);
+  await rule('MULCH-HO-CY', 'Haul-out', [debris('Mulch'), dumpedAt('Bayline County Landfill')]);
+  await rule('MULCH-HO-TN', 'Haul-out', [debris('Mulch'), dumpedAt('Cypress Creek Landfill')]);
+  for (const code of [
+    'HNG-RMV-EA',
+    'LNR-RMV-EA-24',
+    'LNR-RMV-EA-99',
+    'STP-RMV-EA-36',
+    'STP-RMV-EA-48',
+    'CREW-TIME-HR',
+  ]) {
+    await rule(code, 'Unit rate', [payItemIs(code)]);
+  }
+  // White goods: the rules say which items count toward which pay item (spec/RULES.md §9).
+  await rule('WG-RMV-EA', 'Unit rate', [payItemIs('WG-RMV-EA')], 1, [
+    'Washer',
+    'Dryer',
+    'Fridge, freon recovered',
+    'Fridge, no freon',
+    'Oven',
+    'Microwave',
+  ]);
+  await rule(
+    'WG-FRN-EA',
+    'Unit rate',
+    [
+      payItemIs('WG-RMV-EA'),
+      { criterion: 'Item', test: 'is at least', item: 'Fridge, freon recovered', number: '1' },
+    ],
+    2,
+    ['Fridge, freon recovered'],
+  );
+  await rule(
+    'STP-FILL-CY',
+    'Unit rate',
+    [
+      {
+        criterion: 'Pay item',
+        test: 'is one of',
+        values: [unitRate['STP-RMV-EA-36'] ?? '', unitRate['STP-RMV-EA-48'] ?? ''],
+      },
+    ],
+    2,
+  );
+  await dana.grant('Luis Ortega', [
+    'View review',
+    'Correct records',
+    'Renumber',
+    'Void',
+    'Accept a flag',
+    'QC',
+    'Lock as invoiced',
+  ]);
+
+  // Friday: P2, Bayline County's private property debris removal, loads alone.
+  await world.at(friday('09:00'));
+  await dana.close();
+  dana = await OfficeDesk.signedIn(browser, people.dana, friday('09:00'));
+  const p2Id = await dana.project({
+    name: p2,
+    client: 'Bayline County',
+    event: 'Hurricane Delphine (DR-9001-FL)',
+    programType: 'PPDR',
+    activeTo: '2027-01-31',
+    workflows: ['Loads'],
+    kindsOfWork: [],
+    numbersFrom: { Loads: '102001', Certifications: '730416' },
+  });
+  await dana.primeAndContract(p2Id, coastline, 'Coastline, Bayline PPDR 2026');
+  await dana.form(p2Id, 'Load', 'Load');
+  await dana.form(p2Id, 'ROE', 'ROE');
+  await dana.form(p2Id, 'Survey', 'Survey');
+  await dana.debrisType(p2Id, 'Load', { library: 'Vegetative' });
+  await dana.payItem(p2Id, {
+    code: 'VEG-HAUL-CY',
+    description: 'PPDR VEG haul',
+    payableType: 'Vegetative',
+    unit: 'Cubic yards',
+    rates: rate('9.00'),
+  });
+  await dana.rule(p2Id, {
+    name: 'VEG-HAUL-CY on Load',
+    form: 'Load',
+    contract: 'Coastline, Bayline PPDR 2026',
+    ifs: [debris('Vegetative')],
+    then: { slot: 1, payItem: 'VEG-HAUL-CY, PPDR VEG haul' },
+  });
+  await dana.site(p2Id, {
+    name: 'Marsh Road TDSR',
+    type: 'TDSR/DMS',
+    facts: ['Takes loads', 'Haul-outs leave here'],
+    permit: 'FDEP-DMS-2026-0117',
+    latitude: '39.09000000',
+    longitude: '-75.62000000',
+  });
+  projectIds.p1 = p1Id;
+  projectIds.p2 = p2Id;
+  await dana.close();
+
+  // Saturday at the yard: the six monitors made on its phone, the trucks and crews certified.
+  await world.adopt();
 });
 
 test('the golden mission §1: on Saturday at the yard its eight phones are enrolled through their first screen, online, under the master passcode; Luis writes the boards on Sunday', async ({
@@ -451,10 +790,61 @@ test('AC-05-02, AC-06-16, AC-04-12, AC-08-01, AC-08-02, AC-10-93: Wednesday the 
   expect(standing.p1.queue).toEqual(outcomes.p1.queue);
 });
 
-test('AC-08-64, AC-07-113, AC-07-111, AC-08-65: the mission’s review done (101003’s call accepted, 101060 renumbered to 101006 and its typed number accepted, 301003 and 301005 voided): every live ticket COMPLETED, the two voided VOID, nothing on the review queue; P1’s ledger line for line, $5,548.25 on 19 lines; P2’s $324.00 on two; the audit rows read through the API: each field event made on its monitor’s phone, Luis’s acts with his reasons and words, the value before kept, 301003’s removed line copied whole', async () => {
-  test.setTimeout(60_000);
+test('AC-08-64, AC-07-113, AC-07-111, AC-08-65: the mission’s review done by Luis Ortega on the back office’s screens (101003’s call accepted, 101060 renumbered to 101006 and its typed number accepted, 301003 and 301005 voided), the worker running what each act queued: every live ticket COMPLETED, the two voided VOID, nothing on the review queue; P1’s ledger line for line, $5,548.25 on 19 lines; P2’s $324.00 on two; the audit rows read through the API: each field event made on its monitor’s phone, Luis’s acts with his reasons and words, the value before kept, 301003’s removed line copied whole', async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
   await world.at(wednesday('08:00'));
-  await world.review();
+  const luis = await OfficeDesk.signedIn(browser, people.luis, wednesday('08:00'));
+  const page = luis.page;
+  const ticket = async (workflow: string, number: string) => {
+    await luis.at(`/projects/${projectIds.p1}/tickets/${workflow}/${number}`);
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(number);
+  };
+  // An act at a ticket's page; the worker runs what it queued.
+  const acted = async (opener: RegExp | string, title: string, reason: string, note: string) => {
+    await page.getByRole('button', { name: opener }).click();
+    const form = page.getByRole('dialog', { name: title });
+    await pick(form, 'Reason', reason);
+    await type(form, 'Your note', note);
+    await form.getByRole('button', { name: title, exact: true }).click();
+    await expect(form).toBeHidden();
+    await world.worker();
+  };
+  await ticket('LOAD', '101003');
+  await acted(
+    /^Accept the flag: Ticket 101003/,
+    'Accept the flag',
+    'Photos confirm',
+    'Heaped; photos confirm',
+  );
+  await ticket('LOAD', '101060');
+  await page
+    .getByRole('region', { name: 'Disposal (DIS) 101060' })
+    .getByRole('button', { name: 'Renumber', exact: true })
+    .click();
+  const renumbering = page.getByRole('dialog', { name: 'Renumber' });
+  await type(renumbering, 'Ticket number', '101006');
+  await renumbering.getByRole('button', { name: 'Renumber', exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('101006');
+  await world.worker();
+  await ticket('LOAD', '101006');
+  await acted(
+    /^Accept the flag: Ticket 101006: typed ticket number/,
+    'Accept the flag',
+    'Photos confirm',
+    'Cert, times and photos match 101006',
+  );
+  await ticket('UNIT_RATE', '301003');
+  await acted('Void the ticket', 'Void the ticket', 'Duplicate ticket', 'Duplicate of 301001');
+  await ticket('UNIT_RATE', '301005');
+  await acted(
+    'Void the ticket',
+    'Void the ticket',
+    'Not eligible work',
+    'Under 24 in; goes out as vegetative debris',
+  );
+  await luis.close();
   const standing = await world.standing();
   const { reviewed } = world.outcomes;
   expect(standing.p1.statuses).toEqual(reviewed.p1.statuses);
@@ -466,4 +856,79 @@ test('AC-08-64, AC-07-113, AC-07-111, AC-08-65: the mission’s review done (101
   expect(standing.p2.ledger).toEqual(reviewed.p2.ledger);
   expect(standing.p2.total).toEqual({ lines: 2, total: '$324.00' });
   expect(await world.audit()).toEqual(reviewed.p1.audit);
+});
+
+test('AC-09-11, AC-09-31, REQ-406, REQ-408: Luis QCs P1’s thirteen live tickets on the back office’s screens and locks them as invoiced in “Bayline ROW, week of 12 Oct”; its ledger reads $5,548.25 on 19 lines, P2’s $324.00 on 2; Bayline County’s debris manager, a client user Dana issues, reads 101002 in the viewer portal with its two lines', async ({
+  browser,
+}) => {
+  test.setTimeout(240_000);
+  await world.at(wednesday('09:00'));
+  const luis = await OfficeDesk.signedIn(browser, people.luis, wednesday('09:00'));
+  const page = luis.page;
+  await luis.at(`/projects/${projectIds.p1}/invoice-batches`);
+  await page.getByRole('button', { name: 'Name a batch' }).click();
+  const naming = page.getByRole('dialog', { name: 'Name a batch' });
+  await type(naming, 'Name', 'Bayline ROW, week of 12 Oct');
+  await naming.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(naming).toBeHidden();
+
+  await luis.at(`/projects/${projectIds.p1}/qc`);
+  let locked = 0;
+  for (const workflow of ['Loads', 'Haul-outs', 'Unit rate']) {
+    await page
+      .getByRole('radiogroup', { name: 'Workflow' })
+      .getByText(workflow, { exact: true })
+      .click();
+    await pick(page, 'Status', 'Completed');
+    const table = page.getByRole('table', { name: `${workflow}: every ticket` });
+    await expect(table.getByRole('row').nth(1)).toBeVisible();
+    const tickAll = async () => {
+      const names = await table
+        .getByRole('checkbox')
+        .evaluateAll((boxes) => boxes.map((box) => box.closest('label')?.textContent ?? ''));
+      for (const name of names) await tick(table, name);
+      return names.length;
+    };
+    const count = await tickAll();
+    await page.getByRole('button', { name: 'Set the QC status' }).click();
+    const qc = page.getByRole('dialog', { name: /^Set the QC status of/ });
+    await pick(qc, 'Set it to', 'QC Approved');
+    await qc.getByRole('button', { name: 'Set the QC status' }).click();
+    await expect(table.getByText('QC Approved', { exact: true })).toHaveCount(count);
+    await tickAll();
+    await page.getByRole('button', { name: 'Lock as invoiced', exact: true }).click();
+    const locking = page.getByRole('dialog', { name: /^Lock .* as invoiced$/ });
+    await pick(locking, 'Invoice batch', 'Bayline ROW, week of 12 Oct');
+    await locking.getByRole('button', { name: 'Lock as invoiced' }).click();
+    await expect(
+      table.getByText('Locked as invoiced, in Bayline ROW, week of 12 Oct', { exact: true }),
+    ).toHaveCount(count);
+    locked += count;
+  }
+  expect(locked).toBe(13);
+  const p1Total = world.outcomes.reviewed.p1.total;
+  await luis.at(`/projects/${projectIds.p1}/ledger`);
+  await expect(
+    page.getByText(`${String(p1Total.lines)} lines, ${p1Total.total} in all`),
+  ).toBeVisible();
+  await expect(page.getByText('19 lines, $5,548.25 in all')).toBeVisible();
+  await luis.at(`/projects/${projectIds.p2}/ledger`);
+  await expect(page.getByText('2 lines, $324.00 in all')).toBeVisible();
+  await luis.close();
+
+  // Dana issues Bayline County's debris manager a client user's login to P1.
+  await world.at(wednesday('09:30'));
+  const dana = await OfficeDesk.signedIn(browser, people.dana, wednesday('09:30'));
+  const viewer = {
+    email: 'debris.manager@baylinecounty.example',
+    password: 'heron street marsh tower',
+  };
+  await dana.clientUser('Bayline County debris manager', viewer.email, p1, viewer.password);
+  await dana.close();
+  const reader = await OfficeDesk.viewerSignedIn(browser, viewer);
+  await reader.at(`/projects/${projectIds.p1}/tickets/LOAD/101002`);
+  const lines = reader.page.getByRole('table', { name: 'Lines' });
+  await expect(lines).toContainText('$297.00');
+  await expect(lines).toContainText('$144.00');
+  await reader.close();
 });

@@ -7,11 +7,14 @@
 import type { LaunchOptions } from '@playwright/test';
 
 import { apiOrigin, fieldOrigin, trustedKeys } from './stack.ts';
+import { officeOrigin } from './office-desk.ts';
 import { worldApiOrigin } from './world.ts';
 
 export async function launched(camera: 'allowed' | 'refused'): Promise<LaunchOptions> {
   const keys = await trustedKeys(
-    [fieldOrigin, apiOrigin, worldApiOrigin].map((origin) => new URL(origin).hostname),
+    [fieldOrigin, apiOrigin, worldApiOrigin, officeOrigin].map(
+      (origin) => new URL(origin).hostname,
+    ),
   );
   return {
     args: [

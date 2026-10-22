@@ -9,10 +9,11 @@
 //   node packages/scenarios/src/cli.ts world <origin>
 //                                  the field app's browser tests' own world, for the page at that
 //                                  origin, until stopped (ADR-572; apps/field/e2e/world-setup.ts)
-//   node packages/scenarios/src/cli.ts mission <origin>
+//   node packages/scenarios/src/cli.ts mission <origin> [screens <office origin>]
 //                                  the golden mission's own world, for the page at that origin:
 //                                  asked a line at a time until its standard input ends (ADR-603;
-//                                  apps/field/e2e/mission-world.ts)
+//                                  apps/field/e2e/mission-world.ts); with `screens`, set up by
+//                                  the back office's screens at the office origin, not the stories
 //   node packages/scenarios/src/cli.ts office <origin> [mission]
 //                                  the back office's browser tests' own world, for the page at
 //                                  that origin, until stopped (apps/back-office/e2e/world-setup.ts):
@@ -43,7 +44,9 @@ async function main(args: readonly string[]): Promise<number> {
   }
   if (command === 'world') return world(args[1]);
   if (command === 'office') return office(args[1], args[2] === 'mission' ? 'mission' : 'field');
-  if (command === 'mission') return mission(args[1]);
+  if (command === 'mission') {
+    return mission(args[1], args[2] === 'screens' ? 'screens' : 'stories', args[3]);
+  }
   const keep = args.includes('--keep');
   const named = args.filter((arg) => arg !== '--keep');
   const unknown = named.filter((name) => !stories.some((story) => story.name === name));
@@ -151,12 +154,16 @@ async function office(pageOrigin: string | undefined, kind: 'field' | 'mission')
 // mission's approved outcomes); then each line on standard input is one thing asked, as JSON
 // (`MissionAsked`), answered by one line on standard output, in turn. Closed and dropped when its
 // standard input ends or it is told to stop. The API's error lines go to standard error.
-async function mission(pageOrigin: string | undefined): Promise<number> {
+async function mission(
+  pageOrigin: string | undefined,
+  setUp: 'stories' | 'screens',
+  officeOrigin: string | undefined,
+): Promise<number> {
   if (pageOrigin === undefined || !URL.canParse(pageOrigin)) {
     console.error('mission takes the origin of the page that tests it.');
     return 1;
   }
-  const made = await MissionWorld.opened(pageOrigin);
+  const made = await MissionWorld.opened(pageOrigin, setUp, officeOrigin);
   try {
     console.log(
       JSON.stringify({
