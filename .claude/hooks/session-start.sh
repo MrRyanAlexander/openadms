@@ -16,7 +16,7 @@ if [ -f "$build" ]; then
     echo "**The one build task:** every part in agent_store/BUILD.md is ticked. Check its \"Done when\" and report to the user."
   fi
   echo
-  echo "**How to work** (AGENTS.md): build it as you know it should be, decide without asking (BUILD.md \"Settled\"), commit on the work branch as each part lands, targeted tests as you go, the whole chain at the end."
+  echo "**How to work** (AGENTS.md): build it as you know it should be, decide without asking (BUILD.md \"Settled\"), commit on the work branch as each part lands, targeted tests as you go, the whole chain at the end. **When the user says go** (AGENTS.md \"When the user says go\", \"Runs\"): the lead (Opus) splits what's left across agents working at the same time, each at the model and effort its work needs; every run once per change, after a fix only what failed."
 else
   echo "**No agent_store/BUILD.md:** ask the user what the work is."
 fi

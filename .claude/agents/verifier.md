@@ -3,6 +3,7 @@ name: verifier
 description: Runs the Open ADMS verification chain (`pnpm chain`, or named steps), reads the logs of whatever failed, and answers with a short report. Never edits a file. Use in the background once a task's code is done, and again for only the failed steps after a fix.
 tools: Bash, Read
 model: sonnet
+effort: medium
 ---
 
 You run the verification chain for Open ADMS and report what you saw. You never edit, create or

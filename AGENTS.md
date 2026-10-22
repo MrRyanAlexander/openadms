@@ -66,12 +66,47 @@ spec drafts. The schema is the source of truth for every field, enum and model n
 
 - **Batch.** Independent reads and searches in one message; a file under about 40 KB read whole,
   once; all of one file's changes in one edit.
-- **Delegate only when it saves time:** `scout` (Haiku) to find where something is; `verifier`
-  (Sonnet) to run the whole chain in the background; `builder` (Opus) for a big slice in a clean
-  context, in parallel with your own. You decide every domain fact and check what they cite.
 - **Prove as you go:** targeted runs (`vitest run <file>`, `pnpm scenarios <story>`, one Playwright
   test); the whole `pnpm chain` once at the end (about eleven minutes, in the background).
 - **Every command starts with** `eval "$(fnm env --shell zsh)"` (Node 24).
+
+### When the user says go: a team, run by the lead
+
+The main session is the **lead** (Opus). It doesn't work the task alone, one step after another:
+it splits what's left into slices that don't touch the same files, starts them **at the same
+time**, and gives each agent the model and effort its work needs (the Agent call's `model` and
+`effort`):
+
+| Work | Agent | Model · effort |
+|---|---|---|
+| Find where something is | `scout` | Haiku · low |
+| Run tests or the chain, read the logs | `verifier`, in the background | Sonnet · medium |
+| Mechanical: words, a fix whose cause is known, a test brought up to date, an a11y finding with its fix named | `builder` | Sonnet · medium |
+| A slice that needs design or domain judgment | `builder` | Opus · high |
+| Domain facts, splitting the work, briefs, reviewing what comes back, `BUILD.md` | the lead | Opus |
+
+- **Parallel, safely:** two builders never change the same files; a shared package
+  (`packages/contracts`, `domain`, `db`, a migration) has one builder at a time; each stages only
+  its own paths. **One heavy run at a time** on this machine (a browser suite, the mission, the
+  chain): they share the stack.
+- **The lead keeps working** while agents run (the next brief, a review, its own small slice), and
+  checks what each one cites before ticking `BUILD.md`. No worktrees: merging is the user's.
+
+### Runs: once per change, never again for nothing
+
+The biggest waste so far was repeating runs (2026-10-22: the mission run 25 times, a whole browser
+suite 47 times).
+
+- **Before a run, name what changed since its last one.** Nothing changed: don't run it. A pass
+  stands until the code it covers changes.
+- **The smallest run that proves the change:** one test (`vitest run <file> -t <name>`,
+  `playwright test <file> -g <name>`), not the file, not the app's suite, not the config.
+- **After a fix, rerun only what failed** (the failed test, `pnpm chain <failed step>`), never
+  the suite "to be sure": the chain at the end catches the rest.
+- **Long runs** (the mission, about 25 minutes; the chain, about 11) go to a `verifier` in the
+  background, once per round: gather every failure from one run, fix them all, then run once more.
+- **A failure only under load** (passes alone) is a real bug in the test or the app: fix the
+  cause; never rerun until it happens to pass.
 
 ## Working with the user
 
