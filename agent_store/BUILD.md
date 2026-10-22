@@ -67,9 +67,9 @@ Left:
    sets P1 and P2 up on the back office's screens (`apps/field/e2e/office-desk.ts`, against the
    mission's world opened with `screens`: `packages/scenarios/src/mission-world.ts` `adopt`),
    captures on the field app as before, then reviews, QCs, locks and reads the ledger and the
-   portal on the back office. Its first test has been run in part (it got through the firm's
-   records, P1, its sites, forms, pay items and map; two slips of the project's name for its id
-   were fixed, the last at the tipping fee). Run it with
+   portal on the back office. Its first test (the setup on the screens, then the world adopting it) passes on its own
+   (4.4 minutes). The rest hasn't been run whole yet: the field days, then the review, QC, lock,
+   ledgers and the portal. Run it with
    `cd apps/field && npx playwright test --config playwright.mission.config.ts` (about 25
    minutes), fix what it finds, and commit.
 2. **After `pnpm local:up` again** (the API changed: fastify 5.12.7), `pnpm chain`, then
