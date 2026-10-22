@@ -40,7 +40,7 @@ exist; and the golden mission run through the screens to the approved numbers.
       contracts; forms, debris types, payable types, the firm's lists; pay items (a rate per
       prime); the rule builder; sites and their quantity lookup; the project map; certification
       intake; ROEs from paper with their scope; the setup check's page.
-- [ ] **People, phones, the board, the clock:** people and permissions; the firm's settings; phones
+- [x] **People, phones, the board, the clock:** people and permissions; the firm's settings; phones
       and the master passcode; the dispatch board; the time clock's approval, unlock and hours.
 - [ ] **Review and correct:** the review queue by workflow and cause; a ticket's page (field events
       side by side, photos, history); corrections, renumber, void, accept; quarantine resolution;

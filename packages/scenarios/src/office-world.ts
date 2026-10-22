@@ -7,7 +7,11 @@
 //
 // **What it holds when made**: P1 as Dana Reyes sets it up for its field days, with Luis Ortega
 // and the six monitors on the yard phone (the shared step `setUpP1ForTheField`), on the story's
-// clock at Thursday 8 October; Dana signed in at her browser.
+// clock at Thursday 8 October; Dana signed in at her browser. And a day of Ana Brooks's own hours
+// on P1's time clock, which Dana switches on: Luis assigns her on the yard phone for Thursday and
+// Friday; on Friday morning she signs in on it and it sends Thursday's entries, in at 18:00, a
+// break 20:00–20:30, out at 01:30 on Friday (a stretch past midnight, BUILD.md, settled 1). The
+// world's clock then stands at Friday 9 October, 08:00.
 //
 // **What a test asks of it**, over a loopback control of its own (never the stack's, never a
 // browser's), since the tests run in several processes at once:
@@ -22,16 +26,22 @@
 //   (the story's clock: it stands still unless a test moves it, `POST /later`).
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 
+import { randomUUID } from 'node:crypto';
+
 import {
+  changeProjectSettingsEndpoint,
   createPersonEndpoint,
+  currentSessionEndpoint,
   setPermissionsEndpoint,
   setPersonPasswordEndpoint,
+  type SyncedClockEntry,
 } from '@open-adms/contracts';
 import { permissions, type PermissionName } from '@open-adms/domain';
 
 import { madeUpPassword, type OfficeBrowser } from './office-browser.ts';
 import { storiesHostname } from './over-https.ts';
 import { StoryStage } from './runner.ts';
+import { assigned, synced, taken } from './stories/board.ts';
 import { danasEmail, p1TimeZone } from './stories/p1.ts';
 import { setUpP1ForTheField, type P1Field } from './stories/p1-field-setup.ts';
 import { StoryDatabase } from './story-database.ts';
@@ -68,6 +78,8 @@ export class OfficeWorld {
   private readonly dana: OfficeBrowser;
   private control: Server | undefined;
   private count = 0;
+  // The control answers one ask at a time: Dana's browser is one browser.
+  private turn: Promise<unknown> = Promise.resolve();
 
   private constructor(
     made: StoryDatabase,
@@ -108,6 +120,7 @@ export class OfficeWorld {
       const yard = (await story.enrolled('P1-YARD')).id;
       const field = await setUpP1ForTheField(story, yard);
       const dana = await story.backOffice.admin({ id: field.dana, email: danasEmail });
+      await OfficeWorld.anasHours(stage, field, dana, yard);
       return new OfficeWorld(made, stage, mail, field, dana);
     } catch (problem) {
       await stage?.close();
@@ -116,10 +129,61 @@ export class OfficeWorld {
     }
   }
 
+  // Ana Brooks's Thursday on P1's time clock, sent from the yard phone on Friday morning.
+  private static async anasHours(
+    stage: StoryStage,
+    field: P1Field,
+    dana: OfficeBrowser,
+    yard: string,
+  ): Promise<void> {
+    const story = stage.context;
+    await dana.answered(changeProjectSettingsEndpoint, {
+      ids: { projectId: field.p1 },
+      json: { timeClockEnabled: true },
+    });
+    const ana = field.monitors['Ana Brooks'];
+    const assignments: Record<string, string> = {};
+    for (const workDate of ['2026-10-08', '2026-10-09']) {
+      assignments[workDate] = await assigned(story.api, story.clock, field.luis, {
+        projectId: field.p1,
+        personId: ana.id,
+        workDate,
+        fieldEventKinds: ['COLLECTION'],
+        deviceId: yard,
+      });
+    }
+    story.clock.set('2026-10-09T07:30:00-04:00');
+    await taken(story, ana, yard);
+    const entry = (kind: SyncedClockEntry['kind'], at: string): SyncedClockEntry => ({
+      id: randomUUID(),
+      projectId: field.p1,
+      assignmentId: assignments['2026-10-08'] ?? '',
+      workerId: ana.id,
+      kind,
+      at: new Date(at).toISOString(),
+      deviceUtcOffsetMinutes: -240,
+      activityLines: [],
+    });
+    await synced(story, yard, p1TimeZone, {
+      records: [
+        entry('IN', '2026-10-08T18:00:00-04:00'),
+        entry('BREAK_START', '2026-10-08T20:00:00-04:00'),
+        entry('BREAK_END', '2026-10-08T20:30:00-04:00'),
+        entry('OUT', '2026-10-09T01:30:00-04:00'),
+      ].map((clockEntry) => ({ record: 'CLOCK_ENTRY' as const, clockEntry })),
+    });
+    story.clock.set('2026-10-09T08:00:00-04:00');
+    // Dana's session went quiet while the clock moved on a day: she signs in again now, once,
+    // before any test asks her for anything.
+    await dana.answered(currentSessionEndpoint);
+  }
+
   // The control's origin, once listening.
   async listening(): Promise<string> {
     const server = createServer((asked, answer) => {
-      void this.answered(asked).then(
+      const answering = this.turn.then(() => this.answered(asked));
+      this.turn = answering.catch(() => undefined);
+      void answering.then(
         (body) => {
           answer.writeHead(200, { 'content-type': 'application/json' });
           answer.end(JSON.stringify(body));
@@ -155,7 +219,12 @@ export class OfficeWorld {
       return { now: clock.now().toISOString() };
     }
     if (asked.method === 'GET' && url.pathname === '/world') {
-      return { p1: this.field.p1, dana: this.field.dana, luis: this.field.luis };
+      return {
+        p1: this.field.p1,
+        dana: this.field.dana,
+        luis: this.field.luis,
+        ana: this.field.monitors['Ana Brooks'].id,
+      };
     }
     throw new Error(`Nothing is asked at ${asked.method ?? ''} ${url.pathname}.`);
   }

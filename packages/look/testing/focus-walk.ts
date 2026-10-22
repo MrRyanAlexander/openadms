@@ -228,8 +228,11 @@ export async function walkFocus(page: Page): Promise<Walk> {
       );
       process.stderr.write(`NOTSEEN ${stop.what} ${stop.hiddenBy ?? ''}\n  ${log}\n`);
     }
-    if (passed.length > 0 && stop.what === passed[0]) break;
     if (stop.what === 'the page' && passed.at(-1) === 'the page') break;
+    // A control with parts of its own (the browser's date field: month, day, year) keeps the focus
+    // for a Tab or two: one stop, gone on from once Tab leaves it.
+    if (stop.what !== 'the page' && stop.what === passed.at(-1)) continue;
+    if (passed.length > 0 && stop.what === passed[0]) break;
     passed.push(stop.what);
     if (stop.what !== 'the page') stops.push(stop);
   }

@@ -10,6 +10,11 @@ import { Home } from './screens/home.tsx';
 import { NotFound } from './screens/not-found.tsx';
 import { Project } from './screens/project.tsx';
 import { holds, type Signed } from './session.tsx';
+import { DispatchBoard } from './people/dispatch.tsx';
+import { FirmSettings } from './people/firm-settings.tsx';
+import { Hours } from './people/hours.tsx';
+import { People, PersonPage } from './people/people.tsx';
+import { Phones } from './people/phones.tsx';
 import { CertificationPage, Certifications } from './setup/certifications.tsx';
 import { Clients, Contractors, DeclarationEvents } from './setup/firm-records.tsx';
 import { Forms } from './setup/forms.tsx';
@@ -31,7 +36,16 @@ const firmScreens: Readonly<Record<string, () => ReactNode>> = {
   '/declaration-events': () => <DeclarationEvents />,
   '/contractors': () => <Contractors />,
   '/lists': () => <FirmLists />,
+  '/people': () => <People />,
+  '/phones': () => <Phones />,
+  '/settings': () => <FirmSettings />,
 };
+
+// The firm's screens of one record, by their address.
+const firmRecordScreens: readonly (readonly [
+  string,
+  (params: Readonly<Record<string, string>>) => ReactNode,
+])[] = [['/people/:userId', (params) => <PersonPage userId={params['userId'] ?? ''} />]];
 
 // A project's screens, by the rest of their address after /projects/<id>.
 const projectScreens: readonly (readonly [
@@ -59,11 +73,17 @@ const projectScreens: readonly (readonly [
     ),
   ],
   ['/roes', (projectId) => <Roes projectId={projectId} />],
+  ['/dispatch', (projectId) => <DispatchBoard projectId={projectId} />],
+  ['/hours', (projectId) => <Hours projectId={projectId} />],
 ];
 
 export function routeOf(path: string): ReactNode {
   const firm = firmScreens[path === '' ? '/' : path];
   if (firm !== undefined) return firm();
+  for (const [pattern, screen] of firmRecordScreens) {
+    const params = matched(pattern, path);
+    if (params !== null) return screen(params);
+  }
   for (const [rest, screen] of projectScreens) {
     const params = matched(`/projects/:projectId${rest}`, path);
     if (params !== null) return screen(params['projectId'] ?? '', params);
@@ -77,6 +97,7 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
   const setup = holds(session, 'SETUP');
   const viewSetup = holds(session, 'VIEW_SETUP');
   const viewReview = holds(session, 'VIEW_REVIEW');
+  const viewDispatch = holds(session, 'VIEW_DISPATCH');
   const inProject = (rest: string) => `/projects/${projectId ?? ''}${rest}`;
   const firm: MenuSection = {
     label: said.sections.firm,
@@ -86,6 +107,9 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
       { label: said.links.events, href: '/declaration-events', shown: setup },
       { label: said.links.contractors, href: '/contractors', shown: setup },
       { label: said.links.lists, href: '/lists', shown: setup },
+      { label: said.links.people, href: '/people', shown: viewDispatch },
+      { label: said.links.phones, href: '/phones', shown: viewDispatch },
+      { label: said.links.firmSettings, href: '/settings', shown: setup },
     ],
   };
   if (projectId === null) return [firm];
@@ -96,6 +120,13 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
       links: [
         { label: said.links.certifications, href: inProject('/certifications'), shown: viewReview },
         { label: said.links.roes, href: inProject('/roes'), shown: viewReview },
+      ],
+    },
+    {
+      label: said.sections.dispatch,
+      links: [
+        { label: said.links.dispatch, href: inProject('/dispatch'), shown: viewDispatch },
+        { label: said.links.hours, href: inProject('/hours'), shown: viewDispatch },
       ],
     },
     {

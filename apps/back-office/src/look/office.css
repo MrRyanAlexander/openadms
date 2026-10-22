@@ -602,3 +602,11 @@ fieldset.rule-line > .field {
 fieldset {
   min-width: 0;
 }
+
+/* The browser's date field keeps the focus inside its own parts, where the look's ring never
+   reaches: it is ringed whenever it holds the focus (WCAG 2.4.7). */
+.field-date:focus,
+.field-date:focus-within {
+  outline: var(--focus-ring) solid var(--colour-focus);
+  outline-offset: var(--focus-ring);
+}

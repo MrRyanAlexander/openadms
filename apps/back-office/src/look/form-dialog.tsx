@@ -60,6 +60,13 @@ export type FieldSpec =
       readonly hint?: string;
     }
   | { readonly kind: 'check'; readonly key: string; readonly label: string; readonly hint?: string }
+  | {
+      readonly kind: 'secret';
+      readonly key: string;
+      readonly label: string;
+      readonly autoComplete: 'current-password' | 'new-password';
+      readonly hint?: string;
+    }
   | { readonly kind: 'heading'; readonly key: string; readonly label: string };
 
 // What a form holds: each field's value by its key, as the person entered it.
@@ -68,6 +75,11 @@ export type Values = Readonly<Record<string, string | boolean | readonly string[
 export const text = (values: Values, key: string): string => {
   const value = values[key];
   return typeof value === 'string' ? value.trim() : '';
+};
+// A password or a passcode, exactly as typed: never trimmed.
+export const secretOf = (values: Values, key: string): string => {
+  const value = values[key];
+  return typeof value === 'string' ? value : '';
 };
 export const optional = (values: Values, key: string): string | undefined => {
   const value = text(values, key);
@@ -121,6 +133,21 @@ export function FieldsOf({
                 }}
                 {...(field.hint === undefined ? {} : { hint: field.hint })}
                 {...(field.longest === undefined ? {} : { longest: field.longest })}
+              />
+            );
+          case 'secret':
+            return (
+              <TextEntry
+                key={field.key}
+                label={field.label}
+                value={typeof value === 'string' ? value : ''}
+                onChange={(next) => {
+                  onChange(field.key, next);
+                }}
+                secret
+                autoComplete={field.autoComplete}
+                required
+                {...(field.hint === undefined ? {} : { hint: field.hint })}
               />
             );
           case 'text':
