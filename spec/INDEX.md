@@ -10,8 +10,7 @@ what's still open.
 > **Approved by the user 2026-09-29** (ADR-269), with the part pages, `VISION.md`, `LISTS.md`,
 > `RULES.md` and `RATE-SHEET.md`. Agent-written from the skills, ADRs and the user's answers. Part
 > pages give the **sequence**; the **rules** and their reasons live in the skills under
-> `.claude/skills/`. If a page and a skill disagree, the skill wins — log a KD
-> in `agent_store/DEVIATIONS.md`.
+> `.claude/skills/`. If a page and a skill disagree, the skill wins; fix the page.
 
 | You want to… | Read |
 |---|---|
@@ -22,7 +21,7 @@ what's still open.
 | **Name** a thing, or write an example, fixture or seed | `spec/CONVENTIONS.md`: today's words, code names, the pay item code convention, the example world |
 | **Know** how it's built and secured | Chapter 4a: `spec/ARCHITECTURE.md` |
 | **Find** a record's fields, or a flag's code and wording | `spec/DATA-MODEL.md` · `spec/FLAGS.md` (approved 2026-10-01, ADR-289, 290) |
-| **Build** the next thing, or see where it ends up | Chapter 4: `agent_store/PLAN.md`, where things stand, the road to done, and the next item (its first unticked box; ADR-599, 600) |
+| **Build** the rest, or see where it ends up | Chapter 4: `agent_store/BUILD.md`, the one build task, its parts and what's settled (the user, 2026-10-22) |
 | **Maintain** it: fix, change, or answer a question | Chapter 5 |
 
 ---
@@ -142,8 +141,8 @@ Each page in `spec/parts/` has the same shape, so you always know where to look:
 
 | File | What it holds |
 |---|---|
-| `agent_store/PLAN.md` | The one plan (ADR-599, 600): where things stand, the milestones and their items (the next is its first unticked box), every open requirement and carried concern, the gates, what waits on the user |
-| `agent_store/history/` | Everything older, grep only: the old backlog and register, requirements, roadmap, next-page and archive, and ADR-001…598 |
+| `agent_store/BUILD.md` | The one build task (the user, 2026-10-22): the web platform finished and up with one command, iOS and Android skipped; its fixed list of parts, the questions settled, the defaults taken |
+| `agent_store/history/` | Everything older, grep only: the old plans (`PLAN-TRACK1.md`), backlog and register, requirements, roadmap, next-page and archive, the deviations, and ADR-001…606 |
 | `spec/ARCHITECTURE.md` §18 | The rebuild's layout (`apps/`, `packages/`, `infra/`, `tools/`); `database/AGENTS.md` describes only the historical tree |
 | `adms-verify` skill | How to prove it works — real output only |
 
@@ -168,7 +167,7 @@ built, how the layers connect, and the security rules each must meet:
 - sync, time, photos, printing and scanning;
 - the worker, testing, and the standards we test against.
 
-Code is written against it in `PLAN.md` order, each dependency pinned by an ADR (ADR-143).
+Code is written against it, each dependency pinned to an exact version.
 
 ---
 
@@ -177,11 +176,11 @@ Code is written against it in `PLAN.md` order, each dependency pinned by an ADR 
 | Situation | Do this |
 |---|---|
 | You don't know how something behaves | Load the owning skill (table in `AGENTS.md`), then check `spec/QUESTIONS.md`. Never guess |
-| The user answers a question | Record it as an ADR, update the skill **and the part page** it changes, flip the entry in `QUESTIONS.md` |
-| You need what's decided **now** | `agent_store/DECISIONS.md` (ADR-599 on), then `agent_store/SUMMARY.md` (frozen at ADR-598): rules by topic, ADRs to cite, superseded ones |
-| You make a real decision (product, money, evidence, security, a dependency, the architecture) | Append a short ADR to `agent_store/DECISIONS.md` in the same work (`adms-decisions`) |
-| Code disagrees with a skill, or a page disagrees with a skill | Append a KD to `agent_store/DEVIATIONS.md`; don't silently fix either side |
-| A step gets built | Update the part page's **Where it will live** section and tick the item and its REQ in `PLAN.md` |
+| The user answers a question | Update the skill **and the part page** it changes, flip the entry in `QUESTIONS.md` |
+| You need what's decided **now** | `agent_store/BUILD.md` ("Settled", "Defaults taken"), then `agent_store/SUMMARY.md` by topic and `agent_store/history/DECISIONS-599-606.md` |
+| You make a decision | Say it in the code and the commit message; one touching money, evidence or what a monitor must do also gets a line under "Defaults taken" in `BUILD.md` |
+| Code disagrees with a skill, or a page disagrees with a skill | The skill wins: fix the code or the page, and say so in the commit message |
+| A step gets built | Tick its part in `BUILD.md` when the part lands |
 
 ---
 
@@ -211,7 +210,7 @@ Code is written against it in `PLAN.md` order, each dependency pinned by an ADR 
 | `spec/CHECKLIST-API.md` | The API's security checklist: every ASVS 5.0 Level 1 and 2 item and the API Top 10 (2023), each with the scenario that answers it, the test that built it, its owner phase, or open | **Draft** (ADR-509, 510); for the user's approval |
 | `.claude/skills/adms-*/SKILL.md` | Domain rules and their reasons, one topic each | User-owned; agent edits only to record a user decision, marked with its ADR |
 | `agent_store/SUMMARY.md` | What was decided, by topic, through ADR-598 (frozen, ADR-599) | Nobody: read by topic |
-| `agent_store/*.md` | The plan, decisions from ADR-599 on, deviations, the chain's counts; `history/` for everything older | Agent |
+| `agent_store/*.md` | The build task (`BUILD.md`), the frozen summary, the chain's counts; `history/` for everything older | Agent |
 | `.claude/skills/adms-build/SKILL.md` | How code is written here: the recipes for endpoints, tables, tests, stories and screens (ADR-599) | Agent |
 | `database/` | **Historical** early code (ADR-093); reference only | Nobody (read-only) |
 | `development/` | Reference specs (USACE, First Principles). Read-only | Nobody |

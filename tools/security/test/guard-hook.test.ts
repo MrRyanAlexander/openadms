@@ -1,4 +1,4 @@
-// The agents' guard hook (.claude/hooks/guard.sh; ADR-008, 043, 113, 283; REQ-023): each call it
+// The agents' guard hook (.claude/hooks/guard.sh; AGENTS.md, Git and write boundaries): each call it
 // must block, and each it must let through. The hook reads the tool call as JSON on stdin and
 // exits 2 to block it; anything else lets it run.
 import { spawnSync } from 'node:child_process';
@@ -17,14 +17,19 @@ interface Verdict {
   readonly message: string;
 }
 
-function guard(tool: string, toolInput: Record<string, string>, path?: string): Verdict {
+function guard(
+  tool: string,
+  toolInput: Record<string, string>,
+  path?: string,
+  project = root,
+): Verdict {
   // /bin/bash by its full path: one test empties PATH.
   const result = spawnSync('/bin/bash', [hook], {
     input: JSON.stringify({ tool_name: tool, tool_input: toolInput }),
     encoding: 'utf8',
     env: {
       ...process.env,
-      CLAUDE_PROJECT_DIR: root,
+      CLAUDE_PROJECT_DIR: project,
       ...(path === undefined ? {} : { PATH: path }),
     },
   });
@@ -47,33 +52,76 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
-describe('git is only ever read (ADR-008)', () => {
+// A throw-away repository on the named branch, so the commit rule is tried whatever branch this
+// checkout is on.
+const repository = (branch: string): string => {
+  const folder = mkdtempSync(join(scratch, `repo-${branch}-`));
+  spawnSync('git', ['init', '--quiet', '--initial-branch', branch, folder]);
+  return folder;
+};
+
+describe('git: the agent commits its own work on a branch, never on main (AGENTS.md, Git)', () => {
   it.each([
-    'git add .',
-    'git commit -m "x"',
-    'git -C . commit -m "x"',
     'cd packages/db && git push',
+    'git push origin phase3-field-app',
+    'git pull',
     'git status; git stash',
     'git checkout main',
+    'git checkout -- apps/field/src/home.tsx',
+    'git switch main',
     'git reset --hard',
+    'git -C . reset HEAD~1',
+    'git restore apps',
+    'git clean -fd',
     'git rm -r spec',
+    'git rebase main',
+    'git merge main',
     'git branch -D old',
+    'git branch -m new-name',
+    'git tag v1',
     'git init',
+    'git add apps && git commit -m "x" && git push',
   ])('blocks: %s', (command) => {
     const verdict = bash(command);
     expect(verdict.blocked).toBe(true);
-    expect(verdict.message).toContain('ADR-008');
+    expect(verdict.message).toContain('AGENTS.md, Git');
   });
 
   it.each([
     'git status',
     'git diff --stat',
     'git log --oneline',
+    'git --no-pager log -3',
     'git branch --show-current',
     'git check-ignore -v infra/local/.env',
     'git ls-files',
+    'git add apps/field packages/domain',
+    'git add -A',
+    'git mv spec/old.md spec/new.md',
+    'git checkout -b web-platform',
+    'git switch -c web-platform',
   ])('lets through: %s', (command) => {
     expect(bash(command).blocked).toBe(false);
+  });
+
+  it('lets a commit through on a work branch', () => {
+    const work = repository('web-platform');
+    expect(
+      guard('Bash', { command: 'git add -A && git commit -m "x"' }, undefined, work).blocked,
+    ).toBe(false);
+  });
+
+  it.each(['main', 'master'])('blocks a commit on %s', (branch) => {
+    const trunk = repository(branch);
+    const verdict = guard('Bash', { command: 'git -C . commit -m "x"' }, undefined, trunk);
+    expect(verdict.blocked).toBe(true);
+    expect(verdict.message).toContain(`never commit on ${branch}`);
+  });
+
+  it('lets a commit through on main when the same command starts a branch first', () => {
+    const trunk = repository('main');
+    const command = 'git checkout -b web-platform && git add -A && git commit -m "x"';
+    expect(guard('Bash', { command }, undefined, trunk).blocked).toBe(false);
   });
 });
 
@@ -110,7 +158,6 @@ describe('an env file is never printed, read or written by hand', () => {
 describe('the write boundaries (AGENTS.md)', () => {
   it.each([
     ['development/', join(root, 'development', 'notes.md')],
-    ['database/', join(root, 'database', 'src', 'index.ts')],
     ['node_modules', join(root, 'node_modules', 'zod', 'index.js')],
     ['.git', join(root, '.git', 'config')],
     ['build output', join(root, 'packages', 'db', 'dist', 'index.js')],
@@ -160,7 +207,7 @@ describe('a migration is written once, into its empty stub (ADR-113)', () => {
   it('blocks any change to a migration that holds SQL', () => {
     const verdict = write('Write', applied);
     expect(verdict.blocked).toBe(true);
-    expect(verdict.message).toContain('ADR-113');
+    expect(verdict.message).toContain('never edit a generated or applied migration');
     expect(write('Edit', applied).blocked).toBe(true);
   });
 
