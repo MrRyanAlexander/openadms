@@ -25,6 +25,10 @@ import { ProjectSetup } from './setup/project-setup.tsx';
 import { Roes, SetupCheck } from './setup/roes.tsx';
 import { RuleBuilder, Rules } from './setup/rules.tsx';
 import { Sites } from './setup/sites.tsx';
+import { DropOffLogs, Incidents, Surveys } from './review/form-records.tsx';
+import { ReviewQueue } from './review/queue.tsx';
+import { TicketPage } from './review/ticket.tsx';
+import { HeldRecords, Quarantine, SetAsideJobs } from './review/waiting.tsx';
 import type { MenuSection } from './shell.tsx';
 import { words } from './words.ts';
 
@@ -73,6 +77,23 @@ const projectScreens: readonly (readonly [
     ),
   ],
   ['/roes', (projectId) => <Roes projectId={projectId} />],
+  ['/surveys', (projectId) => <Surveys projectId={projectId} />],
+  ['/incidents', (projectId) => <Incidents projectId={projectId} />],
+  ['/drop-off-logs', (projectId) => <DropOffLogs projectId={projectId} />],
+  ['/review', (projectId) => <ReviewQueue projectId={projectId} />],
+  [
+    '/tickets/:workflow/:ticketNumber',
+    (projectId, params) => (
+      <TicketPage
+        projectId={projectId}
+        workflow={params['workflow'] ?? ''}
+        ticketNumber={params['ticketNumber'] ?? ''}
+      />
+    ),
+  ],
+  ['/quarantine', (projectId) => <Quarantine projectId={projectId} />],
+  ['/held', (projectId) => <HeldRecords projectId={projectId} />],
+  ['/set-aside-jobs', (projectId) => <SetAsideJobs projectId={projectId} />],
   ['/dispatch', (projectId) => <DispatchBoard projectId={projectId} />],
   ['/hours', (projectId) => <Hours projectId={projectId} />],
 ];
@@ -116,10 +137,22 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
   return [
     firm,
     {
+      label: said.sections.tickets,
+      links: [
+        { label: said.links.review, href: inProject('/review'), shown: viewReview },
+        { label: said.links.quarantine, href: inProject('/quarantine'), shown: viewReview },
+        { label: said.links.held, href: inProject('/held'), shown: viewReview },
+        { label: said.links.jobs, href: inProject('/set-aside-jobs'), shown: viewReview },
+      ],
+    },
+    {
       label: said.sections.forms,
       links: [
         { label: said.links.certifications, href: inProject('/certifications'), shown: viewReview },
         { label: said.links.roes, href: inProject('/roes'), shown: viewReview },
+        { label: said.links.surveys, href: inProject('/surveys'), shown: viewReview },
+        { label: said.links.incidents, href: inProject('/incidents'), shown: viewReview },
+        { label: said.links.dropOffLogs, href: inProject('/drop-off-logs'), shown: viewReview },
       ],
     },
     {

@@ -46,6 +46,31 @@ export interface WorldIds {
 
 export const worldIds = (): Promise<WorldIds> => asked<WorldIds>('/world');
 
+// What the golden mission's outcomes say (packages/scenarios' `goldenOutcomes`), the parts a back
+// office test checks its screens against: the review queue before any review, a workflow at a
+// time ("number STATUS · flag…"), and each ticket's status once the review is done.
+export interface MissionOutcomes {
+  readonly wednesday: {
+    readonly p1: {
+      readonly queue: Readonly<Record<'LOAD' | 'HAUL_OUT' | 'UNIT_RATE', readonly string[]>>;
+    };
+  };
+  readonly reviewed: {
+    readonly p1: {
+      readonly statuses: readonly string[];
+      readonly ledger: readonly string[];
+      readonly total: { readonly lines: number; readonly total: string };
+    };
+    readonly p2: {
+      readonly ledger: readonly string[];
+      readonly total: { readonly lines: number; readonly total: string };
+    };
+  };
+}
+
+// The mission's outcomes, from a world that holds the mission.
+export const missionOutcomes = (): Promise<MissionOutcomes> => asked<MissionOutcomes>('/outcomes');
+
 // A person given a password by Dana and nothing more: they sign in through the screens.
 export function givenPassword(name: string, role: Role, grants: readonly string[] = []) {
   return asked<Person>('/people', {

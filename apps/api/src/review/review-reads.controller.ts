@@ -24,6 +24,7 @@ import {
   readTicketDecisionsEndpoint,
   readTicketEndpoint,
   renameInvoiceBatchEndpoint,
+  reviewNamesEndpoint,
   reviewQueueEndpoint,
   setQcStatusesEndpoint,
   type BodyOf,
@@ -170,6 +171,16 @@ export class ReviewReadsController {
         query.recordId,
         paged(query),
       ),
+    );
+  }
+
+  @Serves(reviewNamesEndpoint)
+  async reviewNames(
+    @Param() params: ParamsOf<typeof reviewNamesEndpoint>,
+    @Req() request: FastifyRequest,
+  ) {
+    return reviewNamesEndpoint.answer.parse(
+      await this.reads.reviewNames(callerOf(request).userId, params.projectId),
     );
   }
 

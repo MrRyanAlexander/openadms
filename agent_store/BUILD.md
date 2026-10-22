@@ -42,7 +42,7 @@ exist; and the golden mission run through the screens to the approved numbers.
       intake; ROEs from paper with their scope; the setup check's page.
 - [x] **People, phones, the board, the clock:** people and permissions; the firm's settings; phones
       and the master passcode; the dispatch board; the time clock's approval, unlock and hours.
-- [ ] **Review and correct:** the review queue by workflow and cause; a ticket's page (field events
+- [x] **Review and correct:** the review queue by workflow and cause; a ticket's page (field events
       side by side, photos, history); corrections, renumber, void, accept; quarantine resolution;
       held records and jobs; records made in the back office.
 - [ ] **Money, the lock, the close:** the ledger; QC; invoice locks and batches; the audit trail
@@ -88,6 +88,11 @@ exist; and the golden mission run through the screens to the approved numbers.
 ## Defaults taken
 
 *(one line each: what, and where it lives in the code)*
+
+- A held record is saved as corrected by editing what its phone sent, as the sync's own JSON,
+  checked against the sync contract before it is sent (`apps/back-office/src/review/waiting.tsx`).
+- An address a reviewer types or corrects on a field event is marked typed, never looked up
+  (`apps/back-office/src/review/field-event-form.tsx`).
 
 ## Not in this build
 

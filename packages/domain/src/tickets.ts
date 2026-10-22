@@ -64,6 +64,18 @@ const kindsOf: Record<
   UNIT_RATE: { collection: null, closing: 'UNIT_RATE' },
 };
 
+// The kinds of field event a workflow's ticket may hold, in field order: what a reviewer may
+// make under its number in the back office (ADR-156).
+const kindsIn = (workflow: WorkflowName): readonly FieldEventKindName[] => {
+  const { collection, closing } = kindsOf[workflow];
+  return collection === null ? [closing] : [collection, closing];
+};
+export const kindsOfWorkflow: Readonly<Record<WorkflowName, readonly FieldEventKindName[]>> = {
+  LOAD: kindsIn('LOAD'),
+  HAUL_OUT: kindsIn('HAUL_OUT'),
+  UNIT_RATE: kindsIn('UNIT_RATE'),
+};
+
 const kindWords: Record<FieldEventKindName, string> = {
   COLLECTION: 'collection',
   DISPOSAL: 'disposal',

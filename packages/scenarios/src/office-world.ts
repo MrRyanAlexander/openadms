@@ -22,6 +22,8 @@
 //   with their session's cookies handed to the test's browser. A person of a test's own never
 //   shares a second step's code with another test (a code is good once).
 // - `GET /mail?to=` what the API mailed an address (a reset's code), oldest first.
+// - `GET /outcomes` the golden mission's approved outcomes (`goldenOutcomes`), which a test of
+//   the mission's world checks what its screens made against.
 // - `GET /now` the world's time, which its API judges a session and an authenticator's code by
 //   (the story's clock: it stands still unless a test moves it, `POST /later`).
 import { createServer, type IncomingMessage, type Server } from 'node:http';
@@ -44,6 +46,7 @@ import { StoryStage } from './runner.ts';
 import { assigned, synced, taken } from './stories/board.ts';
 import { danasEmail, p1TimeZone } from './stories/p1.ts';
 import { tellGoldenMission } from './stories/golden-mission.ts';
+import { goldenOutcomes } from './stories/golden-outcomes.ts';
 import type { QueueRuns } from './stories/p1-office.ts';
 import { setUpP1ForTheField, type P1Field } from './stories/p1-field-setup.ts';
 import { StoryDatabase } from './story-database.ts';
@@ -240,6 +243,9 @@ export class OfficeWorld {
     }
     if (asked.method === 'GET' && url.pathname === '/world') {
       return this.ids;
+    }
+    if (asked.method === 'GET' && url.pathname === '/outcomes') {
+      return goldenOutcomes;
     }
     throw new Error(`Nothing is asked at ${asked.method ?? ''} ${url.pathname}.`);
   }

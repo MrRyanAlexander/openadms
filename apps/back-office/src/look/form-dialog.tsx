@@ -1,10 +1,10 @@
 // A record added or changed in a dialog over the screen (ARCHITECTURE §14): its fields as the screen
 // lists them, each labelled from the translation file, a pick-list's values picked, never typed
-// (invariant 6); sent as the screen shapes its body; what the API refused said at the top of the
+// (invariant 6), a time of day in the platform's own time field; sent as the screen shapes its body; what the API refused said at the top of the
 // dialog in its own words, and nothing closed until the API has saved it. React Aria's modal: the
 // focus is held inside while it is open and goes back to the button that opened it; Escape closes
 // it, saving nothing.
-import { Banner, Button, TextEntry } from '@open-adms/look';
+import { Banner, Button, TextEntry, TimeEntry } from '@open-adms/look';
 import { useState, type ReactNode } from 'react';
 import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 
@@ -38,7 +38,7 @@ export type FieldSpec =
       readonly required?: boolean;
     }
   | {
-      readonly kind: 'date';
+      readonly kind: 'date' | 'time';
       readonly key: string;
       readonly label: string;
       readonly hint?: string;
@@ -181,6 +181,18 @@ export function FieldsOf({
                 }}
                 hint={field.hint}
                 required={field.required === true}
+              />
+            );
+          case 'time':
+            return (
+              <TimeEntry
+                key={field.key}
+                label={field.label}
+                value={typeof value === 'string' ? value : ''}
+                onChange={(next) => {
+                  onChange(field.key, next);
+                }}
+                {...(field.hint === undefined ? {} : { hint: field.hint })}
               />
             );
           case 'pick':

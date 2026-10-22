@@ -8,7 +8,7 @@
   "scripts": {
     "build": "tsc --build && vite build",
     "build:world": "ADMS_OFFICE_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world",
-    "e2e": "tsc --build && vite build && pnpm build:world && playwright install --only-shell chromium && playwright test"
+    "e2e": "tsc --build && vite build && pnpm build:world && playwright install --only-shell chromium && (playwright test; screens=$?; playwright test --config playwright.mission.config.ts; mission=$?; [ $screens -eq 0 ] && [ $mission -eq 0 ])"
   },
   "dependencies": {
     "@open-adms/contracts": "workspace:*",

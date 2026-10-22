@@ -19,12 +19,14 @@ import type {
   FieldEventRead,
   FlagRecord,
   FlagsAnswer,
+  ReviewNamesAnswer,
   ReviewQueueAnswer,
   ScaleReceiptAnswer,
   SetAsideJobsAnswer,
   TicketAnswer,
   TicketDecisionsAnswer,
 } from '@open-adms/contracts';
+import { formDefinitionFields } from '@open-adms/contracts';
 import type { Database, FieldEvent, Flag, FlagAcceptance, Prisma } from '@open-adms/db';
 import { Access, type ViewPermission, type WorkflowName } from '@open-adms/domain';
 
@@ -812,6 +814,116 @@ export class ReviewReads {
   }
 
   // A project of that id, or nothing to read.
+  // The names a reviewer reads the project's tickets by (ADR-224, 539): its people, its setup's
+  // records and the firm's lists a ticket names, each archived one said so. Never a rate.
+  reviewNames(readerId: string, projectId: string): Promise<ReviewNamesAnswer> {
+    // One query at a time on the read's one connection (ADR-554).
+    return this.db.$read(async (tx) => {
+      await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
+      await ReviewReads.project(tx, projectId);
+      const listed = { orderBy: [{ position: 'asc' as const }, { name: 'asc' as const }] };
+      const gone = (row: { readonly archivedAt: Date | null }) => row.archivedAt !== null;
+      const named = (row: { id: string; name: string; archivedAt: Date | null }) => ({
+        id: row.id,
+        name: row.name,
+        archived: gone(row),
+      });
+      const people = await tx.user.findMany({
+        where: { role: { in: ['ADMIN', 'MANAGER_ANALYST', 'MONITOR'] } },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, role: true, monitorNumber: true, archivedAt: true },
+      });
+      const sites = await tx.disposalSite.findMany({
+        where: { projectId },
+        orderBy: { name: 'asc' },
+      });
+      const debrisTypes = await tx.formDebrisType.findMany({
+        where: { form: { projectId } },
+        include: { form: true, debrisType: true },
+        orderBy: [{ form: { name: 'asc' } }, { debrisType: { position: 'asc' } }],
+      });
+      const payItems = await tx.payItem.findMany({
+        where: { projectId },
+        orderBy: { code: 'asc' },
+      });
+      const places = await tx.projectContractor.findMany({
+        where: { projectId },
+        include: { contractor: true },
+        orderBy: { contractor: { name: 'asc' } },
+      });
+      const contracts = await tx.contract.findMany({
+        where: { projectId },
+        orderBy: { name: 'asc' },
+      });
+      const rules = await tx.rule.findMany({ where: { projectId }, orderBy: { name: 'asc' } });
+      const zones = await tx.zone.findMany({
+        where: { mapVersion: { projectId } },
+        orderBy: { name: 'asc' },
+      });
+      const payableTypes = await tx.payableType.findMany(listed);
+      const kindsOfWork = await tx.kindOfWork.findMany(listed);
+      const itemNames = await tx.itemName.findMany(listed);
+      const fieldTags = await tx.fieldTag.findMany({ where: { projectId }, ...listed });
+      const reasons = await tx.reason.findMany(listed);
+      const surveyWorkTypes = await tx.surveyWorkType.findMany(listed);
+      const incidentTypes = await tx.incidentType.findMany(listed);
+      const incidentSubTypes = await tx.incidentSubType.findMany(listed);
+      const formDefinitions = await tx.formDefinition.findMany({
+        where: { form: { projectId } },
+        orderBy: [{ documentType: 'asc' }, { version: 'desc' }],
+      });
+      return {
+        people: people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          monitorNumber: person.monitorNumber,
+          monitor: person.role === 'MONITOR',
+          archived: gone(person),
+        })),
+        sites: sites.map(named),
+        debrisTypes: debrisTypes.map((entry) => ({
+          id: entry.id,
+          name: entry.debrisType.name,
+          archived: gone(entry) || gone(entry.debrisType),
+          formName: entry.form.name,
+          documentType: entry.documentType,
+          reduced: entry.reduced,
+        })),
+        payItems: payItems.map((item) => ({
+          id: item.id,
+          code: item.code,
+          description: item.description,
+          archived: gone(item),
+        })),
+        contractors: places.map((place) => ({
+          id: place.contractorId,
+          name: place.contractor.name,
+          archived: gone(place) || gone(place.contractor),
+        })),
+        contracts: contracts.map(named),
+        rules: rules.map(named),
+        zones: zones.map((zone) => ({ id: zone.id, name: zone.name })),
+        payableTypes: payableTypes.map(named),
+        kindsOfWork: kindsOfWork.map(named),
+        itemNames: itemNames.map((item) => ({ ...named(item), kindOfWorkId: item.kindOfWorkId })),
+        fieldTags: fieldTags.map(named),
+        reasons: reasons.map((reason) => ({ ...named(reason), uses: reason.uses })),
+        surveyWorkTypes: surveyWorkTypes.map(named),
+        incidentTypes: incidentTypes.map(named),
+        incidentSubTypes: incidentSubTypes.map((sub) => ({
+          ...named(sub),
+          incidentTypeId: sub.incidentTypeId,
+        })),
+        formDefinitions: formDefinitions.map((definition) => ({
+          id: definition.id,
+          documentType: definition.documentType,
+          version: definition.version,
+          fields: formDefinitionFields.parse(definition.fields),
+        })),
+      };
+    });
+  }
+
   private static async project(tx: Tx, projectId: string): Promise<void> {
     const project = await tx.project.findUnique({ where: { id: projectId }, select: { id: true } });
     if (project === null) throw notFound();

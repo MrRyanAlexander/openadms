@@ -19,8 +19,13 @@ interface Ready {
   readonly control: string;
 }
 
-export default async function worldSetup(): Promise<() => Promise<void>> {
-  const made = spawn(process.execPath, [harness, 'office', worldPageOrigin], {
+export default function worldSetup(): Promise<() => Promise<void>> {
+  return madeWorld('field');
+}
+
+// The world of the kind asked for: P1 set up for the field, or the golden mission to its review.
+export async function madeWorld(kind: 'field' | 'mission'): Promise<() => Promise<void>> {
+  const made = spawn(process.execPath, [harness, 'office', worldPageOrigin, kind], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const stopped = once(made, 'exit');

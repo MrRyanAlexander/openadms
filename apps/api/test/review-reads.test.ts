@@ -56,6 +56,7 @@ import {
   readScaleReceiptEndpoint,
   readTicketDecisionsEndpoint,
   readTicketEndpoint,
+  reviewNamesEndpoint,
   removePhoneEndpoint,
   renameInvoiceBatchEndpoint,
   reviewQueueEndpoint,
@@ -265,6 +266,35 @@ describe('the review queue and a ticket whole', () => {
       const nobodys = await ticket('LOAD', '109999');
       expect(told(nobodys)).toEqual([404, 'NOT_FOUND']);
       expect(Object.keys(nobodys.body as object).sort()).toEqual(['code', 'requestId']);
+    });
+  });
+});
+
+describe('the names a reviewer reads a ticket by', () => {
+  it('ADR-224, 539 a project’s names for its tickets: its people (a monitor with their Monitor ID), the firm’s payable types and kinds of work, and its reasons with where each is offered; read with view review alone, a viewer refused', async () => {
+    await world(async (served, tx, who, within) => {
+      const p = await p1WithTickets(served, tx, within, who);
+      const luis = await luisHolds(served, tx, who.luis);
+      const names = saved(
+        reviewNamesEndpoint,
+        await read(served, luis, reviewNamesEndpoint, { ids: { projectId: p.project.id } }),
+      );
+      expect(names.people.find((person) => person.id === who.dana)).toMatchObject({
+        name: 'Dana Reyes',
+        monitor: false,
+        archived: false,
+      });
+      expect(names.people.find((person) => person.id === who.kim)?.monitorNumber).toMatch(
+        /^M[0-9]{6,}$/,
+      );
+      expect(names.payableTypes.map((type) => type.name)).toContain('Vegetative');
+      expect(names.kindsOfWork.map((kind) => kind.name)).toContain('Stumps');
+      expect(names.reasons.find((reason) => reason.name === 'Photos confirm')?.uses).toContain(
+        'ACCEPT_FLAG',
+      );
+      await expect(
+        new ReviewReads(within).reviewNames(who.viewer, p.project.id),
+      ).rejects.toMatchObject({ code: 'NOT_ALLOWED' });
     });
   });
 });

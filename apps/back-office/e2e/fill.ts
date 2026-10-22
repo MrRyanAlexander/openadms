@@ -4,11 +4,16 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The select labelled so, opened, and the option of that name picked. React Aria names a select's
+// The select labelled so, opened, and the option of that name picked (or the one whose name a
+// pattern matches, where its name holds what the test can't know, a Monitor ID). React Aria names a select's
 // button by what it shows, then its label.
 // A select whose options are still being read opens with none: it is opened again once they are
 // there, as a person would.
-export async function pick(scope: Page | Locator, label: string, option: string): Promise<void> {
+export async function pick(
+  scope: Page | Locator,
+  label: string,
+  option: string | RegExp,
+): Promise<void> {
   const page = 'page' in scope ? scope.page() : scope;
   const button = scope.getByRole('button', { name: new RegExp(`(^| )${escaped(label)}$`) });
   const choice = page.getByRole('option', { name: option, exact: true });

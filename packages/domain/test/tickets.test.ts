@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   Ticket,
   Tickets,
+  kindsOfWorkflow,
   workerStatuses,
   type FieldEventKindName,
   type GroupedFieldEvent,
@@ -430,5 +431,15 @@ describe('the status the worker gives a ticket', () => {
 
     expect(ticket.status([zeroCall])).toBe('COMPLETED');
     expect(ticket.status([{ ...zeroCall, accepted: false }])).toBe('MANUAL_REVIEW');
+  });
+});
+
+describe('the kinds a workflow’s ticket holds', () => {
+  it('ADR-156, 236 a load is a collection then a disposal, a haul-out its two ends, a unit rate ticket its one field event: what the back office may make under a number', () => {
+    expect(kindsOfWorkflow).toEqual({
+      LOAD: ['COLLECTION', 'DISPOSAL'],
+      HAUL_OUT: ['HAUL_OUT_COLLECTION', 'HAUL_OUT_DISPOSAL'],
+      UNIT_RATE: ['UNIT_RATE'],
+    });
   });
 });

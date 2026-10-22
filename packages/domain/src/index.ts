@@ -404,6 +404,7 @@ export {
 export {
   Ticket,
   Tickets,
+  kindsOfWorkflow,
   placeOf,
   workerStatuses,
   workflows,

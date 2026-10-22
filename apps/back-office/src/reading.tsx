@@ -4,7 +4,7 @@
 // the page's own otherwise.
 import type { AnswerOf, Endpoint } from '@open-adms/contracts';
 import { Banner } from '@open-adms/look';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import type { Api, Asking, NotAnswered, Reply } from './api.ts';
 import { say, words } from './words.ts';
@@ -21,7 +21,8 @@ export function useApi(): Api {
 export type Read<T> =
   { readonly kind: 'loading' } | { readonly kind: 'answered'; readonly answer: T } | NotAnswered;
 
-// A read the screen shows, asked again whenever what it asks changes, and on `reload`.
+// A read the screen shows, asked again whenever what it asks changes, and on `reload` (what it
+// showed staying on the screen until the new answer comes).
 export function useRead<E extends Endpoint>(
   served: E,
   asking: Asking<E> | null,
@@ -30,10 +31,13 @@ export function useRead<E extends Endpoint>(
   const [read, setRead] = useState<Read<AnswerOf<E>>>({ kind: 'loading' });
   const [asked, setAsked] = useState(0);
   const key = asking === null ? null : JSON.stringify(asking);
+  // What was last asked: read again on `reload`, the answer shown stays until the new one comes.
+  const lastKey = useRef<string | null>(null);
   useEffect(() => {
     if (key === null) return;
     let shown = true;
-    setRead({ kind: 'loading' });
+    if (lastKey.current !== key) setRead({ kind: 'loading' });
+    lastKey.current = key;
     void api.ask(served, JSON.parse(key) as Asking<E>).then((reply: Reply<E>) => {
       if (shown) setRead(reply);
     });
