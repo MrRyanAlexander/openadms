@@ -1,4 +1,6 @@
 // The local stack's helper (ARCHITECTURE §4; BACKLOG 0.2.3; ADR-263). Run from the root:
+//   pnpm start         the one command: `pnpm installer` (its questions on a first run, a check
+//                      and a resume after), then `pnpm local:up`, then where each part answers
 //   pnpm local:up      generate the dev passwords if missing, fetch the map extract if missing and
 //                      check it against its pinned SHA-256, make the stack's root and each
 //                      service's certificate where one is missing or ending (ADR-517), build the
@@ -183,6 +185,24 @@ class LocalStack {
     await this.checkPage('addresses.adms.localhost', '/status');
     await this.api();
     this.worker();
+    this.whereEachAnswers();
+  }
+
+  // Where each part answers, over HTTPS, once it is up.
+  private whereEachAnswers(): void {
+    const port = Number(this.setting('ADMS_HTTPS_PORT') ?? '443');
+    const at = (hostname: string) => `https://${hostname}${port === 443 ? '' : `:${String(port)}`}`;
+    const apiUp = existsSync(this.apiEnvFile);
+    console.log('');
+    console.log('Open ADMS is up:');
+    console.log(`  the back office and the viewer portal  ${at('office.adms.localhost')}`);
+    console.log(`  the field app (its browser build)       ${at('field.adms.localhost')}`);
+    console.log(
+      apiUp
+        ? `  the API                                 ${at('api.adms.localhost')}`
+        : '  the API and the worker: not yet; run `pnpm installer`, then `pnpm local:up` again',
+    );
+    console.log('  Trust infra/local/.generated/caddy-root.crt in your browser to open them.');
   }
 
   down(): void {
