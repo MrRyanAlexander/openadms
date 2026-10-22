@@ -2,8 +2,29 @@
   "name": "@open-adms/back-office",
   "version": "0.0.0",
   "private": true,
-  "description": "Open ADMS back office web app (React + Vite, ARCHITECTURE §14).",
+  "description": "Open ADMS back office web app and read-only viewer portal (React + Vite, ARCHITECTURE §14).",
   "license": "AGPL-3.0-only",
   "type": "module",
-  "exports": "./dist/index.js"
+  "scripts": {
+    "build": "tsc --build && vite build",
+    "build:world": "ADMS_OFFICE_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world",
+    "e2e": "tsc --build && vite build && pnpm build:world && playwright install --only-shell chromium && playwright test"
+  },
+  "dependencies": {
+    "@open-adms/contracts": "workspace:*",
+    "@open-adms/domain": "workspace:*",
+    "@open-adms/look": "workspace:*",
+    "react": "19.3.0",
+    "react-aria-components": "1.22.1",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.13.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "axe-core": "4.14.0",
+    "typescript": "6.0.3",
+    "vite": "8.3.3"
+  }
 }

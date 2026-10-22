@@ -44,7 +44,7 @@ export { AdminCommand, type Questions } from './people/admin-command.ts';
 export { People } from './people/people.ts';
 export { ServerAdmin, serverReason } from './people/server-admin.ts';
 export { shippedBreachedPasswords } from './sign-in/breached-list.ts';
-export { NoMail } from './sign-in/mail.ts';
+export { NoMail, type Mail, type Message } from './sign-in/mail.ts';
 export { OneTimeCodes } from './sign-in/one-time-codes.ts';
 export { PasswordHasher } from './sign-in/password-hasher.ts';
 export { SessionTokens } from './sign-in/session-tokens.ts';

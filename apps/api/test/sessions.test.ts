@@ -65,6 +65,7 @@ describe('signing in', () => {
       const { answer, cookies, csrf } = await served.signedIn(' Dana.Reyes@GATES.example ', long);
       expect(answer.body).toEqual({
         user: { id: dana, name: 'Dana Reyes', role: 'ADMIN' },
+        granted: [],
         passwordChangeRequired: false,
         twoStepSetUp: true,
         twoStepSetupRequired: false,
@@ -345,6 +346,44 @@ describe('a session', () => {
       );
       // Signing out again changes nothing and says the same.
       expect((await served.ask('POST', '/sessions/sign-outs', signed)).status).toBe(200);
+    });
+  });
+
+  it('ASVS 7.5.2, 7.4.5: Dana sees her own sessions open now, newest first, this one marked, and ends her other one; another person’s, or this one, is not found and nothing ends', async () => {
+    await world(async (served, tx, { dana }) => {
+      const first = await served.signedIn(danasEmail, long);
+      served.clock.later(1);
+      const second = await served.signedIn(danasEmail, long);
+      const luis = await served.signedIn(luissEmail, longer);
+      const idOf = (signed: typeof first) => (signed.cookies[refreshCookie] ?? '').split('.')[0];
+      const listed = await served.ask('GET', '/sessions', second);
+      expect(listed.status).toBe(200);
+      const own = (listed.body as { sessions: { id: string; current: boolean }[] }).sessions;
+      expect(own.map(({ id, current }) => [id, current])).toEqual([
+        [idOf(second), true],
+        [idOf(first), false],
+      ]);
+      // Luis's is no business of hers; her own current one ends by signing out.
+      for (const sessionId of [idOf(luis), idOf(second)]) {
+        const refused = await served.ask('POST', '/sessions/endings', {
+          ...second,
+          payload: { sessionId },
+        });
+        expect([refused.status, refused.code]).toEqual([404, 'NOT_FOUND']);
+      }
+      const ended = await served.ask('POST', '/sessions/endings', {
+        ...second,
+        payload: { sessionId: idOf(first) },
+      });
+      expect([ended.status, ended.body]).toEqual([200, { status: 'ended', sessions: 1 }]);
+      refused401(await served.current(first.cookies));
+      expect((await served.current(second.cookies)).status).toBe(200);
+      expect((await served.current(luis.cookies)).status).toBe(200);
+      const revoked = await tx.session.findMany({
+        where: { userId: dana, revokedAt: { not: null } },
+        select: { id: true },
+      });
+      expect(revoked.map(({ id }) => id)).toEqual([idOf(first)]);
     });
   });
 

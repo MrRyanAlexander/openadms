@@ -14,3 +14,4 @@ export {
   type ScreensOptions,
 } from './screens.ts';
 export { rules, wcagLevels } from './wcag.ts';
+export { servedOverHttps, trustedKeys } from './stack.ts';

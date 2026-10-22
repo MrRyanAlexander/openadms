@@ -69,6 +69,7 @@ import {
   viewerTicketsAnswerSchema,
   resetAskedAnswerSchema,
   sessionAnswerSchema,
+  ownSessionsAnswerSchema,
   sessionsEndedAnswerSchema,
   signedOutAnswerSchema,
   twoStepClearedAnswerSchema,
@@ -481,6 +482,35 @@ export const signInEndpoint = endpoint({
     code: z.string().min(1).max(32).optional(),
   }),
   answer: sessionAnswerSchema,
+});
+
+// The person's own sessions (ASVS 7.5.2): those open now, and one of them ended. The one asking
+// is ended by signing out.
+export const listOwnSessionsEndpoint = endpoint({
+  name: 'listOwnSessions',
+  summary:
+    'The signed-in person’s own sessions open now, newest first: when each was opened, when it ends at the latest, and which is this one.',
+  access: 'SIGNED_IN',
+  roles: signedInRoles,
+  beforePasswordChange: true,
+  beforeTwoStepSetup: true,
+  method: 'GET',
+  path: '/sessions',
+  answer: ownSessionsAnswerSchema,
+});
+
+export const endOwnSessionEndpoint = endpoint({
+  name: 'endOwnSession',
+  summary:
+    'The signed-in person ends one of their own other sessions (this one ends by signing out). Not found for a session that isn’t theirs or has ended.',
+  access: 'SIGNED_IN',
+  roles: signedInRoles,
+  beforePasswordChange: true,
+  beforeTwoStepSetup: true,
+  method: 'POST',
+  path: '/sessions/endings',
+  body: z.strictObject({ sessionId: z.uuid() }),
+  answer: sessionsEndedAnswerSchema,
 });
 
 export const refreshSessionEndpoint = endpoint({
@@ -4548,10 +4578,12 @@ export const endpoints: readonly Endpoint[] = [
   requestPasswordResetEndpoint,
   completePasswordResetEndpoint,
   signInEndpoint,
+  listOwnSessionsEndpoint,
   refreshSessionEndpoint,
   signOutEndpoint,
   currentSessionEndpoint,
   sessionCsrfEndpoint,
+  endOwnSessionEndpoint,
   changePasswordEndpoint,
   beginTwoStepSetupEndpoint,
   confirmTwoStepSetupEndpoint,

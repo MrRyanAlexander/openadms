@@ -88,8 +88,19 @@ const focusedNow = () => {
     ringContrast = Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
   }
   const area = shown.getBoundingClientRect();
+  // The middle of what of it lies inside the screen too: a control taller than the screen (a
+  // table's scrolling region) is seen where any of it is.
+  const inside = {
+    left: Math.max(area.left, 0),
+    top: Math.max(area.top, 0),
+    right: Math.min(area.right, innerWidth),
+    bottom: Math.min(area.bottom, innerHeight),
+  };
   const points = [
     [area.left + area.width / 2, area.top + area.height / 2],
+    ...(inside.right > inside.left && inside.bottom > inside.top
+      ? [[(inside.left + inside.right) / 2, (inside.top + inside.bottom) / 2]]
+      : []),
     [area.left + 3, area.top + 3],
     [area.right - 3, area.top + 3],
     [area.left + 3, area.bottom - 3],
@@ -110,16 +121,32 @@ const focusedNow = () => {
   return { what, ring, ringContrast, seen, hiddenBy };
 };
 
-// Every enabled control on the screen, in sight of a screen reader, Tab didn't reach.
+// Every enabled control on the screen, in sight of a screen reader, Tab didn't reach. A group of
+// radio buttons is one stop: Tab reaches the one picked, and the arrows the rest (WAI-ARIA's radio
+// group), so a group Tab reached is reached whole.
 const notReached = (reached: readonly string[]) => {
   const names = window.walkNames ?? new WeakMap<Element, string>();
-  return [...document.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href]')]
+  const controls = [
+    ...document.querySelectorAll<HTMLElement>('button, input, select, textarea, a[href]'),
+  ];
+  const groupOf = (control: HTMLElement) =>
+    control instanceof HTMLInputElement && control.type === 'radio' && control.name !== ''
+      ? control.name
+      : null;
+  const groupsReached = new Set(
+    controls
+      .filter((control) => reached.includes(names.get(control) ?? ''))
+      .map(groupOf)
+      .filter((group) => group !== null),
+  );
+  return controls
     .filter(
       (control) =>
         !control.hasAttribute('disabled') &&
         control.closest('[inert], [aria-hidden="true"]') === null &&
         control.getClientRects().length > 0 &&
-        !reached.includes(names.get(control) ?? ''),
+        !reached.includes(names.get(control) ?? '') &&
+        !groupsReached.has(groupOf(control) ?? ''),
     )
     .map(
       (control) =>

@@ -5,8 +5,9 @@
 // field asks the browser to fill nothing. A number copied off paper (a scale receipt's weight)
 // opens the phone's keyboard of digits and a point, and a whole number (a box's inches) its keyboard
 // of digits alone (ADR-585). A field whose record keeps so many characters
-// takes no more (C127).
-import { Input, Label, Text, TextField } from 'react-aria-components';
+// takes no more (C127). **What the server refused** of a field is said beneath it (`problem`): the
+// field is marked invalid and described by those words (WCAG 3.3.1), never by colour alone.
+import { FieldError, Input, Label, Text, TextField } from 'react-aria-components';
 
 export function TextEntry({
   label,
@@ -18,16 +19,21 @@ export function TextEntry({
   decimal = false,
   whole = false,
   longest,
+  problem,
+  required = false,
 }: {
   readonly label: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly hint?: string;
   readonly secret?: boolean;
-  readonly autoComplete?: 'off' | 'username' | 'current-password';
+  readonly autoComplete?:
+    'off' | 'username' | 'email' | 'current-password' | 'new-password' | 'one-time-code';
   readonly decimal?: boolean;
   readonly whole?: boolean;
   readonly longest?: number;
+  readonly problem?: string | undefined;
+  readonly required?: boolean;
 }) {
   return (
     <TextField
@@ -35,6 +41,9 @@ export function TextEntry({
       value={value}
       onChange={onChange}
       type={secret ? 'password' : 'text'}
+      isInvalid={problem !== undefined}
+      isRequired={required}
+      validationBehavior="aria"
     >
       <Label className="field-label">{label}</Label>
       <Input
@@ -52,6 +61,7 @@ export function TextEntry({
           {hint}
         </Text>
       )}
+      <FieldError className="field-problem">{problem}</FieldError>
     </TextField>
   );
 }

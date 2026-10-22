@@ -6,6 +6,9 @@ import {
   changePasswordEndpoint,
   csrfAnswerSchema,
   currentSessionEndpoint,
+  endOwnSessionEndpoint,
+  listOwnSessionsEndpoint,
+  ownSessionsAnswerSchema,
   passwordSetAnswerSchema,
   refreshSessionEndpoint,
   sessionAnswerSchema,
@@ -13,7 +16,10 @@ import {
   signedOutAnswerSchema,
   signInEndpoint,
   signOutEndpoint,
+  sessionsEndedAnswerSchema,
   type CsrfAnswer,
+  type OwnSessionsAnswer,
+  type SessionsEndedAnswer,
   type PasswordSetAnswer,
   type SessionAnswer,
   type SignedOutAnswer,
@@ -38,6 +44,7 @@ export const apiSessionTokens = Symbol('the API’s session tokens');
 export function sessionAnswer(caller: Caller, tokens: SessionTokens): SessionAnswer {
   return sessionAnswerSchema.parse({
     user: { id: caller.userId, name: caller.name, role: caller.role },
+    granted: caller.granted,
     passwordChangeRequired: caller.passwordChangeRequired,
     twoStepSetUp: caller.twoStepSetUp,
     twoStepSetupRequired: caller.twoStepSetupRequired,
@@ -120,6 +127,33 @@ export class SessionsController {
   @Serves(currentSessionEndpoint)
   current(@Req() request: FastifyRequest): SessionAnswer {
     return this.answer(callerOf(request));
+  }
+
+  @Serves(listOwnSessionsEndpoint)
+  async listOwn(@Req() request: FastifyRequest): Promise<OwnSessionsAnswer> {
+    const caller = callerOf(request);
+    const sessions = await this.sessions.own(caller.userId, caller.sessionId);
+    return ownSessionsAnswerSchema.parse({
+      sessions: sessions.map((session) => ({
+        id: session.id,
+        openedAt: session.openedAt.toISOString(),
+        endsBy: session.endsBy.toISOString(),
+        current: session.current,
+      })),
+    });
+  }
+
+  @Serves(endOwnSessionEndpoint)
+  async endOwn(
+    @Body() body: { sessionId: string },
+    @Req() request: FastifyRequest,
+  ): Promise<SessionsEndedAnswer> {
+    const caller = callerOf(request);
+    if (!(await this.sessions.endOwn(caller.userId, body.sessionId, caller.sessionId))) {
+      throw new Refusal('NOT_FOUND', 404);
+    }
+    request.log.info('A person ended one of their own sessions.');
+    return sessionsEndedAnswerSchema.parse({ status: 'ended', sessions: 1 });
   }
 
   @Serves(sessionCsrfEndpoint)

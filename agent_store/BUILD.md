@@ -30,7 +30,7 @@ exist; and the golden mission run through the screens to the approved numbers.
 
 - [x] **Field app finished:** the two settled items below (past midnight; WCAG 2.1.4's setting and
       3.2.2's line).
-- [ ] **Back office foundation:** the shared look as a workspace package (tokens, components, the
+- [x] **Back office foundation:** the shared look as a workspace package (tokens, components, the
       a11y test helpers, the translation layer) used by both apps; `apps/back-office` (React +
       Vite, the field app's versions) at `office.adms.localhost` behind Caddy with its own page
       policy; sign-in, two-step, password change and reset, own sessions, sign-out; the layout

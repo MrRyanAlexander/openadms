@@ -55,6 +55,14 @@ export interface Caller {
   readonly twoStepSetupRequired: boolean;
 }
 
+// One of a person's own sessions, as they are shown it.
+export interface OwnSession {
+  readonly id: string;
+  readonly openedAt: Date;
+  readonly endsBy: Date;
+  readonly current: boolean;
+}
+
 // A session's tokens, for its cookies, and how long the refresh token's cookie may live.
 export interface Opened {
   readonly caller: Caller;
@@ -323,6 +331,38 @@ export class Sessions {
     if (session === undefined) return undefined;
     if (!this.parts.tokens.sameHash(read.hash, session.row.refreshTokenHash)) return undefined;
     return this.parts.tokens.csrf(read.sessionId);
+  }
+
+  // A person's own sessions open now, newest first (ASVS 7.5.2): never a phone's.
+  async own(userId: string, currentId: string): Promise<OwnSession[]> {
+    const now = this.parts.clock.now();
+    const rows = await this.db.$read((tx) =>
+      tx.session.findMany({
+        where: { userId, revokedAt: null, expiresAt: { gt: now }, deviceId: null },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, createdAt: true, expiresAt: true },
+      }),
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      openedAt: row.createdAt,
+      endsBy: row.expiresAt,
+      current: row.id === currentId,
+    }));
+  }
+
+  // One of a person's own other sessions ended by them (ASVS 7.4.5); false where it isn't theirs,
+  // is the one asking, or has ended.
+  async endOwn(userId: string, sessionId: string, currentId: string): Promise<boolean> {
+    if (sessionId === currentId) return false;
+    const now = this.parts.clock.now();
+    const { count } = await this.db.$write({ actorId: userId, source: 'BACK_OFFICE' }, (tx) =>
+      tx.session.updateMany({
+        where: { id: sessionId, userId, deviceId: null, revokedAt: null, expiresAt: { gt: now } },
+        data: { revokedAt: now },
+      }),
+    );
+    return count === 1;
   }
 
   // Ends every session of a person but one, inside the piece of work that changed their

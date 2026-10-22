@@ -23,6 +23,7 @@ const checks: (() => Outcome | Outcome[])[] = [
   () => new DependencyAudit(root).run(),
   () => new SecretsScan(repository).run(),
   () => new SecretsScan(repository).built('apps/field/dist/web'),
+  () => new SecretsScan(repository).built('apps/back-office/dist/web'),
   () => new EnvFilesCheck(repository).run(),
   () => new DatabaseReach(repository).run(),
   () => new GrantTests(repository, process.argv.includes('--fresh')).run(),

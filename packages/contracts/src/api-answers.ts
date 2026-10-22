@@ -192,6 +192,9 @@ export const sessionAnswerSchema = z.strictObject({
     name: z.string(),
     role: z.enum(['ADMIN', 'MANAGER_ANALYST', 'READ_ONLY_VIEWER']),
   }),
+  // The permissions a manager/analyst holds now (an admin needs none granted; a viewer holds
+  // none): what the back office shows them of itself. The API asks again on every request.
+  granted: z.array(z.enum(permissions)),
   passwordChangeRequired: z.boolean(),
   // Whether the person has an authenticator, and whether they must set one up before anything
   // else (an admin or a manager/analyst with none; ADR-412).
@@ -267,6 +270,22 @@ export const sessionsEndedAnswerSchema = z.strictObject({
 });
 
 export type SessionsEndedAnswer = z.infer<typeof sessionsEndedAnswerSchema>;
+
+// The signed-in person's own sessions open now, newest first (ASVS 7.5.2, 7.4.5): when each was
+// opened and when it ends at the latest, and which is the one asking. Never a token or an
+// address.
+export const ownSessionsAnswerSchema = z.strictObject({
+  sessions: z.array(
+    z.strictObject({
+      id: z.uuid(),
+      openedAt: z.iso.datetime(),
+      endsBy: z.iso.datetime(),
+      current: z.boolean(),
+    }),
+  ),
+});
+
+export type OwnSessionsAnswer = z.infer<typeof ownSessionsAnswerSchema>;
 
 // One of the firm's phones as the back office reads it (ARCHITECTURE §7.4; AC-02-15, 59; ADR-134,
 // 240, 428): its name on the dispatch board, whether it is in service and, if not, from when;

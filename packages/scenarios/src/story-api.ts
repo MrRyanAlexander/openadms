@@ -73,7 +73,7 @@ import {
   type PhoneSetupChoicesAnswer,
 } from '@open-adms/contracts';
 import type { MasterPasscodeSessionKind } from '@open-adms/domain';
-import { ApiModule, ApiProcess, NoMail, type Addresses } from '@open-adms/api';
+import { ApiModule, ApiProcess, NoMail, type Addresses, type Mail } from '@open-adms/api';
 import type { Actor, Database, Prisma } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
@@ -180,6 +180,8 @@ export interface StoryApiParts {
   // The pages that may call it from a browser (ADR-572, 603): none where only a story's own
   // phones and people ask it; the field app's page where its browser tests' phones do.
   readonly corsOrigins?: readonly string[];
+  // Where the API's mail goes: nowhere, unless a world reads it (`StoryMail`).
+  readonly mail?: Mail;
 }
 
 export class StoryApi {
@@ -582,6 +584,8 @@ export interface ListeningParts {
   // installation's API asks its own: the field app's browser world's (`pnpm field:try`, the
   // browser tests; ADR-593). None for a story's phones.
   readonly asksAddresses?: boolean;
+  // Where its mail goes: nowhere, unless a world reads it (`StoryMail`).
+  readonly mail?: Mail;
 }
 
 // The API's own process, `ApiProcess` with `ApiModule` as `apps/api/src/main.ts` starts it, on a
@@ -642,7 +646,7 @@ export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
       stream: { write: log },
       database: waited === undefined ? opened : timed(opened, waited),
       viewerDatabase: database.openViewer(pool),
-      mail: new NoMail(),
+      mail: parts.mail ?? new NoMail(),
       clock,
       ...(map === undefined ? { addresses: noAddresses } : {}),
       media,

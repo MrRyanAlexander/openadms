@@ -2,7 +2,7 @@
 //   pnpm local:up      generate the dev passwords if missing, fetch the map extract if missing and
 //                      check it against its pinned SHA-256, make the stack's root and each
 //                      service's certificate where one is missing or ending (ADR-517), build the
-//                      field app's browser build (ADR-565), start every service, wait until all
+//                      field app's browser build (ADR-565) and the back office, start every service, wait until all
 //                      are healthy, make the object store's media bucket if it isn't there and
 //                      see that it keeps versions (ADR-480), check each page over HTTPS;
 //                      then, once `pnpm installer` has made the API's settings, build the API,
@@ -168,6 +168,7 @@ class LocalStack {
     this.writeStoreIdentities();
     this.writeDatabasePassword();
     this.fieldApp();
+    this.backOffice();
     // A first run builds the road tiles and imports the addresses before either server answers.
     const timeout = this.setting('ADMS_UP_TIMEOUT_S') ?? '1800';
     this.compose(['up', '--detach', '--wait', '--wait-timeout', timeout]);
@@ -176,6 +177,7 @@ class LocalStack {
     this.ensureMediaBucket();
     await this.checkPage('adms.localhost', '/health');
     await this.checkPage('field.adms.localhost', '/');
+    await this.checkPage('office.adms.localhost', '/');
     await this.checkPage('routing.adms.localhost', '/status');
     await this.checkPage('addresses.adms.localhost', '/status');
     await this.api();
@@ -204,6 +206,16 @@ class LocalStack {
   fieldApp(): void {
     console.log('Building the field app (tsc --build, vite build in apps/field) …');
     this.build('pnpm', ['--filter', '@open-adms/field', 'build']);
+  }
+
+  // The back office and its viewer portal (ARCHITECTURE §14), built the same way and for the same
+  // reason: its folder is this checkout's before Caddy mounts it.
+  // Its browser tests' own build too (dist/world, the stories' API its one server), which Caddy
+  // serves at office-world.adms.localhost.
+  backOffice(): void {
+    console.log('Building the back office (tsc --build, vite build in apps/back-office) …');
+    this.build('pnpm', ['--filter', '@open-adms/back-office', 'build']);
+    this.build('pnpm', ['--filter', '@open-adms/back-office', 'build:world']);
   }
 
   // `pnpm installer` asks for this alone once it has written the API's settings (the stack is up).

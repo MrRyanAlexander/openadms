@@ -1,0 +1,173 @@
+{
+  "language": "en",
+  "app": {
+    "name": "Open ADMS",
+    "office": "Back office",
+    "portal": "Viewer portal"
+  },
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "close": "Close",
+    "back": "Back",
+    "add": "Add",
+    "edit": "Edit",
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "loading": "Loading…",
+    "unreachable": "The server can’t be reached. Check the connection and try again.",
+    "unreadable": "The server’s answer couldn’t be read. Try again, or tell an admin.",
+    "notAllowed": "You don’t have permission to see or do this. An admin can grant it.",
+    "notFound": "Not found. It may have been archived, or the link is wrong.",
+    "limited": "Too many tries. Wait {seconds} seconds, then try again.",
+    "required": "Fill this in.",
+    "saved": "Saved.",
+    "nothingSaved": "Nothing was saved.",
+    "skipToContent": "Skip to the content",
+    "archived": "Archived",
+    "inService": "In service",
+    "showArchived": "Show archived",
+    "search": "Search",
+    "pick": "Pick one"
+  },
+  "table": {
+    "empty": "Nothing here yet.",
+    "more": "Show more",
+    "loadingMore": "Showing more…",
+    "shown": {
+      "one": "1 row shown",
+      "other": "{count} rows shown"
+    },
+    "all": "All rows are shown."
+  },
+  "signIn": {
+    "title": "Sign in",
+    "email": "Email address",
+    "password": "Password",
+    "code": "Code from your authenticator app",
+    "codeHint": "Six digits. A code works once.",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "refused": "That email address and password don’t match a login that may sign in here, or the login is waiting after wrong tries. Check them and try again.",
+    "codeNeeded": "Your password is right. Now type the code your authenticator app shows.",
+    "forgot": "Forgot your password?",
+    "ended": "Your session ended. Sign in again to carry on.",
+    "signedOut": "You’re signed out."
+  },
+  "reset": {
+    "title": "Reset your password",
+    "about": "Type the email address the firm holds for you. If it signs in here, a code is sent to it.",
+    "ask": "Send the code",
+    "asking": "Sending…",
+    "sent": "If that address signs in here, a code is on its way. It works once, for a short while.",
+    "noMail": "This installation sends no email. Ask an admin to set a new password for you.",
+    "code": "Code from the email",
+    "password": "New password",
+    "again": "New password again",
+    "complete": "Set the new password",
+    "completing": "Setting…",
+    "done": "Your password is set. Sign in with it.",
+    "refusedCode": "That code isn’t good: it may have been used, run out, or been mistyped. Ask for another.",
+    "mismatch": "The two passwords aren’t the same.",
+    "toSignIn": "Back to sign in"
+  },
+  "password": {
+    "title": "Change your password",
+    "required": "Somebody else set your password. Choose one of your own before anything else.",
+    "current": "Current password",
+    "new": "New password",
+    "again": "New password again",
+    "hint": "At least the length the firm asks for. A long phrase is best; no other rules.",
+    "change": "Change the password",
+    "changing": "Changing…",
+    "done": "Your password is changed. Your other sessions are ended.",
+    "wrong": "The current password isn’t right.",
+    "unchanged": "The new password is the same as the one you have.",
+    "mismatch": "The two new passwords aren’t the same."
+  },
+  "twoStep": {
+    "title": "Set up two-step sign-in",
+    "required": "Admins and managers need an authenticator app to sign in. Set one up now.",
+    "optional": "An authenticator app keeps your login safe even if your password is known.",
+    "begin": "Begin",
+    "beginning": "Beginning…",
+    "secret": "In your authenticator app, add a login and type this key:",
+    "secretLabel": "Key",
+    "uri": "Or, where your app takes a link:",
+    "code": "Code your app shows now",
+    "confirm": "Confirm",
+    "confirming": "Confirming…",
+    "refused": "That code doesn’t prove the app has the key, or the setup ran out. Begin again.",
+    "done": "Two-step sign-in is set up.",
+    "remove": "Remove two-step sign-in",
+    "removing": "Removing…",
+    "removed": "Two-step sign-in is removed from your login.",
+    "removeCode": "Code your app shows now, to remove it"
+  },
+  "account": {
+    "title": "Your account",
+    "role": {
+      "ADMIN": "Admin",
+      "MANAGER_ANALYST": "Manager or analyst",
+      "READ_ONLY_VIEWER": "Read-only viewer"
+    },
+    "signedInAs": "Signed in as {name}, {role}.",
+    "twoStepOn": "Two-step sign-in is on.",
+    "twoStepOff": "Two-step sign-in is off.",
+    "sessions": "Your sessions",
+    "sessionsAbout": "Each place you’re signed in. End one you don’t recognise; this one ends when you sign out.",
+    "opened": "Opened",
+    "endsBy": "Ends by",
+    "thisOne": "This session",
+    "endColumn": "End",
+    "end": "End it",
+    "ending": "Ending…",
+    "ended": "That session is ended.",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…"
+  },
+  "shell": {
+    "menu": "Menu",
+    "openMenu": "Open the menu",
+    "closeMenu": "Close the menu",
+    "navigation": "Back office",
+    "project": "Project",
+    "noProject": "Pick a project",
+    "account": "Your account",
+    "signOut": "Sign out",
+    "sections": {
+      "firm": "The firm",
+      "tickets": "Tickets",
+      "forms": "Reports and Forms",
+      "billings": "Billings",
+      "setup": "Setup",
+      "people": "People and phones"
+    },
+    "links": {
+      "projects": "Projects"
+    }
+  },
+  "home": {
+    "title": "Projects",
+    "about": "Pick a project to work on it.",
+    "name": "Project",
+    "timeZone": "Time zone",
+    "activeFrom": "Active from",
+    "activeTo": "Active to",
+    "state": "State",
+    "open": "Open",
+    "closed": "Closed",
+    "whichProjects": "Which projects",
+    "openOnly": "Open",
+    "closedOnly": "Closed",
+    "every": "All"
+  },
+  "project": {
+    "title": "{name}"
+  },
+  "notFound": {
+    "title": "Not found"
+  }
+}

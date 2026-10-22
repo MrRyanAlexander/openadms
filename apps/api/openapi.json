@@ -261,6 +261,27 @@
                       "required": ["id", "name", "role"],
                       "additionalProperties": false
                     },
+                    "granted": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
+                        ]
+                      }
+                    },
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
@@ -277,11 +298,72 @@
                   },
                   "required": [
                     "user",
+                    "granted",
                     "passwordChangeRequired",
                     "twoStepSetUp",
                     "twoStepSetupRequired",
                     "csrf"
                   ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listOwnSessions",
+        "summary": "The signed-in person’s own sessions open now, newest first: when each was opened, when it ends at the latest, and which is this one.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "openedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "endsBy": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          },
+                          "current": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "openedAt", "endsBy", "current"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["sessions"],
                   "additionalProperties": false
                 }
               }
@@ -332,6 +414,27 @@
                       "required": ["id", "name", "role"],
                       "additionalProperties": false
                     },
+                    "granted": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
+                        ]
+                      }
+                    },
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
@@ -348,6 +451,7 @@
                   },
                   "required": [
                     "user",
+                    "granted",
                     "passwordChangeRequired",
                     "twoStepSetUp",
                     "twoStepSetupRequired",
@@ -441,6 +545,27 @@
                       "required": ["id", "name", "role"],
                       "additionalProperties": false
                     },
+                    "granted": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
+                        ]
+                      }
+                    },
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
@@ -457,6 +582,7 @@
                   },
                   "required": [
                     "user",
+                    "granted",
                     "passwordChangeRequired",
                     "twoStepSetUp",
                     "twoStepSetupRequired",
@@ -499,6 +625,68 @@
                     }
                   },
                   "required": ["csrf"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/endings": {
+      "post": {
+        "operationId": "endOwnSession",
+        "summary": "The signed-in person ends one of their own other sessions (this one ends by signing out). Not found for a session that isn’t theirs or has ended.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST", "READ_ONLY_VIEWER"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  }
+                },
+                "required": ["sessionId"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "ended"
+                    },
+                    "sessions": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": ["status", "sessions"],
                   "additionalProperties": false
                 }
               }
@@ -687,6 +875,27 @@
                       "required": ["id", "name", "role"],
                       "additionalProperties": false
                     },
+                    "granted": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "CORRECT",
+                          "RENUMBER",
+                          "VOID",
+                          "ACCEPT_FLAG",
+                          "QC",
+                          "LOCK_INVOICED",
+                          "UNLOCK_INVOICED",
+                          "APPROVE_HOURS",
+                          "SETUP",
+                          "DISPATCH",
+                          "VIEW_REVIEW",
+                          "VIEW_SETUP",
+                          "VIEW_DISPATCH"
+                        ]
+                      }
+                    },
                     "passwordChangeRequired": {
                       "type": "boolean"
                     },
@@ -703,6 +912,7 @@
                   },
                   "required": [
                     "user",
+                    "granted",
                     "passwordChangeRequired",
                     "twoStepSetUp",
                     "twoStepSetupRequired",

@@ -80,6 +80,54 @@ field.adms.localhost {
 	}
 }
 
+# The back office and its read-only viewer portal (ARCHITECTURE §14): the files `vite build` wrote
+# into apps/back-office/dist/web/, mounted read-only. A path that names a file is served as it is;
+# any other path is the page itself, which reads the path to know its screen (a reload or a link
+# copied keeps a person's place). The page's policy is apps/back-office/page.ts's, word for word
+# (apps/back-office/test/page.test.ts): no script but its own, no HTML made from a string,
+# nothing loaded from another origin, photographs and files shown from the bytes the page fetched
+# (`blob:`), one server to talk to, the API, and nothing may frame it.
+office.adms.localhost {
+	import headers
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src https://api.adms.localhost; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		X-Frame-Options "DENY"
+	}
+	@bundle path /assets/*
+	header @bundle Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+	root * /srv/office
+	try_files {path} /index.html
+	file_server {
+		hide .*
+	}
+}
+
+# The back office built for its browser tests' own world (apps/back-office/dist/world): the same
+# page, its one server the stories' API (`stories.adms.localhost`, the same site, so the session's
+# cookies go with each call as they do at an installation). Served only while a checkout has
+# built it; nothing of an installation's is behind it.
+office-world.adms.localhost {
+	import headers
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src https://stories.adms.localhost; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		X-Frame-Options "DENY"
+	}
+	header Cache-Control "no-store"
+	root * /srv/office-world
+	try_files {path} /index.html
+	file_server {
+		hide .*
+	}
+}
+
 # The API (ARCHITECTURE §6; ADR-385): its container publishes no port, so this is the only way in.
 # Until `pnpm installer` has made its settings there is no container, and this answers 502.
 # The API sets its own headers on every answer (ADR-392); the proxy's name is no caller's business.

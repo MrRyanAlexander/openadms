@@ -86,6 +86,8 @@ export class OfficeBrowser {
   private password: string;
   // What the person's authenticator app holds, once they have set one up.
   private secret: Buffer | undefined;
+  // The same key as the app was shown it, base32.
+  private secretText: string | undefined;
   // The step whose code the app last gave: a code is good once.
   private lastStep = -1;
   private readonly cookies = new Map<string, string>();
@@ -121,12 +123,28 @@ export class OfficeBrowser {
     if (session.twoStepSetupRequired) {
       const begun = await browser.answered(beginTwoStepSetupEndpoint);
       browser.secret = base32Read(begun.secret);
+      browser.secretText = begun.secret;
       const confirmed = await browser.answered(confirmTwoStepSetupEndpoint, {
         json: { setup: begun.setup, code: browser.code() },
       });
       browser.csrf = confirmed.csrf;
     }
     return browser;
+  }
+
+  // What the person holds once signed in, handed whole to a browser test that takes their place
+  // (the office world): their password, their authenticator's key as the app was shown it, and
+  // the session's cookies. This browser is never used again after: the refresh token is good once.
+  handedOver(): {
+    readonly password: string;
+    readonly secret: string | null;
+    readonly cookies: readonly { readonly name: string; readonly value: string }[];
+  } {
+    return {
+      password: this.password,
+      secret: this.secretText ?? null,
+      cookies: [...this.cookies].map(([name, value]) => ({ name, value })),
+    };
   }
 
   // Any answer, as the API gave it: for a refusal a story checks.

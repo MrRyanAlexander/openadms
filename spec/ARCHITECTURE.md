@@ -1245,13 +1245,15 @@ refused.
 apps/
   api/            NestJS: device sync + back-office + portal endpoints
   worker/         reconciliation, pricing, repricing, media jobs
-  back-office/    React + Vite
+  back-office/    React + Vite: the back office and the read-only viewer portal, at its own name
   field/          React + Vite + Capacitor (browser build for testing; iOS, then Android)
 packages/
   db/             Prisma schema folder, migrations, hardening SQL (§5.6), seed data
   domain/         the rules as classes: capacity, volume, pricing, time, numbering (shared by phone and server)
   contracts/      Zod schemas for every API and sync payload; generated OpenAPI
   receipts/       the receipt content model, to ZPL and PDF, Code 128; the control-ticket test set (ADR-595)
+  look/           the web apps' tokens, shared components on React Aria, the translation layer, and
+                  the browser tests' accessibility checks (BUILD.md, the back office foundation)
   scenarios/      the scenario harness and the golden mission
 infra/local/      docker compose, Caddy
 tools/setup/      the installer (local + demo deploy)
@@ -1261,6 +1263,7 @@ Each package has one owner and one direction of dependency:
 - `domain` depends on nothing.
 - `contracts` depends on `domain`.
 - `receipts` depends on `domain` (a certification's capacity) and on nothing else (ADR-595).
+- `look` depends on nothing of ours; React and React Aria are its peers (the app's own copy).
 - The apps depend on both.
 - **Only `db` and the two server apps touch Postgres.**
 

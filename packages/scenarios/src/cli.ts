@@ -13,12 +13,16 @@
 //                                  the golden mission's own world, for the page at that origin:
 //                                  asked a line at a time until its standard input ends (ADR-603;
 //                                  apps/field/e2e/mission-world.ts)
+//   node packages/scenarios/src/cli.ts office <origin>
+//                                  the back office's browser tests' own world, for the page at
+//                                  that origin, until stopped (apps/back-office/e2e/world-setup.ts)
 // Exits 1 when a check fails or a story stops early.
 import process from 'node:process';
 import { createInterface } from 'node:readline';
 
 import { BrowserWorld } from './browser-world.ts';
 import { MissionWorld, type MissionAsked } from './mission-world.ts';
+import { OfficeWorld } from './office-world.ts';
 import { Runner } from './runner.ts';
 import { StoryDatabase, StoryTemplate } from './story-database.ts';
 import { stories } from './stories/index.ts';
@@ -37,6 +41,7 @@ async function main(args: readonly string[]): Promise<number> {
     return 0;
   }
   if (command === 'world') return world(args[1]);
+  if (command === 'office') return office(args[1]);
   if (command === 'mission') return mission(args[1]);
   const keep = args.includes('--keep');
   const named = args.filter((arg) => arg !== '--keep');
@@ -104,6 +109,38 @@ async function world(pageOrigin: string | undefined): Promise<number> {
     await made.close();
     process.stdin.pause();
     for (const line of made.errors) console.error(`The world's API: ${line}`);
+  }
+  return 0;
+}
+
+// The back office's world: made, then one line on standard output saying it is ready, as JSON (its
+// database's name and its control's origin, where the tests ask it for people and read its mail);
+// held until the process is told to stop or its standard input ends, then closed and dropped.
+async function office(pageOrigin: string | undefined): Promise<number> {
+  if (pageOrigin === undefined || !URL.canParse(pageOrigin)) {
+    console.error('office takes the origin of the page that tests it.');
+    return 1;
+  }
+  const made = await OfficeWorld.opened(pageOrigin);
+  try {
+    const control = await made.listening();
+    console.log(
+      JSON.stringify({
+        ready: true,
+        database: made.database,
+        apiOrigin: OfficeWorld.apiOrigin,
+        control,
+      }),
+    );
+    await new Promise<void>((done) => {
+      process.once('SIGTERM', done);
+      process.once('SIGINT', done);
+      process.stdin.once('end', done);
+      process.stdin.resume();
+    });
+  } finally {
+    await made.close();
+    process.stdin.pause();
   }
   return 0;
 }

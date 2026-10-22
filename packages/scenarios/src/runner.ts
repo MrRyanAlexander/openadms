@@ -20,6 +20,7 @@ import {
   type TurnInHolds,
   type TurnInSent,
 } from '@open-adms/contracts';
+import type { Mail } from '@open-adms/api';
 import type { Database } from '@open-adms/db';
 import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
 
@@ -279,6 +280,8 @@ export interface StageParts {
   readonly checked: (passed: boolean) => void;
   // The pages that may call its API from a browser (ADR-572, 603): none for a story's phones.
   readonly corsOrigins?: readonly string[];
+  // Where the API's mail goes: nowhere, unless a world reads it (`StoryMail`).
+  readonly mail?: Mail;
 }
 
 // A story's stage (ADR-275, 491, 603): the services' own clients on its database, its clock, its
@@ -316,6 +319,7 @@ export class StoryStage {
       policy,
       media,
       corsOrigins: parts.corsOrigins ?? [],
+      ...(parts.mail === undefined ? {} : { mail: parts.mail }),
     });
     const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
     const browsers = new Map<string, OfficeBrowser>();

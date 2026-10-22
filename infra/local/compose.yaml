@@ -367,9 +367,9 @@ services:
       ADMS_SMTP_ADDRESS: mail:1025
       ADMS_SMTP_CA_FILE: /run/adms/tls/root.crt
       # The exact origins whose pages may read an answer (ADR-098, 391; AC-11-02; ADR-565): the
-      # field app's browser build, and its native builds' (Capacitor's on iOS, then on Android).
-      # The back office's joins when it gets its hostname (Phase 4).
-      ADMS_CORS_ORIGINS: https://field.adms.localhost,capacitor://localhost,https://localhost
+      # field app's browser build, and its native builds' (Capacitor's on iOS, then on Android); and
+      # the back office's, which sends the session's cookies and its CSRF value (ARCHITECTURE §6).
+      ADMS_CORS_ORIGINS: https://field.adms.localhost,capacitor://localhost,https://localhost,https://office.adms.localhost
       # The one proxy whose word is taken for a caller's address (ADR-416): Caddy, at the address
       # the stack's network gives it below. Rate limits count by that address.
       ADMS_TRUSTED_PROXIES: 172.30.213.2
@@ -510,6 +510,10 @@ services:
       # The field app's browser build, as `vite build` wrote it (ADR-565): `pnpm local:up` builds
       # it first, so the folder is there before Caddy starts; a later build is served at once.
       - ../../apps/field/dist/web:/srv/field:ro
+      # The back office and its viewer portal, built the same way (ARCHITECTURE §14).
+      - ../../apps/back-office/dist/web:/srv/office:ro
+      # The same, built for its browser tests' own world (the stories' API as its one server).
+      - ../../apps/back-office/dist/world:/srv/office-world:ro
     depends_on:
       objectstore-tls:
         condition: service_healthy

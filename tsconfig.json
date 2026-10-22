@@ -17,6 +17,9 @@
       "path": "apps/back-office"
     },
     {
+      "path": "apps/back-office/test"
+    },
+    {
       "path": "apps/field"
     },
     {
