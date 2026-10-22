@@ -22,10 +22,12 @@ import { PayItemSetup, ProjectSetup } from '@open-adms/api';
 import {
   createInvoiceBatchEndpoint,
   listInvoiceBatchesEndpoint,
+  listProjectTicketsEndpoint,
   lockAsInvoicedEndpoint,
   lockSeveralAsInvoicedEndpoint,
   previewPayItemRateEndpoint,
   readInvoiceBatchEndpoint,
+  readLedgerEndpoint,
   readTicketEndpoint,
   reviewQueueEndpoint,
   setQcStatusesEndpoint,
@@ -51,7 +53,13 @@ import {
   setUpP1Pricing,
 } from './p1-office.ts';
 import { firstBlocks, taken } from './board.ts';
-import { dollars, goldenOutcomes, p1TicketsByKind, type LedgerTotal } from './golden-outcomes.ts';
+import {
+  dollars,
+  goldenOutcomes,
+  ledgerLine,
+  p1TicketsByKind,
+  type LedgerTotal,
+} from './golden-outcomes.ts';
 import { MissionAudit } from './golden-audit.ts';
 import { MissionReview, type Reviewed } from './golden-review.ts';
 import { boardP2, certifyP2Loader, p2Phones, setUpP2, type P2PhoneName } from './p2.ts';
@@ -1192,6 +1200,56 @@ export async function tellGoldenMission(
       2,
       1,
       '422 NOT_SAVED · NOT_QCD_ALONE: A collection is never QC’d or locked on its own: its completed load or haul-out is, once the ticket is whole. Nothing was saved.',
+    ],
+  );
+  // The ledger as the back office reads it (REQ-406): every line with its ticket, and what the
+  // lines the filters match come to, the server's own exact sum.
+  const ledgerRead = async (projectId: string, query: Record<string, string> = {}) => {
+    const lines: string[] = [];
+    let after: string | null = null;
+    let total: [number, string];
+    do {
+      const page: AnswerOf<typeof readLedgerEndpoint> = await byLuis(readLedgerEndpoint, {
+        ids: { projectId },
+        query: { ...query, limit: '200', ...(after === null ? {} : { after }) },
+      });
+      lines.push(...page.lines.map((line) => ledgerLine({ ...line, code: line.payItem.code })));
+      total = [page.total.lines, dollars(Number(page.total.amount.replace('.', '')))];
+      after = page.next;
+    } while (after !== null);
+    return [lines.sort(), total];
+  };
+  const p1Tickets: AnswerOf<typeof listProjectTicketsEndpoint> = await byLuis(
+    listProjectTicketsEndpoint,
+    { ids: { projectId: p1 }, query: { workflow: 'UNIT_RATE' } },
+  );
+  story.check(
+    'AC-07-113, AC-09-11, AC-09-08 read through the ledger’s endpoint, P1 comes to $5,548.25 on 19 lines, line for line, and the batch’s lines to the same; P2 to $324.00 on 2, locked outside any batch; listed to lock, each unit rate ticket says why it can’t be locked now: the five locked already, the two voided not completed',
+    [
+      await ledgerRead(p1),
+      (await ledgerRead(p1, { invoiceBatchId: batch.id }))[1],
+      (await ledgerRead(p1, { locked: 'false' }))[1],
+      await ledgerRead(p2),
+      (await ledgerRead(p2, { locked: 'true' }))[1],
+      p1Tickets.tickets.map(
+        (ticket) => `${ticket.ticketNumber} ${ticket.lockRefusal?.code ?? 'lockable'}`,
+      ),
+    ],
+    [
+      [[...p1Ledger].sort(), ledgerOf(goldenOutcomes.reviewed.p1.total)],
+      ledgerOf(goldenOutcomes.reviewed.p1.total),
+      [0, '$0.00'],
+      [[...p2Ledger].sort(), ledgerOf(goldenOutcomes.reviewed.p2.total)],
+      ledgerOf(goldenOutcomes.reviewed.p2.total),
+      [
+        '301001 ALREADY_LOCKED',
+        '301002 ALREADY_LOCKED',
+        '301003 NOT_COMPLETED',
+        '301004 ALREADY_LOCKED',
+        '301005 NOT_COMPLETED',
+        '301006 ALREADY_LOCKED',
+        '301007 ALREADY_LOCKED',
+      ],
     ],
   );
 

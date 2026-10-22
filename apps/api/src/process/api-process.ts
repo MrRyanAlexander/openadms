@@ -106,6 +106,8 @@ import { apiHeldReads, apiHeldReview } from '../review/held.controller.ts';
 import { HeldReads } from '../review/held-reads.ts';
 import { apiAuditTrail, apiReviewReads } from '../review/review-reads.controller.ts';
 import { AuditTrail } from '../review/audit-trail.ts';
+import { apiLedger } from '../money/ledger.controller.ts';
+import { Ledger } from '../money/ledger.ts';
 import { ReviewReads } from '../review/review-reads.ts';
 import { HeldReview } from '../review/held-review.ts';
 import { apiHeldThings, HeldThings } from '../sync/held.ts';
@@ -584,6 +586,8 @@ export class ApiProcess {
           [apiReviewReads, new ReviewReads(database)],
           // The audit log, read (ADR-544).
           [apiAuditTrail, new AuditTrail(database)],
+          // The ledger and a project's tickets to QC and lock (REQ-406).
+          [apiLedger, new Ledger(database)],
           [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],

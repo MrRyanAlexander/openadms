@@ -74,6 +74,7 @@ import {
   signedOutAnswerSchema,
   twoStepClearedAnswerSchema,
   twoStepSetupAnswerSchema,
+  ticketStatuses,
 } from './api-answers.ts';
 import {
   correctedRecordSchema,
@@ -114,6 +115,7 @@ import {
   surveysAnswerSchema,
   ticketAnswerSchema,
   ticketDecisionsAnswerSchema,
+  auditDomains,
   auditTrailAnswerSchema,
   setAsideJobsAnswerSchema,
   viewerCertificationsAnswerSchema,
@@ -123,6 +125,7 @@ import {
   viewerSurveysAnswerSchema,
 } from './read-answers.ts';
 import { formDefinitionFields } from './form-definition.ts';
+import { ledgerAnswerSchema, projectTicketsAnswerSchema } from './report-answers.ts';
 import {
   assignedWork,
   offlineSignInReportSchema,
@@ -4572,6 +4575,77 @@ export const viewerPhotographFileEndpoint = endpoint({
   answer: keptFileAnswerSchema,
 });
 
+// ---------------------------------------------------------------------------------------------
+// Money, the lock and reports (REQ-406, 407, 409…414; spec/parts/07, 09; spec/FROM-BUILD-1.md
+// §9, §10; adms-ledger-audit §6.1, §6.1d, §6.2). Open to an admin and to a manager/analyst
+// granted "view review" (ADR-224, 539): whoever reviews a ticket sees its money. Each reads the
+// project as it stands, kept nowhere: a report is like a printout.
+
+// Yes or no, as a query string says it.
+const yesOrNo = z.enum(['true', 'false']).optional();
+// A range of calendar days in the project's time zone, the first and the last both counted.
+const daysFrom = { from: day.optional(), to: day.optional() };
+// Which of a project's tickets a read or a file takes: the same filters everywhere.
+const ledgerFilters = {
+  workflow: z.enum(workflows).optional(),
+  payItemId: z.uuid().optional(),
+  primeId: z.uuid().optional(),
+  invoiceBatchId: z.uuid().optional(),
+  locked: yesOrNo,
+  ...daysFrom,
+};
+
+export const readLedgerEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readLedger',
+  summary:
+    'A project’s ledger as it stands, a page at a time in the order the worker wrote its lines: each line with its ticket (and property or pile), workflow, # slot, pay item, unit, quantity, rate, amount, contract, prime, operating sub, rule, ticket date, the ticket’s status, QC status and lock. Narrowed by workflow, pay item, prime, invoice batch, locked or not, and the days its work counts on (the project’s time zone). With the page, what every line the filters match comes to: how many, and their sum to the cent, added by the database.',
+  method: 'GET',
+  path: '/projects/:projectId/ledger',
+  params: projectId,
+  query: z.strictObject({ ...ledgerFilters, after: z.uuid().optional(), limit: readPage }),
+  answer: ledgerAnswerSchema,
+});
+
+export const listProjectTicketsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'listProjectTickets',
+  summary:
+    'A project’s tickets of one workflow, any status, by number a page at a time: each with its statuses, ticket date, field events, what a QC mark or a lock names, its QC status, its lock and batch, what its lines come to, and why it can’t be locked as invoiced now where it can’t, in plain words. Narrowed by status, QC status (NONE: no mark yet), locked or not, an invoice batch, and the days it counts on.',
+  method: 'GET',
+  path: '/projects/:projectId/tickets',
+  params: projectId,
+  query: z.strictObject({
+    workflow: z.enum(workflows),
+    status: z.enum(ticketStatuses).optional(),
+    qcStatus: z.enum([...qcStatuses, 'NONE']).optional(),
+    locked: yesOrNo,
+    invoiceBatchId: z.uuid().optional(),
+    ...daysFrom,
+    // The last ticket number of the page before: the answer's `next`.
+    after: z.string().trim().min(1).max(40).optional(),
+    limit: readPage,
+  }),
+  answer: projectTicketsAnswerSchema,
+});
+
+export const readProjectAuditTrailEndpoint = endpoint({
+  ...read,
+  name: 'readProjectAuditTrail',
+  summary:
+    'What the audit log holds of a project, newest first, a page at a time: every change to its records, each with the values before and after, who made it, from where and why. Narrowed by the log’s domain (security, billing, operations, records) and by who made the change. Each reader is shown what their areas let them read, as a record’s history is: a ticket’s records with view review, setup with view setup, the board with view dispatch, the security domain an admin alone.',
+  method: 'GET',
+  path: '/projects/:projectId/audit-records',
+  params: projectId,
+  query: auditPage.extend({
+    domain: z.enum(auditDomains).optional(),
+    actorId: z.uuid().optional(),
+  }),
+  answer: auditTrailAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   readinessEndpoint,
@@ -4616,6 +4690,9 @@ export const endpoints: readonly Endpoint[] = [
   readTicketHistoryEndpoint,
   readRecordHistoryEndpoint,
   listSetAsideJobsEndpoint,
+  readLedgerEndpoint,
+  listProjectTicketsEndpoint,
+  readProjectAuditTrailEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,

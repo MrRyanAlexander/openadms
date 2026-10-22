@@ -92,6 +92,9 @@ const inventory = [
   'readRecordHistory GET /audit-records SIGNED_IN ADMIN,MANAGER_ANALYST',
   // A project's jobs set aside (ADR-545).
   'listSetAsideJobs GET /projects/:projectId/set-aside-jobs SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
+  'readLedger GET /projects/:projectId/ledger SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
+  'listProjectTickets GET /projects/:projectId/tickets SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_REVIEW',
+  'readProjectAuditTrail GET /projects/:projectId/audit-records SIGNED_IN ADMIN,MANAGER_ANALYST',
   'changeProjectSettings PATCH /projects/:projectId/settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeProjectWindow PATCH /projects/:projectId/active-window SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'closingCheck GET /projects/:projectId/closing-check SIGNED_IN ADMIN',

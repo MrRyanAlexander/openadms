@@ -354,6 +354,8 @@ export type SetAsideJobsAnswer = z.infer<typeof setAsideJobsAnswerSchema>;
 // request's id. Its number is the log's own, as text.
 export const auditOperations = ['INSERT', 'UPDATE', 'DELETE'] as const;
 export const auditSources = ['DEVICE', 'BACK_OFFICE', 'SYSTEM'] as const;
+// The log's domains, as the database gives each row one by its table (ARCHITECTURE §5.3).
+export const auditDomains = ['SECURITY', 'BILLING', 'OPERATIONS', 'RECORDS'] as const;
 const auditEntry = z.strictObject({
   id: z.string().regex(/^[0-9]+$/),
   occurredAt: at,

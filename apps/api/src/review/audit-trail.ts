@@ -24,7 +24,7 @@ import type { Database, Prisma } from '@open-adms/db';
 import type { ViewPermission, WorkflowName } from '@open-adms/domain';
 
 import { Refusal } from '../process/refusal.ts';
-import { backOfficeReader } from './review-reads.ts';
+import { backOfficeReader, backOfficeSees } from './review-reads.ts';
 
 type Tx = Prisma.TransactionClient;
 
@@ -103,6 +103,25 @@ export function viewOfTable(table: string): ViewPermission | 'ADMIN' {
   if (reviewTables.has(table)) return 'VIEW_REVIEW';
   if (dispatchTables.has(table)) return 'VIEW_DISPATCH';
   return 'VIEW_SETUP';
+}
+
+// The tables a reader's views let them read the log of, as a filter on the log: the same areas
+// `viewOfTable` gives one record's history. An admin reads every table; the security domain is
+// theirs alone, whatever else a person sees.
+export function tablesSeenWith(
+  sees: Readonly<Record<ViewPermission, boolean>>,
+): Prisma.AuditRecordWhereInput {
+  const seen = [
+    ...(sees.VIEW_REVIEW ? reviewTables : []),
+    ...(sees.VIEW_DISPATCH ? dispatchTables : []),
+  ];
+  if (!sees.VIEW_SETUP) return { tableName: { in: seen } };
+  const unseen = [
+    ...securityTables,
+    ...(sees.VIEW_REVIEW ? [] : reviewTables),
+    ...(sees.VIEW_DISPATCH ? [] : dispatchTables),
+  ];
+  return { tableName: { notIn: unseen } };
 }
 
 // One row of the log, as either reader reads it.
@@ -358,6 +377,56 @@ export class AuditTrail {
         await AuditTrail.logged(tx, { tableName, recordId }, asked, admin),
         asked.limit,
       );
+    });
+  }
+
+  // A project's whole history, newest first (REQ-407): every row of the log whose record holds
+  // the project's id (the project itself, and each of its records that names it), narrowed by
+  // the log's domain and by who made the change. A reader is shown the areas they read (an
+  // admin every one): a manager/analyst with no view of the back office's is refused. A record
+  // that names its project only through another (an item line, a certification's box) is read
+  // through that record's or its ticket's history.
+  //
+  // The rows are found by the project's id inside each row's own values, so a log that outgrows
+  // one piece of work (`DATABASE_WORK_LONGEST_MS`) is answered busy, never cut short.
+  projectHistory(
+    readerId: string,
+    projectId: string,
+    asked: AuditPageAsked & {
+      readonly domain?: 'SECURITY' | 'BILLING' | 'OPERATIONS' | 'RECORDS' | undefined;
+      readonly actorId?: string | undefined;
+    },
+  ): Promise<AuditTrailAnswer> {
+    return this.db.$read(async (tx) => {
+      const admin = await AuditTrail.isAdmin(tx, readerId);
+      const sees = {
+        VIEW_REVIEW: admin || (await backOfficeSees(tx, readerId, 'VIEW_REVIEW')),
+        VIEW_SETUP: admin || (await backOfficeSees(tx, readerId, 'VIEW_SETUP')),
+        VIEW_DISPATCH: admin || (await backOfficeSees(tx, readerId, 'VIEW_DISPATCH')),
+      };
+      if (!sees.VIEW_REVIEW && !sees.VIEW_SETUP && !sees.VIEW_DISPATCH) {
+        throw new Refusal('NOT_ALLOWED', 403);
+      }
+      const project = await tx.project.findUnique({
+        where: { id: projectId },
+        select: { id: true },
+      });
+      if (project === null) throw new Refusal('NOT_FOUND', 404);
+      const where: Prisma.AuditRecordWhereInput = {
+        AND: [
+          {
+            OR: [
+              { tableName: 'project', recordId: projectId },
+              { newValue: { path: ['project_id'], equals: projectId } },
+              { priorValue: { path: ['project_id'], equals: projectId } },
+            ],
+          },
+          ...(admin ? [] : [tablesSeenWith(sees)]),
+          ...(asked.domain === undefined ? [] : [{ domain: asked.domain }]),
+          ...(asked.actorId === undefined ? [] : [{ actorId: asked.actorId }]),
+        ],
+      };
+      return answered(await AuditTrail.logged(tx, where, asked, admin), asked.limit);
     });
   }
 
