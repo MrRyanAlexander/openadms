@@ -22,6 +22,8 @@ import { PayItemSetup, ProjectSetup } from '@open-adms/api';
 import {
   createInvoiceBatchEndpoint,
   dailyReportFileEndpoint,
+  photoPdfEndpoint,
+  receiptBatchEndpoint,
   listInvoiceBatchesEndpoint,
   listProjectTicketsEndpoint,
   lockAsInvoicedEndpoint,
@@ -1270,6 +1272,29 @@ export async function tellGoldenMission(
     ids: { projectId: p1 },
     query: missionDays,
   });
+  // 101001's two field events, one a page, each with its photographs drawn and its receipt.
+  const photos = Buffer.from(
+    await byLuis(photoPdfEndpoint, {
+      ids: { projectId: p1 },
+      query: { items: 'tickets', layout: 'one', numbers: '101001' },
+    }),
+  ).toString('latin1');
+  const receipts = Buffer.from(
+    await byLuis(receiptBatchEndpoint, {
+      ids: { projectId: p1 },
+      query: { numbers: '101001 101002, 109999', content: 'receipts' },
+    }),
+  ).toString('latin1');
+  story.check(
+    'REQ-413, REQ-414 a photo PDF of 101001, one field event a page, each with its details, its photographs and its receipt; the receipt batch of 101001, 101002 and 109999: a first page naming 109999, then the four field events’ receipts',
+    [
+      photos.match(/\/Type \/Page /g)?.length,
+      photos.match(/\(Ticket 101001\) Tj/g)?.length,
+      receipts.includes('(Not found on this project: 109999.) Tj'),
+      receipts.match(/\/Type \/Page /g)?.length,
+    ],
+    [2, 2, true, 5],
+  );
   story.check(
     'REQ-409, REQ-410 P1’s mission reported over its three days, never a cost: six completed loads, 248.7 CY from the six collections the ledger prices; two completed haul-outs; the five live unit rate tickets (the two voids count nowhere); the email summary ends on its closing line, and the daily report is a PDF of eight pages',
     [

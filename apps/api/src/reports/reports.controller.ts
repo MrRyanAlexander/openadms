@@ -7,6 +7,9 @@
 // figure, a name or an address.
 import {
   dailyReportFileEndpoint,
+  exportFileEndpoint,
+  photoPdfEndpoint,
+  receiptBatchEndpoint,
   readDebrisTotalsEndpoint,
   readEmailSummaryEndpoint,
   type ParamsOf,
@@ -20,9 +23,13 @@ import { Serves } from '../process/serves.ts';
 import { callerOf } from '../sign-in/admission.ts';
 import { dailyReportPdf } from './daily-report.ts';
 import { DebrisTotals, type TotalsAsked } from './debris-totals.ts';
+import { Documents } from './documents.ts';
+import { Exports } from './exports.ts';
 import { emailText, summaryOf } from './summary.ts';
 
 export const apiDebrisTotals = Symbol('the API’s debris totals');
+export const apiExports = Symbol('the API’s exports');
+export const apiDocuments = Symbol('the API’s photo PDFs and receipt batch');
 
 type Asked = QueryOf<typeof readDebrisTotalsEndpoint>;
 const totalsAsked = (query: Asked): TotalsAsked => ({
@@ -52,9 +59,17 @@ export function asDownload(
 @Controller()
 export class ReportsController {
   private readonly totals: DebrisTotals;
+  private readonly exports: Exports;
+  private readonly documents: Documents;
 
-  constructor(@Inject(apiDebrisTotals) totals: DebrisTotals) {
+  constructor(
+    @Inject(apiDebrisTotals) totals: DebrisTotals,
+    @Inject(apiExports) exports: Exports,
+    @Inject(apiDocuments) documents: Documents,
+  ) {
     this.totals = totals;
+    this.exports = exports;
+    this.documents = documents;
   }
 
   @Serves(readDebrisTotalsEndpoint)
@@ -106,5 +121,65 @@ export class ReportsController {
       `daily-report-${query.from}${query.to === query.from ? '' : `-to-${query.to}`}.pdf`,
       bytes,
     );
+  }
+
+  @Serves(exportFileEndpoint)
+  async exportFile(
+    @Param() params: ParamsOf<typeof exportFileEndpoint>,
+    @Query() query: QueryOf<typeof exportFileEndpoint>,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<Buffer> {
+    const made = await this.exports.file(
+      callerOf(request).userId,
+      params.projectId,
+      params.dataset,
+      query.format,
+      {
+        workflow: query.workflow,
+        payItemId: query.payItemId,
+        primeId: query.primeId,
+        invoiceBatchId: query.invoiceBatchId,
+        locked: query.locked === undefined ? undefined : query.locked === 'true',
+        from: query.from,
+        to: query.to,
+      },
+    );
+    request.log.info(
+      { rows: made.rows, bytes: made.bytes.byteLength },
+      'A person exported a project’s records.',
+    );
+    return asDownload(reply, made.contentType, `${params.dataset}.${made.extension}`, made.bytes);
+  }
+
+  @Serves(photoPdfEndpoint)
+  async photoPdf(
+    @Param() params: ParamsOf<typeof photoPdfEndpoint>,
+    @Query() query: QueryOf<typeof photoPdfEndpoint>,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<Buffer> {
+    const bytes = await this.documents.photoPdf(callerOf(request).userId, params.projectId, query);
+    request.log.info({ bytes: bytes.byteLength }, 'A person made a photo PDF.');
+    return asDownload(reply, 'application/pdf', `photographs-${query.items}.pdf`, bytes);
+  }
+
+  @Serves(receiptBatchEndpoint)
+  async receiptBatch(
+    @Param() params: ParamsOf<typeof receiptBatchEndpoint>,
+    @Query() query: QueryOf<typeof receiptBatchEndpoint>,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<Buffer> {
+    const made = await this.documents.receiptBatch(
+      callerOf(request).userId,
+      params.projectId,
+      query,
+    );
+    request.log.info(
+      { bytes: made.bytes.byteLength, notFound: made.notFound.length },
+      'A person made a receipt batch.',
+    );
+    return asDownload(reply, 'application/pdf', `receipts-${query.content}.pdf`, made.bytes);
   }
 }

@@ -109,7 +109,9 @@ import { AuditTrail } from '../review/audit-trail.ts';
 import { apiLedger } from '../money/ledger.controller.ts';
 import { Ledger } from '../money/ledger.ts';
 import { DebrisTotals } from '../reports/debris-totals.ts';
-import { apiDebrisTotals } from '../reports/reports.controller.ts';
+import { Documents } from '../reports/documents.ts';
+import { Exports } from '../reports/exports.ts';
+import { apiDebrisTotals, apiDocuments, apiExports } from '../reports/reports.controller.ts';
 import { ReviewReads } from '../review/review-reads.ts';
 import { HeldReview } from '../review/held-review.ts';
 import { apiHeldThings, HeldThings } from '../sync/held.ts';
@@ -592,6 +594,15 @@ export class ApiProcess {
           [apiLedger, new Ledger(database)],
           // A project's debris totals, its email summary and its daily report (REQ-409, 410).
           [apiDebrisTotals, new DebrisTotals(database)],
+          // The exports, each read through the read its screen uses (REQ-412).
+          [
+            apiExports,
+            new Exports(database, {
+              ledger: new Ledger(database),
+              reads: new ReviewReads(database),
+              audit: new AuditTrail(database),
+            }),
+          ],
           [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],
@@ -704,6 +715,17 @@ export class ApiProcess {
           [
             apiPhotographFiles,
             new PhotographFiles(database, { media, fileBytesAtMost: policy.mediaFileBytesAtMost }),
+          ],
+          // Photo PDFs and the receipt batch, drawn from the files kept (REQ-413, 414).
+          [
+            apiDocuments,
+            new Documents(
+              database,
+              new PhotographFiles(database, {
+                media,
+                fileBytesAtMost: policy.mediaFileBytesAtMost,
+              }),
+            ),
           ],
           [
             apiMasterPasscode,

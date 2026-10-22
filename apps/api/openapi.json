@@ -10495,6 +10495,315 @@
         }
       }
     },
+    "/projects/{projectId}/exports/{dataset}": {
+      "get": {
+        "operationId": "exportFile",
+        "summary": "A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark) or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tickets", "transactions", "certifications", "audit-history"]
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["csv", "excel", "json"]
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "payItemId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "primeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "invoiceBatchId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "locked",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "text/csv; charset=utf-8": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "text/csv; charset=utf-8"
+                }
+              },
+              "application/json; charset=utf-8": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/json; charset=utf-8"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/photo-pdf": {
+      "get": {
+        "operationId": "photoPdf",
+        "summary": "A PDF of photographs built for an auditor, in one of two layouts: several items a page (each a row of its details and up to three photographs, three rows a page, never cropped), or one item a page with its receipt beside its details. Items are tickets (each field event with its photographs, narrowed by workflow and days, or by the ticket numbers given), certifications (all, or the cert numbers given) or incidents (by days). A photograph removed from the record is left out; one the PDF can’t show (HEIC, HEIF, TIFF) is named in its place. Refused for more items than one document draws. Sent as a download, never as a page.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "items",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["tickets", "certifications", "incidents"]
+            }
+          },
+          {
+            "name": "layout",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["several", "one"]
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "numbers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/receipt-batch": {
+      "get": {
+        "operationId": "receiptBatch",
+        "summary": "A PDF of the receipts of one or more ticket numbers, pasted with any separator (spaces, commas, semicolons, lines): just their receipts, each field event’s as its phone prints it, or the full record of each with its photographs and its receipt. Its first page names every number the project doesn’t have; none is dropped. Narrowed to one workflow where asked. Refused for more field events than one document draws. Sent as a download, never as a page.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "numbers",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "content",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["receipts", "full"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{projectId}/settings": {
       "patch": {
         "operationId": "changeProjectSettings",

@@ -4740,6 +4740,74 @@ export const dailyReportFileEndpoint = endpoint({
   answer: keptFileAnswerSchema,
 });
 
+// The exports (REQ-412; spec/FROM-BUILD-1.md §10; AC-09-27, 28): what the back office builds the
+// client package from by hand. Each is read as its own screen reads it, so whoever exports sees no
+// more than there; a cell a spreadsheet would run is written as text (ASVS 1.3.3).
+export const exportDatasets = [
+  'tickets',
+  'transactions',
+  'certifications',
+  'audit-history',
+] as const;
+export const exportFormats = ['csv', 'excel', 'json'] as const;
+
+export const exportFileEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'exportFile',
+  summary:
+    'A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark) or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.',
+  method: 'GET',
+  path: '/projects/:projectId/exports/:dataset',
+  params: z.strictObject({ projectId: z.uuid(), dataset: z.enum(exportDatasets) }),
+  query: z.strictObject({ format: z.enum(exportFormats), ...ledgerFilters }),
+  answersFile: true,
+  answersFileOf: ['text/csv; charset=utf-8', 'application/json; charset=utf-8'],
+  answer: keptFileAnswerSchema,
+});
+
+// Photo PDFs (REQ-413): two standard layouts; tickets, certifications or incidents.
+export const photoPdfEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'photoPdf',
+  summary:
+    'A PDF of photographs built for an auditor, in one of two layouts: several items a page (each a row of its details and up to three photographs, three rows a page, never cropped), or one item a page with its receipt beside its details. Items are tickets (each field event with its photographs, narrowed by workflow and days, or by the ticket numbers given), certifications (all, or the cert numbers given) or incidents (by days). A photograph removed from the record is left out; one the PDF can’t show (HEIC, HEIF, TIFF) is named in its place. Refused for more items than one document draws. Sent as a download, never as a page.',
+  method: 'GET',
+  path: '/projects/:projectId/photo-pdf',
+  params: projectId,
+  query: z.strictObject({
+    items: z.enum(['tickets', 'certifications', 'incidents']),
+    layout: z.enum(['several', 'one']),
+    workflow: z.enum(workflows).optional(),
+    ...daysFrom,
+    numbers: z.string().trim().min(1).max(4000).optional(),
+  }),
+  answersFile: true,
+  answersFileOf: ['application/pdf'],
+  answer: keptFileAnswerSchema,
+});
+
+// The receipt batch (REQ-414): numbers pasted with any separator.
+export const receiptBatchEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'receiptBatch',
+  summary:
+    'A PDF of the receipts of one or more ticket numbers, pasted with any separator (spaces, commas, semicolons, lines): just their receipts, each field event’s as its phone prints it, or the full record of each with its photographs and its receipt. Its first page names every number the project doesn’t have; none is dropped. Narrowed to one workflow where asked. Refused for more field events than one document draws. Sent as a download, never as a page.',
+  method: 'GET',
+  path: '/projects/:projectId/receipt-batch',
+  params: projectId,
+  query: z.strictObject({
+    numbers: z.string().trim().min(1).max(4000),
+    workflow: z.enum(workflows).optional(),
+    content: z.enum(['receipts', 'full']),
+  }),
+  answersFile: true,
+  answersFileOf: ['application/pdf'],
+  answer: keptFileAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   readinessEndpoint,
@@ -4791,6 +4859,9 @@ export const endpoints: readonly Endpoint[] = [
   readDebrisTotalsEndpoint,
   readEmailSummaryEndpoint,
   dailyReportFileEndpoint,
+  exportFileEndpoint,
+  photoPdfEndpoint,
+  receiptBatchEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,
