@@ -269,6 +269,7 @@ export {
   removeOwnTwoStepEndpoint,
   firmSettingsEndpoint,
   changePhoneKeyHoursEndpoint,
+  changeReportContactEndpoint,
   changeViewerTwoStepEndpoint,
   changeMonitorSessionHoursEndpoint,
   closeProjectEndpoint,
@@ -317,6 +318,7 @@ export {
   listProjectsEndpoint,
   readProjectEndpoint,
   reviewQueueEndpoint,
+  reviewNamesEndpoint,
   listFlagsEndpoint,
   readTicketDecisionsEndpoint,
   readTicketHistoryEndpoint,
@@ -324,6 +326,9 @@ export {
   readLedgerEndpoint,
   listProjectTicketsEndpoint,
   readProjectAuditTrailEndpoint,
+  readDebrisTotalsEndpoint,
+  readEmailSummaryEndpoint,
+  dailyReportFileEndpoint,
   listSetAsideJobsEndpoint,
   viewerTicketHistoryEndpoint,
   readTicketEndpoint,
@@ -593,6 +598,7 @@ export {
   type TicketVoidRecord,
   type WaypointRecord,
 } from './review-answers.ts';
+export { reviewNamesAnswerSchema, type ReviewNamesAnswer } from './review-names.ts';
 export { notRead, notTaken } from './not-taken.ts';
 export { fieldEventDetailsSchema, type FieldEventDetailsPayload } from './field-event-details.ts';
 export {

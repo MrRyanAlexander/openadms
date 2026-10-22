@@ -25,6 +25,7 @@ import { ReviewRecordsController } from '../review/review-records.controller.ts'
 import { ReviewReadsController } from '../review/review-reads.controller.ts';
 import { HeldController } from '../review/held.controller.ts';
 import { LedgerController } from '../money/ledger.controller.ts';
+import { ReportsController } from '../reports/reports.controller.ts';
 import { ContractorSetupController } from '../setup/contractor-setup.controller.ts';
 import { FormSetupController } from '../setup/form-setup.controller.ts';
 import { ListSetupController } from '../setup/list-setup.controller.ts';
@@ -89,6 +90,7 @@ import { HealthController } from './health.controller.ts';
     ReviewReadsController,
     HeldController,
     LedgerController,
+    ReportsController,
     CertificationsController,
     ViewerReadsController,
   ],

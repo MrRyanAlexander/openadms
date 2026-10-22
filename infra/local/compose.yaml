@@ -400,6 +400,9 @@ services:
       - ../../packages/domain/dist:/srv/open-adms/packages/domain/dist:ro
       - ../../packages/domain/policy.env:/srv/open-adms/packages/domain/policy.env:ro
       - ../../packages/domain/breached-passwords.txt:/srv/open-adms/packages/domain/breached-passwords.txt:ro
+      - ../../packages/receipts/package.json:/srv/open-adms/packages/receipts/package.json:ro
+      - ../../packages/receipts/node_modules:/srv/open-adms/packages/receipts/node_modules:ro
+      - ../../packages/receipts/dist:/srv/open-adms/packages/receipts/dist:ro
       - ./.generated/caddy-root.crt:/run/adms/tls/root.crt:ro
       - ./.generated/tls/api.crt:/run/adms/tls/api.crt:ro
       - ./.generated/tls/api.key:/run/adms/tls/api.key:ro

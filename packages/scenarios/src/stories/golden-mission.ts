@@ -21,11 +21,14 @@
 import { PayItemSetup, ProjectSetup } from '@open-adms/api';
 import {
   createInvoiceBatchEndpoint,
+  dailyReportFileEndpoint,
   listInvoiceBatchesEndpoint,
   listProjectTicketsEndpoint,
   lockAsInvoicedEndpoint,
   lockSeveralAsInvoicedEndpoint,
   previewPayItemRateEndpoint,
+  readDebrisTotalsEndpoint,
+  readEmailSummaryEndpoint,
   readInvoiceBatchEndpoint,
   readLedgerEndpoint,
   readTicketEndpoint,
@@ -1250,6 +1253,44 @@ export async function tellGoldenMission(
         '301006 ALREADY_LOCKED',
         '301007 ALREADY_LOCKED',
       ],
+    ],
+  );
+
+  // The mission's debris, as the back office reports it (REQ-409, 410): never a cost.
+  const missionDays = { from: '2026-10-12', to: '2026-10-14' };
+  const debris = await byLuis(readDebrisTotalsEndpoint, {
+    ids: { projectId: p1 },
+    query: missionDays,
+  });
+  const summary = await byLuis(readEmailSummaryEndpoint, {
+    ids: { projectId: p1 },
+    query: missionDays,
+  });
+  const report = await byLuis(dailyReportFileEndpoint, {
+    ids: { projectId: p1 },
+    query: missionDays,
+  });
+  story.check(
+    'REQ-409, REQ-410 P1’s mission reported over its three days, never a cost: six completed loads, 248.7 CY from the six collections the ledger prices; two completed haul-outs; the five live unit rate tickets (the two voids count nowhere); the email summary ends on its closing line, and the daily report is a PDF of eight pages',
+    [
+      [debris.loads.total.loads, debris.loads.total.cy],
+      debris.haulOuts.total.loads,
+      debris.unitRate.total.tickets,
+      summary.text.trimEnd().split('\n').at(-1),
+      /amount|\$/.test(summary.text),
+      Buffer.from(report).toString('latin1').startsWith('%PDF-1.4'),
+      Buffer.from(report)
+        .toString('latin1')
+        .match(/\/Type \/Page /g)?.length,
+    ],
+    [
+      [6, '248.70'],
+      2,
+      5,
+      'All figures in this report are pending final reconciliation',
+      false,
+      true,
+      8,
     ],
   );
 

@@ -125,7 +125,12 @@ import {
   viewerSurveysAnswerSchema,
 } from './read-answers.ts';
 import { formDefinitionFields } from './form-definition.ts';
-import { ledgerAnswerSchema, projectTicketsAnswerSchema } from './report-answers.ts';
+import {
+  debrisTotalsAnswerSchema,
+  emailSummaryAnswerSchema,
+  ledgerAnswerSchema,
+  projectTicketsAnswerSchema,
+} from './report-answers.ts';
 import {
   assignedWork,
   offlineSignInReportSchema,
@@ -164,6 +169,7 @@ import {
   syncedCertificationBoxSchema,
 } from './sync-records.ts';
 import { syncAnsweredSchema, syncSentSchema } from './sync.ts';
+import { reviewNamesAnswerSchema } from './review-names.ts';
 import { turnInAnswerSchema, turnInSentSchema } from './turn-in.ts';
 import {
   billingUnits,
@@ -2376,7 +2382,7 @@ export const returnPhoneEndpoint = endpoint({
 export const firmSettingsEndpoint = endpoint({
   name: 'firmSettings',
   summary:
-    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, and how many hours a monitor’s sign-in on a phone lasts.',
+    'The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, how many hours a monitor’s sign-in on a phone lasts, and the email address a reader of the firm’s reports writes to.',
   access: 'SIGNED_IN',
   roles: backOfficeRoles,
   permission: 'SETUP',
@@ -2396,6 +2402,26 @@ export const changePhoneKeyHoursEndpoint = endpoint({
   path: '/firm-settings/phone-key',
   body: z.strictObject({
     hours: z.number().int().min(1).max(8760).nullable(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+// Where a reader of the firm's reports writes to be added to their list (REQ-410; the user,
+// spec/FROM-BUILD-1.md §9: "an email from whoever setup this version of the ADMS to contact"),
+// printed on the daily report's last page. Changed by whoever sets the firm up, as the phones'
+// hours are.
+export const changeReportContactEndpoint = endpoint({
+  name: 'changeReportContact',
+  summary:
+    'Sets the email address printed on the last page of the firm’s reports, for a reader who wants to be added to their list; null prints none. Audited.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'PATCH',
+  path: '/firm-settings/report-contact',
+  body: z.strictObject({
+    email: z.email().max(320).nullable(),
     note: z.string().trim().min(1).max(500).optional(),
   }),
   answer: firmSettingsAnswerSchema,
@@ -3860,6 +3886,20 @@ export const reviewQueueEndpoint = endpoint({
   answer: reviewQueueAnswerSchema,
 });
 
+// The names a reviewer's screens read beside a ticket (ADR-224, 539): what a field event, a flag
+// and a line name by id, by name; archived ones said so.
+export const reviewNamesEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'reviewNames',
+  summary:
+    'The names a reviewer reads a project’s tickets by: its people (a monitor with their Monitor ID), sites, the debris types of its forms, pay items by code and description, contractors, contracts, rules and zones, and the firm’s lists a ticket names (payable types, kinds of work and their item names, field tags, reasons with where each is offered, survey work types, incident types and sub-types); each archived one said so. Never a rate.',
+  method: 'GET',
+  path: '/projects/:projectId/review-names',
+  params: projectId,
+  answer: reviewNamesAnswerSchema,
+});
+
 export const listFlagsEndpoint = endpoint({
   ...read,
   permission: 'VIEW_REVIEW',
@@ -4646,6 +4686,60 @@ export const readProjectAuditTrailEndpoint = endpoint({
   answer: auditTrailAnswerSchema,
 });
 
+// What a report counts (REQ-409): a range of days in the project's time zone, both given, and
+// what it is narrowed to: a workflow (a ticket type), a debris type, a site, a contractor.
+const reportAsked = z.strictObject({
+  from: day,
+  to: day,
+  workflow: z.enum(workflows).optional(),
+  debrisTypeId: z.uuid().optional(),
+  siteId: z.uuid().optional(),
+  contractorId: z.uuid().optional(),
+});
+
+export const readDebrisTotalsEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readDebrisTotals',
+  summary:
+    'What a project moved over a range of days (a day, a week, a month, any range up to 366 days) in its time zone, never a cost: completed loads by debris type (loads, CY, tons), completed haul-outs by the site they were dumped at and their debris type, unit rate tickets by payable type and pay item (tickets and units), the trucks, trailers and crews whose badges were scanned, incidents filed and open, monitors on shift, and each day’s counts. Narrowed by workflow, debris type, site and contractor. Read each time, kept nowhere.',
+  method: 'GET',
+  path: '/projects/:projectId/debris-totals',
+  params: projectId,
+  query: reportAsked,
+  answer: debrisTotalsAnswerSchema,
+});
+
+export const readEmailSummaryEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'readEmailSummary',
+  summary:
+    'The debris totals as the email summary’s plain text, to paste: the project’s reference and name, the days, a section per operation headed and lined with the project’s own forms, debris types, sites, payable types and lists, its totals, the project’s other stats, and "All figures in this report are pending final reconciliation". Never a cost.',
+  method: 'GET',
+  path: '/projects/:projectId/email-summary',
+  params: projectId,
+  query: reportAsked,
+  answer: emailSummaryAnswerSchema,
+});
+
+// The daily report's file (ADR-483's way of answering a file): a PDF the server draws, sent as a
+// download and never as a page.
+export const dailyReportFileEndpoint = endpoint({
+  ...read,
+  permission: 'VIEW_REVIEW',
+  name: 'dailyReportFile',
+  summary:
+    'The daily report as a landscape PDF, for the same days and filters as the debris totals: a title page; the email’s outline without its figures; a page per operation (loads, haul-outs, unit rate) with its details and a map of the boundary, zones, sites and field events drawn as plain lines, no map tiles; the project’s other stats with each day; its estimates and objectives (none is recorded, and the page says so); and an end page with the firm’s address for its list. Sent as a download, never as a page. Never a cost.',
+  method: 'GET',
+  path: '/projects/:projectId/daily-report',
+  params: projectId,
+  query: reportAsked,
+  answersFile: true,
+  answersFileOf: ['application/pdf'],
+  answer: keptFileAnswerSchema,
+});
+
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   readinessEndpoint,
@@ -4684,6 +4778,7 @@ export const endpoints: readonly Endpoint[] = [
   listProjectsEndpoint,
   readProjectEndpoint,
   reviewQueueEndpoint,
+  reviewNamesEndpoint,
   listFlagsEndpoint,
   readTicketEndpoint,
   readTicketDecisionsEndpoint,
@@ -4693,6 +4788,9 @@ export const endpoints: readonly Endpoint[] = [
   readLedgerEndpoint,
   listProjectTicketsEndpoint,
   readProjectAuditTrailEndpoint,
+  readDebrisTotalsEndpoint,
+  readEmailSummaryEndpoint,
+  dailyReportFileEndpoint,
   changeProjectSettingsEndpoint,
   changeProjectWindowEndpoint,
   closingCheckEndpoint,
@@ -4762,6 +4860,7 @@ export const endpoints: readonly Endpoint[] = [
   siteQuantityLookupEndpoint,
   firmSettingsEndpoint,
   changePhoneKeyHoursEndpoint,
+  changeReportContactEndpoint,
   changeViewerTwoStepEndpoint,
   changeMonitorSessionHoursEndpoint,
   listPhonesEndpoint,

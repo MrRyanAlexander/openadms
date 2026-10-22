@@ -6,6 +6,7 @@
 import {
   changeMonitorSessionHoursEndpoint,
   changePhoneKeyHoursEndpoint,
+  changeReportContactEndpoint,
   changeViewerTwoStepEndpoint,
   firmSettingsEndpoint,
   monitorCreatedAnswerSchema,
@@ -52,6 +53,7 @@ describe('who may read and change them', () => {
         for (const [served_, more] of [
           [firmSettingsEndpoint, {}],
           [changePhoneKeyHoursEndpoint, { payload: { hours: 48 } }],
+          [changeReportContactEndpoint, { payload: { email: 'reports@gates.example' } }],
           [changeViewerTwoStepEndpoint, { payload: { required: true } }],
           [changeMonitorSessionHoursEndpoint, { payload: { hours: 12 } }],
         ] as const) {
@@ -65,6 +67,7 @@ describe('who may read and change them', () => {
         phoneKeyRevokedAfterHours: 24,
         viewerTwoStepRequired: false,
         monitorSessionHours: 24,
+        reportContactEmail: null,
       });
       // Setup opens the hours to Luis, never the viewers' sign-in.
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
@@ -85,6 +88,7 @@ describe('who may read and change them', () => {
         phoneKeyRevokedAfterHours: 72,
         viewerTwoStepRequired: false,
         monitorSessionHours: 24,
+        reportContactEmail: null,
       });
       expect(
         await tx.auditRecord.findMany({
@@ -251,6 +255,44 @@ describe('AC-10-91 how long a monitor’s sign-in on a phone lasts (ADR-531)', (
         payload: { monitorNumber, password: '5550142' },
       });
       expect(monitorSignedInAnswerSchema.parse(signedIn.body).expiresInSeconds).toBe(14 * 3600);
+    });
+  });
+});
+
+describe('REQ-410 where a reader of the firm’s reports writes', () => {
+  it('none as shipped; set by whoever sets the firm up, audited with their note, and cleared with null; an address that isn’t one is refused by the schema', async () => {
+    await world(async (served, tx, who) => {
+      const dana = await served.signedIn(danasEmail, long);
+      const changed = await ask(served, dana, changeReportContactEndpoint, {
+        payload: { email: 'reports@gates.example', note: 'The reports desk' },
+      });
+      expect(saved(changeReportContactEndpoint, changed).reportContactEmail).toBe(
+        'reports@gates.example',
+      );
+      expect(
+        await tx.auditRecord.findMany({
+          where: { requestId: changed.requestId },
+          select: { tableName: true, actorId: true, changedFields: true, reason: true },
+        }),
+      ).toEqual([
+        {
+          tableName: 'firm_settings',
+          actorId: who.dana,
+          changedFields: ['report_contact_email'],
+          reason: 'The reports desk',
+        },
+      ]);
+      expect(
+        told(
+          await ask(served, dana, changeReportContactEndpoint, {
+            payload: { email: 'not an address' },
+          }),
+        ),
+      ).toEqual([400, 'BAD_REQUEST']);
+      const cleared = await ask(served, dana, changeReportContactEndpoint, {
+        payload: { email: null },
+      });
+      expect(saved(changeReportContactEndpoint, cleared).reportContactEmail).toBeNull();
     });
   });
 });

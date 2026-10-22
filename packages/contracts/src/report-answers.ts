@@ -151,30 +151,41 @@ export const debrisTotalsAnswerSchema = z.strictObject({
     haulOuts: z.string(),
     unitRate: z.string(),
   }),
-  // Completed loads by the debris type their collection named: one row a debris type.
+  // Completed loads by the debris type their collection named: one row a debris type (none where
+  // a collection names none).
   loads: z.strictObject({
-    rows: z.array(z.strictObject({ debrisType: named, loads: count, ...moved })),
+    rows: z.array(z.strictObject({ debrisType: named.nullable(), loads: count, ...moved })),
     total: z.strictObject({ loads: count, ...moved }),
     equipment: z.array(equipmentSchema),
   }),
   // Completed haul-outs by the site they were dumped at and their debris type.
   haulOuts: z.strictObject({
-    rows: z.array(z.strictObject({ site: named, debrisType: named, loads: count, ...moved })),
+    rows: z.array(
+      z.strictObject({
+        site: named.nullable(),
+        debrisType: named.nullable(),
+        loads: count,
+        ...moved,
+      }),
+    ),
     total: z.strictObject({ loads: count, ...moved }),
     equipment: z.array(equipmentSchema),
   }),
   // Unit rate tickets by the pay item they were worked out at, within its payable type: how
-  // many tickets, and how many units their monitors counted (hours on crew time).
+  // many tickets, and what their monitors counted: units, or hours where the work is counted in
+  // hours (crew time: each item's hours).
   unitRate: z.strictObject({
     rows: z.array(
       z.strictObject({
-        payableType: named,
+        payableType: named.nullable(),
         payItem: z.strictObject({ id, code: z.string(), description: z.string() }).nullable(),
         tickets: count,
         units: exact,
+        hours: z.boolean(),
       }),
     ),
-    total: z.strictObject({ tickets: count, units: exact }),
+    // Units and hours apart: an hour is never added to a count.
+    total: z.strictObject({ tickets: count, units: exact, hours: exact }),
     equipment: z.array(equipmentSchema),
   }),
   incidents: z.strictObject({ filed: count, open: count }),

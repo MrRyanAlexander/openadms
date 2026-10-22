@@ -13,6 +13,8 @@
 //   never run past a day) is changed by an admin alone: it is sign-in policy. Each sign-in reads
 //   it as it is made, online, under the passcode or taken from one made offline; a session
 //   already open keeps its end.
+// - **Where a reader of the firm's reports writes** (REQ-410) is changed by the same people as the
+//   phones' hours: it is printed on the daily report's last page, nothing reads it otherwise.
 // - Each change says the person's note, where they gave one, to the audit log as its reason.
 import type { Prisma } from '@open-adms/db';
 import { SetupRights } from '@open-adms/domain';
@@ -25,12 +27,14 @@ export interface FirmSettingsRead {
   readonly phoneKeyRevokedAfterHours: number | null;
   readonly viewerTwoStepRequired: boolean;
   readonly monitorSessionHours: number;
+  readonly reportContactEmail: string | null;
 }
 
 const settingsRead = {
   phoneKeyRevokedAfterHours: true,
   viewerTwoStepRequired: true,
   monitorSessionHours: true,
+  reportContactEmail: true,
 } as const;
 
 export class FirmSettings extends SetupService {
@@ -78,6 +82,26 @@ export class FirmSettings extends SetupService {
         return tx.firmSettings.update({
           where: { id: 1 },
           data: { phoneKeyRevokedAfterHours: hours },
+          select: settingsRead,
+        });
+      },
+    );
+  }
+
+  // The email address printed on the firm's reports' last page; null prints none (REQ-410).
+  changeReportContact(
+    person: string,
+    email: string | null,
+    note?: string,
+  ): Promise<Outcome<FirmSettingsRead>> {
+    return this.writeAs(
+      { actorId: person, source: 'BACK_OFFICE', ...(note === undefined ? {} : { reason: note }) },
+      async (tx) => {
+        const refusal = await this.setupRefusal(tx, person);
+        if (refusal !== null) throw new Refused(refusal);
+        return tx.firmSettings.update({
+          where: { id: 1 },
+          data: { reportContactEmail: email },
           select: settingsRead,
         });
       },

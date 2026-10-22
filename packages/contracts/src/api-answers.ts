@@ -318,11 +318,13 @@ export type PhoneRecord = z.infer<typeof phoneRecordSchema>;
 
 // The firm's own settings (REQ-214, 215; ADR-520, 530, 531): how many hours a phone marked lost or
 // retired keeps its key (null: off), whether a read-only viewer must use two-step sign-in, and how
-// many hours a monitor's sign-in on a phone lasts.
+// many hours a monitor's sign-in on a phone lasts; and where a reader of the firm's reports writes
+// to be added to their list (REQ-410), printed on the daily report's last page.
 export const firmSettingsAnswerSchema = z.strictObject({
   phoneKeyRevokedAfterHours: z.number().int().min(1).max(8760).nullable(),
   viewerTwoStepRequired: z.boolean(),
   monitorSessionHours: z.number().int().min(1).max(24),
+  reportContactEmail: z.string().nullable(),
 });
 
 export type FirmSettingsAnswer = z.infer<typeof firmSettingsAnswerSchema>;

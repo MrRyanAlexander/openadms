@@ -108,6 +108,8 @@ import { apiAuditTrail, apiReviewReads } from '../review/review-reads.controller
 import { AuditTrail } from '../review/audit-trail.ts';
 import { apiLedger } from '../money/ledger.controller.ts';
 import { Ledger } from '../money/ledger.ts';
+import { DebrisTotals } from '../reports/debris-totals.ts';
+import { apiDebrisTotals } from '../reports/reports.controller.ts';
 import { ReviewReads } from '../review/review-reads.ts';
 import { HeldReview } from '../review/held-review.ts';
 import { apiHeldThings, HeldThings } from '../sync/held.ts';
@@ -588,6 +590,8 @@ export class ApiProcess {
           [apiAuditTrail, new AuditTrail(database)],
           // The ledger and a project's tickets to QC and lock (REQ-406).
           [apiLedger, new Ledger(database)],
+          // A project's debris totals, its email summary and its daily report (REQ-409, 410).
+          [apiDebrisTotals, new DebrisTotals(database)],
           [apiHeldThings, held],
           // A certification's changes (task 2.4.4, part 4): only an admin revokes.
           [apiCertifications, certifications],

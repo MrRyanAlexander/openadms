@@ -1367,6 +1367,9 @@ model FirmSettings {
   // How many hours a monitor's sign-in on a phone lasts (ADR-531, the user: a shift never runs
   // past a day). 1 to 24 (a check; NIST SP 800-63B-4 §2.2.3 allows a day at most).
   monitorSessionHours       Int     @default(24) @map("monitor_session_hours")
+  // Where a reader of the firm's reports writes to be added to their list (REQ-410; the user,
+  // spec/FROM-BUILD-1.md §9): printed on the daily report's last page. None is printed as none.
+  reportContactEmail        String? @map("report_contact_email")
 
   @@map("firm_settings")
 }

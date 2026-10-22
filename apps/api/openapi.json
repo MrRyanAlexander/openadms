@@ -5075,6 +5075,501 @@
         }
       }
     },
+    "/projects/{projectId}/review-names": {
+      "get": {
+        "operationId": "reviewNames",
+        "summary": "The names a reviewer reads a project’s tickets by: its people (a monitor with their Monitor ID), sites, the debris types of its forms, pay items by code and description, contractors, contracts, rules and zones, and the firm’s lists a ticket names (payable types, kinds of work and their item names, field tags, reasons with where each is offered, survey work types, incident types and sub-types); each archived one said so. Never a rate.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "people": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "monitorNumber": {
+                            "type": ["string", "null"]
+                          },
+                          "monitor": {
+                            "type": "boolean"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "monitorNumber", "monitor", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "sites": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "debrisTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "formName": {
+                            "type": "string"
+                          },
+                          "documentType": {
+                            "type": "string"
+                          },
+                          "reduced": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "archived",
+                          "formName",
+                          "documentType",
+                          "reduced"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payItems": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "code", "description", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "contractors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "contracts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "zones": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "name"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "payableTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "kindsOfWork": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "itemNames": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "kindOfWorkId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": ["id", "name", "archived", "kindOfWorkId"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "fieldTags": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "uses": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["id", "name", "archived", "uses"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "surveyWorkTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "incidentTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": ["id", "name", "archived"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "incidentSubTypes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "archived": {
+                            "type": "boolean"
+                          },
+                          "incidentTypeId": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          }
+                        },
+                        "required": ["id", "name", "archived", "incidentTypeId"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "formDefinitions": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "documentType": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "fields": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "label": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "enum": ["TEXT", "NUMBER", "YES_NO", "PICK", "PHOTO"]
+                                },
+                                "required": {
+                                  "type": "boolean"
+                                },
+                                "choices": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                }
+                              },
+                              "required": ["id", "label", "type", "required"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": ["id", "documentType", "version", "fields"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "people",
+                    "sites",
+                    "debrisTypes",
+                    "payItems",
+                    "contractors",
+                    "contracts",
+                    "rules",
+                    "zones",
+                    "payableTypes",
+                    "kindsOfWork",
+                    "itemNames",
+                    "fieldTags",
+                    "reasons",
+                    "surveyWorkTypes",
+                    "incidentTypes",
+                    "incidentSubTypes",
+                    "formDefinitions"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/projects/{projectId}/flags": {
       "get": {
         "operationId": "listFlags",
@@ -9195,6 +9690,794 @@
                       ]
                     }
                   }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/debris-totals": {
+      "get": {
+        "operationId": "readDebrisTotals",
+        "summary": "What a project moved over a range of days (a day, a week, a month, any range up to 366 days) in its time zone, never a cost: completed loads by debris type (loads, CY, tons), completed haul-outs by the site they were dumped at and their debris type, unit rate tickets by payable type and pay item (tickets and units), the trucks, trailers and crews whose badges were scanned, incidents filed and open, monitors on shift, and each day’s counts. Narrowed by workflow, debris type, site and contractor. Read each time, kept nowhere.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "debrisTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "siteId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "contractorId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "client": {
+                          "type": "string"
+                        },
+                        "declarationEvent": {
+                          "type": "string"
+                        },
+                        "reference": {
+                          "type": "string"
+                        },
+                        "programType": {
+                          "type": "string"
+                        },
+                        "timeZone": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "client",
+                        "declarationEvent",
+                        "reference",
+                        "programType",
+                        "timeZone"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "from": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "to": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "headings": {
+                      "type": "object",
+                      "properties": {
+                        "loads": {
+                          "type": "string"
+                        },
+                        "haulOuts": {
+                          "type": "string"
+                        },
+                        "unitRate": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["loads", "haulOuts", "unitRate"],
+                      "additionalProperties": false
+                    },
+                    "loads": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "debrisType": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "loads": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "cy": {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              "tons": {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              }
+                            },
+                            "required": ["debrisType", "loads", "cy", "tons"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "total": {
+                          "type": "object",
+                          "properties": {
+                            "loads": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "cy": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            },
+                            "tons": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            }
+                          },
+                          "required": ["loads", "cy", "tons"],
+                          "additionalProperties": false
+                        },
+                        "equipment": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "crew": {
+                                "type": "boolean"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["name", "crew", "count"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["rows", "total", "equipment"],
+                      "additionalProperties": false
+                    },
+                    "haulOuts": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "site": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "debrisType": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "loads": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "cy": {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              "tons": {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              }
+                            },
+                            "required": ["site", "debrisType", "loads", "cy", "tons"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "total": {
+                          "type": "object",
+                          "properties": {
+                            "loads": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "cy": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            },
+                            "tons": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            }
+                          },
+                          "required": ["loads", "cy", "tons"],
+                          "additionalProperties": false
+                        },
+                        "equipment": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "crew": {
+                                "type": "boolean"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["name", "crew", "count"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["rows", "total", "equipment"],
+                      "additionalProperties": false
+                    },
+                    "unitRate": {
+                      "type": "object",
+                      "properties": {
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "payableType": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "name"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "payItem": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                      },
+                                      "code": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": ["id", "code", "description"],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "tickets": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "units": {
+                                "type": "string",
+                                "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                              },
+                              "hours": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": ["payableType", "payItem", "tickets", "units", "hours"],
+                            "additionalProperties": false
+                          }
+                        },
+                        "total": {
+                          "type": "object",
+                          "properties": {
+                            "tickets": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "units": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            },
+                            "hours": {
+                              "type": "string",
+                              "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                            }
+                          },
+                          "required": ["tickets", "units", "hours"],
+                          "additionalProperties": false
+                        },
+                        "equipment": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "crew": {
+                                "type": "boolean"
+                              },
+                              "count": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": ["name", "crew", "count"],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": ["rows", "total", "equipment"],
+                      "additionalProperties": false
+                    },
+                    "incidents": {
+                      "type": "object",
+                      "properties": {
+                        "filed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "open": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": ["filed", "open"],
+                      "additionalProperties": false
+                    },
+                    "monitorsOnShift": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "byDay": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "day": {
+                            "type": "string",
+                            "format": "date",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                          },
+                          "loads": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "loadCy": {
+                            "type": "string",
+                            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                          },
+                          "haulOuts": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "haulOutCy": {
+                            "type": "string",
+                            "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+                          },
+                          "unitRateTickets": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "day",
+                          "loads",
+                          "loadCy",
+                          "haulOuts",
+                          "haulOutCy",
+                          "unitRateTickets"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "from",
+                    "to",
+                    "headings",
+                    "loads",
+                    "haulOuts",
+                    "unitRate",
+                    "incidents",
+                    "monitorsOnShift",
+                    "byDay"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/email-summary": {
+      "get": {
+        "operationId": "readEmailSummary",
+        "summary": "The debris totals as the email summary’s plain text, to paste: the project’s reference and name, the days, a section per operation headed and lined with the project’s own forms, debris types, sites, payable types and lists, its totals, the project’s other stats, and \"All figures in this report are pending final reconciliation\". Never a cost.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "debrisTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "siteId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "contractorId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subject": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["subject", "text"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{projectId}/daily-report": {
+      "get": {
+        "operationId": "dailyReportFile",
+        "summary": "The daily report as a landscape PDF, for the same days and filters as the debris totals: a title page; the email’s outline without its figures; a page per operation (loads, haul-outs, unit rate) with its details and a map of the boundary, zones, sites and field events drawn as plain lines, no map tiles; the project’s other stats with each day; its estimates and objectives (none is recorded, and the page says so); and an end page with the firm’s address for its list. Sent as a download, never as a page. Never a cost.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "VIEW_REVIEW",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "workflow",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["LOAD", "HAUL_OUT", "UNIT_RATE"]
+            }
+          },
+          {
+            "name": "debrisTypeId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "siteId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          },
+          {
+            "name": "contractorId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
                 }
               }
             }
@@ -21700,7 +22983,7 @@
     "/firm-settings": {
       "get": {
         "operationId": "firmSettings",
-        "summary": "The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, and how many hours a monitor’s sign-in on a phone lasts.",
+        "summary": "The firm’s own settings: how many hours a phone marked lost or retired keeps its key (or off), whether read-only viewers must use two-step sign-in, how many hours a monitor’s sign-in on a phone lasts, and the email address a reader of the firm’s reports writes to.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "x-open-adms-permission": "SETUP",
@@ -21731,12 +23014,16 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
-                    "monitorSessionHours"
+                    "monitorSessionHours",
+                    "reportContactEmail"
                   ],
                   "additionalProperties": false
                 }
@@ -21821,12 +23108,111 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
-                    "monitorSessionHours"
+                    "monitorSessionHours",
+                    "reportContactEmail"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firm-settings/report-contact": {
+      "patch": {
+        "operationId": "changeReportContact",
+        "summary": "Sets the email address printed on the last page of the firm’s reports, for a reader who wants to be added to their list; null prints none. Audited.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "SETUP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 320,
+                        "format": "email",
+                        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["email"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phoneKeyRevokedAfterHours": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8760
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "viewerTwoStepRequired": {
+                      "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours",
+                    "reportContactEmail"
                   ],
                   "additionalProperties": false
                 }
@@ -21901,12 +23287,16 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
-                    "monitorSessionHours"
+                    "monitorSessionHours",
+                    "reportContactEmail"
                   ],
                   "additionalProperties": false
                 }
@@ -21983,12 +23373,16 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
-                    "monitorSessionHours"
+                    "monitorSessionHours",
+                    "reportContactEmail"
                   ],
                   "additionalProperties": false
                 }

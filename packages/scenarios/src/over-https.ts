@@ -160,7 +160,8 @@ export function refusalOf(answer: Asked): string {
 
 // The body of a 200; anything else stops the story, saying what came back.
 export function answered(served: Endpoint, answer: Asked): unknown {
-  if (answer.status === 200) return answer.body;
+  // A file's answer is its bytes (ADR-483); any other, its JSON.
+  if (answer.status === 200) return served.answersFile === true ? answer.bytes : answer.body;
   const code = codeOf(answer) ?? 'no error answer';
   throw new Error(`${served.name} was answered ${String(answer.status)} ${code}.`);
 }

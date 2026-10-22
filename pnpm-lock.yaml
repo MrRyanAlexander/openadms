@@ -59,6 +59,9 @@ importers:
       '@open-adms/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@open-adms/receipts':
+        specifier: workspace:*
+        version: link:../../packages/receipts
       '@smithy/node-http-handler':
         specifier: 4.12.1
         version: 4.12.1

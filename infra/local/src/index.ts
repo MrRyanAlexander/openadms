@@ -69,6 +69,7 @@ const runs = {
     'packages/domain/dist',
     'packages/domain/policy.env',
     'packages/domain/breached-passwords.txt',
+    'packages/receipts/dist',
     'pnpm-lock.yaml',
     'infra/local/compose.yaml',
     'infra/local/.generated/caddy-root.crt',
