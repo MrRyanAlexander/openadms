@@ -34,11 +34,12 @@ export function answersWith(
     const listedOrigin = origin !== undefined && listed.has(origin);
     if (listedOrigin) {
       // A listed origin's page may send the session's cookies with its calls (ADR-408): allowed
-      // only beside an origin named whole, never beside a wildcard.
+      // only beside an origin named whole, never beside a wildcard. It reads the name a file the
+      // server made is saved under.
       void reply.headers({
         'access-control-allow-origin': origin,
         'access-control-allow-credentials': 'true',
-        'access-control-expose-headers': `${requestIdHeader}, retry-after`,
+        'access-control-expose-headers': `${requestIdHeader}, retry-after, content-disposition`,
       });
     }
     const refused = door(request);

@@ -689,3 +689,14 @@ fieldset {
   flex-direction: column;
   gap: var(--space-2);
 }
+
+/* The email summary as it will be pasted: its own lines kept, wrapped within the screen. */
+.email-summary {
+  margin: 0;
+  padding: var(--space-3);
+  border: var(--edge) solid var(--colour-surface);
+  border-radius: var(--radius);
+  font-family: ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

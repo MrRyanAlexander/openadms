@@ -5,6 +5,7 @@
 import {
   changeMasterPasscodeEndpoint,
   changeMonitorSessionHoursEndpoint,
+  changeReportContactEndpoint,
   changePhoneKeyHoursEndpoint,
   changeViewerTwoStepEndpoint,
   firmSettingsEndpoint,
@@ -12,13 +13,20 @@ import {
 import { Banner, Button, ScreenTitle } from '@open-adms/look';
 import { useState } from 'react';
 
-import { FormDialog, checked, numberOf, optional, secretOf } from '../look/form-dialog.tsx';
+import {
+  FormDialog,
+  checked,
+  nullable,
+  numberOf,
+  optional,
+  secretOf,
+} from '../look/form-dialog.tsx';
 import { Shown, useApi, useRead } from '../reading.tsx';
 import { isAdmin, useSigned } from '../session.tsx';
 import { say, words } from '../words.ts';
 import { yesNo } from '../setup/common.tsx';
 
-type Open = 'phoneKey' | 'viewers' | 'sessions' | 'passcode' | null;
+type Open = 'phoneKey' | 'viewers' | 'sessions' | 'passcode' | 'contact' | null;
 
 export function FirmSettings() {
   const api = useApi();
@@ -57,6 +65,8 @@ export function FirmSettings() {
               <dd>{yesNo(settings.viewerTwoStepRequired)}</dd>
               <dt>{said.monitorSessions}</dt>
               <dd>{String(settings.monitorSessionHours)}</dd>
+              <dt>{said.reportContact}</dt>
+              <dd>{settings.reportContactEmail ?? words.common.none}</dd>
             </dl>
             <div className="form-actions">
               <Button
@@ -65,6 +75,13 @@ export function FirmSettings() {
                 }}
               >
                 {say(words.common.of, { what: said.change, name: said.phoneKey })}
+              </Button>
+              <Button
+                onPress={() => {
+                  setOpen('contact');
+                }}
+              >
+                {say(words.common.of, { what: said.change, name: said.reportContact })}
               </Button>
               {isAdmin(session) ? (
                 <>
@@ -156,6 +173,32 @@ export function FirmSettings() {
                 save={async (values) => {
                   const reply = await api.ask(changeMonitorSessionHoursEndpoint, {
                     body: { hours: numberOf(values, 'hours') ?? 0, ...noted(values) },
+                  });
+                  if (reply.kind !== 'answered') return reply;
+                  setTold(words.common.saved);
+                  reload();
+                  return null;
+                }}
+                onClose={close}
+              />
+            ) : null}
+            {open === 'contact' ? (
+              <FormDialog
+                title={said.reportContact}
+                fields={[
+                  {
+                    kind: 'text',
+                    key: 'email',
+                    label: said.reportContact,
+                    hint: said.reportContactHint,
+                    longest: 320,
+                  },
+                  { kind: 'text', key: 'note', label: said.note, longest: 500 },
+                ]}
+                initial={{ email: settings.reportContactEmail ?? '' }}
+                save={async (values) => {
+                  const reply = await api.ask(changeReportContactEndpoint, {
+                    body: { email: nullable(values, 'email'), ...noted(values) },
                   });
                   if (reply.kind !== 'answered') return reply;
                   setTold(words.common.saved);

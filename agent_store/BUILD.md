@@ -47,7 +47,7 @@ exist; and the golden mission run through the screens to the approved numbers.
       held records and jobs; records made in the back office.
 - [x] **Money, the lock, the close:** the ledger; QC; invoice locks and batches; the audit trail
       viewer; closing and reopening a project.
-- [ ] **Reports and exports:** debris totals; the daily report PDF and email summary; exports (CSV,
+- [x] **Reports and exports:** debris totals; the daily report PDF and email summary; exports (CSV,
       Excel-compatible, JSON); photo PDFs; the receipt batch.
 - [ ] **The viewer portal:** a viewer's projects, tickets and history, read-only, over `/viewer/…`.
 - [ ] **Up and proven:** the one command; the golden mission through every screen (done when 2);

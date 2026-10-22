@@ -30,6 +30,8 @@ import { InvoiceBatches } from './billings/batches.tsx';
 import { Closing } from './billings/closing.tsx';
 import { Ledger } from './billings/ledger.tsx';
 import { QcAndLock } from './billings/tickets.tsx';
+import { Exports } from './reports/exports.tsx';
+import { Reports } from './reports/reports.tsx';
 import { DropOffLogs, Incidents, Surveys } from './review/form-records.tsx';
 import { ReviewQueue } from './review/queue.tsx';
 import { TicketPage } from './review/ticket.tsx';
@@ -99,6 +101,8 @@ const projectScreens: readonly (readonly [
   ['/quarantine', (projectId) => <Quarantine projectId={projectId} />],
   ['/held', (projectId) => <HeldRecords projectId={projectId} />],
   ['/set-aside-jobs', (projectId) => <SetAsideJobs projectId={projectId} />],
+  ['/reports', (projectId) => <Reports projectId={projectId} />],
+  ['/exports', (projectId) => <Exports projectId={projectId} />],
   ['/ledger', (projectId) => <Ledger projectId={projectId} />],
   ['/qc', (projectId) => <QcAndLock projectId={projectId} />],
   ['/invoice-batches', (projectId) => <InvoiceBatches projectId={projectId} />],
@@ -158,6 +162,8 @@ export function sectionsOf(signed: Signed, projectId: string | null): readonly M
     {
       label: said.sections.forms,
       links: [
+        { label: said.links.reports, href: inProject('/reports'), shown: viewReview },
+        { label: said.links.exports, href: inProject('/exports'), shown: viewReview },
         { label: said.links.certifications, href: inProject('/certifications'), shown: viewReview },
         { label: said.links.roes, href: inProject('/roes'), shown: viewReview },
         { label: said.links.surveys, href: inProject('/surveys'), shown: viewReview },

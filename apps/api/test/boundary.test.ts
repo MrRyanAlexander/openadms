@@ -309,7 +309,7 @@ describe('the boundary', () => {
       const answer = await from(listedOrigin);
       expect(answer.statusCode).toBe(200);
       expect(answer.headers['access-control-allow-origin']).toBe(listedOrigin);
-      expect(answer.headers['access-control-expose-headers']).toBe('x-request-id, retry-after');
+      expect(answer.headers['access-control-expose-headers']).toBe('x-request-id, retry-after, content-disposition');
       expect(answer.headers.vary).toBe('Origin');
       // Before a write, the browser asks first; it is told the methods and the one header.
       const asked = await api.app.inject({

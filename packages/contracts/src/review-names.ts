@@ -30,6 +30,8 @@ export const reviewNamesAnswerSchema = z.strictObject({
   debrisTypes: z.array(
     z.strictObject({
       ...named,
+      // The firm's debris type the entry offers (what a report narrows by).
+      debrisTypeId: id,
       formName: z.string(),
       documentType: z.string(),
       reduced: z.boolean(),

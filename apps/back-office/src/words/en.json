@@ -197,7 +197,9 @@
       "qc": "QC and invoice lock",
       "batches": "Invoice batches",
       "audit": "Audit trail",
-      "closing": "Close the project"
+      "closing": "Close the project",
+      "reports": "Reports",
+      "exports": "Exports, photo PDFs and receipts"
     }
   },
   "home": {
@@ -878,7 +880,9 @@
     "currentPassword": "Your password",
     "newPasscode": "The new master passcode",
     "changePasscode": "Change the master passcode",
-    "passcodeChanged": "The master passcode is changed: version {version}."
+    "passcodeChanged": "The master passcode is changed: version {version}.",
+    "reportContact": "Address on the reports",
+    "reportContactHint": "Printed on the daily report’s last page, for a reader who wants to be added to its list. Empty prints none."
   },
   "phones": {
     "title": "Phones",
@@ -1630,5 +1634,114 @@
       "status": "QC status",
       "about": "QC is the back office’s own mark: it changes nothing on the record and reruns nothing. Only a QC Approved ticket can be locked as invoiced."
     }
+  },
+  "reports": {
+    "title": "Reports",
+    "about": "What the project moved, in debris totals, never costs. Made each time, like a printout.",
+    "period": "Period",
+    "periods": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "week": "This week",
+      "month": "This month",
+      "whole": "Since the project began",
+      "range": "Days of my choosing"
+    },
+    "workflow": "Workflow",
+    "debrisType": "Debris type",
+    "site": "Site",
+    "contractor": "Contractor",
+    "every": "Every one",
+    "oneDay": "{day}",
+    "days": "{from} to {to}",
+    "dailyReport": "Save the daily report (PDF)",
+    "making": "Making it…",
+    "emailSummary": "The email summary",
+    "emailAbout": "To paste into an email, as it stands.",
+    "subject": "Subject:",
+    "copy": "Copy the summary",
+    "copied": "Copied.",
+    "noDebrisType": "No debris type",
+    "loads": "Loads",
+    "cyColumn": "Cubic yards",
+    "cy": "{amount} CY",
+    "total": "In all: {loads}, {cy}.",
+    "loadsCounted": {
+      "none": "no loads",
+      "one": "1 load",
+      "other": "{count} loads"
+    },
+    "equipment": "Trucks, trailers and crews: {equipment}.",
+    "payableType": "Payable type",
+    "payItem": "Pay item",
+    "tickets": "Unit rate tickets",
+    "units": "Units",
+    "hours": "{amount} hours",
+    "unitTotal": "In all: {tickets}, {units} units, {hours} hours.",
+    "ticketsCounted": {
+      "none": "no tickets",
+      "one": "1 ticket",
+      "other": "{count} tickets"
+    },
+    "stats": "Other project stats",
+    "incidents": "Incidents",
+    "incidentsCounted": "{filed} filed, {open} open",
+    "monitors": "Monitors on shift",
+    "byDay": "Each day",
+    "day": "Day",
+    "loadCy": "Load CY",
+    "haulOuts": "Haul-outs",
+    "haulOutCy": "Haul-out CY",
+    "emailText": "The summary’s text"
+  },
+  "exports": {
+    "title": "Exports, photo PDFs and receipts",
+    "about": "The client package is assembled by hand from these files. Each is made when you ask for it; nothing of it is kept.",
+    "filesTitle": "Exports",
+    "dataset": "What to export",
+    "datasets": {
+      "tickets": "Tickets",
+      "transactions": "Transactions (the ledger)",
+      "certifications": "Certifications",
+      "audit-history": "Audit history"
+    },
+    "format": "Format",
+    "formats": {
+      "csv": "CSV",
+      "excel": "Excel-compatible",
+      "json": "JSON"
+    },
+    "workflow": "Workflow",
+    "prime": "Prime",
+    "batch": "Invoice batch",
+    "every": "Every one",
+    "export": "Save the export",
+    "making": "Making it…",
+    "saved": "Made and saved.",
+    "photosTitle": "Photo PDFs",
+    "photosAbout": "Several items a page, each with its details and photographs; or one item a page with its receipt.",
+    "items": "Items",
+    "itemKinds": {
+      "tickets": "Tickets",
+      "certifications": "Certifications",
+      "incidents": "Incidents"
+    },
+    "layout": "Layout",
+    "layouts": {
+      "several": "Several a page",
+      "one": "One a page, with its receipt"
+    },
+    "ticketNumbers": "Ticket numbers",
+    "certNumbers": "Cert numbers",
+    "numbersHint": "Paste one or more, separated by spaces, commas or lines. Left empty, every one of the days chosen.",
+    "makePhotos": "Save the photo PDF",
+    "receiptsTitle": "Receipt batch",
+    "receiptsAbout": "Paste ticket numbers to get their receipts, or each one’s full record with its photographs and receipt. A number the project doesn’t have is named on the first page.",
+    "content": "What to print",
+    "contents": {
+      "receipts": "Just the receipts",
+      "full": "The full record"
+    },
+    "makeReceipts": "Save the receipts"
   }
 }

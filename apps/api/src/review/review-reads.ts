@@ -885,6 +885,7 @@ export class ReviewReads {
           id: entry.id,
           name: entry.debrisType.name,
           archived: gone(entry) || gone(entry.debrisType),
+          debrisTypeId: entry.debrisTypeId,
           formName: entry.form.name,
           documentType: entry.documentType,
           reduced: entry.reduced,

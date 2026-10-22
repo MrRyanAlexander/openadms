@@ -221,3 +221,22 @@ test('AC-09-11, AC-09-31, AC-07-113 P1’s thirteen live tickets QC Approved on 
     page.getByText(`${String(p2Total.lines)} lines, ${p2Total.total} in all`),
   ).toBeVisible();
 });
+
+test('REQ-409 P1’s mission days on the Reports screen, never a cost: six completed loads, 248.7 CY; two haul-outs; five live unit rate tickets', async ({
+  page,
+  context,
+}) => {
+  await signedIn(context, 'Dakota Pryce', 'MANAGER_ANALYST', ['VIEW_REVIEW']);
+  const reports = english.reports;
+  await page.goto(`/projects/${p1}/reports`);
+  await page
+    .getByRole('radiogroup', { name: reports.period })
+    .getByText(reports.periods.range, { exact: true })
+    .click();
+  await page.getByLabel(english.common.from, { exact: true }).fill('2026-10-12');
+  await page.getByLabel(english.common.to, { exact: true }).fill('2026-10-14');
+  await expect(page.getByText('In all: 6 loads, 248.7 CY.')).toBeVisible();
+  await expect(page.getByText(/^In all: 2 loads, /)).toBeVisible();
+  await expect(page.getByText(/^In all: 5 tickets, /)).toBeVisible();
+  await checkScreen(page);
+});
