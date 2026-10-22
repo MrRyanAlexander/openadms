@@ -218,12 +218,10 @@ export class Runner {
     let failed = 0;
     let error: string | undefined;
     let database: StoryDatabase | undefined;
-    let storyApi: StoryApi | undefined;
-    const open: Pick<Database, '$disconnect'>[] = [];
+    let stage: StoryStage | undefined;
     try {
       const template = this.options.template;
       database = await StoryDatabase.create(template);
-      const opened = database;
       if (template === undefined) {
         const migrations = database.migrate();
         const seeded = await database.seed();
@@ -237,225 +235,22 @@ export class Runner {
             `a copy of this run’s template, ${String(template.migrations)} migrations and its seed`,
         );
       }
-      const api = database.open('api');
-      const worker = database.open('worker');
-      open.push(api, worker);
-      const clock = new StoryClock(story.start);
-      const policy = builtInPolicy();
-      const created = new Map<string, StoryMonitor>();
-      const media = new StoryMedia();
-      storyApi = new StoryApi({ database, clock, policy, media });
-      const served = storyApi;
-      const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
-      const browsers = new Map<string, OfficeBrowser>();
-      // Every request of a story's phones on one clock, through the story's API.
-      const phonesOn = (on: { now: () => Date }, startedAgain: boolean): StoryPhones => {
-        const asked = served.requests(on, startedAgain);
-        return {
-          server: asked.server,
-          async enrolled(name, moment) {
-            const key = new SoftwareKey();
-            // At a moment of its own, where one is given: the API's clock is then that moment.
-            const enrolment = moment === undefined ? asked : served.requests({ now: () => moment });
-            const { deviceId } = await enrolment.enrol({
-              name,
-              passcode: storyMasterPasscode,
-              publicKey: key.publicKey,
-            });
-            served.enrolled(deviceId, key);
-            return { id: deviceId, name, key };
-          },
-          async monitor(name, onPhone) {
-            const known = created.get(name);
-            if (known !== undefined) return known;
-            if (onPhone === undefined)
-              throw new Error(`No monitor ${name}, and no phone to create one on.`);
-            // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…
-            const password = `555${String(101 + created.size).padStart(4, '0')}`;
-            const answer = await asked.monitorCreated(onPhone, {
-              name,
-              password,
-              passcode: storyMasterPasscode,
-            });
-            const monitor = {
-              id: answer.userId,
-              monitorNumber: answer.monitorNumber,
-              name,
-              password,
-            };
-            created.set(name, monitor);
-            return monitor;
-          },
-          async signedIn(monitor, onPhone) {
-            return takenAt(
-              await asked.signedIn(onPhone, {
-                monitorNumber: monitor.monitorNumber,
-                password: monitor.password,
-              }),
-            );
-          },
-          underPasscode: {
-            choices: (onPhone, projectId) =>
-              asked.setupChoices(onPhone, {
-                passcode: storyMasterPasscode,
-                projectId,
-                monitorsAfter: null,
-              }),
-            async session(monitor, onPhone, kind) {
-              return takenAt(
-                await asked.passcodeSession(onPhone, {
-                  personId: monitor.id,
-                  kind,
-                  passcode: storyMasterPasscode,
-                }),
-              );
-            },
-            // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
-            turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
-            proves: async (onPhone) => (await served.proves(onPhone, storyMasterPasscode)).answer,
-            async turnInNaming(onPhone, holds, lastUsed = []) {
-              const { server } = asked;
-              if (server.turnIn === undefined) {
-                throw new Error('The story’s server turns no phone in.');
-              }
-              return turnInAnswerSchema.parse(
-                await server.turnIn(onPhone, { passcode: storyMasterPasscode, holds, lastUsed }),
-              );
-            },
-          },
-          lists: {
-            async held({ assignmentId, deviceId }) {
-              const answer = await asked.lists(deviceId);
-              if (answer.assignment?.id !== assignmentId || answer.lists === null) {
-                throw new Error(
-                  `The phone’s lists are of ${answer.assignment?.id ?? answer.noAssignment ?? 'nothing'}, ` +
-                    'not of the assignment the story names.',
-                );
-              }
-              return answer.lists;
-            },
-          },
-        };
-      };
-      // What each phone holds for signing in offline: its login list, the sign-in it keeps, and
-      // the one it reported before.
-      const offline = new Map<
-        string,
-        {
-          readonly list: HeldLoginList;
-          kept?: OfflineSignInReport;
-          reported?: OfflineSignInReport;
-        }
-      >();
-      const offlineOf = (deviceId: string) => {
-        let held = offline.get(deviceId);
-        if (held === undefined) {
-          held = { list: new HeldLoginList() };
-          offline.set(deviceId, held);
-        }
-        return held;
-      };
-      const onClock = served.requests(clock);
-      const context: StoryContext = {
-        clock,
-        api,
-        worker,
-        policy,
-        ...phonesOn(clock, false),
-        offline: {
-          async loginList(onPhone) {
-            const { list } = offlineOf(onPhone);
-            const answers: PhoneLoginListAnswer[] = [];
-            for (let more = true; more;) {
-              const answer = await onClock.loginList(onPhone, list.held());
-              answers.push(answer);
-              more = list.kept(answer);
-            }
-            return answers;
-          },
-          signIn(monitor, onPhone, password = monitor.password) {
-            const held = offlineOf(onPhone);
-            const firstHash = held.list.opened(monitor.id, password);
-            if (firstHash === undefined) return false;
-            const at = clock.now();
-            held.kept = offlineSignInReport(
-              onPhone,
-              monitor.id,
-              at,
-              utcOffsetMinutes(story.timeZone, at),
-              firstHash,
-            );
-            return true;
-          },
-          async reported(onPhone, again = false) {
-            const held = offlineOf(onPhone);
-            const report = again ? held.reported : held.kept;
-            if (report === undefined) throw new Error('The phone keeps no sign-in to report.');
-            const answer = await onClock.offlineSignIn(onPhone, report);
-            held.reported = report;
-            delete held.kept;
-            return answer;
-          },
+      stage = StoryStage.open({
+        database,
+        timeZone: story.timeZone,
+        start: story.start,
+        out,
+        checked(ok) {
+          if (ok) passed += 1;
+          else failed += 1;
         },
-        phonesOn: (on) => phonesOn(on, true),
-        media,
-        at(time, what) {
-          clock.set(time);
-          out(`  ${projectTime(story.timeZone, clock.now())}  ${what}`);
-        },
-        phone: (setup) => new SimulatedDevice(setup, clock),
-        proofs: { proves: (deviceId, passcode) => served.proves(deviceId, passcode) },
-        openWorker() {
-          const another = opened.open('worker');
-          open.push(another);
-          return another;
-        },
-        apiPool: {
-          connections: policy.databasePoolConnections,
-          waitedMs: () => served.waitedMs(),
-        },
-        backOffice: {
-          async admin(person) {
-            const held = browsers.get(person.id);
-            if (held !== undefined) return held;
-            const password = await setOnTheServer(api, clock, policy, person);
-            const browser = await OfficeBrowser.signIn(send, clock, person, password);
-            browsers.set(person.id, browser);
-            return browser;
-          },
-          async person(by, person) {
-            const held = browsers.get(person.id);
-            if (held !== undefined) return held;
-            const password = madeUpPassword();
-            await by.answered(setPersonPasswordEndpoint, {
-              ids: { userId: person.id },
-              json: { password },
-            });
-            const browser = await OfficeBrowser.signIn(send, clock, person, password);
-            browsers.set(person.id, browser);
-            return browser;
-          },
-          signedOut: signedOut(send),
-        },
-        check(what, actual, expected) {
-          if (isDeepStrictEqual(actual, expected)) {
-            passed += 1;
-            out(`      ✓ ${what}`);
-          } else {
-            failed += 1;
-            out(`      ✗ ${what}`);
-            out(`          expected ${show(expected)}`);
-            out(`          got      ${show(actual)}`);
-          }
-        },
-      };
-      await story.run(context);
+      });
+      await story.run(stage.context);
     } catch (caught) {
       error = redacted(caught instanceof Error ? caught.message : String(caught));
       out(`  ✗ stopped: ${error}`);
     } finally {
-      await storyApi?.close();
-      for (const client of open) await client.$disconnect();
+      await stage?.close();
       if (database !== undefined) {
         if (this.options.keep === true) {
           await database.keep();
@@ -471,6 +266,266 @@ export class Runner {
         (error === undefined ? '' : ', stopped early'),
     );
     return { name: story.name, database: database?.name, passed, failed, error };
+  }
+}
+
+// What a story's stage is set on: its database (made, migrated and seeded already), its time
+// zone and the moment its clock starts, where what happens is said, and each check's verdict.
+export interface StageParts {
+  readonly database: StoryDatabase;
+  readonly timeZone: string;
+  readonly start: string;
+  readonly out: (line: string) => void;
+  readonly checked: (passed: boolean) => void;
+  // The pages that may call its API from a browser (ADR-572, 603): none for a story's phones.
+  readonly corsOrigins?: readonly string[];
+}
+
+// A story's stage (ADR-275, 491, 603): the services' own clients on its database, its clock, its
+// API over HTTPS with the phones it enrolled and the people at their browsers, as a story is told
+// on it (`StoryContext`). The runner sets one for each story; the field app's browser world for
+// the golden mission holds one for its run (`MissionWorld`). Closed, its API stops and its
+// clients disconnect; the database is the caller's.
+export class StoryStage {
+  readonly context: StoryContext;
+  private readonly served: StoryApi;
+  private readonly open: Pick<Database, '$disconnect'>[];
+
+  private constructor(
+    context: StoryContext,
+    served: StoryApi,
+    open: Pick<Database, '$disconnect'>[],
+  ) {
+    this.context = context;
+    this.served = served;
+    this.open = open;
+  }
+
+  static open(parts: StageParts): StoryStage {
+    const { database, out, checked } = parts;
+    const api = database.open('api');
+    const worker = database.open('worker');
+    const open: Pick<Database, '$disconnect'>[] = [api, worker];
+    const clock = new StoryClock(parts.start);
+    const policy = builtInPolicy();
+    const created = new Map<string, StoryMonitor>();
+    const media = new StoryMedia();
+    const served = new StoryApi({
+      database,
+      clock,
+      policy,
+      media,
+      corsOrigins: parts.corsOrigins ?? [],
+    });
+    const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
+    const browsers = new Map<string, OfficeBrowser>();
+    // Every request of a story's phones on one clock, through the story's API.
+    const phonesOn = (on: { now: () => Date }, startedAgain: boolean): StoryPhones => {
+      const asked = served.requests(on, startedAgain);
+      return {
+        server: asked.server,
+        async enrolled(name, moment) {
+          const key = new SoftwareKey();
+          // At a moment of its own, where one is given: the API's clock is then that moment.
+          const enrolment = moment === undefined ? asked : served.requests({ now: () => moment });
+          const { deviceId } = await enrolment.enrol({
+            name,
+            passcode: storyMasterPasscode,
+            publicKey: key.publicKey,
+          });
+          served.enrolled(deviceId, key);
+          return { id: deviceId, name, key };
+        },
+        async monitor(name, onPhone) {
+          const known = created.get(name);
+          if (known !== undefined) return known;
+          if (onPhone === undefined)
+            throw new Error(`No monitor ${name}, and no phone to create one on.`);
+          // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…
+          const password = `555${String(101 + created.size).padStart(4, '0')}`;
+          const answer = await asked.monitorCreated(onPhone, {
+            name,
+            password,
+            passcode: storyMasterPasscode,
+          });
+          const monitor = {
+            id: answer.userId,
+            monitorNumber: answer.monitorNumber,
+            name,
+            password,
+          };
+          created.set(name, monitor);
+          return monitor;
+        },
+        async signedIn(monitor, onPhone) {
+          return takenAt(
+            await asked.signedIn(onPhone, {
+              monitorNumber: monitor.monitorNumber,
+              password: monitor.password,
+            }),
+          );
+        },
+        underPasscode: {
+          choices: (onPhone, projectId) =>
+            asked.setupChoices(onPhone, {
+              passcode: storyMasterPasscode,
+              projectId,
+              monitorsAfter: null,
+            }),
+          async session(monitor, onPhone, kind) {
+            return takenAt(
+              await asked.passcodeSession(onPhone, {
+                personId: monitor.id,
+                kind,
+                passcode: storyMasterPasscode,
+              }),
+            );
+          },
+          // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
+          turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
+          proves: async (onPhone) => (await served.proves(onPhone, storyMasterPasscode)).answer,
+          async turnInNaming(onPhone, holds, lastUsed = []) {
+            const { server } = asked;
+            if (server.turnIn === undefined) {
+              throw new Error('The story’s server turns no phone in.');
+            }
+            return turnInAnswerSchema.parse(
+              await server.turnIn(onPhone, { passcode: storyMasterPasscode, holds, lastUsed }),
+            );
+          },
+        },
+        lists: {
+          async held({ assignmentId, deviceId }) {
+            const answer = await asked.lists(deviceId);
+            if (answer.assignment?.id !== assignmentId || answer.lists === null) {
+              throw new Error(
+                `The phone’s lists are of ${answer.assignment?.id ?? answer.noAssignment ?? 'nothing'}, ` +
+                  'not of the assignment the story names.',
+              );
+            }
+            return answer.lists;
+          },
+        },
+      };
+    };
+    // What each phone holds for signing in offline: its login list, the sign-in it keeps, and
+    // the one it reported before.
+    const offline = new Map<
+      string,
+      {
+        readonly list: HeldLoginList;
+        kept?: OfflineSignInReport;
+        reported?: OfflineSignInReport;
+      }
+    >();
+    const offlineOf = (deviceId: string) => {
+      let held = offline.get(deviceId);
+      if (held === undefined) {
+        held = { list: new HeldLoginList() };
+        offline.set(deviceId, held);
+      }
+      return held;
+    };
+    const onClock = served.requests(clock);
+    const context: StoryContext = {
+      clock,
+      api,
+      worker,
+      policy,
+      ...phonesOn(clock, false),
+      offline: {
+        async loginList(onPhone) {
+          const { list } = offlineOf(onPhone);
+          const answers: PhoneLoginListAnswer[] = [];
+          for (let more = true; more;) {
+            const answer = await onClock.loginList(onPhone, list.held());
+            answers.push(answer);
+            more = list.kept(answer);
+          }
+          return answers;
+        },
+        signIn(monitor, onPhone, password = monitor.password) {
+          const held = offlineOf(onPhone);
+          const firstHash = held.list.opened(monitor.id, password);
+          if (firstHash === undefined) return false;
+          const at = clock.now();
+          held.kept = offlineSignInReport(
+            onPhone,
+            monitor.id,
+            at,
+            utcOffsetMinutes(parts.timeZone, at),
+            firstHash,
+          );
+          return true;
+        },
+        async reported(onPhone, again = false) {
+          const held = offlineOf(onPhone);
+          const report = again ? held.reported : held.kept;
+          if (report === undefined) throw new Error('The phone keeps no sign-in to report.');
+          const answer = await onClock.offlineSignIn(onPhone, report);
+          held.reported = report;
+          delete held.kept;
+          return answer;
+        },
+      },
+      phonesOn: (on) => phonesOn(on, true),
+      media,
+      at(time, what) {
+        clock.set(time);
+        out(`  ${projectTime(parts.timeZone, clock.now())}  ${what}`);
+      },
+      phone: (setup) => new SimulatedDevice(setup, clock),
+      proofs: { proves: (deviceId, passcode) => served.proves(deviceId, passcode) },
+      openWorker() {
+        const another = database.open('worker');
+        open.push(another);
+        return another;
+      },
+      apiPool: {
+        connections: policy.databasePoolConnections,
+        waitedMs: () => served.waitedMs(),
+      },
+      backOffice: {
+        async admin(person) {
+          const held = browsers.get(person.id);
+          if (held !== undefined) return held;
+          const password = await setOnTheServer(api, clock, policy, person);
+          const browser = await OfficeBrowser.signIn(send, clock, person, password);
+          browsers.set(person.id, browser);
+          return browser;
+        },
+        async person(by, person) {
+          const held = browsers.get(person.id);
+          if (held !== undefined) return held;
+          const password = madeUpPassword();
+          await by.answered(setPersonPasswordEndpoint, {
+            ids: { userId: person.id },
+            json: { password },
+          });
+          const browser = await OfficeBrowser.signIn(send, clock, person, password);
+          browsers.set(person.id, browser);
+          return browser;
+        },
+        signedOut: signedOut(send),
+      },
+      check(what, actual, expected) {
+        if (isDeepStrictEqual(actual, expected)) {
+          checked(true);
+          out(`      ✓ ${what}`);
+        } else {
+          checked(false);
+          out(`      ✗ ${what}`);
+          out(`          expected ${show(expected)}`);
+          out(`          got      ${show(actual)}`);
+        }
+      },
+    };
+    return new StoryStage(context, served, open);
+  }
+
+  async close(): Promise<void> {
+    await this.served.close();
+    for (const client of this.open) await client.$disconnect();
   }
 }
 

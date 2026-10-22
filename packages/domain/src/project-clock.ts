@@ -74,6 +74,25 @@ export class ProjectClock {
     };
   }
 
+  // The instant a time of day on the 24-hour clock, "08:20", falls at on a calendar day in the
+  // project's time zone (task 3.7.2, ADR-601: a line of the day's activity typed by its worker);
+  // none for what isn't a time of day. Where the clocks go back, a time the day has twice is its
+  // first; where they go forward, a time the day skips is read an hour earlier.
+  instantAt(day: string, time: string): Date | null {
+    const date = dayText.exec(day);
+    const read = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(time.trim());
+    if (date === null || read === null) return null;
+    const shown = Date.UTC(
+      Number(date[1]),
+      Number(date[2]) - 1,
+      Number(date[3]),
+      Number(read[1]),
+      Number(read[2]),
+    );
+    const guess = shown - this.offsetMinutes(new Date(shown)) * 60_000;
+    return new Date(shown - this.offsetMinutes(new Date(guess)) * 60_000);
+  }
+
   // 21:40.
   time(instant: Date): string {
     const { hour = '', minute = '' } = this.parts(instant);

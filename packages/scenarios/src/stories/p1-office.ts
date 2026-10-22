@@ -433,7 +433,10 @@ export interface P1BackOffice {
   reprocess(tickets: readonly JobTicket[]): Promise<AnswerOf<typeof reprocessTicketsEndpoint>>;
 }
 
-export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffice {
+export function p1BackOffice(
+  story: StoryContext,
+  office: Pick<P1Office, 'dana' | 'luis' | 'p1'>,
+): P1BackOffice {
   const danas = () => story.backOffice.admin({ id: office.dana, email: danasEmail });
   const luiss = async () =>
     story.backOffice.person(await danas(), { id: office.luis, email: luissEmail });
@@ -461,7 +464,10 @@ export function p1BackOffice(story: StoryContext, office: P1Office): P1BackOffic
 }
 
 // Dana loads P1's map: its boundary and three zones.
-export async function loadP1Map(story: StoryContext, office: P1Office): Promise<void> {
+export async function loadP1Map(
+  story: StoryContext,
+  office: Pick<P1Office, 'dana' | 'p1'>,
+): Promise<void> {
   await saved(
     new ProjectSetup(story.api, story.clock, story.policy).loadMap(office.dana, {
       projectId: office.p1,
@@ -485,7 +491,10 @@ export type P1Certify = (
 
 // Saturday: Sam Grant certifies P1's three containers and two crews (golden mission §1). The
 // answer certifies another that day, for a story that needs one more.
-export async function certifyP1(story: StoryContext, office: P1Office): Promise<P1Certify> {
+export async function certifyP1(
+  story: StoryContext,
+  office: Pick<P1Office, 'luis' | 'sam' | 'lee' | 'p1' | 'coastline' | 'samPhone'>,
+): Promise<P1Certify> {
   const { api, clock } = story;
   const { luis, sam, lee, p1, coastline, samPhone } = office;
   const certifying = await assigned(api, clock, luis, {
@@ -685,7 +694,8 @@ export interface P1Pricing {
   };
 }
 
-const unticked = {
+// A pay item's capture settings, none ticked.
+export const unticked = {
   kindOfWorkId: null,
   bandFrom: null,
   bandTo: null,
@@ -705,7 +715,10 @@ const unticked = {
 // with Coastline's rate on each, the Landfill's link to its tipping fee pay item, and every
 // rule, each naming "Coastline, Bayline ROW 2026". A pay item's "Pays when" writes its rule; the
 // stump hole fill's is written in the rule builder.
-export async function setUpP1Pricing(story: StoryContext, office: P1Office): Promise<P1Pricing> {
+export async function setUpP1Pricing(
+  story: StoryContext,
+  office: Pick<P1Office, 'dana' | 'p1' | 'coastline' | 'contract' | 'landfill' | 'cypress'>,
+): Promise<P1Pricing> {
   const { api, clock } = story;
   const { dana, p1, coastline, contract, landfill, cypress } = office;
   const payItems = new PayItemSetup(api, clock, story.policy);

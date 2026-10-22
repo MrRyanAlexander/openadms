@@ -53,11 +53,15 @@ export {
   ClockDay,
   DayApprovals,
   clockEntryKinds,
+  type ClockedWork,
   type ClockEntryAt,
   type ClockEntryKind,
+  type ClockStanding,
   type DayApprovalRefusal,
   type DayAsked,
   type DayHours,
+  type PrefilledLine,
+  type TypedLine,
 } from './time-clock.ts';
 export {
   QuantityChecks,
@@ -440,6 +444,7 @@ export {
   PhoneUnitRate,
   type PhoneKindOfWork,
   type PhoneUnitRatePayItem,
+  type StumpEntered,
   type UnitRateAsked,
   type UnitRateScreen,
 } from './phone-unit-rate.ts';

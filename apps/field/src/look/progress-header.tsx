@@ -1,9 +1,11 @@
 // The progress header (ADR-561 (5)): one question a screen, how far through the record it is,
 // and Back, which works until the record is submitted and is then gone (ADR-477). The bar is
-// drawn for the eye; the words say the same to a screen reader.
+// drawn for the eye; the words say the same to a screen reader. Its title takes the focus as each
+// question comes (`ScreenTitle`).
 import { say, words } from '../words.ts';
 import { Button } from './button.tsx';
 import { Backward } from './icons.tsx';
+import { ScreenTitle } from './screen-title.tsx';
 
 export function ProgressHeader({
   titleId,
@@ -34,7 +36,7 @@ export function ProgressHeader({
       <div className="progress-bar" aria-hidden="true">
         <div className="progress-bar-done" style={{ width: `${String((step / steps) * 100)}%` }} />
       </div>
-      <h1 id={titleId}>{title}</h1>
+      <ScreenTitle id={titleId}>{title}</ScreenTitle>
     </header>
   );
 }

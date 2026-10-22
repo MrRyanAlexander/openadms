@@ -23,6 +23,13 @@ export {
   type RecordedEvent,
 } from './device.ts';
 export { BrowserWorld } from './browser-world.ts';
+export {
+  MissionWorld,
+  type MissionAnswer,
+  type MissionAsked,
+  type MissionMonitor,
+  type MissionStanding,
+} from './mission-world.ts';
 export { localMapServers } from './map-servers.ts';
 export { builtInPolicy } from './policy.ts';
 export {
@@ -32,6 +39,8 @@ export {
   type StoryContext,
   type StoryMonitor,
   type StoryResult,
+  StoryStage,
+  type StageParts,
 } from './runner.ts';
 export { SoftwareKey, type EnrolledPhone } from './software-key.ts';
 export { StoryDatabase, StoryTemplate, type Standing } from './story-database.ts';

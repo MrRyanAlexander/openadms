@@ -12,8 +12,9 @@
 // the lists (AC-11-16; coming back to the front and on its own, only where the sync says they
 // moved); told there is no assignment, the phone keeps the lists it holds. A request answered `NOT_SIGNED_IN` sends
 // the monitor back to sign in, keeping everything the phone holds (AC-11-14). Every screen's strip
-// says how much waits to go and when the phone last synced. Time joins the menu with the time
-// clock's task (3.7.1), which tells the phone whether the project has it on.
+// says how much waits to go and when the phone last synced. **Time** is in the menu, and the
+// strip says where the worker stands on its clock, only where the phone holds its assignment and
+// its lists say the project has the time clock on (task 3.7.2, ADR-598, 601; C177).
 //
 // With every read of the lists the login list is read too (AC-02-41; task 3.2.4, ADR-575), and a
 // sign-in made with no connection is reported before the sync (AC-11-21): refused, the monitor is
@@ -44,7 +45,17 @@
 // on this phone, and nothing is recorded of it. Task 3.6.3 (ADR-596): home's "Scan a barcode"
 // says what the phone holds of the monitor's under a number scanned back, and nothing is recorded
 // of it either.
-import { useCallback, useEffect, useRef, useState } from 'react';
+//
+// Task 3.7.2 (ADR-241, 601; AC-02-50…52): the time clock where the project has it on. Time enters
+// a clock-in, a break and a clock-out by hand on the assignment; the clock-out shows the day's
+// activity, pre-filled from the worker's field events, to change and approve. **The two nudges,
+// never a stop:** starting a field event from home while not clocked in asks "You’re not clocked
+// in. Clock in now?" and the work starts either way; Settings' "Sign out" while clocked in (or on
+// a break) asks "Clock out?", which clocks out first or signs out still clocked in. Opening a
+// ticket left open is no start, and the lock after inactivity, a handover and a session's end
+// sign out with no nudge: nobody is there to answer it.
+import type { ClockStanding } from '@open-adms/domain';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   CertificationCapture,
@@ -52,20 +63,31 @@ import {
   certificationTitle,
   type Certifying,
 } from './certify.tsx';
+import { ClockInNudge, ClockOut, ClockOutNudge, TimeClock } from './clock.tsx';
 import { FormCapture, formBegun, formStarted, formTitle, type Filling } from './forms.tsx';
 import { Home } from './home.tsx';
-import { Banner, BottomMenu, Button, StatusStrip, type MenuItem } from './look/index.ts';
+import {
+  Banner,
+  BottomMenu,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  type MenuItem,
+} from './look/index.ts';
 import { Move } from './move.tsx';
 import { certificationReceipt, ticketReceipt } from './phone/printing.ts';
 import { ReceiptsToPrint, type Reprintable } from './printing.tsx';
 import { scannedBack } from './phone/scanning.ts';
 import { ScanBack } from './scan.tsx';
 import type { Ended, SetUpFor } from './phone.tsx';
+import type { ClockOf, PhoneClock } from './phone/clock.ts';
 import type { Enrolment } from './phone/identity.ts';
 import type { HeldLists, PhoneLists } from './phone/lists.ts';
 import type { MonitorOnPhone, SignedIn } from './phone/monitor.ts';
 import type { NotSavedShown, PhoneOutbox } from './phone/outbox.ts';
 import type { PhoneSetup } from './phone/setup.ts';
+import { SignedInRuns } from './phone/signed-in-runs.ts';
 import type { ListsAfter, PhoneSync, SyncRun } from './phone/sync.ts';
 import { workOfForm, workOfKind, worksOf, type Work } from './phone/works.ts';
 import type { NotAnswered } from './server.ts';
@@ -87,7 +109,16 @@ export interface Inactivity {
   readonly warningSeconds: number;
 }
 
+// The bottom menu (Q-217): Time only where the project has the time clock on.
 const menu: readonly MenuItem[] = ['work', 'sync', 'settings'];
+const menuWithTime: readonly MenuItem[] = ['work', 'time', 'sync', 'settings'];
+
+// Where the worker stands, as the status strip says it.
+const stripClock: Readonly<Record<ClockStanding, 'in' | 'break' | 'out'>> = {
+  IN: 'in',
+  BREAK: 'break',
+  OUT: 'out',
+};
 
 // The works whose capture is built, each the kind of field event it starts.
 const captured: ReadonlyMap<Work, CapturedKind> = new Map(
@@ -138,6 +169,7 @@ export function SignedInPhone({
   sync,
   outbox,
   capture,
+  clock,
   inactivity,
   syncEveryMinutes,
   setup,
@@ -152,6 +184,8 @@ export function SignedInPhone({
   readonly sync: PhoneSync;
   readonly outbox: PhoneOutbox;
   readonly capture: CaptureParts;
+  // The worker's own time clock (task 3.7.2).
+  readonly clock: PhoneClock;
   readonly inactivity: Inactivity;
   readonly syncEveryMinutes: number;
   readonly setup: PhoneSetup;
@@ -183,30 +217,33 @@ export function SignedInPhone({
   const [reprinting, setReprinting] = useState(false);
   const [scanningBack, setScanningBack] = useState(false);
   const [numbersLow, setNumbersLow] = useState(false);
+  // A nudge of the time clock's being asked: on starting a field event, or on signing out.
+  const [nudge, setNudge] = useState<
+    { readonly at: 'start'; readonly work: Work } | 'signOut' | null
+  >(null);
+  // The clock-out's screens, and what follows them: Time again, or the sign-out.
+  const [clockingOut, setClockingOut] = useState<'time' | 'signOut' | null>(null);
   const lastTouched = useRef(Date.now());
   // Whether these screens are still the monitor's: a read that ends after they signed out, or
   // after the lock, says nothing.
   const theirs = useRef(true);
 
   // The phone syncs now, then reads the lists and the login list: what the server answered is
-  // kept, and the screen shows it.
+  // kept, and the screen shows it. A sign-in the server no longer took was dropped by the run: the
+  // monitor signs in again. A session ended on this phone meanwhile (a sign-out, the lock, a
+  // handover) is that act's to follow, never the run's (`SignedInRuns`).
+  const runs = useMemo(() => new SignedInRuns({ sync, monitor, lists }), [sync, monitor, lists]);
   const read = useCallback(
     async (after: ListsAfter = 'read') => {
       setReading(true);
-      const ran = await sync.run(after);
-      // A sign-in the server no longer took was dropped by the run: the monitor signs in again.
-      const [session, kept, synced] = await Promise.all([
-        monitor.signedIn(),
-        lists.held(),
-        sync.lastSynced(),
-      ]);
-      if (!theirs.current) return;
-      if (session === undefined) {
+      const outcome = await runs.run(after);
+      if (!theirs.current || outcome.kind === 'overtaken') return;
+      if (outcome.kind === 'signedOut') {
         theirs.current = false;
-        const refused = ran.kind === 'refused' && ran.code === 'SIGN_IN_REFUSED';
-        onSignedOut({ why: refused ? 'offlineRefused' : 'ended' });
+        onSignedOut({ why: outcome.why });
         return;
       }
+      const { session, held: kept, lastSynced: synced, ran } = outcome;
       setSignedIn(session);
       setHeld(kept);
       setLastRun(ran);
@@ -217,7 +254,7 @@ export function SignedInPhone({
       setNow(new Date());
       setReading(false);
     },
-    [lists, monitor, onSignedOut, outbox, sync],
+    [onSignedOut, outbox, runs],
   );
 
   // On signing in, and again whenever the phone finds a connection or comes back to the front.
@@ -273,14 +310,16 @@ export function SignedInPhone({
   }, [capture, capturing, held, signedIn]);
 
   // The lock after inactivity: a touch or a key anywhere is something done; past the warning's
-  // moment the warning shows, and at the end the monitor is signed out.
+  // moment the warning shows, and at the end the monitor is signed out. Heard as the event comes
+  // down to its target, before it: a button's press stops it rising again (React Aria's), and a
+  // monitor working by its buttons alone is working all the same.
   useEffect(() => {
     const touched = () => {
       lastTouched.current = Date.now();
       setWarned(false);
     };
-    document.addEventListener('pointerdown', touched);
-    document.addEventListener('keydown', touched);
+    document.addEventListener('pointerdown', touched, true);
+    document.addEventListener('keydown', touched, true);
     const lockAfter = inactivity.lockMinutes * 60_000;
     const warnAfter = lockAfter - inactivity.warningSeconds * 1000;
     const checking = window.setInterval(() => {
@@ -305,8 +344,8 @@ export function SignedInPhone({
       });
     }, 1000);
     return () => {
-      document.removeEventListener('pointerdown', touched);
-      document.removeEventListener('keydown', touched);
+      document.removeEventListener('pointerdown', touched, true);
+      document.removeEventListener('keydown', touched, true);
       window.clearInterval(checking);
     };
   }, [inactivity, monitor, onSignedOut, signedIn]);
@@ -317,6 +356,19 @@ export function SignedInPhone({
     await monitor.signOut();
     onSignedOut(null);
   };
+
+  // The lists held of the assignment's project, which the capture's screens work from.
+  const heldNow =
+    held !== undefined && held.assignment.project.id === signedIn.assignment?.project.id
+      ? held
+      : undefined;
+  // The worker's clock on the assignment, where the project has the time clock on.
+  const clockOf: ClockOf | null =
+    signedIn.assignment !== null && heldNow?.lists.timeClock.enabled === true
+      ? { workerId: signedIn.userId, assignment: signedIn.assignment }
+      : null;
+  const clockStanding = clockOf === null ? null : clock.standing(clockOf);
+  const shownPlace = place === 'time' && clockOf === null ? 'work' : place;
 
   const marked = signedIn.masterPasscodeSession;
   const standing = {
@@ -329,6 +381,7 @@ export function SignedInPhone({
     lastSent: lastSync ?? null,
     now,
     ...(signedIn.assignment === null ? {} : { timeZone: signedIn.assignment.project.timeZone }),
+    ...(clockStanding === null ? {} : { clock: stripClock[clockStanding] }),
   };
   const synced = lastSynced(lastSync, now);
   const stale = listsRead(held?.readAt, now);
@@ -359,7 +412,11 @@ export function SignedInPhone({
   const bottom = (
     <>
       {warning}
-      <BottomMenu items={menu} current={place} onPick={setPlace} />
+      <BottomMenu
+        items={clockOf === null ? menu : menuWithTime}
+        current={shownPlace}
+        onPick={setPlace}
+      />
     </>
   );
 
@@ -435,11 +492,81 @@ export function SignedInPhone({
     );
   }
 
+  // A work started from home: a field event's capture, a certification or a form.
+  const started = (work: Work) => {
+    const kind = captured.get(work);
+    if (kind !== undefined) setCapturing({ at: 'new', kind });
+    if (work === 'certification') setCertifying({ at: 'new' });
+    const form = formed.get(work);
+    const { assignment } = signedIn;
+    if (form === undefined || heldNow === undefined || assignment === null) return;
+    // A drop-off log picks nothing first: it opens straight away (ADR-584).
+    if (form === 'DROP_OFF_LOG') {
+      void capture.forms.begin(formBegun(form, signedIn, assignment, heldNow)).then((begun) => {
+        setFilling({ at: 'fill', id: begun.id });
+      });
+    } else setFilling({ at: 'new', kind: form });
+  };
+
+  // The time clock's nudges and its clock-out (task 3.7.2).
+  if (nudge === 'signOut' && clockOf !== null) {
+    return (
+      <ClockOutNudge
+        standing={standing}
+        onClockOut={() => {
+          setNudge(null);
+          setClockingOut('signOut');
+        }}
+        onSignOut={() => {
+          setNudge(null);
+          void signOut();
+        }}
+        onBack={() => {
+          setNudge(null);
+        }}
+        after={warning}
+      />
+    );
+  }
+  if (nudge !== null && nudge !== 'signOut' && clockOf !== null) {
+    return (
+      <ClockInNudge
+        clock={clock}
+        of={clockOf}
+        standing={standing}
+        onGoOn={() => {
+          setNudge(null);
+          setWaiting(outbox.waiting());
+          started(nudge.work);
+        }}
+        after={warning}
+      />
+    );
+  }
+  if (clockingOut !== null && clockOf !== null && heldNow !== undefined) {
+    const then = clockingOut;
+    return (
+      <ClockOut
+        clock={clock}
+        of={clockOf}
+        activities={heldNow.lists.timeClock.activities}
+        standing={standing}
+        signsOut={then === 'signOut'}
+        onDone={() => {
+          setClockingOut(null);
+          setWaiting(outbox.waiting());
+          if (then === 'signOut') void signOut();
+          else setPlace('time');
+        }}
+        onBack={() => {
+          setClockingOut(null);
+        }}
+        after={warning}
+      />
+    );
+  }
+
   // The capture's screens, for the lists held of the assignment's project (task 3.5.1).
-  const heldNow =
-    held !== undefined && held.assignment.project.id === signedIn.assignment?.project.id
-      ? held
-      : undefined;
   if (capturing !== null && signedIn.assignment !== null && heldNow !== undefined) {
     return (
       <TicketCapture
@@ -554,7 +681,24 @@ export function SignedInPhone({
     );
   }
 
-  if (place === 'work' && signedIn.assignment !== null) {
+  if (shownPlace === 'time' && clockOf !== null) {
+    return (
+      <TimeClock
+        clock={clock}
+        of={clockOf}
+        standing={standing}
+        onEntered={() => {
+          setWaiting(outbox.waiting());
+        }}
+        onClockOut={() => {
+          setClockingOut('time');
+        }}
+        after={bottom}
+      />
+    );
+  }
+
+  if (shownPlace === 'work' && signedIn.assignment !== null) {
     const { assignment } = signedIn;
     const { tickets, forms, certifications } = capture;
     const submitted =
@@ -584,17 +728,9 @@ export function SignedInPhone({
           heldNow === undefined ? [] : [...captured.keys(), 'certification', ...startsForms]
         }
         onStart={(work) => {
-          const kind = captured.get(work);
-          if (kind !== undefined) setCapturing({ at: 'new', kind });
-          if (work === 'certification') setCertifying({ at: 'new' });
-          const form = formed.get(work);
-          if (form === undefined || heldNow === undefined) return;
-          // A drop-off log picks nothing first: it opens straight away (ADR-584).
-          if (form === 'DROP_OFF_LOG') {
-            void forms.begin(formBegun(form, signedIn, assignment, heldNow)).then((begun) => {
-              setFilling({ at: 'fill', id: begun.id });
-            });
-          } else setFilling({ at: 'new', kind: form });
+          // A field event started while not clocked in: the nudge first, never a stop (AC-02-51).
+          if (captured.has(work) && clockStanding === 'OUT') setNudge({ at: 'start', work });
+          else started(work);
         }}
         today={counted(
           words.home.today,
@@ -672,13 +808,13 @@ export function SignedInPhone({
     );
   }
 
-  if (place === 'work') {
+  if (shownPlace === 'work') {
     const said = words.work;
     return (
       <main data-screen="no-assignment" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1>{words.home.title}</h1>
+          <ScreenTitle>{words.home.title}</ScreenTitle>
           <Banner tone="notice">
             <p>{said.noAssignment[signedIn.noAssignment ?? 'NONE_THAT_DAY']}</p>
           </Banner>
@@ -689,32 +825,32 @@ export function SignedInPhone({
           <p>{synced}</p>
           {unread === null ? null : <p>{unread}</p>}
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={reading} onPress={() => void read()}>
+        <ScreenActions>
+          <Button main wide busy={reading} onPress={() => void read()}>
             {reading ? said.checking : said.checkAgain}
           </Button>
           <Button
             wide
-            isDisabled={reading}
+            busy={reading}
             onPress={() => {
               setSettingUp('setUp');
             }}
           >
             {said.setUp}
           </Button>
-        </div>
+        </ScreenActions>
         {bottom}
       </main>
     );
   }
 
-  if (place === 'sync') {
+  if (shownPlace === 'sync') {
     const said = words.sync;
     return (
       <main data-screen="sync" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1>{said.title}</h1>
+          <ScreenTitle>{said.title}</ScreenTitle>
           <p role="status">{reading ? said.syncing : (unread ?? synced)}</p>
           {waiting === 0 && files === 0 && notSaved.length === 0 ? (
             <p>{said.nothingWaits}</p>
@@ -744,16 +880,16 @@ export function SignedInPhone({
           </p>
           <p>{stale}</p>
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={reading} onPress={() => void read()}>
+        <ScreenActions>
+          <Button main wide busy={reading} onPress={() => void read()}>
             {reading ? said.syncing : said.syncNow}
           </Button>
           {passcodeNeeded ? (
-            <Button wide isDisabled={reading} onPress={turnIn}>
+            <Button wide busy={reading} onPress={turnIn}>
               {said.turnIn}
             </Button>
           ) : null}
-        </div>
+        </ScreenActions>
         {bottom}
       </main>
     );
@@ -764,7 +900,7 @@ export function SignedInPhone({
     <main data-screen="settings" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <p>
           {say(said.signedInAs, { name: signedIn.name, monitorNumber: signedIn.monitorNumber })}
         </p>
@@ -772,13 +908,22 @@ export function SignedInPhone({
         {marked === null ? null : <p>{said.underPasscode[marked]}</p>}
         <p>{say(said.phone, { name: enrolment.name })}</p>
       </div>
-      <div className="screen-actions">
-        <Button main wide isDisabled={signingOut} onPress={() => void signOut()}>
+      <ScreenActions>
+        <Button
+          main
+          wide
+          busy={signingOut}
+          onPress={() => {
+            // Signing out while clocked in: "Clock out?" first, never a stop (AC-02-51).
+            if (clockStanding === 'IN' || clockStanding === 'BREAK') setNudge('signOut');
+            else void signOut();
+          }}
+        >
           {signingOut ? said.signingOut : said.signOut}
         </Button>
         <Button
           wide
-          isDisabled={signingOut}
+          busy={signingOut}
           onPress={() => {
             setSettingUp('handOver');
           }}
@@ -788,7 +933,7 @@ export function SignedInPhone({
         {signedIn.assignment === null ? null : (
           <Button
             wide
-            isDisabled={signingOut}
+            busy={signingOut}
             onPress={() => {
               setMoving(true);
             }}
@@ -796,10 +941,10 @@ export function SignedInPhone({
             {said.move}
           </Button>
         )}
-        <Button wide isDisabled={signingOut} onPress={turnIn}>
+        <Button wide busy={signingOut} onPress={turnIn}>
           {said.turnIn}
         </Button>
-      </div>
+      </ScreenActions>
       {bottom}
     </main>
   );

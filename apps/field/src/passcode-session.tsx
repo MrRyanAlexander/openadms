@@ -12,6 +12,8 @@ import {
   Button,
   ListPicker,
   ProgressHeader,
+  ScreenActions,
+  ScreenTitle,
   StatusStrip,
   TextEntry,
   type Standing,
@@ -146,7 +148,7 @@ export function PasscodeSession({
       </Banner>
     );
   const cancel = (
-    <Button wide isDisabled={busy} onPress={onCancel}>
+    <Button wide busy={busy} onPress={onCancel}>
       {said.cancel}
     </Button>
   );
@@ -156,17 +158,17 @@ export function PasscodeSession({
       <main data-screen="session-passcode" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1 id={titleId}>{said.title}</h1>
+          <ScreenTitle id={titleId}>{said.title}</ScreenTitle>
           <p>{said.needs}</p>
           <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
           {shown}
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={busy || passcode === ''} onPress={() => void opened()}>
+        <ScreenActions>
+          <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void opened()}>
             {busy ? said.checking : said.next}
           </Button>
           {cancel}
-        </div>
+        </ScreenActions>
       </main>
     );
   }
@@ -199,18 +201,18 @@ export function PasscodeSession({
           }}
         />
         {moreAfter === null ? null : (
-          <Button wide isDisabled={busy} onPress={() => void more()}>
+          <Button wide busy={busy} onPress={() => void more()}>
             {busy ? said.monitor.loading : said.monitor.more}
           </Button>
         )}
         {shown}
       </div>
-      <div className="screen-actions">
-        <Button main wide isDisabled={busy} onPress={() => void open()}>
+      <ScreenActions>
+        <Button main wide busy={busy} onPress={() => void open()}>
           {busy ? said.opening : said.open}
         </Button>
         {cancel}
-      </div>
+      </ScreenActions>
     </main>
   );
 }

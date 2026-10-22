@@ -14,9 +14,6 @@ html {
   font-size: 100%;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* A control brought into view by focus stops clear of the actions held at the bottom (WCAG
-     2.4.11): room for two of the main buttons. */
-  scroll-padding-bottom: calc(var(--height-main) * 2 + var(--space-6) * 2);
 }
 
 body {
@@ -116,6 +113,17 @@ h2 {
   border-top: var(--edge) solid var(--colour-surface);
 }
 
+/* Actions too tall to hold over the work (on its side, the largest text): after it instead. */
+.screen-actions-after {
+  position: static;
+}
+
+/* A screen's title takes the focus as the screen or its question comes, for a screen reader and
+   the next Tab (screen-title.tsx); it is no control and never Tab's stop, so it draws no ring. */
+.screen-title:focus {
+  outline: none;
+}
+
 /* The warning before the lock after inactivity (AC-11-20): above the menu, over what scrolls. */
 .screen-warning {
   position: sticky;
@@ -187,7 +195,8 @@ h2 {
   background: var(--colour-surface);
 }
 
-.button[data-disabled] {
+.button[data-disabled],
+.button[data-busy] {
   border-style: dashed;
   color: var(--colour-words-quiet);
   cursor: default;
@@ -205,7 +214,8 @@ h2 {
   background: var(--colour-main-pressed);
 }
 
-.button-main[data-disabled] {
+.button-main[data-disabled],
+.button-main[data-busy] {
   border-color: var(--colour-edge);
   background: var(--colour-surface);
   color: var(--colour-words-quiet);

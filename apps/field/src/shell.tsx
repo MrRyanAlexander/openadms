@@ -20,6 +20,7 @@ import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';
 import { PasscodeSession } from './passcode-session.tsx';
 import { Phone, type Ended, type SetUpFor } from './phone.tsx';
+import type { PhoneClock } from './phone/clock.ts';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { PhoneLists } from './phone/lists.ts';
 import type { LoginList } from './phone/login-list.ts';
@@ -38,10 +39,13 @@ import { TurnIn } from './turn-in.tsx';
 
 // The phone as the build opens it: who it is to the server, the monitor signed in on it, the
 // lists and the login list it holds, what it holds to send and how it syncs, how a sign-in goes,
-// how long it may be left alone, how it is turned in, and how it opens again once erased.
+// how long it may be left alone, how it is turned in, and how it opens again once erased; and the
+// worker's own time clock (task 3.7.2).
 export interface OpenedPhone {
   // What the capture screens work with (task 3.5.1).
   readonly capture: CaptureParts;
+  // The time clock, where the project has it on (task 3.7.2, ADR-601).
+  readonly clock: PhoneClock;
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
@@ -241,6 +245,7 @@ export function Shell({
           sync={opened.sync}
           outbox={opened.outbox}
           capture={opened.capture}
+          clock={opened.clock}
           inactivity={opened.inactivity}
           syncEveryMinutes={opened.syncEveryMinutes}
           setup={opened.setup}

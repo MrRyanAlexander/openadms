@@ -456,7 +456,7 @@ export function NewTicket({
           {navigator.onLine ? (
             <Button
               wide
-              isDisabled={reading === 'reading'}
+              busy={reading === 'reading'}
               onPress={() => {
                 setReading('reading');
                 void parts.lists.read().then(async (read) => {
@@ -527,7 +527,8 @@ export function NewTicket({
           <Button
             main
             wide
-            isDisabled={scanned.trim() === '' || opening}
+            isDisabled={scanned.trim() === ''}
+            busy={opening}
             onPress={() => {
               take({ number: scanned.trim(), from: 'SCANNED', reasonId: null });
             }}
@@ -596,7 +597,8 @@ export function NewTicket({
         <Button
           main
           wide
-          isDisabled={again === '' || opening}
+          isDisabled={again === ''}
+          busy={opening}
           onPress={() => {
             if (again !== typed) {
               setWrong(true);
@@ -625,7 +627,7 @@ export function NewTicket({
       return frame(
         said.question.title,
         <>
-          <Button main wide isDisabled={opening} onPress={() => void open(numbered)}>
+          <Button main wide busy={opening} onPress={() => void open(numbered)}>
             {say(said.question.use, { number: numbered.number })}
           </Button>
           <Button wide onPress={back}>

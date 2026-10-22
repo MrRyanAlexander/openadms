@@ -10,5 +10,8 @@ export { BottomMenu, type MenuItem } from './menu.tsx';
 export { NumberKeypad } from './keypad.tsx';
 export { ProgressHeader } from './progress-header.tsx';
 export { ScanField } from './scan-field.tsx';
+export { ScreenActions } from './screen-actions.tsx';
+export { ScreenTitle } from './screen-title.tsx';
 export { StatusStrip, type Standing } from './status-strip.tsx';
 export { TextEntry } from './text-entry.tsx';
+export { TimeEntry } from './time-entry.tsx';

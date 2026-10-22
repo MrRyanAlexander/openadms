@@ -12,7 +12,15 @@ import { ProjectClock } from '@open-adms/domain';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, rawlyHeld, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  rawlyHeld,
+  reportTriedOffline,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldCast, worldPasscode, type CastMonitor } from './world.ts';
 
 const p1 = 'Bayline County ROW, Hurricane Delphine';
@@ -98,11 +106,13 @@ test('AC-02-46, AC-11-27, AC-11-64: with no signal, Ana hands P1-COL-3 to Kim, w
   await expect(
     page.getByText(filled(english.phone.anotherMonitor, { name: kim.name })),
   ).toBeVisible();
+  const kimsReportTried = reportTriedOffline(page);
   await signedIn(page, kim);
   // Her own assignment comes with signal: none on the phone yet.
   await expect(page.getByText(english.work.noAssignment.NONE_THAT_DAY)).toBeVisible();
   expect((await rawlyHeld(page, [worldPasscode()])).foundInStore).toEqual([]);
 
+  await kimsReportTried;
   const before = toApi(asked).length;
   await context.setOffline(false);
   await expect
@@ -194,6 +204,7 @@ test('AC-02-47, AC-11-27, AC-11-26, AC-02-42: Lee, with two assignments today, h
   await expect(page.getByRole('option').first()).toContainText(english.session.monitor.phones);
   await checkScreen(page);
   await picked(page, lee.name).click();
+  const sessionReportTried = reportTriedOffline(page);
   await page.getByRole('button', { name: english.session.open }).click();
 
   const marked = filled(english.look.strip.underPasscode.AS_MONITOR, { name: lee.name });
@@ -206,6 +217,7 @@ test('AC-02-47, AC-11-27, AC-11-26, AC-02-42: Lee, with two assignments today, h
     [],
   );
 
+  await sessionReportTried;
   const before = toApi(asked).length;
   await context.setOffline(false);
   await expect

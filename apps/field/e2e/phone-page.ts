@@ -76,15 +76,33 @@ export async function openedUnder(page: Page): Promise<string> {
   return /\d{6}/.exec((await heading.textContent()) ?? '')?.[0] ?? '';
 }
 
-export async function enrolled(page: Page, name: string): Promise<void> {
-  await page.goto(worldOrigin());
+// In the run's own world, unless another is named: the golden mission's (e2e/mission-world.ts).
+export async function enrolled(
+  page: Page,
+  name: string,
+  world: { readonly origin: string; readonly passcode: string } = {
+    origin: worldOrigin(),
+    passcode: worldPasscode(),
+  },
+): Promise<void> {
+  await page.goto(world.origin);
   await expect(page.getByRole('status')).toHaveText(english.shell.server.answers);
   await page.getByLabel(english.enrol.name).fill(name);
-  await page.getByLabel(english.enrol.passcode).fill(worldPasscode());
+  await page.getByLabel(english.enrol.passcode).fill(world.passcode);
   await checkScreen(page);
   await page.getByRole('button', { name: english.enrol.enrol }).click();
   await expect(page.getByText(filled(english.phone.enrolled, { name }))).toBeVisible();
   await expect(page.getByRole('status')).toHaveText(english.phone.standing.inService);
+}
+
+// The try a phone's run makes at once, with no signal, to report a sign-in made without it,
+// waited out until it has failed: asked before the sign-in, awaited before a test counts what
+// goes once the signal is back. A try still in flight when the signal comes back goes through as
+// it is, ahead of where the test counts from (ADR-603).
+export function reportTriedOffline(page: Page): Promise<unknown> {
+  return page.waitForEvent('requestfailed', (failed) =>
+    failed.url().endsWith('/phones/current/offline-sign-ins'),
+  );
 }
 
 // What the browser holds raw: the keyring's device key as the browser keeps it, every row of the

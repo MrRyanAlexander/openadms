@@ -24,6 +24,9 @@ export const shelves = [
   // views' bytes beside it; a cancelled one, kept unsent with its number; and of each submitted one
   // what a replacement is picked from.
   'certifications',
+  // The time clock's entries each worker made on the phone (ADR-598, 601): where they stand on
+  // their assignment's clock is read from them, and which field events a clock-out has carried.
+  'clock',
   // The photographs waiting to go: each one's record, and a note of each of its files (ARCHITECTURE
   // §11).
   'photographs',

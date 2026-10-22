@@ -15,7 +15,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, rawlyHeld, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  rawlyHeld,
+  reportTriedOffline,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldCast, worldPasscode } from './world.ts';
 
 const p1 = 'Bayline County ROW, Hurricane Delphine';
@@ -271,11 +279,13 @@ test('AC-11-24, AC-11-25, AC-11-23, AC-02-38, AC-11-27: with no signal, P1-COL-2
 
   await expect(page.getByLabel(english.phone.monitorNumber)).toHaveValue(lee.monitorNumber);
   await page.getByLabel(english.phone.passwordLabel).fill(lee.password);
+  const reportTried = reportTriedOffline(page);
   await page.getByRole('button', { name: english.phone.signIn }).click();
   await expect(page.getByText(p1)).toBeVisible();
   await expect(page.locator('.screen-actions').getByRole('button')).toHaveText([
     english.home.start.collection,
   ]);
+  await reportTried;
   const before = toApi(asked).length;
   expect((await rawlyHeld(page, [worldPasscode(), 'not-the-firms-passcode'])).foundInStore).toEqual(
     [],

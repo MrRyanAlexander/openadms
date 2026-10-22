@@ -51,6 +51,8 @@ import {
   ListPicker,
   ListPicks,
   ListRow,
+  ScreenActions,
+  ScreenTitle,
   StatusStrip,
   TextEntry,
   type Standing,
@@ -239,10 +241,10 @@ export function CertificationCapture({
         <main data-screen="certification-photo" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{label}</h1>
+            <ScreenTitle>{label}</ScreenTitle>
             <PhotoDrawn tickets={parts.certifications} photo={photo} label={label} large />
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
@@ -252,7 +254,7 @@ export function CertificationCapture({
             >
               {said.photoBack}
             </Button>
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -264,7 +266,9 @@ export function CertificationCapture({
         <main data-screen="certification-submitted" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{say(said.submitted.title, { number: certification.certNumber })}</h1>
+            <ScreenTitle>
+              {say(said.submitted.title, { number: certification.certNumber })}
+            </ScreenTitle>
             <Banner tone="good" announced>
               <p>{said.submitted.saved}</p>
             </Banner>
@@ -287,7 +291,7 @@ export function CertificationCapture({
             />
             <p className="quiet">{said.submitted.sealed}</p>
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
@@ -300,7 +304,7 @@ export function CertificationCapture({
             <Button wide onPress={onHome}>
               {said.submitted.home}
             </Button>
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -642,10 +646,10 @@ function Certify({
       <main data-screen="cancel-certification" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1>{say(said.cancelTitle, { number: now.certNumber })}</h1>
+          <ScreenTitle>{say(said.cancelTitle, { number: now.certNumber })}</ScreenTitle>
           <p>{said.cancelAbout}</p>
         </div>
-        <div className="screen-actions">
+        <ScreenActions>
           <Button
             main
             wide
@@ -663,7 +667,7 @@ function Certify({
           >
             {said.cancelYes}
           </Button>
-        </div>
+        </ScreenActions>
         {below}
       </main>
     );
@@ -1120,7 +1124,7 @@ function Certify({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             setSubmitting(true);
             setNotKept(null);

@@ -18,16 +18,8 @@
 // Not here: what each viewer sees (the database's own tests, AC-02-66, 78…82); the client
 // package, which Dana zips by hand from the exports (Phase 4); 201002 and 201003, the flag
 // catalogue's examples, which Sam's phone passes over.
+import { PayItemSetup, ProjectSetup } from '@open-adms/api';
 import {
-  Certifications,
-  ContractorSetup,
-  FormSetup,
-  PayItemSetup,
-  ProjectSetup,
-  SiteSetup,
-} from '@open-adms/api';
-import {
-  acceptFlagEndpoint,
   createInvoiceBatchEndpoint,
   listInvoiceBatchesEndpoint,
   lockAsInvoicedEndpoint,
@@ -35,38 +27,40 @@ import {
   previewPayItemRateEndpoint,
   readInvoiceBatchEndpoint,
   readTicketEndpoint,
-  renumberFieldEventEndpoint,
   reviewQueueEndpoint,
   setQcStatusesEndpoint,
-  voidTicketEndpoint,
   type AnswerOf,
   type Endpoint,
 } from '@open-adms/contracts';
 import { systemActorId, type FieldEventKind } from '@open-adms/db';
-import { uuidv7 } from '@open-adms/domain';
 import { MapServers, Mileages, Reconciliation, type RunOutcome } from '@open-adms/worker';
 
-import { projectTime, utcOffsetMinutes } from '../clock.ts';
+import { projectTime } from '../clock.ts';
 import { chained, type Completed, made, scanned } from '../device.ts';
 import { localMapServers } from '../map-servers.ts';
 import { refusalOf, type AskedWith } from '../over-https.ts';
 import type { Story } from '../runner.ts';
 import {
   certifyP1,
-  photographed,
   loadP1Map,
   p1BackOffice,
   p1FieldDaysHeld,
   P1Syncs,
-  primaryBox,
   QueueRuns,
   saved,
   setUpP1Pricing,
 } from './p1-office.ts';
-import { assigned, firstBlocks, taken } from './board.ts';
+import { firstBlocks, taken } from './board.ts';
+import { dollars, goldenOutcomes, p1TicketsByKind, type LedgerTotal } from './golden-outcomes.ts';
+import { MissionAudit } from './golden-audit.ts';
+import { MissionReview, type Reviewed } from './golden-review.ts';
+import { boardP2, certifyP2Loader, p2Phones, setUpP2, type P2PhoneName } from './p2.ts';
 import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
+
+// A ledger's total as `total` answers it: how many lines, and their sum.
+const ledgerOf = ({ lines, total }: LedgerTotal): [number, string] => [lines, total];
 
 // What a run did with each ticket, as lines a person reads.
 const told = (outcome: RunOutcome | null): string[] =>
@@ -84,55 +78,15 @@ const told = (outcome: RunOutcome | null): string[] =>
 const of = (outcome: RunOutcome | null, ...ticketNumbers: string[]): string[] =>
   told(outcome).filter((line) => ticketNumbers.some((number) => line.startsWith(number)));
 
-const dollars = (cents: number): string =>
-  `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const unticked = {
-  kindOfWorkId: null,
-  bandFrom: null,
-  bandTo: null,
-  countIsAlwaysOne: false,
-  gpsRequired: false,
-  measurementRequired: false,
-  decimalsAllowed: false,
-  photosRequired: false,
-  monitorMayMarkIneligible: false,
-  quantityFromCarriedTickets: false,
-  crewTimeConversion: null,
-  crewDayHours: null,
-} as const;
-
-// P1's ledger at the mission's end (golden mission §2, §4): nineteen lines.
-const p1Ledger = [
-  '101001 #1 VEG-HAUL-CY-15 52 × $7.50 = $390.00',
-  '101002 #1 CD-HAUL-CY-15 36 × $8.25 = $297.00',
-  '101002 #2 TIP-FEE-CY-BCL 36 × $4.00 = $144.00',
-  '101003 #1 VEG-HAUL-CY-15 62.4 × $7.50 = $468.00',
-  '101004 #1 VEG-HAUL-CY-15 24 × $7.50 = $180.00',
-  '101005 #1 VEG-HAUL-CY-15 45.5 × $7.50 = $341.25',
-  '101006 #1 VEG-HAUL-CY-15 28.8 × $7.50 = $216.00',
-  '201001 #1 MULCH-HO-CY 99 × $5.10 = $504.90',
-  '201001 #2 TIP-FEE-CY-BCL 99 × $4.00 = $396.00',
-  '201004-A #1 MULCH-HO-TN 2.82 × $20.00 = $56.40',
-  '201004-B #1 MULCH-HO-TN 7.06 × $20.00 = $141.20',
-  '201004-C #1 MULCH-HO-TN 14.12 × $20.00 = $282.40',
-  '301001 #1 HNG-RMV-EA 1 × $68.00 = $68.00',
-  '301002 #1 LNR-RMV-EA-24 1 × $95.00 = $95.00',
-  '301004 #1 STP-RMV-EA-36 1 × $110.00 = $110.00',
-  '301004 #2 STP-FILL-CY 4.8 × $22.00 = $105.60',
-  '301006 #1 WG-RMV-EA 6 × $40.00 = $240.00',
-  '301006 #2 WG-FRN-EA 2 × $25.00 = $50.00',
-  '301007 #1 CREW-TIME-HR 9.75 × $150.00 = $1462.50',
-];
-const p2Ledger = [
-  '102001-A #1 VEG-HAUL-CY 14.4 × $9.00 = $129.60',
-  '102001-B #1 VEG-HAUL-CY 21.6 × $9.00 = $194.40',
-];
-
-const p1Loads = ['101001', '101002', '101003', '101004', '101005', '101006'];
-const p1HaulOuts = ['201001', '201004'];
-const p1LiveUnitRate = ['301001', '301002', '301004', '301006', '301007'];
-const p1Voided = ['301003', '301005'];
+// The approved outcomes (golden mission §2…§4), one home for them (`golden-outcomes.ts`).
+const {
+  loads: p1Loads,
+  haulOuts: p1HaulOuts,
+  liveUnitRate: p1LiveUnitRate,
+  voided: p1Voided,
+} = p1TicketsByKind;
+const p1Ledger = goldenOutcomes.reviewed.p1.ledger;
+const p2Ledger = goldenOutcomes.reviewed.p2.ledger;
 const batchName = 'Bayline ROW, week of 12 Oct';
 
 export const goldenMission: Story = {
@@ -145,7 +99,7 @@ export const goldenMission: Story = {
   async run(story) {
     const { api, worker, clock } = story;
     const office = await p1FieldDaysHeld(story);
-    const { dana, luis, sam, p1, coastline, samPhone } = office;
+    const { dana, luis, sam, p1, coastline } = office;
     const done = (completed: Completed) => completed.event;
     const person = async (name: string): Promise<string> =>
       (await api.user.findFirstOrThrow({ where: { name } })).id;
@@ -187,105 +141,13 @@ export const goldenMission: Story = {
       on('09', '09:00'),
       'Friday: Dana sets up P2, the PPDR project, under the same client and declaration event: Coastline its prime, its contract, a load form with Vegetative, an ROE form and a survey form, VEG-HAUL-CY at $9.00, Marsh Road TDSR entered again, and two phones',
     );
+    const { p2, tdsr: p2Tdsr } = await setUpP2(story, office);
     const projects = new ProjectSetup(api, clock, story.policy);
-    const contractors = new ContractorSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock, story.policy);
     const payItems = new PayItemSetup(api, clock, story.policy);
-    const first = await api.project.findUniqueOrThrow({ where: { id: p1 } });
-    const p2 = (
-      await saved(
-        projects.project(dana, {
-          name: 'Bayline County PPDR, Hurricane Delphine',
-          clientId: first.clientId,
-          declarationEventId: first.declarationEventId,
-          programTypeId: (await api.programType.findFirstOrThrow({ where: { name: 'PPDR' } })).id,
-          timeZone,
-          activeFrom: '2026-10-12',
-          activeTo: '2027-01-31',
-          ticketNumberSource: 'GENERATED',
-          workflows: ['LOAD'],
-          kindOfWorkIds: [],
-          numbersFrom: { LOAD: 102001, CERTIFICATION: 730416 },
-        }),
-      )
-    ).id;
-    await saved(contractors.addPrime(dana, p2, coastline));
-    await saved(
-      contractors.contract(dana, {
-        projectId: p2,
-        name: 'Coastline, Bayline PPDR 2026',
-        primeId: coastline,
-      }),
-    );
-    const p2Load = (
-      await saved(forms.form(dana, { projectId: p2, documentType: 'LOAD', name: 'Load' }))
-    ).id;
-    await saved(
-      forms.form(dana, {
-        projectId: p2,
-        documentType: 'ROE',
-        name: 'ROE',
-        gpsRequired: false,
-      }),
-    );
-    await saved(forms.form(dana, { projectId: p2, documentType: 'SURVEY', name: 'Survey' }));
-    const p2Vegetative = (
-      await saved(
-        forms.debrisType(dana, {
-          formId: p2Load,
-          debrisTypeId: (await api.debrisType.findFirstOrThrow({ where: { name: 'Vegetative' } }))
-            .id,
-          reduced: false,
-          hiddenOnPhones: false,
-        }),
-      )
-    ).id;
-    const p2Haul = (
-      await saved(
-        payItems.payItem(dana, {
-          ...unticked,
-          projectId: p2,
-          code: 'VEG-HAUL-CY',
-          description: 'PPDR VEG haul',
-          payableTypeId: (await api.payableType.findFirstOrThrow({ where: { name: 'Vegetative' } }))
-            .id,
-          unit: 'CY',
-          rates: [{ primeId: coastline, rate: '9.00' }],
-        }),
-      )
-    ).id;
-    await saved(
-      payItems.paysWhen(dana, p2Haul, [
-        {
-          formId: p2Load,
-          slot: 1,
-          criteria: [{ criterion: 'DEBRIS_TYPE', operator: 'EQUALS', picks: [p2Vegetative] }],
-        },
-      ]),
-    );
-    const p2Tdsr = (
-      await saved(
-        new SiteSetup(api, clock, story.policy).site(dana, {
-          projectId: p2,
-          name: 'Marsh Road TDSR',
-          siteTypeId: (await api.siteType.findUniqueOrThrow({ where: { key: 'TDSR' } })).id,
-          takesLoads: true,
-          haulOutsLeaveHere: true,
-          chargesTippingFee: false,
-          ineligibleSite: false,
-          permitNumber: 'FDEP-DMS-2026-0117',
-          latitude: '39.09000000',
-          longitude: '-75.62000000',
-          activationDate: '2026-10-12',
-        }),
-      )
-    ).id;
     // P2's two phones, enrolled under the master passcode, each with a key of its own.
-    const p2Devices: Record<string, string> = {};
-    for (const name of ['P2-COL-1', 'P2-TWR-TDSR']) {
-      p2Devices[name] = (await story.enrolled(name)).id;
-    }
-    const p2Phone = (name: string): string => {
+    const p2Devices: Partial<Record<P2PhoneName, string>> = {};
+    for (const name of p2Phones) p2Devices[name] = (await story.enrolled(name)).id;
+    const p2Phone = (name: P2PhoneName): string => {
       const id = p2Devices[name];
       if (id === undefined) throw new Error(`No phone ${name}`);
       return id;
@@ -296,37 +158,7 @@ export const goldenMission: Story = {
       'Saturday: Sam Grant certifies P1’s three containers and two crews, then Rivera’s self-loader again on P2, its own 730416; five photographs of each',
     );
     await certifyP1(story, office);
-    clock.set(on('10', '11:30'));
-    const feature = async (name: string): Promise<string> =>
-      (await api.vehicleFeature.findFirstOrThrow({ where: { name } })).id;
-    const p2Loader = await saved(
-      new Certifications(api, clock, story.policy).certify({
-        id: uuidv7(clock.now()),
-        projectId: p2,
-        kind: 'CONTAINER',
-        certNumber: '730416',
-        primeId: coastline,
-        firstTierSub: 'Rivera Trucking',
-        vehicleTypeId: (
-          await api.vehicleType.findFirstOrThrow({ where: { name: 'Self-Loading Truck' } })
-        ).id,
-        boxes: [
-          primaryBox(264, 92, 96),
-          {
-            shape: 'TRIANGLE',
-            sign: 'SUBTRACT',
-            length: 36,
-            width: 92,
-            height: 48,
-            featureId: await feature('Dog Box'),
-          },
-        ],
-        certifiedById: sam,
-        certifiedAt: clock.now(),
-        deviceUtcOffsetMinutes: utcOffsetMinutes(timeZone, clock.now()),
-      }),
-    );
-    await photographed(story, { deviceId: samPhone, takenById: sam }, p2Loader);
+    await certifyP2Loader(story, office, { p2 });
     const certified = await api.certification.findMany({
       orderBy: [{ projectId: 'asc' }, { certNumber: 'asc' }],
     });
@@ -504,11 +336,6 @@ export const goldenMission: Story = {
         (flag) =>
           `${flag.message}${flag.acceptances.map((each) => ` (accepted: ${each.reason.name})`).join('')}${flag.clearedAt === null ? '' : ' (cleared)'}`,
       );
-    const standingFlag = (ticketNumber: string) =>
-      api.flag.findFirstOrThrow({
-        where: { projectId: p1, ticketNumber, clearedAt: null },
-        orderBy: { id: 'asc' },
-      });
     const eventOf = (ticketNumber: string, kind: FieldEventKind, projectId = p1) =>
       api.fieldEvent.findFirstOrThrow({ where: { projectId, ticketNumber, kind } });
     const reasonId = async (name: string): Promise<string> =>
@@ -543,19 +370,13 @@ export const goldenMission: Story = {
     // His act as it was answered: refused at the door, or by the endpoint's rule in its words.
     const refusal = async (served: Endpoint, more: AskedWith): Promise<string> =>
       refusalOf(await (await backOffice.luiss()).asked(served, more));
-    const reviewed = async <A>(done: Promise<A>): Promise<A> => {
-      const answer = await done;
-      last.run = await queue.settled(p1);
+    // The mission's review, an act at a time, each followed by the worker's run.
+    const review = new MissionReview(story, p1, backOffice, queue);
+    const reviewed = async <A>(done: Promise<Reviewed<A>>): Promise<A> => {
+      const { answer, run } = await done;
+      last.run = run;
       return answer;
     };
-    const accepting = async (ticketNumber: string, note: string): Promise<AskedWith> => ({
-      ids: { flagId: (await standingFlag(ticketNumber)).id },
-      json: { reasonId: await reasonId('Photos confirm'), note },
-    });
-    const voiding = async (ticketNumber: string, reason: string, note: string) => ({
-      ids: { projectId: p1 },
-      json: { workflow: 'UNIT_RATE', ticketNumber, reasonId: await reasonId(reason), note },
-    });
     type Ticket =
       { completedLoadId: string } | { completedHaulOutId: string } | { unitRateTicketId: string };
     const locking = (ticket: Ticket, invoiceBatchId?: string): AskedWith => ({
@@ -584,23 +405,12 @@ export const goldenMission: Story = {
       on('12', '06:35'),
       'Monday at the yard: Luis has written P2’s board too. Ana Brooks signs in on P2-COL-1, which takes a block of P2’s loads and of its ROE numbers, and Kim Nguyen on P2-TWR-TDSR: a second assignment and phone each, one project per phone',
     );
-    const p2Monday = { workDate: '2026-10-12', projectId: p2 } as const;
-    const p2Board = {
-      ana: await assigned(api, clock, luis, {
-        ...p2Monday,
-        personId: ana,
-        deviceId: p2Phone('P2-COL-1'),
-        fieldEventKinds: ['COLLECTION'],
-        formDocumentTypes: ['ROE', 'SURVEY'],
-      }),
-      kim: await assigned(api, clock, luis, {
-        ...p2Monday,
-        personId: kim,
-        deviceId: p2Phone('P2-TWR-TDSR'),
-        fieldEventKinds: ['DISPOSAL'],
-        siteId: p2Tdsr,
-      }),
-    };
+    const p2Board = await boardP2(
+      story,
+      { luis, ana, kim },
+      { p2, tdsr: p2Tdsr },
+      { 'P2-COL-1': p2Phone('P2-COL-1'), 'P2-TWR-TDSR': p2Phone('P2-TWR-TDSR') },
+    );
     await firstBlocks(story, p2Phone('P2-COL-1'), timeZone, p2, ['LOAD', 'ROE']);
     // Each signs in on their second phone, which takes the assignment that names it: P2's, though
     // each has P1's too that day (AC-02-29, 36; ADR-444).
@@ -746,18 +556,7 @@ export const goldenMission: Story = {
     story.check(
       'AC-06-87 Monday night on P1: 101001 and 101002 are COMPLETED, 101003 is in review for its 96% call and still bills, the preload 101004 waits for its disposal with no flag, and the three unit rate tickets are COMPLETED, the duplicate hanger among them: 7 lines, $1,530.00',
       [told(monday), await total(p1)],
-      [
-        [
-          '101001 · COMPLETED',
-          '101002 · COMPLETED',
-          '101003 · MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
-          '101004 · PENDING',
-          '301001 · COMPLETED',
-          '301002 · COMPLETED',
-          '301003 · COMPLETED',
-        ],
-        [7, '$1,530.00'],
-      ],
+      [goldenOutcomes.mondayNight.p1.tickets, ledgerOf(goldenOutcomes.mondayNight.p1.ledger)],
     );
     const first101001 = await api.completedLoad.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '101001' },
@@ -793,11 +592,11 @@ export const goldenMission: Story = {
       ],
       [
         [10, 1],
-        ['102001 · COMPLETED'],
+        goldenOutcomes.mondayNight.p2.tickets,
         [48, 75, '36'],
         ['A 14.4 CY', 'B 21.6 CY'],
         p2Ledger,
-        [2, '$324.00'],
+        ledgerOf(goldenOutcomes.mondayNight.p2.ledger),
         [],
       ],
     );
@@ -853,26 +652,7 @@ export const goldenMission: Story = {
     story.check(
       'AC-05-52, AC-06-103, AC-06-154 Tuesday night: the collections 101004, 101005 and 101006 wait alone, PENDING and not flagged (an unpartnered field event never expires); the haul-out 201001 and the split haul-out 201004 are COMPLETED; the under-size stump 301005 is in review with no pay item; 17 lines, $4,879.00',
       [told(tuesday), await total(p1)],
-      [
-        [
-          '101001 · COMPLETED',
-          '101002 · COMPLETED',
-          '101003 · MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
-          '101004 · PENDING',
-          '101005 · PENDING',
-          '101006 · PENDING',
-          '201001 · COMPLETED',
-          '201004 · COMPLETED',
-          '301001 · COMPLETED',
-          '301002 · COMPLETED',
-          '301003 · COMPLETED',
-          '301004 · COMPLETED',
-          '301005 · MANUAL_REVIEW · Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review. · Ticket 301005: no survey. Flagged for review.',
-          '301006 · COMPLETED',
-          '301007 · COMPLETED',
-        ],
-        [17, '$4,879.00'],
-      ],
+      [goldenOutcomes.tuesdayNight.p1.tickets, ledgerOf(goldenOutcomes.tuesdayNight.p1.ledger)],
     );
     const haulOut = await api.completedHaulOut.findFirstOrThrow({
       where: { projectId: p1, ticketNumber: '201004' },
@@ -944,21 +724,7 @@ export const goldenMission: Story = {
         of(wednesday, '10100', '101060'),
         await total(p1),
       ],
-      [
-        4,
-        1,
-        [],
-        [
-          '101001 · COMPLETED',
-          '101002 · COMPLETED',
-          '101003 · MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
-          '101004 · COMPLETED',
-          '101005 · COMPLETED',
-          '101006 · PENDING',
-          '101060 · PENDING · Ticket 101060: typed ticket number (Barcode damaged). Flagged for review.',
-        ],
-        [19, '$5,400.25'],
-      ],
+      [4, 1, [], goldenOutcomes.wednesday.p1.loads, ledgerOf(goldenOutcomes.wednesday.p1.ledger)],
     );
     story.check(
       'AC-04-12, AC-08-01, AC-08-02 the review queue on Wednesday before any review holds three kinds of thing: the flagged tickets, each with its plain message (101003; 301005, for its size and its missing survey); the pending tickets, the collection 101006 with no flag and the disposal typed 101060 with its typed-number flag; and the quarantined records, of which there are none. Nothing is flagged on a certification, a site or a survey, and the duplicate hanger 301003 is COMPLETED and not in it: Luis finds it at QC',
@@ -1003,14 +769,8 @@ export const goldenMission: Story = {
         [loadsWaiting.next, unitRateWaiting.next],
       ],
       [
-        [
-          '101003 MANUAL_REVIEW · Ticket 101003: load call 96%. Flagged for review.',
-          '101006 PENDING',
-          '101060 PENDING · Ticket 101060: typed ticket number (Barcode damaged). Flagged for review.',
-        ],
-        [
-          '301005 MANUAL_REVIEW · Ticket 301005: not an eligible stump (20 in, under 24 in). Flagged for review. · Ticket 301005: no survey. Flagged for review.',
-        ],
+        goldenOutcomes.wednesday.p1.queue.LOAD,
+        goldenOutcomes.wednesday.p1.queue.UNIT_RATE,
         [null, null],
       ],
     );
@@ -1029,9 +789,7 @@ export const goldenMission: Story = {
       on('14', '08:00'),
       'Luis checks 101003’s tower photographs and accepts its flag: Photos confirm, "Heaped; photos confirm"; the worker runs',
     );
-    const accepted = await reviewed(
-      byLuis(acceptFlagEndpoint, await accepting('101003', 'Heaped; photos confirm')),
-    );
+    const accepted = await reviewed(review.acceptLoadCall());
     story.check(
       'AC-08-43 101003: MANUAL_REVIEW → COMPLETED, its flag accepted and kept, its line as it was: 62.4 × $7.50 = $468.00',
       [of(last.run, '101003'), await flagsOn('101003'), await total(p1, ['101003'])],
@@ -1047,20 +805,13 @@ export const goldenMission: Story = {
       'Luis matches cert, times and photos and renumbers Kim’s disposal from 101060 to 101006: real work is renumbered, never voided; the worker runs',
     );
     const dis101060 = await eventOf('101060', 'DISPOSAL');
-    await reviewed(
-      byLuis(renumberFieldEventEndpoint, {
-        ids: { fieldEventId: dis101060.id },
-        json: { ticketNumber: '101006' },
-      }),
-    );
+    await reviewed(review.renumberTypedDisposal());
     const renumbered = of(last.run, '101006', '101060');
     story.at(
       on('14', '08:20'),
       'He accepts the typed-number flag: Photos confirm; the worker runs',
     );
-    await reviewed(
-      byLuis(acceptFlagEndpoint, await accepting('101006', 'Cert, times and photos match 101006')),
-    );
+    await reviewed(review.acceptTypedNumber());
     story.check(
       'AC-06-10, AC-08-22, AC-08-50 101006: the renumber pairs it, 48 CY × 60% = 28.8 CY, $216.00, in review for its typed number until Luis accepts that flag; nothing is left under 101060',
       [
@@ -1089,23 +840,13 @@ export const goldenMission: Story = {
     const lineOf301003 = await api.transaction.findFirstOrThrow({
       where: { fieldEventId: urt301003.id },
     });
-    const void301003 = await reviewed(
-      byLuis(
-        voidTicketEndpoint,
-        await voiding('301003', 'Duplicate ticket', 'Duplicate of 301001'),
-      ),
-    );
+    const void301003 = await reviewed(review.voidDuplicateHanger());
     const after301003 = of(last.run, '301003');
     story.at(
       on('14', '08:50'),
       'The stump 301005 is 20 in across: he voids it, Not eligible work, "Under 24 in; goes out as vegetative debris"; the worker runs',
     );
-    await reviewed(
-      byLuis(
-        voidTicketEndpoint,
-        await voiding('301005', 'Not eligible work', 'Under 24 in; goes out as vegetative debris'),
-      ),
-    );
+    await reviewed(review.voidUnderSizeStump());
     story.check(
       'AC-07-95, AC-08-31, AC-08-32 the two voids: 301003, COMPLETED → VOID, its $68.00 line removed; 301005, MANUAL_REVIEW → VOID, which never had a pay item or a line; a void ticket has no open flag',
       [after301003, of(last.run, '301005'), await total(p1, p1Voided), await flagsOn('301005')],
@@ -1130,15 +871,7 @@ export const goldenMission: Story = {
         await api.fieldEvent.count({ where: { projectId: p1, status: 'PENDING' } }),
         await api.quarantinedRecord.count({ where: { projectId: p1 } }),
       ],
-      [
-        [
-          ...[...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].map((number) => `${number} COMPLETED`),
-          ...p1Voided.map((number) => `${number} VOID`),
-        ].sort(),
-        [],
-        0,
-        0,
-      ],
+      [goldenOutcomes.reviewed.p1.statuses, [], 0, 0],
     );
     story.check(
       'AC-07-113, AC-08-64 P1’s ledger at the mission’s end, line for line: $5,548.25 on 19 lines, $5,068.25 on 16 before the split haul-out plus 201004’s $480.00 on three; 301003 and 301005 bill nothing',
@@ -1149,7 +882,13 @@ export const goldenMission: Story = {
         await total(p1, ['201004']),
         await total(p1, p1Voided),
       ],
-      [p1Ledger, [19, '$5,548.25'], [16, '$5,068.25'], [3, '$480.00'], [0, '$0.00']],
+      [
+        p1Ledger,
+        ledgerOf(goldenOutcomes.reviewed.p1.total),
+        ledgerOf(goldenOutcomes.reviewed.p1.withoutSplitHaulOut),
+        ledgerOf(goldenOutcomes.reviewed.p1.splitHaulOut),
+        [0, '$0.00'],
+      ],
     );
     const everyLine = await api.transaction.findMany({
       include: { prime: true, operatingSub: true, completedLoad: true },
@@ -1183,7 +922,7 @@ export const goldenMission: Story = {
     story.check(
       'AC-07-113 P2’s ledger: $324.00 on two lines',
       [await ledger(p2), await total(p2), await statuses(p2)],
-      [p2Ledger, [2, '$324.00'], ['102001 COMPLETED']],
+      [p2Ledger, ledgerOf(goldenOutcomes.reviewed.p2.total), goldenOutcomes.reviewed.p2.statuses],
     );
 
     // ------------------------------------------------------------------------------------------
@@ -1236,6 +975,11 @@ export const goldenMission: Story = {
         await api.transaction.count({ where: { id: lineOf301003.id } }),
       ],
       [[['system', 'SYSTEM']], true, [true, 68], true, 0],
+    );
+    story.check(
+      'AC-07-111, AC-08-65 the same audit rows, read through the API at Luis’s browser, a ticket’s history at a time (golden mission §4): who made each field event on which phone, the number Kim typed and why; Luis’s renumber, acceptances and voids, each with its reason and his words; 301003’s removed line copied whole; each void’s status written by the worker',
+      await new MissionAudit(await backOffice.luiss(), await backOffice.danas(), p1).read(),
+      goldenOutcomes.reviewed.p1.audit,
     );
 
     // ------------------------------------------------------------------------------------------
@@ -1373,7 +1117,7 @@ export const goldenMission: Story = {
       ],
       [
         [...p1Loads, ...p1HaulOuts, ...p1LiveUnitRate].sort(),
-        [19, '$5,548.25'],
+        ledgerOf(goldenOutcomes.reviewed.p1.total),
         [],
         '422 NOT_SAVED · NOT_COMPLETED: Ticket 301003 is void: it bills nothing and isn’t locked as invoiced. Nothing was locked.',
         13,
@@ -1505,7 +1249,7 @@ export const goldenMission: Story = {
         },
         runsBefore,
         p1Ledger,
-        [19, '$5,548.25'],
+        ledgerOf(goldenOutcomes.reviewed.p1.total),
         1,
       ],
     );

@@ -5,7 +5,8 @@
 // Lee Morgan on two assignments, Tariq Patel on none, Jo Kim on P1's unit rate work with its two
 // crews certified (task 3.5.3, ADR-583) and on certifying (task 3.5.5, ADR-585), and Sam Grant on the collections of the PARKS project,
 // which numbers its loads from control tickets: task 3.5.1), as the run's setup handed them on. The world
-// also holds P2, with nobody's work, for the setup tests' own monitors (ADR-576), and P1-TWR-LF,
+// also holds P2, for the setup tests' own monitors (ADR-576) and, with the time clock on, Omar
+// Haddad on its collections (task 3.7.2, ADR-601), and P1-TWR-LF,
 // marked lost, whose key the firm's time revoked, with its key for a test to plant (ADR-580).
 function handedOn(name: string): string {
   const value = process.env[name];
@@ -39,8 +40,8 @@ export const worldLostPhone = (): LostPhone =>
   JSON.parse(handedOn('ADMS_E2E_WORLD_LOST_PHONE')) as LostPhone;
 
 export const worldCast = (): Readonly<
-  Record<'kim' | 'ana' | 'lee' | 'tariq' | 'jo' | 'sam', CastMonitor>
+  Record<'kim' | 'ana' | 'lee' | 'tariq' | 'jo' | 'sam' | 'omar', CastMonitor>
 > =>
   JSON.parse(handedOn('ADMS_E2E_WORLD_CAST')) as Readonly<
-    Record<'kim' | 'ana' | 'lee' | 'tariq' | 'jo' | 'sam', CastMonitor>
+    Record<'kim' | 'ana' | 'lee' | 'tariq' | 'jo' | 'sam' | 'omar', CastMonitor>
   >;

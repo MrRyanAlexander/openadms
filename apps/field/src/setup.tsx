@@ -22,6 +22,8 @@ import {
   ListPicker,
   ListPicks,
   ProgressHeader,
+  ScreenActions,
+  ScreenTitle,
   StatusStrip,
   TextEntry,
   type Choice,
@@ -282,7 +284,7 @@ export function Setup({
     <Button
       main
       wide
-      isDisabled={busy}
+      busy={busy}
       onPress={() => {
         if (!ready) setProblem(none);
         else if (from === last) void make();
@@ -306,7 +308,7 @@ export function Setup({
     </>
   );
   const cancel = (
-    <Button wide isDisabled={busy} onPress={onCancel}>
+    <Button wide busy={busy} onPress={onCancel}>
       {said.cancel}
     </Button>
   );
@@ -317,17 +319,23 @@ export function Setup({
         <main data-screen="setup-passcode" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1 id={titleId}>{handingOver ? said.handOverTitle : said.title}</h1>
+            <ScreenTitle id={titleId}>{handingOver ? said.handOverTitle : said.title}</ScreenTitle>
             <p>{handingOver ? said.handOverNeeds : said.needs}</p>
             <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
             {shown}
           </div>
-          <div className="screen-actions">
-            <Button main wide isDisabled={busy || passcode === ''} onPress={() => void opened()}>
+          <ScreenActions>
+            <Button
+              main
+              wide
+              busy={busy}
+              isDisabled={passcode === ''}
+              onPress={() => void opened()}
+            >
               {busy ? said.checking : said.next}
             </Button>
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'project':
@@ -346,17 +354,18 @@ export function Setup({
             />
             {shown}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
-              isDisabled={busy || project === null}
+              busy={busy}
+              isDisabled={project === null}
               onPress={() => void projectPicked()}
             >
               {busy ? said.checking : said.next}
             </Button>
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'work':
@@ -374,10 +383,10 @@ export function Setup({
             />
             {shown}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             {next('work', work.length > 0, said.work.none)}
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'site':
@@ -403,10 +412,10 @@ export function Setup({
             />
             {shown}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             {next('site', true, '')}
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'payItems':
@@ -427,14 +436,14 @@ export function Setup({
             )}
             {shown}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             {next(
               'payItems',
               payItems.length > 0 || choices.payItems.length === 0,
               said.payItems.none,
             )}
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'monitor':
@@ -456,18 +465,18 @@ export function Setup({
               }}
             />
             {moreAfter === null ? null : (
-              <Button wide isDisabled={busy} onPress={() => void more()}>
+              <Button wide busy={busy} onPress={() => void more()}>
                 {busy ? said.monitor.loading : said.monitor.more}
               </Button>
             )}
             {shown}
           </div>
-          <div className="screen-actions">
-            <Button main wide isDisabled={busy} onPress={() => void monitorPicked()}>
+          <ScreenActions>
+            <Button main wide busy={busy} onPress={() => void monitorPicked()}>
               {busy ? said.checking : said.next}
             </Button>
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     case 'handOver': {
@@ -497,11 +506,12 @@ export function Setup({
             />
             {shown}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
-              isDisabled={busy || handOver === null}
+              busy={busy}
+              isDisabled={handOver === null}
               onPress={() => {
                 if (handOver === theirOwn) void handOverNow(monitor);
                 else onward('handOver');
@@ -510,7 +520,7 @@ export function Setup({
               {busy ? said.making : said.next}
             </Button>
             {cancel}
-          </div>
+          </ScreenActions>
         </main>
       );
     }
@@ -520,13 +530,13 @@ export function Setup({
         <main data-screen="setup-handed" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{said.handed.title}</h1>
+            <ScreenTitle>{said.handed.title}</ScreenTitle>
             <Banner tone="good">
               <p>{say(said.handed.to, { name: monitor.name })}</p>
             </Banner>
             <p role="status">{said.made[handed]}</p>
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
@@ -536,7 +546,7 @@ export function Setup({
             >
               {said.handed.done}
             </Button>
-          </div>
+          </ScreenActions>
         </main>
       );
     }
@@ -547,7 +557,7 @@ export function Setup({
         <main data-screen="setup-made" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{said.made.title}</h1>
+            <ScreenTitle>{said.made.title}</ScreenTitle>
             <Banner tone="good">
               <p>{say(said.made.for, { name, project: made.assignment.project.name })}</p>
             </Banner>
@@ -556,7 +566,7 @@ export function Setup({
               <p>{say(said.made.notHere, { name })}</p>
             )}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button
               main
               wide
@@ -566,7 +576,7 @@ export function Setup({
             >
               {said.made.done}
             </Button>
-          </div>
+          </ScreenActions>
         </main>
       );
     }

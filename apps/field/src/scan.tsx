@@ -17,7 +17,15 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 
 import { Viewfinder } from './camera.tsx';
-import { Banner, Button, ScanField, StatusStrip, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScanField,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  type Standing,
+} from './look/index.ts';
 import type { Camera, CameraView } from './phone/camera.ts';
 import { barcodeIn, type ScannedBack } from './phone/scanning.ts';
 import { say, words } from './words.ts';
@@ -185,7 +193,7 @@ export function ScanBack({
     <main data-screen="scan-back" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <p className="quiet">{said.about}</p>
         <ScanEntry
           camera={camera}
@@ -213,11 +221,11 @@ export function ScanBack({
           )}
         </div>
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button main wide onPress={onBack}>
           {said.back}
         </Button>
-      </div>
+      </ScreenActions>
       {below}
     </main>
   );

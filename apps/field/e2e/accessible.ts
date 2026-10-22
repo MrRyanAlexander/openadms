@@ -7,12 +7,17 @@
 //
 // **Each screen is checked as the phone may show it** (AC-11-51, 55, 56; ADR-559, 568, 583): in
 // the light theme and the dark, and held 320 CSS pixels wide, then with its text at 200%, with
-// nothing scrolling sideways (WCAG 1.4.4, 1.4.10). The prototype checked these on its own screens
+// nothing scrolling sideways (WCAG 1.4.4, 1.4.10), and on its side. **The keyboard walks round it**
+// (item 3.10.2; `focus-walk.ts`; AC-11-58), as it shows and again at 320 px with text at 200%: every
+// enabled control reached by Tab (2.1.1), each showing a ring of 3:1 (2.4.7, 1.4.11) and never
+// wholly hidden behind what is held at the foot of the screen (2.4.11). The prototype checked these on its own screens
 // (task 3.1.4) until the app's screens took its place (task 3.5.3); now every screen a test
 // reaches is held to them, and the page is put back as it was.
 import axe from 'axe-core';
 import { test as base, expect, type Page, type TestInfo } from '@playwright/test';
 
+import { walkFocus, type Walk } from './focus-walk.ts';
+import { reviewScreen } from './review.ts';
 import { attachmentName, reporterFile, screenAttribute, type ScreenCheck } from './screens.ts';
 import { rules } from './wcag.ts';
 
@@ -22,7 +27,7 @@ type Checker = typeof axe;
 // both fail, since nobody has looked at either. One is settled here: with no stylesheet on the
 // page, axe-core can't read an orientation lock (1.3.4) and says so, but none can exist. A page
 // with a stylesheet has its rules read.
-async function check(page: Page, info: TestInfo): Promise<void> {
+async function check(page: Page, info: TestInfo, options: Checking = {}): Promise<void> {
   // A check no reporter reads proves no screen was reached: the run must have `screens.ts`.
   expect(
     info.config.reporter.map(([name]) => name),
@@ -48,7 +53,8 @@ async function check(page: Page, info: TestInfo): Promise<void> {
     violations: [
       ...themed(light.violations, 'light'),
       ...themed(darkFound.violations, 'dark'),
-      ...(await reflowed(page)),
+      ...(options.keyboard === false ? [] : walked(await walkFocus(page), 'as shown')),
+      ...(await reflowed(page, options)),
     ],
     incomplete: [...themed(light.incomplete, 'light'), ...themed(darkFound.incomplete, 'dark')],
   };
@@ -58,6 +64,8 @@ async function check(page: Page, info: TestInfo): Promise<void> {
     body: JSON.stringify(checked),
     contentType: 'application/json',
   });
+  // The hand review's readings, only when asked (item 3.10.2; review.ts).
+  if (options.keyboard !== false) await reviewScreen(page, info.titlePath.slice(1).join(' › '));
   expect(
     [...found.violations, ...found.incomplete].map(
       ({ rule, help, where }) => `${screen}: ${rule} (${help}) at ${where.join(', ')}`,
@@ -72,9 +80,46 @@ interface Finding {
   readonly where: readonly string[];
 }
 
-// The screen at 320 CSS pixels wide, then with its text at 200% (WCAG 1.4.10, 1.4.4): a finding
-// for each that scrolls sideways. The page is put back as it was.
-async function reflowed(page: Page): Promise<Finding[]> {
+// How a screen is checked: with the keyboard's walk unless a test says otherwise. A key pressed is
+// something done, so a screen whose moment ends at one (the warning before the lock after
+// inactivity, AC-11-20) is checked without it.
+interface Checking {
+  readonly keyboard?: boolean;
+}
+
+// The keyboard's walk round a screen, as findings.
+function walked(walk: Walk, where: string): Finding[] {
+  const finding = (rule: string, help: string, at: readonly string[]): Finding[] =>
+    at.length === 0 ? [] : [{ rule, help, where: at.map((what) => `${where}: ${what}`) }];
+  return [
+    ...finding(
+      'focus-visible',
+      'a control with the focus shows a ring of 3:1 (WCAG 2.4.7, 1.4.11)',
+      walk.stops
+        .filter((stop) => !stop.ring || (stop.ringContrast !== null && stop.ringContrast < 3))
+        .map((stop) => stop.what),
+    ),
+    ...finding(
+      'focus-not-obscured',
+      'a control with the focus is never wholly hidden (WCAG 2.4.11)',
+      walk.stops.filter((stop) => !stop.seen).map((stop) => `${stop.what}, ${stop.hiddenBy ?? ''}`),
+    ),
+    ...finding('keyboard', 'every control is reached by Tab (WCAG 2.1.1)', walk.unreached),
+  ];
+}
+
+// Two frames on, once what measures itself as the page draws has (the screen's actions).
+const drawn = (page: Page) =>
+  page.evaluate(async () => {
+    for (let frame = 0; frame < 2; frame += 1) {
+      await new Promise((done) => requestAnimationFrame(done));
+    }
+  });
+
+// The screen at 320 CSS pixels wide, then with its text at 200% (WCAG 1.4.10, 1.4.4), then on its
+// side (1.3.4): a finding for each that scrolls sideways, and the keyboard's walk at 320 px with
+// text at 200%. The page is put back as it was.
+async function reflowed(page: Page, options: Checking): Promise<Finding[]> {
   const size = page.viewportSize();
   const sideways = () =>
     page.evaluate(
@@ -85,15 +130,25 @@ async function reflowed(page: Page): Promise<Finding[]> {
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '200%';
   });
+  await drawn(page);
   const larger = await sideways();
+  const large =
+    options.keyboard === false ? [] : walked(await walkFocus(page), '320 px, text at 200%');
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '';
   });
+  const upright = size ?? { width: 412, height: 839 };
+  await page.setViewportSize({ width: upright.height, height: upright.width });
+  await drawn(page);
+  const turned = await sideways();
   if (size !== null) await page.setViewportSize(size);
-  const help = 'holds 320 CSS px wide without scrolling sideways';
+  await drawn(page);
+  const help = 'holds 320 CSS px wide, and on its side, without scrolling sideways';
   return [
     ...(narrow ? [{ rule: 'reflow', help, where: ['320 px'] }] : []),
     ...(larger ? [{ rule: 'reflow', help, where: ['320 px, text at 200%'] }] : []),
+    ...(turned ? [{ rule: 'reflow', help, where: ['on its side'] }] : []),
+    ...large,
   ];
 }
 
@@ -127,8 +182,8 @@ async function audited(
 }
 
 // The screen showing now, checked before a test moves on from it.
-export async function checkScreen(page: Page): Promise<void> {
-  await check(page, test.info());
+export async function checkScreen(page: Page, options: Checking = {}): Promise<void> {
+  await check(page, test.info(), options);
 }
 
 export const test = base.extend({

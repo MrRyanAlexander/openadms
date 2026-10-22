@@ -23,6 +23,8 @@ import {
   Button,
   NumberKeypad,
   ProgressHeader,
+  ScreenActions,
+  ScreenTitle,
   StatusStrip,
   TextEntry,
   type Standing,
@@ -82,7 +84,7 @@ export function Step({
         )}
         {children}
       </div>
-      <div className="screen-actions">{actions}</div>
+      <ScreenActions>{actions}</ScreenActions>
     </>
   );
 }
@@ -108,18 +110,18 @@ export function CancelTicket({
     <main data-screen="cancel-ticket" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{say(said.open.cancelTitle, { number: ticket.ticketNumber })}</h1>
+        <ScreenTitle>{say(said.open.cancelTitle, { number: ticket.ticketNumber })}</ScreenTitle>
         <p>{said.open.cancelAbout}</p>
         {disposal ? <p>{said.open.turnedAway}</p> : null}
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button main wide onPress={onKeep}>
           {said.open.cancelNo}
         </Button>
         <Button wide onPress={onCancel}>
           {said.open.cancelYes}
         </Button>
-      </div>
+      </ScreenActions>
       {below}
     </main>
   );
@@ -352,7 +354,7 @@ export function PlaceFields({
     <>
       <Button
         wide
-        isDisabled={placing !== 'no'}
+        busy={placing !== 'no'}
         onPress={() => {
           setPlacing('fixing');
           void parts.locator.where().then(async (where) => {
@@ -380,7 +382,7 @@ export function PlaceFields({
       {ticket.end === null || !navigator.onLine ? null : (
         <Button
           wide
-          isDisabled={placing !== 'no'}
+          busy={placing !== 'no'}
           onPress={() => {
             const { end } = ticket;
             if (end === null) return;

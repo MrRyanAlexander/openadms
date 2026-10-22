@@ -9,7 +9,15 @@
 import type { TurnInHolds } from '@open-adms/contracts';
 import { useState } from 'react';
 
-import { Banner, Button, StatusStrip, TextEntry, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  TextEntry,
+  type Standing,
+} from './look/index.ts';
 import type { PhoneTurnIn } from './phone/turn-in.ts';
 import { refusalWords } from './refusals.ts';
 import { counted, words } from './words.ts';
@@ -83,16 +91,16 @@ export function TurnIn({
       <main data-screen="turned-in" className="screen">
         <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }} />
         <div className="screen-body">
-          <h1>{said.done.title}</h1>
+          <ScreenTitle>{said.done.title}</ScreenTitle>
           <Banner tone="good" announced>
             <p>{said.done.erased}</p>
           </Banner>
         </div>
-        <div className="screen-actions">
+        <ScreenActions>
           <Button main wide onPress={onDone}>
             {said.done.enrol}
           </Button>
-        </div>
+        </ScreenActions>
       </main>
     );
   }
@@ -101,7 +109,7 @@ export function TurnIn({
     <main data-screen="turn-in" className="screen">
       <StatusStrip standing={{ ...standing, sending: busy }} />
       <div className="screen-body">
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <p>{said.needs}</p>
         <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
         {problem === null ? null : (
@@ -128,14 +136,14 @@ export function TurnIn({
           </section>
         )}
       </div>
-      <div className="screen-actions">
-        <Button main wide isDisabled={busy || passcode === ''} onPress={() => void turnedIn()}>
+      <ScreenActions>
+        <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void turnedIn()}>
           {busy ? said.turning : said.turnIn}
         </Button>
-        <Button wide isDisabled={busy} onPress={onCancel}>
+        <Button wide busy={busy} onPress={onCancel}>
           {said.cancel}
         </Button>
-      </div>
+      </ScreenActions>
     </main>
   );
 }

@@ -93,7 +93,12 @@ Decides who can do what, and on which phone:
     phone, the day's lines with the clock-out; the phone is told whether the clock is on; a
     manager, never the worker, approves the day and unlocks it with a note; the export reads each
     day's entries, lines and hours, the day ending before midnight in the project's time zone,
-    no cap. The phone's screens: task 3.7.2; the approval screen and the export: Phase 4.)*
+    no cap. The approval screen and the export: Phase 4 (W3).)*
+    *(Built on the phone, task 3.7.2, ADR-601: Time in the menu where the project has the clock
+    on, offering only what comes next; "You're not clocked in. Clock in now?" on starting a field
+    event and "Clock out?" on signing out clocked in, neither stopping the work; at clock-out the
+    day's activity pre-filled a line an hour from the worker's field events, for them to change,
+    add to from the firm's list and approve.)*
 11. **Sync whenever there's a connection**, records first, photos after ([Part 5](05-sync.md)); the
     phone is topped up with numbers and fresh lists. A phone needn't be handed in for its work to
     arrive (ADR-240).

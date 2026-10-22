@@ -109,13 +109,21 @@ test('AC-11-32, AC-11-33, C139: Kim’s photographs go after their records, a 5 
     ),
   ).toEqual([null, null, null]);
 
-  // The signal goes after the large file's first part.
+  // The signal goes after the large file's first part: awaited as the cut itself, which comes at
+  // the end of the whole sync (its records, the lists, the login list, the small photograph and
+  // the large one's first part), never polled for a few seconds: under load the server's answer
+  // to the sync alone was seen to take from 0.3 s to 8 s.
   let cut = false;
+  let signalGone: () => void = () => undefined;
+  const cutOff = new Promise<void>((resolve) => {
+    signalGone = resolve;
+  });
   await page.route(`**/phones/current/photos/${large.id}/files/photo?**`, async (route) => {
     const offset = new URL(route.request().url()).searchParams.get('offset');
     if (!cut && offset !== '0') {
       cut = true;
       await route.abort('internetdisconnected');
+      signalGone();
       return;
     }
     await route.continue();
@@ -123,7 +131,7 @@ test('AC-11-32, AC-11-33, C139: Kim’s photographs go after their records, a 5 
 
   await page.getByRole('button', { name: english.menu.sync }).click();
   await page.getByRole('button', { name: english.sync.syncNow }).click();
-  await expect.poll(() => cut).toBe(true);
+  await cutOff;
   await expect(page.getByRole('button', { name: english.sync.syncNow })).toBeEnabled();
 
   // The records went first, then the photographs' records after them in the same sync.
@@ -168,10 +176,19 @@ test('AC-11-32, AC-11-33, C139: Kim’s photographs go after their records, a 5 
 
   // The app opened again, with signal: Kim signs in, and the phone asks where the large file
   // stands before it sends more of it, then sends the rest from there.
+  // Its rest awaited as the answer it is, which comes after the sign-in and the whole sync again;
+  // then only the record of it is waited for.
   await page.unroute(`**/phones/current/photos/${large.id}/files/photo?**`);
   const before = asked.length;
+  const restAnswered = page.waitForResponse(
+    (answer) =>
+      answer.request().method() === 'PATCH' &&
+      new URL(answer.url()).pathname === `/phones/current/photos/${large.id}/files/photo` &&
+      new URL(answer.url()).searchParams.get('offset') === String(partBytes),
+  );
   await page.reload();
   await signIn(page);
+  await restAnswered;
   await expect
     .poll(() => filesAsked(asked.slice(before), large.id).map(told))
     .toEqual(['GET - 200', `PATCH ${String(partBytes)} 200`]);

@@ -23,6 +23,12 @@ describe('AC-11-51: the screens of the field app', () => {
       'certify',
       'cancel-certification',
       'certify-box',
+      // The time clock's (task 3.7.2, ADR-601).
+      'time',
+      'clock-in-nudge',
+      'clock-out-nudge',
+      'clock-out',
+      'activity-line',
       // The collection's (task 3.5.1, ADR-581).
       'complete-collection',
       'create-monitor',
@@ -154,7 +160,7 @@ describe('AC-11-51: the run', () => {
   it('AC-11-51: passes when every screen was checked, and says how many', async () => {
     expect(await ran([...screensIn(), 'enrol'])).toBeUndefined();
     expect(lines.join('\n')).toBe(
-      '\nAccessibility: 55 of 55 screens checked, in 56 checks; 0 found.',
+      '\nAccessibility: 60 of 60 screens checked, in 61 checks; 0 found.',
     );
   });
 

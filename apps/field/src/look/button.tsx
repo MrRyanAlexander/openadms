@@ -3,7 +3,12 @@
 // The main action is one per screen, at the bottom in thumb reach; every button is at least 56 px
 // tall (tokens.css), far past WCAG 2.5.8's 24 px. **A step of work's own state** (ADR-590): a
 // button may be marked to do, in the notice colour, or done, in the good colour, its words and
-// icon saying which too, never the colour alone (WCAG 1.4.1).
+// icon saying which too, never the colour alone (WCAG 1.4.1). **While the phone is busy** with what
+// a press began, its buttons wait (`busy`, item 3.10.2): none takes a press, each looks as a
+// disabled one does and says to a screen reader that it is unavailable (`aria-disabled`), and **each
+// keeps the focus**, which a disabled button would drop to the page (WCAG 2.4.3). Not React Aria's
+// `isPending`, whose announcement names the button by id and outlives it once the screen moves on. `isDisabled` is for a button that can't be
+// pressed yet (nothing typed).
 import type { ReactNode } from 'react';
 import { Button as Pressable, type ButtonProps } from 'react-aria-components';
 
@@ -21,9 +26,12 @@ export function Button({
   wide = false,
   tone,
   icon,
+  busy = false,
   children,
+  onPress,
   ...pressing
 }: Pressing & {
+  readonly busy?: boolean;
   readonly main?: boolean;
   readonly wide?: boolean;
   readonly tone?: ButtonTone | undefined;
@@ -39,7 +47,15 @@ export function Button({
     .filter((name) => name !== '')
     .join(' ');
   return (
-    <Pressable {...pressing} className={className}>
+    <Pressable
+      {...pressing}
+      {...(busy
+        ? { 'aria-disabled': true, 'data-busy': true }
+        : onPress === undefined
+          ? {}
+          : { onPress })}
+      className={className}
+    >
       {icon}
       {children}
     </Pressable>

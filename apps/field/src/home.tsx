@@ -17,7 +17,15 @@
 // printed scans back, and the phone says what it holds under the number (`scan.tsx`).
 import type { ReactNode } from 'react';
 
-import { Banner, Button, ListRow, StatusStrip, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ListRow,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  type Standing,
+} from './look/index.ts';
 import type { Work } from './phone/works.ts';
 import { words } from './words.ts';
 
@@ -71,7 +79,7 @@ export function Home({
     <main data-screen="home" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{words.home.title}</h1>
+        <ScreenTitle>{words.home.title}</ScreenTitle>
         <dl className="facts">
           <dt>{words.home.project}</dt>
           <dd>{project}</dd>
@@ -118,7 +126,7 @@ export function Home({
         )}
         {children}
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         {works.map((work, place) => (
           <Button
             key={work}
@@ -132,7 +140,7 @@ export function Home({
             {words.home.start[work]}
           </Button>
         ))}
-      </div>
+      </ScreenActions>
       {after}
     </main>
   );

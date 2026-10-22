@@ -6,7 +6,15 @@
 import { Receipts, type Receipt, type ReceiptCopy } from '@open-adms/receipts';
 import { useState, type ReactNode } from 'react';
 
-import { Banner, Button, ListRow, StatusStrip, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ListRow,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  type Standing,
+} from './look/index.ts';
 import type { Printed, ReceiptPrinter } from './phone/printing.ts';
 import { dayOf, say, timeOfDay, words } from './words.ts';
 
@@ -59,7 +67,7 @@ export function ReceiptPrinted({
       ) : null}
       <Button
         wide
-        isDisabled={printing}
+        busy={printing}
         onPress={() => {
           setPrinting(true);
           void printed(printer, receipt, Receipts.again(receipt)).then((answer) => {
@@ -103,7 +111,7 @@ export function ReceiptsToPrint({
     <main data-screen="receipts" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <p className="quiet">{said.about}</p>
         {last === null ? null : last.answer.kind === 'printed' ? (
           <p role="status">
@@ -136,11 +144,11 @@ export function ReceiptsToPrint({
           ))}
         </ul>
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button main wide onPress={onBack}>
           {said.back}
         </Button>
-      </div>
+      </ScreenActions>
       {below}
     </main>
   );

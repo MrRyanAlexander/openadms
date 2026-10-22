@@ -21,7 +21,14 @@
 import { provenPhoneEndpoint } from '@open-adms/contracts';
 import { useEffect, useState } from 'react';
 
-import { Banner, Button, StatusStrip, TextEntry } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  TextEntry,
+} from './look/index.ts';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { LoginList, ScreenTries } from './phone/login-list.ts';
 import { MonitorOnPhone, type SignedIn } from './phone/monitor.ts';
@@ -238,7 +245,7 @@ export function Phone({
       <main data-screen="phone-locked" className="screen">
         <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now }} />
         <div className="screen-body">
-          <h1>{words.app.name}</h1>
+          <ScreenTitle>{words.app.name}</ScreenTitle>
           <p>{say(said.enrolled, { name: enrolment.name })}</p>
           <Banner tone="notice" announced>
             <p>{said.phoneLocked}</p>
@@ -246,11 +253,11 @@ export function Phone({
           <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
           {problemShown}
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={busy || passcode === ''} onPress={() => void opened()}>
+        <ScreenActions>
+          <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void opened()}>
             {busy ? said.unlocking : said.unlock}
           </Button>
-        </div>
+        </ScreenActions>
       </main>
     );
   }
@@ -259,7 +266,7 @@ export function Phone({
     <main data-screen="phone" className="screen">
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now }} />
       <div className="screen-body">
-        <h1>{words.app.name}</h1>
+        <ScreenTitle>{words.app.name}</ScreenTitle>
         <p>{say(said.enrolled, { name: enrolment.name })}</p>
         <p role="status">{said.standing[standing]}</p>
         {endedWords === null ? (
@@ -316,31 +323,31 @@ export function Phone({
         )}
         <h2>{said.withPasscode}</h2>
         <div className="screen-more">
-          <Button wide isDisabled={busy} onPress={onPasscodeSession}>
+          <Button wide busy={busy} onPress={onPasscodeSession}>
             {said.passcodeSession}
           </Button>
-          <Button wide isDisabled={busy} onPress={onSetUp}>
+          <Button wide busy={busy} onPress={onSetUp}>
             {said.setUp}
           </Button>
-          <Button wide isDisabled={busy} onPress={onCreateMonitor}>
+          <Button wide busy={busy} onPress={onCreateMonitor}>
             {said.createMonitor}
           </Button>
-          <Button wide isDisabled={busy} onPress={onTurnIn}>
+          <Button wide busy={busy} onPress={onTurnIn}>
             {said.turnIn}
           </Button>
         </div>
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         {locked ? (
-          <Button main wide isDisabled={busy || passcode === ''} onPress={() => void unlock()}>
+          <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void unlock()}>
             {busy ? said.unlocking : said.unlock}
           </Button>
         ) : (
-          <Button main wide isDisabled={busy || waiting} onPress={() => void signIn()}>
+          <Button main wide busy={busy} isDisabled={waiting} onPress={() => void signIn()}>
             {busy ? said.signingIn : said.signIn}
           </Button>
         )}
-      </div>
+      </ScreenActions>
     </main>
   );
 }

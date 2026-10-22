@@ -9,10 +9,16 @@
 //   node packages/scenarios/src/cli.ts world <origin>
 //                                  the field app's browser tests' own world, for the page at that
 //                                  origin, until stopped (ADR-572; apps/field/e2e/world-setup.ts)
+//   node packages/scenarios/src/cli.ts mission <origin>
+//                                  the golden mission's own world, for the page at that origin:
+//                                  asked a line at a time until its standard input ends (ADR-603;
+//                                  apps/field/e2e/mission-world.ts)
 // Exits 1 when a check fails or a story stops early.
 import process from 'node:process';
+import { createInterface } from 'node:readline';
 
 import { BrowserWorld } from './browser-world.ts';
+import { MissionWorld, type MissionAsked } from './mission-world.ts';
 import { Runner } from './runner.ts';
 import { StoryDatabase, StoryTemplate } from './story-database.ts';
 import { stories } from './stories/index.ts';
@@ -31,6 +37,7 @@ async function main(args: readonly string[]): Promise<number> {
     return 0;
   }
   if (command === 'world') return world(args[1]);
+  if (command === 'mission') return mission(args[1]);
   const keep = args.includes('--keep');
   const named = args.filter((arg) => arg !== '--keep');
   const unknown = named.filter((name) => !stories.some((story) => story.name === name));
@@ -97,6 +104,49 @@ async function world(pageOrigin: string | undefined): Promise<number> {
     await made.close();
     process.stdin.pause();
     for (const line of made.errors) console.error(`The world's API: ${line}`);
+  }
+  return 0;
+}
+
+// The golden mission's world (ADR-603): made, then one line on standard output saying it is
+// ready, as JSON (its database's name, its made-up master passcode, its cast of monitors and the
+// mission's approved outcomes); then each line on standard input is one thing asked, as JSON
+// (`MissionAsked`), answered by one line on standard output, in turn. Closed and dropped when its
+// standard input ends or it is told to stop. The API's error lines go to standard error.
+async function mission(pageOrigin: string | undefined): Promise<number> {
+  if (pageOrigin === undefined || !URL.canParse(pageOrigin)) {
+    console.error('mission takes the origin of the page that tests it.');
+    return 1;
+  }
+  const made = await MissionWorld.opened(pageOrigin);
+  try {
+    console.log(
+      JSON.stringify({
+        ready: true,
+        database: made.database,
+        apiOrigin: MissionWorld.apiOrigin,
+        masterPasscode: MissionWorld.masterPasscode,
+        cast: made.cast,
+        outcomes: made.outcomes,
+      }),
+    );
+    const lines = createInterface({ input: process.stdin });
+    const stopped = new Promise<void>((done) => {
+      process.once('SIGTERM', done);
+      process.once('SIGINT', done);
+      lines.once('close', done);
+    });
+    let answering = Promise.resolve();
+    lines.on('line', (line) => {
+      answering = answering.then(async () => {
+        const answer = await made.asked(JSON.parse(line) as MissionAsked);
+        console.log(JSON.stringify(answer));
+      });
+    });
+    await stopped;
+    await answering;
+  } finally {
+    await made.close();
   }
   return 0;
 }

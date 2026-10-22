@@ -13,6 +13,8 @@ import {
   Button,
   ListPicker,
   ProgressHeader,
+  ScreenActions,
+  ScreenTitle,
   StatusStrip,
   TextEntry,
   type Standing,
@@ -111,7 +113,7 @@ export function Move({
       </Banner>
     );
   const cancel = (
-    <Button wide isDisabled={busy} onPress={onCancel}>
+    <Button wide busy={busy} onPress={onCancel}>
       {said.cancel}
     </Button>
   );
@@ -121,17 +123,17 @@ export function Move({
       <main data-screen="move-passcode" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1 id={titleId}>{said.title}</h1>
+          <ScreenTitle id={titleId}>{said.title}</ScreenTitle>
           <p>{said.needs}</p>
           <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
           {shown}
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={busy || passcode === ''} onPress={() => void opened()}>
+        <ScreenActions>
+          <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void opened()}>
             {busy ? said.checking : said.next}
           </Button>
           {cancel}
-        </div>
+        </ScreenActions>
       </main>
     );
   }
@@ -170,12 +172,12 @@ export function Move({
           )}
           {shown}
         </div>
-        <div className="screen-actions">
-          <Button main wide isDisabled={busy || sites.length === 0} onPress={() => void move()}>
+        <ScreenActions>
+          <Button main wide busy={busy} isDisabled={sites.length === 0} onPress={() => void move()}>
             {busy ? said.making : said.make}
           </Button>
           {cancel}
-        </div>
+        </ScreenActions>
       </main>
     );
   }
@@ -185,13 +187,13 @@ export function Move({
     <main data-screen="move-made" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{said.made.title}</h1>
+        <ScreenTitle>{said.made.title}</ScreenTitle>
         <Banner tone="good">
           <p>{say(said.made.to, { site: site.name })}</p>
         </Banner>
         <p role="status">{words.setup.made[made.report]}</p>
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button
           main
           wide
@@ -201,7 +203,7 @@ export function Move({
         >
           {said.made.done}
         </Button>
-      </div>
+      </ScreenActions>
     </main>
   );
 }

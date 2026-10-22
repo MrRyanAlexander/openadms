@@ -6,7 +6,9 @@
 // app's was never checked, a check found anything (a second guard on the test's own failure), or
 // a check names a screen the app doesn't have. A run of some tests
 // alone (`-g`) says so with `ADMS_E2E_SOME=1`: the screens it didn't reach are listed, not failed.
-// A reporter isn't told of a filter, so it is never guessed.
+// A reporter isn't told of a filter, so it is never guessed. The golden mission's run
+// (playwright.mission.config.ts; ADR-603) is one of the screens a mission reaches, every one of
+// them checked; it says so in its own line, and a screen it doesn't reach is the other run's.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,8 +64,18 @@ interface Finding {
   readonly where: readonly string[];
 }
 
+// Which run this is: every screen's (the default), or the golden mission's.
+export interface ScreensOptions {
+  readonly run?: 'every screen' | 'the golden mission';
+}
+
 export default class ScreensReached implements Reporter {
   private readonly checks: ScreenCheck[] = [];
+  private readonly mission: boolean;
+
+  constructor(options: ScreensOptions = {}) {
+    this.mission = options.run === 'the golden mission';
+  }
 
   onTestEnd(_test: TestCase, result: TestResult): void {
     for (const attachment of result.attachments) {
@@ -82,16 +94,21 @@ export default class ScreensReached implements Reporter {
       0,
     );
     const some = process.env['ADMS_E2E_SOME'] === '1';
-    const unreached = screens
-      .filter((screen) => !reached.has(screen))
-      .map((screen) => `the ${screen} screen was reached by no browser test`);
+    const unreached = this.mission
+      ? []
+      : screens
+          .filter((screen) => !reached.has(screen))
+          .map((screen) => `the ${screen} screen was reached by no browser test`);
     const unknown = [...reached]
       .filter((screen) => !screens.includes(screen))
       .map((screen) => `a check names the ${screen} screen, which the app doesn't have`);
     console.log(
-      `\nAccessibility: ${String(screens.filter((screen) => reached.has(screen)).length)} of ` +
-        `${String(screens.length)} screens checked, in ${String(this.checks.length)} checks; ` +
-        `${String(findings)} found.`,
+      this.mission
+        ? `\nAccessibility, the golden mission: ${String(reached.size)} screens checked, in ` +
+            `${String(this.checks.length)} checks; ${String(findings)} found.`
+        : `\nAccessibility: ${String(screens.filter((screen) => reached.has(screen)).length)} of ` +
+            `${String(screens.length)} screens checked, in ${String(this.checks.length)} checks; ` +
+            `${String(findings)} found.`,
     );
     for (const problem of unreached) console.log(`${some ? '·' : '✗'} ${problem}`);
     for (const problem of unknown) console.log(`✗ ${problem}`);
@@ -100,7 +117,7 @@ export default class ScreensReached implements Reporter {
         `✗ ${String(findings)} found on the screens checked (each test's "${attachmentName}" attachment)`,
       );
     }
-    if (some)
+    if (some && !this.mission)
       console.log('Some tests alone (ADMS_E2E_SOME=1): a screen not reached is not failed.');
     const failed = findings > 0 || unknown.length > 0 || (!some && unreached.length > 0);
     return Promise.resolve(failed && result.status === 'passed' ? { status: 'failed' } : undefined);

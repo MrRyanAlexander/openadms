@@ -2,7 +2,7 @@
 name: adms-ticket-workflows
 description: Open ADMS ticket workflows and the setup spine, in today's rules. Covers what must exist before any field event (client, declaration event, project, contracts, forms and debris types, pay items, sites, rules, certifications, ROEs), ticket numbers, a ticket's life and statuses, how every capture starts (badge, then the number, at New), Workflow A loads (collection and disposal events to the completed load, split loads, loads that carry tickets), Workflow B haul-outs, Workflow C unit rate (hangers, leaners, stumps and fill, white goods, HHW, crew time), Workflow D forms (ROE, surveys, incidents, citizen drop-off logs), and the order of a reconciliation run. Use when creating, matching or reconciling tickets, or when setting up a project, contract, pay item, site or ROE. Checks and flags live in adms-validation, pricing in adms-ledger-audit, duplicates and corrections in adms-exceptions, phone screens in adms-field-app.
 ---
-<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306; the number at New, open tickets, waypoints, ADR-571; the number typed again only where a person copied it, ADR-573; a number the phone makes never typed again, ADR-589; unit rate work photographed by stage, ADR-590) -->
+<!-- skill-status: current (ADR-138, rewritten 2026-09-29, ADR-242; the tower's lookup, ADR-243; an ROE's scope, ADR-293; split haul-outs, ADR-295; a pay item's unique code and description, a duplicate rule refused, ADR-301; a contractor's contact details, ADR-306; the number at New, open tickets, waypoints, ADR-571; the number typed again only where a person copied it, ADR-573; a number the phone makes never typed again, ADR-589; unit rate work photographed by stage, ADR-590; a stump with no root ball asks no exposure question, ADR-605) -->
 
 > **This page states today's rules** (last changed by ADR-590, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
@@ -464,7 +464,10 @@ monitor records:
   smaller stump goes out as ordinary vegetative debris on a load (ADR-187, 189, 192);
 - the **root ball's diameter**, for the fill; it never goes into the stump's CY as its diameter
   (ADR-196);
-- whether **half or more of the root ball is exposed** (yes/no); **no hole depth**;
+- whether **half or more of the root ball is exposed** (yes/no), asked only where the root ball is
+  measured: the question is the root ball's, so a stump whose root ball is left empty is complete
+  without it, and a root ball emptied takes its answer with it (ADR-605, agent default); **no hole
+  depth**;
 - the **survey number**, picked or typed at the start; none is flagged (ADR-198).
 
 **How it's paid** is the firm's rules, **from the stump (1 each, by size band) or the fill CY, never

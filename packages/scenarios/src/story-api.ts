@@ -177,6 +177,9 @@ export interface StoryApiParts {
   readonly clock: Clock;
   readonly policy: Policy;
   readonly media: StoryMedia;
+  // The pages that may call it from a browser (ADR-572, 603): none where only a story's own
+  // phones and people ask it; the field app's page where its browser tests' phones do.
+  readonly corsOrigins?: readonly string[];
 }
 
 export class StoryApi {
@@ -553,8 +556,7 @@ export class StoryApi {
     return listeningApi({
       ...this.parts,
       clock: { now: () => this.on.now() },
-      // No browser asks a story's API.
-      corsOrigins: [],
+      corsOrigins: this.parts.corsOrigins ?? [],
       log: (line) => {
         this.kept(line);
       },

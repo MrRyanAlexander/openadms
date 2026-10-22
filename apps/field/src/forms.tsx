@@ -40,7 +40,16 @@ import {
   TypeAgain,
   typedAddressChange,
 } from './capture.tsx';
-import { Banner, Button, ListPicker, StatusStrip, TextEntry, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ListPicker,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  TextEntry,
+  type Standing,
+} from './look/index.ts';
 import { TakePhoto } from './camera.tsx';
 import { ScanEntry } from './scan.tsx';
 import type { FormDetails, FormKind, OwnAnswer, PhoneForm } from './phone/forms.ts';
@@ -296,10 +305,10 @@ export function FormCapture({
         <main data-screen="form-photo" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{photoLabel(form, photo)}</h1>
+            <ScreenTitle>{photoLabel(form, photo)}</ScreenTitle>
             <PhotoDrawn tickets={parts.forms} photo={photo} label={photoLabel(form, photo)} large />
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button main wide onPress={back}>
               {said.photoBack}
             </Button>
@@ -331,7 +340,7 @@ export function FormCapture({
                 </Button>
               </>
             ) : null}
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -343,13 +352,13 @@ export function FormCapture({
         <main data-screen="form-submitted" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{say(said.submitted.title, { kind: formTitle(form, held) })}</h1>
+            <ScreenTitle>{say(said.submitted.title, { kind: formTitle(form, held) })}</ScreenTitle>
             <Banner tone="good" announced>
               <p>{said.submitted.saved}</p>
             </Banner>
             <p className="quiet">{said.submitted.sealed}</p>
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             {kind === 'DROP_OFF_LOG' ? (
               <Button
                 main
@@ -378,7 +387,7 @@ export function FormCapture({
             <Button wide onPress={onHome}>
               {said.submitted.home}
             </Button>
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -837,10 +846,10 @@ function FillForm({
       <main data-screen="cancel-form" className="screen">
         <StatusStrip standing={standing} />
         <div className="screen-body">
-          <h1>{say(said.cancelTitle, { form: formTitle(now, held) })}</h1>
+          <ScreenTitle>{say(said.cancelTitle, { form: formTitle(now, held) })}</ScreenTitle>
           <p>{now.kind === 'ROE' ? said.cancelAboutRoe : said.cancelAbout}</p>
         </div>
-        <div className="screen-actions">
+        <ScreenActions>
           <Button
             main
             wide
@@ -858,7 +867,7 @@ function FillForm({
           >
             {said.cancelYes}
           </Button>
-        </div>
+        </ScreenActions>
         {below}
       </main>
     );
@@ -1156,7 +1165,7 @@ function FillForm({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             setSubmitting(true);
             setNotKept(null);
@@ -1209,7 +1218,7 @@ function FixOnly({
     <>
       <Button
         wide
-        isDisabled={fixing}
+        busy={fixing}
         onPress={() => {
           setFixing(true);
           void parts.locator.where().then(async (where) => {

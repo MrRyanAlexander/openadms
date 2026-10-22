@@ -317,6 +317,76 @@
     "sync": "Sync",
     "settings": "Settings"
   },
+  "clock": {
+    "title": "Time",
+    "about": "Your own hours, entered by hand on this assignment. A manager approves your day.",
+    "standing": {
+      "OUT": "You’re not clocked in.",
+      "IN": "You’re clocked in.",
+      "BREAK": "You’re on a break."
+    },
+    "entries": {
+      "title": "Today on this assignment",
+      "none": "Nothing entered yet.",
+      "IN": "Clocked in",
+      "BREAK_START": "Break started",
+      "BREAK_END": "Break ended",
+      "OUT": "Clocked out"
+    },
+    "enter": {
+      "IN": "Clock in",
+      "BREAK_START": "Start a break",
+      "BREAK_END": "End the break",
+      "OUT": "Clock out"
+    },
+    "kept": "Kept on this phone. It goes at the next sync.",
+    "nudgeIn": {
+      "title": "You’re not clocked in. Clock in now?",
+      "about": "The work goes on either way.",
+      "yes": "Clock in",
+      "no": "Not now"
+    },
+    "nudgeOut": {
+      "title": "Clock out?",
+      "about": "You’re still clocked in on this assignment. Signing out doesn’t clock you out.",
+      "yes": "Clock out",
+      "no": "Sign out still clocked in",
+      "back": "Back"
+    },
+    "out": {
+      "title": "Your day’s activity",
+      "about": "Check each line and change what isn’t right. Add what the app can’t know, then approve your day as you clock out.",
+      "none": "No lines yet: add what you did.",
+      "line": "{from}–{to}",
+      "add": "Add a line",
+      "approve": "Approve and clock out",
+      "approving": "Clocking out…",
+      "back": "Back",
+      "signOutAfter": "You’re signed out once you’ve clocked out."
+    },
+    "line": {
+      "work": {
+        "none": "{kind} {number}",
+        "one": "{kind} {number} and 1 more",
+        "other": "{kind} {number} and {count} more"
+      },
+      "editTitle": "A line of your day",
+      "addTitle": "Add a line",
+      "what": "What was it?",
+      "from": "From",
+      "to": "To",
+      "note": "Note (optional)",
+      "save": "Save the line",
+      "remove": "Take the line off",
+      "back": "Back",
+      "pickOne": "Pick what it was from the list.",
+      "notATime": {
+        "from": "Type when it started.",
+        "to": "Type when it ended."
+      },
+      "endsFirst": "It ends before it starts: put the times right."
+    }
+  },
   "sync": {
     "title": "Sync",
     "lists": "Lists for {project}, as of setup version {version}.",

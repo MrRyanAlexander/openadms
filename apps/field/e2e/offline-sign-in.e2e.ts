@@ -9,7 +9,15 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import english from '../src/words/en.json' with { type: 'json' };
 import { checkScreen, expect, test } from './accessible.ts';
-import { enrolled, filled, rawlyHeld, recorded, toApi, type Asked } from './phone-page.ts';
+import {
+  enrolled,
+  filled,
+  rawlyHeld,
+  reportTriedOffline,
+  recorded,
+  toApi,
+  type Asked,
+} from './phone-page.ts';
 import { worldApiOrigin, worldCast, worldPasscode, type CastMonitor } from './world.ts';
 
 const p1 = 'Bayline County ROW, Hurricane Delphine';
@@ -90,6 +98,7 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   await page.keyboard.press('ControlOrMeta+V');
   await expect(page.getByLabel(english.phone.passwordLabel)).toHaveValue(ana.password);
   await page.evaluate(() => navigator.clipboard.writeText(''));
+  const reportTried = reportTriedOffline(page);
   await page.getByRole('button', { name: english.phone.signIn }).click();
 
   // Home from the assignment the phone holds: P1, collections and incidents.
@@ -103,6 +112,7 @@ test('AC-02-39, AC-11-19, AC-02-41, AC-11-21, AC-11-54: with no signal Ana signs
   await page.getByRole('button', { name: english.menu.settings }).click();
   await expect(page.getByText(english.settings.offline)).toBeVisible();
   await checkScreen(page);
+  await reportTried;
   const before = toApi(asked).length;
   expect((await rawlyHeld(page, [ana.password])).foundInStore).toEqual([]);
 
@@ -273,7 +283,8 @@ test('AC-11-20, AC-11-64, AC-02-40: left alone, the phone warns a minute before 
   const stay = page.getByRole('button', { name: english.work.inactivity.stay });
   await page.clock.setFixedTime(start + 29 * 60_000 + 5_000);
   await expect(warning).toBeVisible();
-  await checkScreen(page);
+  // Without the keyboard's walk: a key pressed is something done, and would end the warning.
+  await checkScreen(page, { keyboard: false });
   await stay.click();
   await expect(warning).toBeHidden();
 
@@ -285,4 +296,32 @@ test('AC-11-20, AC-11-64, AC-02-40: left alone, the phone warns a minute before 
   const signOut = at(asked, '/phones/current/sign-outs').at(-1);
   expect(`${String(signOut?.method)} ${String(signOut?.status)}`).toBe('POST 200');
   expect((await rawlyHeld(page, [])).storeRows).toBe(rows);
+});
+
+test('AC-11-20: a press on a button is something done: Kim pressing only the app’s buttons for an hour, never longer than the lock apart, is never warned or signed out', async ({
+  page,
+}) => {
+  const { kim } = worldCast();
+  const start = Date.now();
+  await page.clock.setFixedTime(start);
+  await enrolled(page, 'P1-TWR-TDSR');
+  await signedIn(page, kim);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
+
+  // Every 20 minutes she presses Sync, then Work: the menu's buttons alone, nothing typed.
+  const warning = page.getByText(filled(english.work.inactivity.warning.other, { count: '60' }));
+  for (const minutes of [20, 40, 60]) {
+    await page.clock.setFixedTime(start + minutes * 60_000);
+    await page.getByRole('button', { name: english.menu.sync }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.sync.title);
+    await page.getByRole('button', { name: english.menu.work }).click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.home.title);
+  }
+  // Twenty-nine and a half minutes after her last press, the warning: the press counted (one
+  // that didn't would leave her 88 minutes idle, signed out). One tap keeps her signed in.
+  await page.clock.setFixedTime(start + 60 * 60_000 + 29 * 60_000 + 30_000);
+  await expect(warning).toBeVisible();
+  await expect(page.getByText(kim.name)).toBeVisible();
+  await page.getByRole('button', { name: english.work.inactivity.stay }).click();
+  await expect(warning).toHaveCount(0);
 });

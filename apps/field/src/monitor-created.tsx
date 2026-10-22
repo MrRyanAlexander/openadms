@@ -3,7 +3,7 @@
 // straight on to setting the phone up for them (REQ-311a; task 3.3.1, ADR-576).
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 
-import { Banner, Button, StatusStrip } from './look/index.ts';
+import { Banner, Button, ScreenActions, ScreenTitle, StatusStrip } from './look/index.ts';
 import { say, words } from './words.ts';
 
 export function MonitorCreated({
@@ -22,13 +22,13 @@ export function MonitorCreated({
     <main data-screen="monitor-created" className="screen">
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }} />
       <div className="screen-body">
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <Banner tone="good">
           <p>{say(said.monitorId, { name: created.name, monitorNumber: created.monitorNumber })}</p>
         </Banner>
         <p>{said.username}</p>
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button main wide onPress={onSetUp}>
           {say(said.setUp, { name: created.name })}
         </Button>
@@ -38,7 +38,7 @@ export function MonitorCreated({
         <Button wide onPress={onAnother}>
           {said.another}
         </Button>
-      </div>
+      </ScreenActions>
     </main>
   );
 }

@@ -87,7 +87,8 @@ export function TakePhoto({
         wide
         tone={tone}
         icon={icon ?? <CameraIcon />}
-        isDisabled={isDisabled || busy !== 'no'}
+        isDisabled={isDisabled}
+        busy={busy !== 'no'}
         onPress={() => {
           setBusy('opening');
           void camera.opened().then((opened) => {
@@ -120,7 +121,7 @@ export function TakePhoto({
               <Button
                 main
                 wide
-                isDisabled={busy !== 'no'}
+                busy={busy !== 'no'}
                 onPress={() => {
                   if (view === undefined) return;
                   setBusy('taking');
@@ -133,7 +134,7 @@ export function TakePhoto({
               >
                 {busy === 'taking' ? said.taking : said.take}
               </Button>
-              <Button wide isDisabled={busy !== 'no'} onPress={away}>
+              <Button wide busy={busy !== 'no'} onPress={away}>
                 {said.away}
               </Button>
             </div>

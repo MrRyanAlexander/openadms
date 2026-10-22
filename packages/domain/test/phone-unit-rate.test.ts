@@ -1,6 +1,6 @@
 // What a phone asks of a unit rate ticket, at the domain (spec/acceptance/11-field-app.md
 // AC-11-43; spec/acceptance/04-field-capture.md AC-04-59; REQ-112b, 306, 320; ADR-207, 210, 213,
-// 583, 590). P1's unit rate pay items as the golden mission §1 has them, with the browser world's
+// 583, 590, 605). P1's unit rate pay items as the golden mission §1 has them, with the browser world's
 // settings: a hanger measured, a leaner 24.1–99 in the monitor may mark ineligible; Hangers,
 // Leaners and Stumps photographed by stage, as shipped.
 import { describe, expect, it } from 'vitest';
@@ -177,6 +177,48 @@ describe('crew time’s hours', () => {
       false,
       false,
     ]);
+  });
+});
+
+describe('a stump’s measurement', () => {
+  const stump = (
+    diameterInches: number | null,
+    rootBallInches: number | null,
+    rootBallHalfExposed: boolean | null,
+  ) => ({ diameterInches, rootBallInches, rootBallHalfExposed });
+
+  it('AC-11-92 "half or more exposed?" is the root ball’s: asked where one is measured (301004, 96 in), never where it is left empty (301005)', () => {
+    expect([PhoneUnitRate.asksExposure(96), PhoneUnitRate.asksExposure(null)]).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it('AC-11-92 complete with its diameter, and the exposure answered where a root ball is measured: 301005 without one, 301004 once answered', () => {
+    expect(
+      [
+        stump(20, null, null),
+        stump(30, 96, true),
+        stump(30, 96, false),
+        stump(30, 96, null),
+        stump(null, null, null),
+      ].map((entered) => PhoneUnitRate.stumpMeasured(entered)),
+    ).toEqual([true, true, true, false, false]);
+  });
+
+  it('AC-11-92 a root ball left empty takes its exposure answer with it; one entered keeps it', () => {
+    expect(PhoneUnitRate.rootBallEntered(null, true)).toEqual({
+      rootBallInches: null,
+      rootBallHalfExposed: null,
+    });
+    expect(PhoneUnitRate.rootBallEntered(96, true)).toEqual({
+      rootBallInches: 96,
+      rootBallHalfExposed: true,
+    });
+    expect(PhoneUnitRate.rootBallEntered(96, null)).toEqual({
+      rootBallInches: 96,
+      rootBallHalfExposed: null,
+    });
   });
 });
 

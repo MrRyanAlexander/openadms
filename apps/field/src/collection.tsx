@@ -252,7 +252,7 @@ export function CompleteCollection({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             setSubmitting(true);
             setNotKept(null);

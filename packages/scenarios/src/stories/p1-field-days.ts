@@ -18,18 +18,8 @@
 // whose zone and mileage the worker's stories tell and the rules price by (spec/CONVENTIONS.md
 // §6's stand-in points). The top-up of a block at a sync (the story `sync`). The golden mission's own
 // story, with what happens at review, is 1.9.1.
-import {
-  FormSetup,
-  ListSetup,
-  type NewPayItem,
-  type Outcome,
-  PayItemSetup,
-  ProjectSetup,
-  SiteSetup,
-  type NewAssignment,
-} from '@open-adms/api';
-import type { FieldEventKind, FormDocumentType } from '@open-adms/db';
-import { uuidv7, uuidv7Time } from '@open-adms/domain';
+import type { FieldEventKind } from '@open-adms/db';
+import { uuidv7Time } from '@open-adms/domain';
 
 import { projectTime } from '../clock.ts';
 import {
@@ -44,28 +34,22 @@ import {
   typed,
 } from '../device.ts';
 import type { Story, StoryMonitor } from '../runner.ts';
-import { assigned, firstBlocks, taken } from './board.ts';
-import { danasEmail, luissEmail, p1TimeZone as timeZone, setUpP1, setUpP1Sites } from './p1.ts';
+import { firstBlocks, taken } from './board.ts';
+import {
+  boardP1,
+  p1Phones,
+  p1Plan,
+  setUpP1ForTheField,
+  siteOf,
+  type P1MonitorName,
+  type P1PhoneName,
+  type PlannedWork,
+} from './p1-field-setup.ts';
+import { p1TimeZone as timeZone } from './p1.ts';
 
 const on = (date: string, time: string): string => `2026-10-${date}T${time}:00-04:00`;
 const monday = (time: string): string => on('12', time);
 const tuesday = (time: string): string => on('13', time);
-
-// A pay item's capture settings, none ticked.
-const unticked = {
-  kindOfWorkId: null,
-  bandFrom: null,
-  bandTo: null,
-  countIsAlwaysOne: false,
-  gpsRequired: false,
-  measurementRequired: false,
-  decimalsAllowed: false,
-  photosRequired: false,
-  monitorMayMarkIneligible: false,
-  quantityFromCarriedTickets: false,
-  crewTimeConversion: null,
-  crewDayHours: null,
-} as const;
 
 // Every key anywhere in a phone's lists.
 function keysOf(value: unknown): string[] {
@@ -83,11 +67,6 @@ export const p1FieldDays: Story = {
 
   async run(story) {
     const { api, clock } = story;
-    const saved = async <T>(attempt: Promise<Outcome<T>>): Promise<T> => {
-      const outcome = await attempt;
-      if (!outcome.saved) throw new Error(`Refused: ${outcome.refusal.message}`);
-      return outcome.record;
-    };
     const done = (completed: Completed): RecordedEvent => {
       // Jo's crew photograph with each unit rate ticket (golden mission §2), taken as she
       // completes it; it goes in her sync, after the ticket (ADR-481).
@@ -107,286 +86,31 @@ export const p1FieldDays: Story = {
     );
     // Enrolled by now, on the story's clock, before any work they record: each under the master
     // passcode, with a key of its own (ADR-439, 440).
-    const enrolledPhones: Record<string, string> = {};
-    for (const name of [
-      'P1-COL-1',
-      'P1-TWR-TDSR',
-      'P1-TWR-LF',
-      'P1-HO-TDSR',
-      'P1-TWR-CCL',
-      'P1-UR-1',
-    ]) {
-      enrolledPhones[name] = (await story.enrolled(name)).id;
-    }
-    const dana = uuidv7(clock.now());
-    const office = await api.$write({ actorId: dana, source: 'BACK_OFFICE' }, async (tx) => {
-      // Each with the address they sign in with at the back office (CONVENTIONS §6).
-      await tx.user.create({
-        data: { id: dana, name: 'Dana Reyes', role: 'ADMIN', email: danasEmail },
-      });
-      const luis = await tx.user.create({
-        data: { name: 'Luis Ortega', role: 'MANAGER_ANALYST', email: luissEmail },
-      });
-      // Luis writes each day's board: Dana grants him *dispatch* (ADR-428, 429).
-      await tx.userPermission.create({ data: { userId: luis.id, permission: 'DISPATCH' } });
-      await tx.userPermission.create({ data: { userId: luis.id, permission: 'VIEW_DISPATCH' } });
-      const p1 = await setUpP1(tx, story.policy);
-      const { tdsr, landfill } = await setUpP1Sites(tx, p1.project);
-      // The firm's own sub-type of an incident (golden mission §2).
-      const damage = await tx.incidentType.findFirstOrThrow({ where: { name: 'Property damage' } });
-      await tx.incidentSubType.create({
-        data: { name: 'Mailbox struck', position: 1, incidentTypeId: damage.id },
-      });
-      return {
-        luis: luis.id,
-        p1: p1.project,
-        coastline: p1.prime,
-        tdsr,
-        landfill,
-        phones: enrolledPhones,
-      };
-    });
-    const { luis, p1, coastline, tdsr, landfill } = office;
+    const enrolledPhones: Partial<Record<P1PhoneName, string>> = {};
+    for (const name of p1Phones) enrolledPhones[name] = (await story.enrolled(name)).id;
     const device = (name: string): string => {
-      const id = office.phones[name];
+      const id = enrolledPhones[name as P1PhoneName];
       if (id === undefined) throw new Error(`No phone ${name}`);
       return id;
     };
-    // The six monitors, created as real ones are: on a phone, online, under the master passcode;
-    // the database issues each their Monitor ID (ADR-442).
-    const monitors: Record<string, StoryMonitor> = {};
-    for (const name of [
-      'Ana Brooks',
-      'Kim Nguyen',
-      'Tariq Patel',
-      'Jo Kim',
-      'Sam Grant',
-      'Lee Morgan',
-    ]) {
-      monitors[name] = await story.monitor(name, device('P1-COL-1'));
-    }
-    const monitor = (name: string): StoryMonitor => {
-      const found = monitors[name];
-      if (found === undefined) throw new Error(`No monitor ${name}`);
-      return found;
-    };
-    const person = (name: string): string => monitor(name).id;
-
-    const sites = new SiteSetup(api, clock, story.policy);
-    const forms = new FormSetup(api, clock, story.policy);
-    const lists = new ListSetup(api, clock, story.policy);
-    const projects = new ProjectSetup(api, clock, story.policy);
-    const payItems = new PayItemSetup(api, clock, story.policy);
-
-    const finalDisposal = await api.siteType.findUniqueOrThrow({
-      where: { key: 'FINAL_DISPOSAL' },
-    });
-    const cypress = (
-      await saved(
-        sites.site(dana, {
-          projectId: p1,
-          name: 'Cypress Creek Landfill',
-          shortCode: 'CCL',
-          siteTypeId: finalDisposal.id,
-          takesLoads: true,
-          haulOutsLeaveHere: false,
-          chargesTippingFee: false,
-          ineligibleSite: false,
-          permitNumber: 'FDEP-SW-0131',
-          latitude: '39.24000000',
-          longitude: '-75.60000000',
-          activationDate: '2026-10-12',
-        }),
-      )
-    ).id;
+    // P1 as its field days find it, the six monitors created on P1-COL-1 (`p1-field-setup.ts`).
+    const field = await setUpP1ForTheField(story, device('P1-COL-1'));
+    const { p1, tdsr, landfill, cypress, unitRateWork } = field;
+    const monitor = (name: P1MonitorName): StoryMonitor => field.monitors[name];
+    const person = (name: P1MonitorName): string => monitor(name).id;
     const siteNames = new Map([
       [tdsr, 'Marsh Road TDSR'],
       [landfill, 'Bayline County Landfill'],
       [cypress, 'Cypress Creek Landfill'],
     ]);
 
-    const form = async (documentType: FormDocumentType, name: string): Promise<string> =>
-      (await saved(forms.form(dana, { projectId: p1, documentType, name }))).id;
-    const loadForm = await form('LOAD', 'Load');
-    const haulOutForm = await form('HAUL_OUT', 'Haul-out');
-    await form('UNIT_RATE', 'Unit rate');
-    // What an incident offers Jo: the contractor involved and a cert number (ADR-334).
-    await saved(
-      forms.form(dana, {
-        projectId: p1,
-        documentType: 'INCIDENT',
-        name: 'Incident',
-        incidentOffers: ['CONTRACTOR', 'CERT_NUMBER'],
-      }),
-    );
-    await form('DROP_OFF_LOG', 'Drop-off log');
-    const library = async (name: string): Promise<string> =>
-      (await api.debrisType.findFirstOrThrow({ where: { name } })).id;
-    for (const name of ['Vegetative', 'C&D']) {
-      await saved(
-        forms.debrisType(dana, {
-          formId: loadForm,
-          debrisTypeId: await library(name),
-          reduced: false,
-          hiddenOnPhones: false,
-        }),
-      );
-    }
-    const grinding = await api.reductionMethod.findFirstOrThrow({ where: { name: 'Grinding' } });
-    await saved(
-      forms.debrisType(dana, {
-        formId: haulOutForm,
-        debrisTypeId: (await saved(lists.debrisType(dana, 'Mulch'))).id,
-        reduced: true,
-        reductionMethodId: grinding.id,
-        hiddenOnPhones: false,
-      }),
-    );
-    for (const tag of ['Mixed', 'Zone 1 pile', 'Zone 2 pile', 'Zone 3 pile']) {
-      await saved(projects.fieldTag(dana, p1, tag));
-    }
-
-    // The unit rate pay items a monitor's work falls to, with Coastline's rate on each (golden
-    // mission §1). The fill and the freon are added by rules, never picked: not a phone's.
-    const unitRatePayItem = async (
-      code: string,
-      description: string,
-      work: string,
-      unit: NewPayItem['unit'],
-      rate: string,
-      more: Partial<NewPayItem> = {},
-    ) => {
-      const kindOfWork = await api.kindOfWork.findFirstOrThrow({ where: { name: work } });
-      const payableType = await api.payableType.findFirstOrThrow({ where: { name: work } });
-      return saved(
-        payItems.payItem(dana, {
-          ...unticked,
-          projectId: p1,
-          code,
-          description,
-          payableTypeId: payableType.id,
-          unit,
-          kindOfWorkId: kindOfWork.id,
-          photosRequired: true,
-          rates: [{ primeId: coastline, rate }],
-          ...more,
-        }),
-      );
-    };
-    const each = (
-      code: string,
-      description: string,
-      work: string,
-      rate: string,
-      band?: { from: number; to: number },
-    ) =>
-      unitRatePayItem(code, description, work, 'EA', rate, {
-        countIsAlwaysOne: true,
-        measurementRequired: band !== undefined,
-        bandFrom: band?.from ?? null,
-        bandTo: band?.to ?? null,
-      });
-    const unitRateWork = [
-      await each('HNG-RMV-EA', 'Hanger removal', 'Hangers', '68.00'),
-      await each('LNR-RMV-EA-24', 'Leaner removal 6–24 in', 'Leaners', '95.00', {
-        from: 6,
-        to: 24,
-      }),
-      await each('LNR-RMV-EA-99', 'Leaner removal 24.1–99 in', 'Leaners', '185.00', {
-        from: 24.1,
-        to: 99,
-      }),
-      await each('STP-RMV-EA-36', 'Stump removal 24–36 in', 'Stumps', '110.00', {
-        from: 24,
-        to: 36,
-      }),
-      await each('STP-RMV-EA-48', 'Stump removal 36.1–48 in', 'Stumps', '175.00', {
-        from: 36.1,
-        to: 48,
-      }),
-      await unitRatePayItem('WG-RMV-EA', 'White good removed', 'White Goods', 'EA', '40.00'),
-      await unitRatePayItem(
-        'CREW-TIME-HR',
-        'Crew time, skid steer crew',
-        'Crew time',
-        'HR',
-        '150.00',
-        {
-          decimalsAllowed: true,
-          crewTimeConversion: 'PER_HOUR',
-        },
-      ),
-    ];
-
     // ------------------------------------------------------------------------------------------
     story.at(
       monday('06:00'),
       'Luis Ortega writes Monday’s dispatch board, then copies it to Tuesday',
     );
-    interface Planned {
-      readonly monitor: string;
-      readonly phone: string;
-      readonly kinds: readonly FieldEventKind[];
-      readonly forms?: NewAssignment['formDocumentTypes'];
-      readonly siteId?: string;
-      readonly unitRate?: boolean;
-      readonly tuesdayOnly?: boolean;
-    }
-    const plan: readonly Planned[] = [
-      { monitor: 'Ana Brooks', phone: 'P1-COL-1', kinds: ['COLLECTION'] },
-      {
-        monitor: 'Kim Nguyen',
-        phone: 'P1-TWR-TDSR',
-        kinds: ['DISPOSAL'],
-        forms: ['DROP_OFF_LOG'],
-        siteId: tdsr,
-      },
-      {
-        monitor: 'Tariq Patel',
-        phone: 'P1-TWR-LF',
-        kinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
-        siteId: landfill,
-      },
-      { monitor: 'Sam Grant', phone: 'P1-HO-TDSR', kinds: ['HAUL_OUT_COLLECTION'], siteId: tdsr },
-      {
-        monitor: 'Lee Morgan',
-        phone: 'P1-TWR-CCL',
-        kinds: ['HAUL_OUT_DISPOSAL'],
-        siteId: cypress,
-        tuesdayOnly: true,
-      },
-      {
-        monitor: 'Jo Kim',
-        phone: 'P1-UR-1',
-        kinds: ['UNIT_RATE'],
-        forms: ['INCIDENT'],
-        unitRate: true,
-      },
-    ];
-    const board = async (workDate: string, people: readonly Planned[]) => {
-      const assignments: Record<string, string> = {};
-      for (const planned of people) {
-        assignments[planned.phone] = await assigned(api, clock, luis, {
-          workDate,
-          projectId: p1,
-          personId: person(planned.monitor),
-          fieldEventKinds: [...planned.kinds],
-          formDocumentTypes: [...(planned.forms ?? [])],
-          siteId: planned.siteId ?? null,
-          deviceId: device(planned.phone),
-          // Each named with its own kind of work by the service (C42).
-          payItemIds: planned.unitRate === true ? unitRateWork.map(({ id }) => id) : [],
-        });
-      }
-      return assignments;
-    };
-    const boards = {
-      monday: await board(
-        '2026-10-12',
-        plan.filter((planned) => planned.tuesdayOnly !== true),
-      ),
-      tuesday: await board('2026-10-13', plan),
-    };
+    const plan = p1Plan;
+    const boards = await boardP1(story, field, enrolledPhones as Record<P1PhoneName, string>);
 
     // ------------------------------------------------------------------------------------------
     story.at(
@@ -398,7 +122,7 @@ export const p1FieldDays: Story = {
     await firstBlocks(story, device('P1-UR-1'), timeZone, p1, ['UNIT_RATE']);
 
     const held: Record<string, PhoneLists> = {};
-    const signedIn = async (day: 'monday' | 'tuesday', planned: Planned) => {
+    const signedIn = async (day: 'monday' | 'tuesday', planned: PlannedWork) => {
       const deviceId = device(planned.phone);
       // Monitor ID and password, online: the phone takes the day's assignment (ADR-444).
       const assignmentId = await taken(story, monitor(planned.monitor), deviceId);
@@ -407,13 +131,14 @@ export const p1FieldDays: Story = {
       }
       const lists = await story.lists.held({ assignmentId, deviceId });
       held[planned.phone] = lists;
+      const siteId = siteOf(field, planned);
       return {
         name: planned.phone,
         deviceId,
         monitorId: person(planned.monitor),
         assignmentId,
         projectId: p1,
-        ...(planned.siteId === undefined ? {} : { siteId: planned.siteId }),
+        ...(siteId === undefined ? {} : { siteId }),
         lists,
         timeZone,
       };

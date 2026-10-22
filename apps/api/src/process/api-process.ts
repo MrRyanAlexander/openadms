@@ -171,6 +171,7 @@ import { UntrustedProxy } from './untrusted-proxy.ts';
 import { logged, ProcessLog } from './logs.ts';
 import { apiReadiness, Readiness } from './readiness.ts';
 import type { Settings } from './settings.ts';
+import { ConnectionsAtClose } from './connections-at-close.ts';
 
 export type ProcessSettings = Pick<
   Settings,
@@ -301,6 +302,14 @@ export class ApiProcess {
       trustProxy: settings.trustedProxies.length > 0 ? [...settings.trustedProxies] : false,
     });
     const server = adapter.getInstance();
+    // A connection the proxy pooled and never used, or one whose request is under way, would hold
+    // the close until the proxy hangs up or the keep-alive runs out: each ended as the server
+    // closes (`ConnectionsAtClose`).
+    const connections = new ConnectionsAtClose(server.server);
+    server.addHook('preClose', (done) => {
+      connections.close();
+      done();
+    });
     const routes: Route[] = [];
     server.addHook('onRoute', (route) => {
       for (const method of [route.method].flat()) routes.push({ method, path: route.url });

@@ -25,7 +25,14 @@ import { useState, type ReactNode } from 'react';
 import { TakePhoto } from './camera.tsx';
 import { CancelTicket, PhotoDrawn, photoLabel, TicketPhotos, TruckFacts } from './capture.tsx';
 import { CompleteCollection } from './collection.tsx';
-import { Banner, Button, StatusStrip, type Standing } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  type Standing,
+} from './look/index.ts';
 import { NewTicket, nextSuffix } from './new-ticket.tsx';
 import type { Camera } from './phone/camera.ts';
 import type { PhoneCertifications } from './phone/certifications.ts';
@@ -210,7 +217,7 @@ export function TicketCapture({
         <main data-screen="photo" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{photoLabel(ticket, photo)}</h1>
+            <ScreenTitle>{photoLabel(ticket, photo)}</ScreenTitle>
             <PhotoDrawn
               tickets={parts.tickets}
               photo={photo}
@@ -218,7 +225,7 @@ export function TicketCapture({
               large
             />
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             <Button main wide onPress={back}>
               {said.photos.back}
             </Button>
@@ -250,7 +257,7 @@ export function TicketCapture({
                 </Button>
               </>
             ) : null}
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -264,7 +271,7 @@ export function TicketCapture({
         <main data-screen="submitted" className="screen">
           <StatusStrip standing={standing} />
           <div className="screen-body">
-            <h1>{say(said.submitted.title, { number: ticket.ticketNumber })}</h1>
+            <ScreenTitle>{say(said.submitted.title, { number: ticket.ticketNumber })}</ScreenTitle>
             <Banner tone="good" announced>
               <p>{say(said.submitted.saved, { number: ticket.ticketNumber })}</p>
             </Banner>
@@ -277,7 +284,7 @@ export function TicketCapture({
             />
             {kind === 'DISPOSAL' && onPaper ? <p>{said.submitted.onTheBack}</p> : null}
           </div>
-          <div className="screen-actions">
+          <ScreenActions>
             {ticket.splitSuffix === '' || disposal ? null : (
               <Button
                 main
@@ -307,7 +314,7 @@ export function TicketCapture({
             <Button wide onPress={onHome}>
               {said.submitted.home}
             </Button>
-          </div>
+          </ScreenActions>
           {after}
         </main>
       );
@@ -399,7 +406,7 @@ function OpenTicket({
     <main data-screen="open-ticket" className="screen">
       <StatusStrip standing={standing} />
       <div className="screen-body">
-        <h1>{titled}</h1>
+        <ScreenTitle>{titled}</ScreenTitle>
         {reopened ? (
           <Banner tone="info" announced>
             <p>{say(said.badge.open, { truck: now.certNumber, number: now.ticketNumber })}</p>
@@ -428,7 +435,8 @@ function OpenTicket({
             ) : null}
             <Button
               wide
-              isDisabled={full || marking}
+              isDisabled={full}
+              busy={marking}
               onPress={() => {
                 setMarking(true);
                 const at = new Date();
@@ -477,7 +485,7 @@ function OpenTicket({
           }}
         />
       </div>
-      <div className="screen-actions">
+      <ScreenActions>
         <Button main wide onPress={onComplete}>
           {said.open.complete}
         </Button>
@@ -492,7 +500,7 @@ function OpenTicket({
         >
           {said.open.cancel}
         </Button>
-      </div>
+      </ScreenActions>
       {below}
     </main>
   );

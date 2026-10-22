@@ -7,7 +7,8 @@
 //   pay item or a code; a payable type is offered while one of its pay items is live.
 // - **The kind of work picks the screen** (REQ-112b; ADR-040, 084, 198): Stumps by its built-in
 //   key, never its name (the stump's diameter two feet up, its root ball, "half or more exposed",
-//   its survey number); items with a count each; items with hours each; otherwise a count. A
+//   its survey number); "half or more exposed" is the root ball's (ADR-198), so it is asked only
+//   where a root ball is measured, and the answer goes with it (ADR-605, agent default); items with a count each; items with hours each; otherwise a count. A
 //   payable type's kind of work is its pay items' (kinds never mix on a ticket, ADR-213).
 // - **A count is asked unless each of its pay items is always one**, in whole numbers unless one
 //   of them allows decimals; an itemised ticket's items hold it (ADR-157, 158).
@@ -63,6 +64,14 @@ export interface UnitRateAsked {
   readonly measured: 'TREE' | 'STUMP' | 'NONE';
   // Whether its photographs are taken by stage: before, the measurement, after (ADR-590).
   readonly photosByStage: boolean;
+}
+
+// A stump's measurement as the phone holds it: across two feet up, its root ball, and whether half
+// or more of the root ball is exposed (ADR-198).
+export interface StumpEntered {
+  readonly diameterInches: number | null;
+  readonly rootBallInches: number | null;
+  readonly rootBallHalfExposed: boolean | null;
 }
 
 // A quarter of an hour, in hundredths: crew time's hours go to the quarter hour (ADR-084).
@@ -141,6 +150,33 @@ export class PhoneUnitRate {
   static quarterHour(hours: number): boolean {
     const hundredths = Math.round(hours * 100);
     return Math.abs(hours * 100 - hundredths) < 1e-6 && hundredths % quarterHundredths === 0;
+  }
+
+  // Whether the phone asks "is half or more of the root ball exposed?": the question is the root
+  // ball's (ADR-198), so it is asked only where a root ball is measured (ADR-605).
+  static asksExposure(rootBallInches: number | null): boolean {
+    return rootBallInches !== null;
+  }
+
+  // A stump's root ball entered, or left empty, with the exposure answer it keeps: none once there
+  // is no root ball to answer it of (ADR-605).
+  static rootBallEntered(
+    rootBallInches: number | null,
+    rootBallHalfExposed: boolean | null,
+  ): Pick<StumpEntered, 'rootBallInches' | 'rootBallHalfExposed'> {
+    return {
+      rootBallInches,
+      rootBallHalfExposed: PhoneUnitRate.asksExposure(rootBallInches) ? rootBallHalfExposed : null,
+    };
+  }
+
+  // Whether a stump's measurement is entered: its diameter two feet up, and the exposure answered
+  // where a root ball is measured (ADR-605). A blank root ball (and a blank survey number) is the
+  // monitor's to leave: flagged after sync where the setup asks for one, never stopped (ADR-052,
+  // 198, 203).
+  static stumpMeasured(stump: StumpEntered): boolean {
+    if (stump.diameterInches === null) return false;
+    return !PhoneUnitRate.asksExposure(stump.rootBallInches) || stump.rootBallHalfExposed !== null;
   }
 
   private live(): readonly PhoneUnitRatePayItem[] {

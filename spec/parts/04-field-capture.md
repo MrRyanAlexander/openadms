@@ -128,7 +128,8 @@ is paid by weight.
    field tag (ADR-591).
 3. **Record the work** as its kind asks: hangers removed and one measurement; a leaner's measurement
    at chest height, **as a circumference or a diameter** (the monitor says which); a stump's diameter
-   two feet up, root-ball diameter, "half or more exposed" and survey number; white goods or HHW as
+   two feet up, root-ball diameter, "half or more exposed" (asked only where the root ball is
+   measured, ADR-605) and survey number; white goods or HHW as
    an item list (HHW pounds as the count); crew time as items with hours to the quarter hour
    (ADR-126, 158, 177, 198). The ROE on an ROE project. Where the pay item allows it, the monitor
    may **mark the work ineligible** (flagged, ADR-210).

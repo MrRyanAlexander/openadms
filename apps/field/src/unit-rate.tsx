@@ -8,7 +8,8 @@
 // sets up what comes next; never a field tag (the user, ADR-591); then **the kind of work's own
 // screen** (the domain's `PhoneUnitRate`, REQ-112b): a count where it isn't always one; a tree
 // measured, around or across, in inches to a tenth (ADR-177); a stump's diameter two feet up, its
-// root ball, whether half or more is exposed and its survey number (ADR-198); items with a count
+// root ball, whether half or more is exposed and its survey number (ADR-198), the exposure asked
+// only where a root ball is measured (`PhoneUnitRate.asksExposure`, ADR-605); items with a count
 // each, or with hours each to the quarter hour (ADR-084). **The pay item is worked out from the
 // bands as the work is entered** and kept on the ticket to print: **never shown, nor any rate**
 // (invariant 20; AC-11-43). "Ineligible" is offered where that pay item allows the monitor to mark
@@ -95,13 +96,21 @@ const inchesOf = (typed: string): number | null => {
 
 const shown = (value: number | null): string => (value === null ? '' : String(value));
 
+// What the steps hang on that the ticket holds: a stump's root ball, which its exposure question
+// is asked of.
+type Entered = Pick<PhoneTicket, 'rootBallInches'>;
+
 // The steps the kind of work's own screen takes: its count, its measurement, its items.
-function kindStepsOf(asked: UnitRateAsked | null): UnitRateStep[] {
+function kindStepsOf(asked: UnitRateAsked | null, entered: Entered): UnitRateStep[] {
   const kind: UnitRateStep[] = [];
   if (asked !== null) {
     if (asked.count === 'ASKED') kind.push('count');
     if (asked.measured === 'TREE') kind.push('how', 'inches');
-    if (asked.screen === 'STUMP') kind.push('stump', 'rootBall', 'exposed', 'survey');
+    if (asked.screen === 'STUMP') {
+      kind.push('stump', 'rootBall');
+      if (PhoneUnitRate.asksExposure(entered.rootBallInches)) kind.push('exposed');
+      kind.push('survey');
+    }
     if (asked.screen === 'ITEM_COUNTS' || asked.screen === 'ITEM_HOURS') kind.push('items');
   }
   return kind;
@@ -113,6 +122,7 @@ function kindStepsOf(asked: UnitRateAsked | null): UnitRateStep[] {
 // the review. Photos are a step of their own only for work not photographed by stage.
 function stepsOf(
   asked: UnitRateAsked | null,
+  entered: Entered,
   ineligible: boolean,
   lists: PhoneListsRecord,
 ): UnitRateStep[] {
@@ -120,7 +130,7 @@ function stepsOf(
   return [
     'crew',
     'work',
-    ...(staged ? (['stages'] as const) : kindStepsOf(asked)),
+    ...(staged ? (['stages'] as const) : kindStepsOf(asked, entered)),
     ...(ineligible ? (['ineligible'] as const) : []),
     ...(lists.roes.length === 0 ? [] : (['roe'] as const)),
     'place',
@@ -131,15 +141,16 @@ function stepsOf(
 
 // How many steps New counts the crew as the first of, before the work is picked.
 export const unitRateStepsAtNew = (lists: PhoneListsRecord): number =>
-  stepsOf(null, false, lists).length;
+  stepsOf(null, { rootBallInches: null }, false, lists).length;
 
 // The measurement's own steps, from the dashboard of work photographed by stage and back to it:
 // its photograph, then the kind of work's own screen (ADR-592).
-const measuringOf = (asked: UnitRateAsked | null): UnitRateStep[] =>
-  asked?.photosByStage === true ? ['measurePhoto', ...kindStepsOf(asked)] : [];
+const measuringOf = (asked: UnitRateAsked | null, entered: Entered): UnitRateStep[] =>
+  asked?.photosByStage === true ? ['measurePhoto', ...kindStepsOf(asked, entered)] : [];
 
 // What the measurement's stage says was entered, in the review's words; none until the kind of
-// work's own screen has what it asks (a stump's survey number may stay blank).
+// work's own screen has what it asks (a stump's root ball and survey number may stay blank, and
+// its exposure is asked only of a root ball: `PhoneUnitRate.stumpMeasured`).
 function measuredOf(ticket: PhoneTicket, asked: UnitRateAsked | null): string | null {
   if (asked === null) return null;
   const parts: string[] = [];
@@ -156,7 +167,12 @@ function measuredOf(ticket: PhoneTicket, asked: UnitRateAsked | null): string | 
     );
   }
   if (asked.screen === 'STUMP') {
-    if (ticket.measurementInches === null || ticket.rootBallHalfExposed === null) return null;
+    const measured = PhoneUnitRate.stumpMeasured({
+      diameterInches: ticket.measurementInches,
+      rootBallInches: ticket.rootBallInches,
+      rootBallHalfExposed: ticket.rootBallHalfExposed,
+    });
+    if (ticket.measurementInches === null || !measured) return null;
     parts.push(say(said.review.stumpAcross, { inches: ticket.measurementInches }));
   }
   if (asked.screen === 'ITEM_COUNTS' || asked.screen === 'ITEM_HOURS') {
@@ -174,7 +190,9 @@ const stagePhoto = (ticket: PhoneTicket, stage: PhotoStage) =>
 function stageDone(ticket: PhoneTicket, asked: UnitRateAsked | null, stage: PhotoStage): boolean {
   if (stagePhoto(ticket, stage) === undefined) return false;
   return (
-    stage !== 'MEASUREMENT' || kindStepsOf(asked).length === 0 || measuredOf(ticket, asked) !== null
+    stage !== 'MEASUREMENT' ||
+    kindStepsOf(asked, ticket).length === 0 ||
+    measuredOf(ticket, asked) !== null
   );
 }
 
@@ -228,8 +246,8 @@ export function CompleteUnitRate({
       : { inches: now.measurementInches, measuredAs: now.measuredAs };
   const ineligible =
     now.payableTypeId !== null && phone.mayMarkIneligible(now.payableTypeId, measurement);
-  const steps = stepsOf(asked, ineligible, lists);
-  const measuring = measuringOf(asked);
+  const steps = stepsOf(asked, now, ineligible, lists);
+  const measuring = measuringOf(asked, now);
   const left = [...steps, ...measuring].find((step) => step === ticket.step);
   const [step, setStep] = useState<UnitRateStep>(left ?? 'crew');
   const [cancelling, setCancelling] = useState(false);
@@ -288,13 +306,14 @@ export function CompleteUnitRate({
       after.measurementInches === null || after.measuredAs === null
         ? null
         : { inches: after.measurementInches, measuredAs: after.measuredAs };
-    const measuringNow = measuringOf(askedNow);
+    const measuringNow = measuringOf(askedNow, after);
     if (measuringNow.includes(step)) {
       go(measuringNow[measuringNow.indexOf(step) + 1] ?? 'stages');
       return;
     }
     const stepsNow = stepsOf(
       askedNow,
+      after,
       after.payableTypeId !== null && phone.mayMarkIneligible(after.payableTypeId, measuredNow),
       lists,
     );
@@ -717,7 +736,11 @@ export function CompleteUnitRate({
       return frame(
         said.stump.rootBallTitle,
         next(rootBall === '' || inchesOf(rootBall) !== null, () => {
-          void changed({ rootBallInches: inchesOf(rootBall) }).then(onward);
+          // Left empty, the root ball takes its exposure answer with it, and that question is
+          // not asked (ADR-605).
+          void changed(
+            PhoneUnitRate.rootBallEntered(inchesOf(rootBall), now.rootBallHalfExposed),
+          ).then(onward);
         }),
         <>
           <p>{said.stump.rootBallAbout}</p>
@@ -883,7 +906,7 @@ export function CompleteUnitRate({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             setSubmitting(true);
             setNotKept(null);
@@ -957,14 +980,18 @@ export function CompleteUnitRate({
                     ? said.review.none
                     : say(said.review.across, { inches: now.rootBallInches })}
                 </dd>
-                <dt>{said.review.exposed}</dt>
-                <dd>
-                  {now.rootBallHalfExposed === null
-                    ? said.review.none
-                    : now.rootBallHalfExposed
-                      ? said.review.halfOrMore
-                      : said.review.lessThanHalf}
-                </dd>
+                {PhoneUnitRate.asksExposure(now.rootBallInches) ? (
+                  <>
+                    <dt>{said.review.exposed}</dt>
+                    <dd>
+                      {now.rootBallHalfExposed === null
+                        ? said.review.none
+                        : now.rootBallHalfExposed
+                          ? said.review.halfOrMore
+                          : said.review.lessThanHalf}
+                    </dd>
+                  </>
+                ) : null}
                 <dt>{said.review.survey}</dt>
                 <dd>{now.surveyNumber ?? said.review.none}</dd>
               </>

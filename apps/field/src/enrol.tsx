@@ -5,7 +5,14 @@
 // whether the server answers. The passcode is held only until it is sent.
 import { useEffect, useState } from 'react';
 
-import { Banner, Button, StatusStrip, TextEntry } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  TextEntry,
+} from './look/index.ts';
 import { PhoneIdentity, type Enrolment } from './phone/identity.ts';
 import { refusalWords } from './refusals.ts';
 import type { Server } from './server.ts';
@@ -65,7 +72,7 @@ export function Enrol({
     <main data-screen="enrol" className="screen">
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }} />
       <div className="screen-body">
-        <h1>{words.app.name}</h1>
+        <ScreenTitle>{words.app.name}</ScreenTitle>
         <Banner tone="notice">
           <p>{words.shell.testBuild}</p>
         </Banner>
@@ -84,11 +91,11 @@ export function Enrol({
           </Banner>
         )}
       </div>
-      <div className="screen-actions">
-        <Button main wide isDisabled={enrolling} onPress={() => void enrol()}>
+      <ScreenActions>
+        <Button main wide busy={enrolling} onPress={() => void enrol()}>
           {enrolling ? words.enrol.enrolling : words.enrol.enrol}
         </Button>
-      </div>
+      </ScreenActions>
     </main>
   );
 }

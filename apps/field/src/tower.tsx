@@ -594,7 +594,7 @@ export function CompleteDisposal({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             submit(now);
           }}
@@ -768,7 +768,7 @@ export function CompleteHaulOut({
         <Button
           main
           wide
-          isDisabled={submitting}
+          busy={submitting}
           onPress={() => {
             submit(now);
           }}

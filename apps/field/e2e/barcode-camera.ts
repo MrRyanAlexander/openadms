@@ -39,9 +39,32 @@ export async function barcodeCamera(page: Page): Promise<void> {
       paint();
     };
     paint();
-    // Drawn again and again, so the stream always has a frame to give.
-    window.setInterval(paint, 50);
-    navigator.mediaDevices.getUserMedia = () => Promise.resolve(canvas.captureStream(20));
+    // Drawn again and again while a stream is open, so it always has a frame to give; and only
+    // then: a blurred 1280 × 720 canvas drawn twenty times a second would hold the page's main
+    // thread for the whole test, every press waiting on it.
+    let open = 0;
+    let repainting: number | undefined;
+    navigator.mediaDevices.getUserMedia = () => {
+      const stream = canvas.captureStream(20);
+      open += 1;
+      repainting ??= window.setInterval(paint, 50);
+      for (const track of stream.getTracks()) {
+        const stop = track.stop.bind(track);
+        let stopped = false;
+        track.stop = () => {
+          if (!stopped) {
+            stopped = true;
+            open -= 1;
+            if (open === 0) {
+              window.clearInterval(repainting);
+              repainting = undefined;
+            }
+          }
+          stop();
+        };
+      }
+      return Promise.resolve(stream);
+    };
   });
 }
 

@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --build && vite build",
-    "e2e": "tsc --build && vite build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && playwright install --only-shell chromium && playwright test",
+    "e2e": "tsc --build && vite build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && playwright install --only-shell chromium && (playwright test; screens=$?; playwright test --config playwright.mission.config.ts; mission=$?; [ $screens -eq 0 ] && [ $mission -eq 0 ])",
     "control-tickets": "tsc --build && node e2e/control-tickets.ts",
     "try": "tsc --build && ADMS_FIELD_API_ORIGIN=https://stories.adms.localhost vite build --outDir dist/world && node e2e/try.ts"
   },
@@ -21,7 +21,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.0",
+    "@playwright/test": "1.64.1",
     "@types/node": "24.13.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

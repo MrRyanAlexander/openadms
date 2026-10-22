@@ -17,6 +17,15 @@
 //   note, and approving it again is a new approval. No rate and no pay is held (ADR-241 (5)).
 // - **Never crew time** (ADR-241 (7)): nothing here reads a unit rate ticket, and nothing of a
 //   unit rate ticket reads this.
+// - **On the phone** (task 3.7.2, ADR-601, agent defaults): where the worker stands now (clocked
+//   out, clocked in or on a break) is read from the same entries in the same order, an entry that
+//   fits no stretch left out, and what they may enter next follows from it; **the day's activity
+//   is pre-filled a line an hour of the project's day** (the user's "what they did each hour",
+//   Q-59), from the field events they made on the assignment, each line from the hour's first
+//   field event's start to the latest end among them, naming the first as the field event it was
+//   pre-filled from (a line names one, ADR-598); **a line's times are typed on the 24-hour clock
+//   of its day in the project's time zone**, and one that ends before it starts is said, to be put
+//   right: data entry, never a judgment of the hours.
 import { ProjectClock } from './project-clock.ts';
 
 // What one entry records, the database's ClockEntryKind.
@@ -46,9 +55,54 @@ export interface DayHours {
   readonly unmatchedEntries: number;
 }
 
+// Where a worker stands on their assignment's clock: clocked out (or never in), clocked in, or on a
+// break.
+export type ClockStanding = 'OUT' | 'IN' | 'BREAK';
+
+// A field event as the day's activity is pre-filled from it: the id its phone made it under, and
+// when it started and ended by the phone's clock (the phone's own record of it carries the rest).
+export interface ClockedWork {
+  readonly id: string;
+  readonly startedAt: Date;
+  readonly endedAt: Date;
+}
+
+// One line of the day's activity, pre-filled from the field events whose start fell in one hour
+// of the project's day: from the first one's start to the latest end among them, naming the first
+// as the field event the line was pre-filled from, and every one of them, in field time.
+export interface PrefilledLine<Work extends ClockedWork> {
+  readonly startedAt: Date;
+  readonly endedAt: Date;
+  readonly fieldEventId: string;
+  readonly work: readonly Work[];
+}
+
+// A line of the day's activity as its worker typed its times: the instants it runs between, or
+// why it isn't one yet, a time that isn't a time of day ("from" or "to"), or an end before its
+// start.
+export type TypedLine =
+  | { readonly kind: 'line'; readonly startedAt: Date; readonly endedAt: Date }
+  | { readonly kind: 'notATime'; readonly which: 'from' | 'to' }
+  | { readonly kind: 'endsFirst' };
+
 const minute = 60_000;
 
 const kindOrder: Record<ClockEntryKind, number> = { IN: 0, BREAK_START: 1, BREAK_END: 2, OUT: 3 };
+
+// What each entry moves a worker to from where they stand; none where it fits no stretch.
+const moves: Readonly<Record<ClockStanding, Partial<Record<ClockEntryKind, ClockStanding>>>> = {
+  OUT: { IN: 'IN' },
+  IN: { BREAK_START: 'BREAK', OUT: 'OUT' },
+  BREAK: { BREAK_END: 'IN', OUT: 'OUT' },
+};
+
+// The entries in field time (arrival order means nothing); two at one instant in the order a day
+// runs.
+function inFieldTime(entries: readonly ClockEntryAt[]): ClockEntryAt[] {
+  return [...entries].sort(
+    (a, b) => a.at.getTime() - b.at.getTime() || kindOrder[a.kind] - kindOrder[b.kind],
+  );
+}
 
 export class ClockDay {
   private readonly clock: ProjectClock;
@@ -62,10 +116,7 @@ export class ClockDay {
 
   hours(entries: readonly ClockEntryAt[]): DayHours {
     const { starts, ends } = this.clock.dayBounds(this.workDate);
-    // In field time; two at one instant in the order a day runs.
-    const ordered = [...entries].sort(
-      (a, b) => a.at.getTime() - b.at.getTime() || kindOrder[a.kind] - kindOrder[b.kind],
-    );
+    const ordered = inFieldTime(entries);
     let worked = 0;
     let onBreak = 0;
     let outside = 0;
@@ -102,6 +153,61 @@ export class ClockDay {
       stillClockedIn: state !== 'OUT',
       unmatchedEntries: unmatched,
     };
+  }
+
+  // Where the worker stands after all of these entries, read as the hours read them: an entry
+  // that fits no stretch moves nothing.
+  static standing(entries: readonly ClockEntryAt[]): ClockStanding {
+    let standing: ClockStanding = 'OUT';
+    for (const { kind } of inFieldTime(entries)) standing = moves[standing][kind] ?? standing;
+    return standing;
+  }
+
+  // What the worker may enter from where they stand, in the order a day runs: a clock-in when
+  // clocked out; a break or a clock-out when clocked in; the break's end or a clock-out on one.
+  static next(standing: ClockStanding): readonly ClockEntryKind[] {
+    return clockEntryKinds.filter((kind) => moves[standing][kind] !== undefined);
+  }
+
+  // The day's activity pre-filled from the field events given (ADR-241 (3), 601): a line for each
+  // hour of the project's day one of them started in, in field time. Nothing is dropped or judged:
+  // the worker edits the lines and approves them.
+  prefilled<Work extends ClockedWork>(work: readonly Work[]): PrefilledLine<Work>[] {
+    const ordered = [...work].sort(
+      (a, b) => a.startedAt.getTime() - b.startedAt.getTime() || a.id.localeCompare(b.id),
+    );
+    const hours = new Map<string, Work[]>();
+    for (const one of ordered) {
+      const hour = `${this.clock.day(one.startedAt)} ${this.clock.time(one.startedAt).slice(0, 2)}`;
+      const held = hours.get(hour);
+      if (held === undefined) hours.set(hour, [one]);
+      else held.push(one);
+    }
+    return [...hours.values()].flatMap((held) => {
+      const [first] = held;
+      if (first === undefined) return [];
+      return [
+        {
+          startedAt: first.startedAt,
+          endedAt: new Date(Math.max(...held.map(({ endedAt }) => endedAt.getTime()))),
+          fieldEventId: first.id,
+          work: held,
+        },
+      ];
+    });
+  }
+
+  // A line's times as its worker typed them (ADR-601), each a time of day on the 24-hour clock,
+  // "08:20", on the line's day in the project's time zone (the assignment's own where none is
+  // given): what isn't a time of day is said, and so is a line that ends before it starts.
+  typedLine(from: string, to: string, day = this.workDate): TypedLine {
+    const startedAt = this.clock.instantAt(day, from);
+    if (startedAt === null) return { kind: 'notATime', which: 'from' };
+    const endedAt = this.clock.instantAt(day, to);
+    if (endedAt === null) return { kind: 'notATime', which: 'to' };
+    return endedAt.getTime() < startedAt.getTime()
+      ? { kind: 'endsFirst' }
+      : { kind: 'line', startedAt, endedAt };
   }
 }
 

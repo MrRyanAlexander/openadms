@@ -1,7 +1,8 @@
 // What the field app may hold (BACKLOG 3.1.2; ADR-565): no rule of its own (AC-11-06; invariant
 // 11), no payload shape (Phase 3's exit, criterion 8), no outside SDK and no identifier of the
 // phone or its owner (AC-11-69), no way to make HTML or code from a string (AC-11-61), and one
-// server to talk to, by one module (AC-11-01). Read from its source and its dependencies, as the
+// server to talk to, by one module (AC-11-01); nothing written to the clipboard and no system
+// notification (AC-11-63, 65; item 3.10.2). Read from its source and its dependencies, as the
 // chain runs it; the native builds' own libraries are read again at 3.8.1 and 3.9.1.
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -297,6 +298,23 @@ describe('the field app holds', () => {
     for (const { path, file } of modules) {
       expect(
         namesIn(file).used.filter((name) => name === 'console'),
+        path,
+      ).toEqual([]);
+    }
+  });
+
+  it('AC-11-63, AC-11-65: nothing written to the clipboard and no system notification: no clipboard, notification or push API is reached', () => {
+    const outward = new Set([
+      'clipboard',
+      'execCommand',
+      'Notification',
+      'showNotification',
+      'PushManager',
+      'pushManager',
+    ]);
+    for (const { path, file } of modules) {
+      expect(
+        namesIn(file).used.filter((name) => outward.has(name)),
         path,
       ).toEqual([]);
     }

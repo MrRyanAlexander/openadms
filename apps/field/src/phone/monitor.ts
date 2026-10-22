@@ -163,6 +163,9 @@ export class MonitorOnPhone {
   // A report under way: the monitor's requests at once wait on its one report, never each sending
   // the sign-in again (the server takes it once).
   private reporting: Promise<HeldSession | NotAnswered> | undefined;
+  // How many times a session was ended on this phone by a sign-out: its monitor's, the lock after
+  // inactivity's, a handover's, the passcode's lock. A run begun before one is no longer theirs.
+  private signedOut = 0;
 
   constructor(
     identity: PhoneIdentity,
@@ -307,6 +310,12 @@ export class MonitorOnPhone {
     return this.signedIn();
   }
 
+  // How many sessions were ended on this phone by a sign-out so far (`signOut`), counted as it
+  // begins: a run that read this before it began sees whether one was ended while it ran.
+  get signOuts(): number {
+    return this.signedOut;
+  }
+
   // Who is signed in now by the phone's clock, or nobody. A session run out is dropped.
   async signedIn(): Promise<SignedIn | undefined> {
     const held = await this.held();
@@ -403,6 +412,7 @@ export class MonitorOnPhone {
   // answered. With no signal the server's session runs out by its own hours; a sign-in made
   // offline and never reported is never sent.
   async signOut(): Promise<void> {
+    this.signedOut += 1;
     const held = await this.held();
     if (held !== undefined) {
       await this.identity.asPhone(signOutOnPhoneEndpoint, { session: held.answer.token });

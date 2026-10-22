@@ -421,8 +421,13 @@ export class PhoneOutbox {
   }
 
   // Records kept together or not at all, in the order given: a scale receipt before the disposal
-  // that points at it (ADR-034, 582). One the contract doesn't read keeps none of them.
-  async keepTogether(records: readonly SyncedRecord[]): Promise<NotSavedNotice | undefined> {
+  // that points at it (ADR-034, 582). One the contract doesn't read keeps none of them. What the
+  // part of the app that made them keeps of them itself (`also`: the time clock's own note of an
+  // entry, ADR-601) goes in the same piece of work.
+  async keepTogether(
+    records: readonly SyncedRecord[],
+    also: readonly Change[] = [],
+  ): Promise<NotSavedNotice | undefined> {
     const entries: Entry<SyncedRecord>[] = [];
     for (const [place, record] of records.entries()) {
       const read = recordRead(record);
@@ -439,13 +444,14 @@ export class PhoneOutbox {
         archived: false,
       });
     }
-    await this.store.change(
-      entries.map((entry) => ({
-        shelf: 'records',
+    await this.store.change([
+      ...entries.map((entry) => ({
+        shelf: 'records' as const,
         id: entry.id,
         value: this.stored(entry, 'record'),
       })),
-    );
+      ...also,
+    ]);
     this.next += entries.length;
     this.records.push(...entries);
     return undefined;

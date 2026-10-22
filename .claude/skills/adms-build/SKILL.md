@@ -31,6 +31,27 @@ description: How code is built in Open ADMS, as recipes that earlier work learne
   from the API's error, shown beside the field it names.
 - **Money only from a read that takes it**; a viewer's screen only from `/viewer/…`.
 - **A photograph is fetched with the session's cookies** and shown, never opened as a page.
+- **A field app screen's title is `ScreenTitle`, its actions `ScreenActions`, and a button busy with
+  what its press began is `busy`, never `isDisabled`** (item 3.10.2, ADR-606): the title takes the
+  focus as the screen or its next question comes; the actions are held at the foot only while they
+  take at most 40% of the height and scroll a keyboard-focused control clear of them; a busy button
+  keeps the focus (`aria-disabled`). Not React Aria's `isPending`: its announcement names the button
+  by id and outlives it, which axe-core catches. `accessible.ts` walks the keyboard round every
+  screen; `checkScreen(page, { keyboard: false })` only where a key pressed would end the moment
+  checked (the warning before the lock).
+- **A time of day is typed in the platform's own time field** (the field app's `TimeEntry`, a
+  native `type="time"` input: no date library) and read as an instant only by the domain's
+  `ProjectClock.instantAt` on the project's day and time zone, never by `new Date(…)` in a screen
+  (task 3.7.2, ADR-601).
+- **A listener on the document for "anything done" hears events as they come down**
+  (`addEventListener(…, true)`): a React Aria button stops its press's `pointerdown` rising, so a
+  bubbling listener never hears a monitor working by buttons alone (the phone's lock after
+  inactivity did, until item 3.10.1, ADR-603).
+- **A whole mission told on the screens shares the stories' setup, never a copy**: the back
+  office's part is the scenario harness's shared steps (`p1-field-setup.ts`, `p1-office.ts`,
+  `p2.ts`, `golden-review.ts`) on a `StoryStage`, reached from the browser test through a process
+  of its own; its outcomes are `stories/golden-outcomes.ts`'s (ADR-603; `adms-verify`'s
+  `browser-tests.md`, "The golden mission's run").
 
 ## Standing rules (from the register, word for word)
 
@@ -38,6 +59,12 @@ description: How code is built in Open ADMS, as recipes that earlier work learne
 - **After a change to `apps/api` or `apps/worker`, `pnpm local:up` again** before the chain: each container runs what was built when it started, and `door.test.ts` and `container.test.ts` ask them. (C85, C95)
 - **A sidecar's Caddyfile** (`routing/`, `objectstore/`) is a mounted file: `local:up` doesn't remake its container when only that changed; `docker restart` it, or `local:down` first. A changed object-store policy or key is picked up by `local:down` then `up`. **On a Linux host** each key under `infra/local/.generated/tls/` must be readable by its container's user. (C136, C162, C167)
 - **A new piece of work meant to run longer than `DATABASE_WORK_LONGEST_MS`** states its own limits with its ADR. (C166)
+- **A server the proxy reaches ends its connections as it closes** (`apps/api`'s
+  `ConnectionsAtClose`, in Fastify's `preClose`): one over HTTPS that has carried no request is
+  never idle to Node, so a connection the proxy pooled unused held the close until Caddy hung up,
+  two minutes (the browser tests' worlds, W0); one whose request is under way is answered with
+  `Connection: close`, or ended once its answer is sent. Never `forceCloseConnections: true`,
+  which cuts answers under way.
 - **Counts go in `CHAIN.md` alone, written by `pnpm chain record` (ADR-594); a lesson about a layer's tests in its page beside `adms-verify`; loosenings through `loosen.mjs` in one list.** (C116)
 
 **Every task that adds an endpoint** (the recipe; the API page beside `adms-verify` has the helpers)
@@ -59,5 +86,14 @@ description: How code is built in Open ADMS, as recipes that earlier work learne
 - **A test of the API that must write** uses `apps/api/test/support/database.ts` (`undone`) and may hand the process its database, mail and clock; **the API's test files run one at a time**; a test that archives Dana gives the firm another admin first; a refusal by one of the database's checks ends the test's piece of work, so it is that test's last request; a service asks everything before it writes (a test's piece of work has no savepoint). (C89, C92, C98, C103, C105)
 - **A test asks for a Monitor ID as "M" and six digits or more,** never exactly six (every run moves `adms`'s series on). (C131)
 - **A story** writes nothing a service does by hand: a planned assignment with `assigned`; a monitor with `story.monitor(name, onPhone)` and `taken(story, monitor, phone)`; a phone with `story.enrolled(name, at?)` (an `at` before its first work) and `story.proofs`; a phone's first block with `firstBlocks`; a person's act with `browser.answered(endpoint, …)` signed in as `story.backOffice.admin` or `.person` (a person written by hand needs their sign-in address); its phone takes its setup version from the lists it read. A story that moves its clock back before a phone's last proof is stopped at that phone's next request: tell it in time order. A person whose sessions end signs in again only after the clock moves thirty seconds. **An exact audit list that moves when acts sign in, sync or queue says why in the ADR, never loosens.** (C103, C113, C115, C119, C134, C143, C145)
+- **A browser test awaits what it makes happen; it never polls for it inside expect's few
+  seconds**: a cut the test's route makes is a promise the route resolves, an answer the page waits
+  for is `page.waitForResponse`, and a poll is left only for what the test reads after it. The
+  photo files test's cut came at the end of a whole sync, seen to take 0.3 s to 8 s under load
+  (W0, "the browser runs steady").
+- **The golden mission's audit rows are read through the API**, a ticket's history at a
+  reviewer's browser (`stories/golden-audit.ts`'s `MissionAudit`, `readTicketHistory`), in the
+  outcomes' words (`auditLines`) against their one home (`goldenOutcomes.reviewed.p1.audit`), by
+  the story and the browser test alike.
 - **Stories assert the audit log's order, never its times** (the database stamps its own clock). The server apps' indexes export only what `packages/scenarios` and `infra/local` read (`app-exports.test.ts`): a story that stops calling a service takes it out; kept in process on purpose: `Corrections` (AC-10-50), `first-admin`'s sign-in parts, the setup services, `Certifications`, `NumberAllocator`, `Assignments`, `Phones`. A test of the object store tidies up as the stack's administrator (`tidied`). (C29, C136, C151)
 - **Every later Prisma upgrade:** `views` is a preview feature (fallback: `$queryRaw` inside `$viewed`, in `packages/db` only); run `pnpm audit` and drop each accepted advisory the upgrade fixes (C32), saying so in its ADR; look at the `pg` deprecation warnings from the adapter (`client.query()` while executing; pg 9 removes the call): **`pg` stays on 8 until a run shows none**; since ADR-554 our own code puts no two queries on one connection at once, so one still seen is Prisma's engine's (trace it with `NODE_OPTIONS=--trace-deprecation`). (C32, C98, C109)

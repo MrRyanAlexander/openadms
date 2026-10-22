@@ -200,3 +200,109 @@ describe('who approves a day (AC-02-53)', () => {
     });
   });
 });
+
+describe('the clock on the phone (task 3.7.2, ADR-601)', () => {
+  it('AC-02-50 where the worker stands: out, in, on a break, in again, out; read in field time, an entry that fits no stretch moving nothing', () => {
+    expect(ClockDay.standing([])).toBe('OUT');
+    expect(ClockDay.standing([entry('IN', '06:00')])).toBe('IN');
+    expect(ClockDay.standing([entry('BREAK_START', '13:00'), entry('IN', '06:00')])).toBe('BREAK');
+    expect(
+      ClockDay.standing([
+        entry('IN', '06:00'),
+        entry('BREAK_START', '13:00'),
+        entry('BREAK_END', '13:30'),
+      ]),
+    ).toBe('IN');
+    expect(ClockDay.standing([entry('IN', '06:00'), entry('OUT', '18:50')])).toBe('OUT');
+    // A second clock-in while in, a break ended that never started: nothing moves.
+    expect(
+      ClockDay.standing([entry('IN', '06:00'), entry('IN', '07:00'), entry('BREAK_END', '08:00')]),
+    ).toBe('IN');
+    expect(ClockDay.standing([entry('OUT', '06:00')])).toBe('OUT');
+  });
+
+  it('AC-02-50 what may be entered next: a clock-in when out, a break or a clock-out when in, the break’s end or a clock-out on one', () => {
+    expect(ClockDay.next('OUT')).toEqual(['IN']);
+    expect(ClockDay.next('IN')).toEqual(['BREAK_START', 'OUT']);
+    expect(ClockDay.next('BREAK')).toEqual(['BREAK_END', 'OUT']);
+  });
+
+  it('AC-02-52 the day’s activity pre-filled a line an hour from the field events: from the hour’s first start to its latest end, naming the first; in field time, whatever order they came in', () => {
+    const work = (id: string, from: string, to: string, number: string) => ({
+      id,
+      number,
+      startedAt: at(from),
+      endedAt: at(to),
+    });
+    const a = work('a', '08:20', '08:40', '101001');
+    const b = work('b', '08:45', '09:10', '101002');
+    const c = work('c', '09:05', '09:20', '101003');
+    const d = work('d', '13:05', '13:40', '101004');
+    expect(day.prefilled([d, c, b, a])).toEqual([
+      { startedAt: at('08:20'), endedAt: at('09:10'), fieldEventId: 'a', work: [a, b] },
+      { startedAt: at('09:05'), endedAt: at('09:20'), fieldEventId: 'c', work: [c] },
+      { startedAt: at('13:05'), endedAt: at('13:40'), fieldEventId: 'd', work: [d] },
+    ]);
+    expect(day.prefilled([])).toEqual([]);
+  });
+
+  it('AC-02-52 a tower’s busy day is still a line an hour: 250 disposals from 06:00 come to 13 lines, far under what a clock-out carries', () => {
+    const disposals = Array.from({ length: 250 }, (_, place) => {
+      const startedAt = new Date(at('06:00').getTime() + place * 3 * 60_000);
+      return { id: String(place), startedAt, endedAt: new Date(startedAt.getTime() + 60_000) };
+    });
+    const lines = day.prefilled(disposals);
+    expect(lines).toHaveLength(13);
+    expect(lines.reduce((sum, line) => sum + line.work.length, 0)).toBe(250);
+  });
+
+  it('the hour is the project’s: 08:59 and 09:00 in Bayline County are two lines', () => {
+    const lines = day.prefilled([
+      { id: 'x', startedAt: at('08:59'), endedAt: at('09:01') },
+      { id: 'y', startedAt: at('09:00'), endedAt: at('09:02') },
+    ]);
+    expect(lines.map(({ fieldEventId }) => fieldEventId)).toEqual(['x', 'y']);
+  });
+});
+
+describe('a time of day typed for a day (task 3.7.2, ADR-601)', () => {
+  const clock = new ProjectClock(bayline);
+
+  it('is the instant it falls at in the project’s time zone, on either side of the clocks going back', () => {
+    expect(clock.instantAt(tuesday, '08:20')).toEqual(at('08:20'));
+    expect(clock.instantAt(tuesday, '7:05')).toEqual(at('07:05'));
+    expect(clock.instantAt('2026-11-02', '08:20')).toEqual(new Date('2026-11-02T08:20:00-05:00'));
+    // 01:30 on Sunday 1 November happens twice: the first.
+    expect(clock.instantAt('2026-11-01', '01:30')).toEqual(new Date('2026-11-01T01:30:00-04:00'));
+  });
+
+  it('none for what isn’t a time of day', () => {
+    for (const typed of ['', '8', '24:00', '08:60', '8.20', 'noon', '08:20:00']) {
+      expect(clock.instantAt(tuesday, typed)).toBeNull();
+    }
+    expect(clock.instantAt('13-Oct-2026', '08:20')).toBeNull();
+  });
+});
+
+describe('a line’s times as its worker typed them (task 3.7.2, ADR-601)', () => {
+  it('AC-02-52 are the instants they fall at on the assignment’s day in the project’s time zone, or on the day given', () => {
+    expect(day.typedLine('08:20', '09:10')).toEqual({
+      kind: 'line',
+      startedAt: at('08:20'),
+      endedAt: at('09:10'),
+    });
+    expect(day.typedLine('22:20', '22:50', '2026-10-14')).toEqual({
+      kind: 'line',
+      startedAt: at('22:20', '2026-10-14'),
+      endedAt: at('22:50', '2026-10-14'),
+    });
+    // A line of no length is the worker's to keep.
+    expect(day.typedLine('13:00', '13:00').kind).toBe('line');
+  });
+
+  it('say which time isn’t a time of day, and a line that ends before it starts', () => {
+    expect(day.typedLine('', '09:10')).toEqual({ kind: 'notATime', which: 'from' });
+    expect(day.typedLine('08:20', '9.10')).toEqual({ kind: 'notATime', which: 'to' });
+    expect(day.typedLine('09:10', '08:20')).toEqual({ kind: 'endsFirst' });
+  });
+});

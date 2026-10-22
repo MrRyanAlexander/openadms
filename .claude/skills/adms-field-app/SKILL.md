@@ -2,9 +2,9 @@
 name: adms-field-app
 description: Open ADMS field app and phones, in today's rules. Covers enrolling a phone once, the day's assignment it takes at sign-in, setup by master passcode when there's no assignment (an unplanned assignment), offline sign-in from the login list and its safeguards, switching monitors and moving site, encryption, the time clock on the phone, syncing whenever there's signal, sync and turn in, an out-of-service phone (the Phase 0 part, ARCHITECTURE §7–§8); what a phone holds for its assignment (lists, the site's quantity lookup, never rates or rules); and the later-phase capture notes: offline as the only mode, advisory on-device checks, badge then number at New and open tickets, every start list, the split chain, printing, scanning, GPS and photos. Use when touching enrolment, sign-in, the phone's lists, sync from the phone's side, or anything a monitor captures. The workflows themselves are adms-ticket-workflows.
 ---
-<!-- skill-status: current (the time clock's server half, ADR-598; ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590; no field tag on a phone, unit rate's crew first and its dashboard, ADR-591, 592; printing as built, ADR-595; scanning as built, ADR-596) -->
+<!-- skill-status: current (the look's held actions and the focus, ADR-606; the time clock's server half, ADR-598; ADR-138, rewritten 2026-09-29, ADR-251; the Phase 0 device and assignment models built, ADR-281; split haul-outs, ADR-295; a badge's number the phone's list doesn't hold, ADR-421; enrolment through the API, ADR-439; the assignment taken at sign-in, ADR-444; the lists read by the phone, ADR-450; the login list, ADR-454; an unplanned assignment reported, ADR-457; a site move and a monitor switch reported, ADR-458; every other use of the master passcode a phone logged, ADR-464; the open designs put to the user with task 3.1.4's prototype, ADR-561; put as Q-215…Q-218, ADR-569; the number at New, open tickets, waypoints and photos, ADR-571; Q-215…Q-218 answered, ADR-573; the field app's sign-in and its lists, ADR-574; signing in offline and the lock after inactivity, ADR-575; setup under the passcode on the field app and the sign-in screen’s unlock reported, ADR-576; the passcode’s ten wrong tries offline lock the phone (the user), switching, moving and passcode sessions on the field app, ADR-577; the field app's sync, ADR-578; its photographs' files, asked after on reopening, ADR-579; the collection as built, waypoints, the phone's first block, ADR-581; the tower and the haul-out as built, what a phone at a site asks, ADR-582; unit rate as built, the working crew, what a phone asks of unit rate work, ADR-583; the forms as built, the firm's own fields in the lists, ADR-584; the user's notes on trying the field app: a sync every five minutes, a made number never typed again, unit rate work photographed by stage, ADR-588…590; no field tag on a phone, unit rate's crew first and its dashboard, ADR-591, 592; printing as built, ADR-595; scanning as built, ADR-596; the phone's clock as built, ADR-601; a stump with no root ball asks no exposure question, ADR-605) -->
 
-> **This page states today's rules** (last changed by ADR-596, as its status line lists). Each rule cites its ADR; what changed is in
+> **This page states today's rules** (last changed by ADR-601, as its status line lists). Each rule cites its ADR; what changed is in
 > the History list at the end. The user's own words are quoted and marked **User**. If this page and
 > `agent_store/DECISIONS.md` (or `SUMMARY.md`, to ADR-598) disagree, the record wins: log a KD (`adms-decisions`). How each piece is
 > built and secured: `spec/ARCHITECTURE.md` §7–§12. The worked example is `spec/golden/MISSION.md`
@@ -226,6 +226,19 @@ gets tracked on a spreadsheet."
     manager approves the day (never their own), locking it, and unlocks it with a note; the hours
     are the domain's `ClockDay` (the day ending before midnight in the project's time zone, no
     cap).
+    ⚠️ *Built in the field app (task 3.7.2, ADR-601; agent defaults):* **Time** in the bottom menu,
+    and where the worker stands in the status strip, only while the phone holds their assignment
+    and its lists say the clock is on; only what comes next is offered (`ClockDay.next`), each entry
+    made now and sent at the next sync. **The nudges:** on starting a field event from home while
+    not clocked in (a break counts as in; reopening an open ticket is no start), and on Settings'
+    Sign out while clocked in or on a break (clock out first, sign out still clocked in, or back);
+    the lock, a handover and a session's end sign out with no nudge. **The day's activity is
+    pre-filled a line an hour of the project's day** from the field events the worker submitted on
+    the assignment on this phone (`ClockDay.prefilled`), each line naming the hour's first; one an
+    earlier clock-out carried isn't pre-filled again. The worker changes a line's times (24-hour,
+    on its day, in the project's time zone) and note or takes it off, adds lines from the firm's
+    list, and approves as they clock out; a line that ends before it starts is held until put
+    right (`ClockDay.typedLine`).
 
 **Phones:** the firm issues **iPhones or Androids**; testing goes **browser first, then iPhone, later
 Android** (ADR-099). Every screen is translatable, English first; US units (ADR-172).
@@ -331,7 +344,7 @@ estimate the monitor gives **the load call so far**; the last is the haul-out's.
 | **A load that carries tickets**: the loading monitor adds each carried ticket by its number (painted on a stump, or the white goods ticket's); the tower counts | ADR-192, 204, 243 |
 | **No field tag on a phone** (the user, ADR-591): **User, 2026-10-20:** "get rid of field tag on all ticket flow options **this is not how we want things**". No capture asks one; every field event a phone makes has none. The firm's list and the *Field tag* criterion stay for the back office until the user says (KD-80) | ADR-216, 218, 591 |
 | **Unit rate**: a crew badge scanned once stays the working crew until the monitor changes it; shown clearly and confirmed on each completion; where the pay item allows it the monitor may **mark the work ineligible** (flagged) | ADR-111, 210 |
-| **Measurement**: at chest height, the monitor says whether it's a **circumference or a diameter**; a stump is its diameter two feet up, never a circumference; the stump screen also takes the root ball's diameter, "half or more exposed" and the survey number | ADR-177, 187, 198 |
+| **Measurement**: at chest height, the monitor says whether it's a **circumference or a diameter**; a stump is its diameter two feet up, never a circumference; the stump screen also takes the root ball's diameter, "half or more exposed" (asked only where a root ball is measured, ADR-605) and the survey number | ADR-177, 187, 198, 605 |
 | **Crew time**: items with hours to the quarter hour, the same screen shape as white goods | ADR-084 |
 | **Photos** from the camera only, never the gallery; fingerprinted (SHA-256) at capture; shrunk natively keeping location, time and depth data; **at most 8 per ticket**; "required" is a pay item setting; a certification takes **five** set views. **Taken at any step while the ticket is open**, New included (the debris before loading); **the review shows the photos themselves**, never only a count; before submitting one may be retaken or removed, a removed one never sent (*agent defaults* from the user's notes, ADR-571); one retaken takes its place and is never counted twice; the browser build's camera is opened only when a photograph is taken, and its photograph kept as taken (*agent defaults*, ADR-586) | ADR-101, 157, 179, 571, 586 |
 | **GPS**: the phone sends whatever fix it has and never judges its accuracy; the back office adjusts drift | ADR-083 |
@@ -377,7 +390,8 @@ The number is the phone's next of the unit rate series, always made there, openi
 the crew shown with its photo, **the payable types each once, by name** (no field tag since ADR-591), then **what the domain's `PhoneUnitRate` says the kind of work asks**: a count
 unless every pay item of the payable type is always one; a tree measured around or across where one
 of them asks for it or has a band; Stumps (by its key) the diameter two feet up, the root ball,
-"half or more exposed" and the survey number; items with a count each, whole unless decimals are
+"half or more exposed" (only where a root ball is measured: `PhoneUnitRate.asksExposure`, ADR-605)
+and the survey number; items with a count each, whole unless decimals are
 allowed; items with hours each, to the quarter hour. **The pay item is worked out from the bands as
 the work is entered, kept for the receipt and never shown**; "ineligible" is asked only where the
 pay item worked out allows it (none worked out: any of the payable type's); an ROE where the phone
@@ -520,7 +534,7 @@ once; **the monitor's own count of today's tickets on home**, nothing ranked or 
 bottom menu is Work, Time (only where the project has the time clock on), Sync and Settings**; **the
 number is typed again only when a person copied it** (one typed because the barcode won't read;
 one the phone made no longer, the user, ADR-589), never after a scan. The components and tokens every
-screen is built from are `apps/field/src/look/` (ADR-567, 568).
+screen is built from are `apps/field/src/look/` (ADR-567, 568). **Since item 3.10.2 (ADR-606):** the main action and those beside it are held at the bottom in thumb reach only while they take at most 40% of the screen's height, and come after the work otherwise (the phone on its side, its largest text); a screen's title takes the focus as the screen or its next question comes; a button busy with what it began keeps the focus. Two WCAG criteria are partly met and the user's: 2.1.4 (a scan field takes keys typed anywhere on its screen) and 3.2.2 (a pick moves straight on with nothing said before), `spec/ACCESSIBILITY-FIELD.md` §5.
 
 ---
 

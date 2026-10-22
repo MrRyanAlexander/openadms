@@ -39,6 +39,7 @@ const work: Readonly<Record<string, string>> = {
   tariq: 'no assignment',
   jo: 'unit rate work and certifying, P1',
   sam: 'collections on the PARKS project, from control tickets 400001–405000',
+  omar: 'collections on P2, where the time clock is on',
 };
 
 const page = await servedFolder(fileURLToPath(new URL('../dist/world', import.meta.url)), {

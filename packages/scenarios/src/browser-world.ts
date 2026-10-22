@@ -68,6 +68,12 @@
 // Its key is handed to the test with the rest (a made-up world's, never an installation's), for
 // the browser's keyring to hold as the phone's own: the browser can't otherwise hold a key made
 // before the run, and nothing else of it is planted.
+//
+// **And the time clock** (task 3.7.2, ADR-601): switched on for **P2**, its load form with
+// Vegetative as the story `setup` gives it, and Omar Haddad on its collections today and tomorrow
+// (made up, agent default). On P2 and not on P1 as AC-02-50 words it: the tests that capture on
+// P1 would each meet the clock's nudge, and every test reads what another writes on a project.
+// The firm's activities (Travel, Standby, Training) are the seed's.
 import { generateKeyPairSync } from 'node:crypto';
 
 import {
@@ -112,6 +118,8 @@ export interface WorldCast {
   readonly jo: CastMonitor;
   // On the PARKS project's collections (task 3.5.1; ADR-583).
   readonly sam: CastMonitor;
+  // On P2's collections, where the time clock is on (task 3.7.2, ADR-601).
+  readonly omar: CastMonitor;
 }
 
 // The lost tower phone, as a browser test plants it: its id and name as enrolled, the passcode
@@ -214,6 +222,8 @@ export class BrowserWorld {
         ticketNumberSource: 'GENERATED',
         workflows: ['LOAD'],
         ...new NewProjectSettings(policy).for(ppdr),
+        // The time clock on, for its workers (task 3.7.2, ADR-601).
+        timeClockEnabled: true,
       },
     });
     await startSeries(tx, project.id, { LOAD: 102001 });
@@ -309,6 +319,7 @@ export class BrowserWorld {
       [who.project, 'LOAD', 'Load', ['Vegetative', 'C&D', 'Vegetative to FDS', 'White Goods']],
       [who.project, 'HAUL_OUT', 'Haul-out', ['Mulch']],
       [who.parks, 'LOAD', 'Load', ['Vegetative']],
+      [who.p2, 'LOAD', 'Load', ['Vegetative']],
     ] as const) {
       const form = await saved(forms.form(who.dana, { projectId, documentType, name }));
       for (const debris of names) {
@@ -716,6 +727,7 @@ export class BrowserWorld {
         'Tariq Patel',
         'Jo Kim',
         'Sam Grant',
+        'Omar Haddad',
       ];
       const created = new Map<string, CastMonitor & { readonly id: string }>();
       for (const [place, name] of people.entries()) {
@@ -774,6 +786,12 @@ export class BrowserWorld {
           personId: of('Sam Grant').id,
           fieldEventKinds: ['COLLECTION'],
         });
+        await assigned(api, clock, office.luis, {
+          workDate,
+          projectId: office.p2,
+          personId: of('Omar Haddad').id,
+          fieldEventKinds: ['COLLECTION'],
+        });
         for (const [kind, site] of [
           ['COLLECTION', null],
           ['DISPOSAL', office.landfill],
@@ -811,6 +829,7 @@ export class BrowserWorld {
           tariq: handed(of('Tariq Patel')),
           jo: handed(of('Jo Kim')),
           sam: handed(of('Sam Grant')),
+          omar: handed(of('Omar Haddad')),
         },
         lostPhone: await BrowserWorld.lostPhone(made, asked, office.luis, (ms) => {
           behindMs = ms;

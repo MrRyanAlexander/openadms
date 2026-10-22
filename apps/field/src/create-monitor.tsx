@@ -8,7 +8,14 @@
 import { createMonitorOnPhoneEndpoint, type MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useState } from 'react';
 
-import { Banner, Button, StatusStrip, TextEntry } from './look/index.ts';
+import {
+  Banner,
+  Button,
+  ScreenActions,
+  ScreenTitle,
+  StatusStrip,
+  TextEntry,
+} from './look/index.ts';
 import { Backward } from './look/icons.tsx';
 import type { PhoneIdentity } from './phone/identity.ts';
 import { refusalWords } from './refusals.ts';
@@ -61,11 +68,11 @@ export function CreateMonitor({
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }} />
       <div className="screen-body">
         <div>
-          <Button icon={<Backward />} isDisabled={creating} onPress={onBack}>
+          <Button icon={<Backward />} busy={creating} onPress={onBack}>
             {words.look.back}
           </Button>
         </div>
-        <h1>{said.title}</h1>
+        <ScreenTitle>{said.title}</ScreenTitle>
         <p>{said.needs}</p>
         <TextEntry label={said.name} value={name} onChange={setName} />
         <TextEntry label={said.passwordLabel} secret value={password} onChange={setPassword} />
@@ -77,11 +84,11 @@ export function CreateMonitor({
           </Banner>
         )}
       </div>
-      <div className="screen-actions">
-        <Button main wide isDisabled={creating} onPress={() => void create()}>
+      <ScreenActions>
+        <Button main wide busy={creating} onPress={() => void create()}>
           {creating ? said.creating : said.create}
         </Button>
-      </div>
+      </ScreenActions>
     </main>
   );
 }

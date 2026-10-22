@@ -10,6 +10,7 @@ import { createRoot } from 'react-dom/client';
 
 import { BrowserCamera } from './phone/camera.ts';
 import { PhoneCertifications } from './phone/certifications.ts';
+import { PhoneClock } from './phone/clock.ts';
 import { PhoneForms } from './phone/forms.ts';
 import { PhoneIdentity } from './phone/identity.ts';
 import { PhoneLists } from './phone/lists.ts';
@@ -83,7 +84,10 @@ const phone = BrowserStore.opened().then(async (store) => {
   const certifications = await PhoneCertifications.opened(store, lists, outbox, {
     photoBytesAtMost: policy.mediaFileBytesAtMost,
   });
+  // The worker's own time clock on the phone (task 3.7.2, ADR-601), pre-filled from the tickets.
+  const clock = await PhoneClock.opened(store, outbox, tickets);
   return {
+    clock,
     capture: {
       tickets,
       forms,
