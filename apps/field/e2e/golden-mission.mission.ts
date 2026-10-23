@@ -845,6 +845,10 @@ test('AC-08-64, AC-07-113, AC-07-111, AC-08-65: the mission’s review done by L
     'Under 24 in; goes out as vegetative debris',
   );
   await luis.close();
+  // The review took Luis half an hour. The world's own session of his has ended by then (quiet
+  // since 07:20), and it signs in again with his authenticator: never with the code his sign-in
+  // at the screens used at 08:00, as a code is good once (NIST SP 800-63B §5.1.4).
+  await world.at(wednesday('08:30'));
   const standing = await world.standing();
   const { reviewed } = world.outcomes;
   expect(standing.p1.statuses).toEqual(reviewed.p1.statuses);
