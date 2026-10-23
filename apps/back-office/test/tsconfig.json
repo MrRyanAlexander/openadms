@@ -6,7 +6,8 @@
     "allowImportingTsExtensions": true,
     "tsBuildInfoFile": "../dist/test.tsbuildinfo",
     "lib": ["es2024", "dom", "dom.iterable"],
-    "types": ["node"]
+    "types": ["node"],
+    "jsx": "react-jsx"
   },
   "include": [
     ".",

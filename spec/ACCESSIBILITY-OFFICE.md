@@ -18,12 +18,12 @@ managers/analysts) and **the read-only viewer portal** (client users, contractor
 chosen by who signs in. Every screen names itself (`data-screen`); a screen no browser test reaches
 fails the run.
 
-| Mark | How |
-|---|---|
-| **A** | axe-core 4.14.0's WCAG 2.0–2.2 A and AA rules on every screen a test reaches, **in the light theme and the dark**; a violation or an unsettled result fails the run |
-| **R** | Each screen held **320 CSS px wide**, then with its **text at 200%**: any sideways scroll of the page fails (1.4.10, 1.4.4) |
+| Mark  | How                                                                                                                                                                                                                                                  |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A** | axe-core 4.14.0's WCAG 2.0–2.2 A and AA rules on every screen a test reaches, **in the light theme and the dark**; a violation or an unsettled result fails the run                                                                                  |
+| **R** | Each screen held **320 CSS px wide**, then with its **text at 200%**: any sideways scroll of the page fails (1.4.10, 1.4.4)                                                                                                                          |
 | **K** | **The keyboard's walk**, as shown and again at 320 px with text at 200%: every enabled control reached by Tab (2.1.1), a visible ring of 3:1 or better at each stop (2.4.7, 1.4.11), the focused control never wholly hidden (2.4.11); fails the run |
-| **S** | The source read: React Aria's components under the look's own (`@open-adms/look`), every word through the translation file (`src/words/en.json`), no `autoFocus`, no timer on a screen, no hover-only content, no drag |
+| **S** | The source read: React Aria's components under the look's own (`@open-adms/look`), every word through the translation file (`src/words/en.json`), no `autoFocus`, no timer on a screen, no hover-only content, no drag                               |
 
 **The last runs (2026-10-22):** the screens' run, 24 tests, **50 of 50 screens checked in 73
 checks, 0 found**; the golden mission's run, 5 tests, 6 screens in 13 checks, 0 found.
@@ -37,6 +37,11 @@ checks, 0 found**; the golden mission's run, 5 tests, 6 screens in 13 checks, 0 
    named, focusable region now, so its long lines scroll by keyboard too.
 3. **Two buttons shared the words "QC status"** in the QC dialog: the status picked is "Set it
    to", so each control's name is its own (2.4.6, 3.3.2).
+4. **The desktop's first build** (2026-10-22): a window scrolling within itself left its words
+   below its fold "partially obscured" to the contrast check (1.4.3), and a menu bar held in view
+   left too little room round a link the page scrolled beneath it (2.5.8): the page scrolls as
+   one now. The menus, not yet folded in the frame after a screen narrowed, pushed the page
+   sideways (1.4.10): they wrap until they fold.
 
 ## 3. Across the app
 
@@ -50,9 +55,22 @@ checks, 0 found**; the golden mission's run, 5 tests, 6 screens in 13 checks, 0 
   carry their `autocomplete` (1.3.5).
 - **Dialogs** (2.1.2, 2.4.3): React Aria's modal: the focus held inside and given back to the
   button that opened it; Escape closes it, saving nothing.
-- **The menu** (2.4.1, 2.4.11, 3.2.3): closed by default, opened from the header's button, closed
-  on Escape, a press outside it or a link chosen; a skip link leads past the header; the header
-  stays in view only where the screen has room for it.
+- **The desktop** (2.1.1, 2.4.1, 2.4.3, 2.4.11, 2.5.1, 2.5.7, 3.2.3; the user, 2026-10-22): the
+  back office and the portal are a desktop (`shell.tsx`, `desk/`). **The menu bar** follows
+  WAI-ARIA's menubar pattern: one stop of Tab, Left and Right along it (an open menu carried
+  along), Down, Enter or Space into a menu, a letter to the item it begins, Escape giving the
+  focus back to the menu's name; where its menus don't fit across (a narrow screen, large text)
+  they fold into one menu of named groups. **The desktop's folder icons** and a folder's icons
+  open on one press (pointer, touch or Enter), never a double-click alone; every icon is a stop of
+  Tab, and the arrows move between them by where they stand. **One window at a time**, named
+  "Window:" and its title, its screen keeping its own `main` and its one `h1`; its buttons
+  (minimize, maximize or restore, close) are 44 px, pressed, never dragged; the address names the
+  window shown, so Back, Forward and a link keep a person's place, and the taskbar's other windows
+  open their addresses again. Where the desktop is narrow, counted in its text's size (320 px, text
+  at 200%), every window is maximized. **The page scrolls as one, the bars with it**: a window
+  scrolling within itself hid its words from the contrast check, and bars held in view covered
+  what scrolled beneath them (a link's target space, 2.5.8), so neither is done. A skip link leads
+  past the bars; the theme (light, dark, or the computer's) is the View menu's.
 - **Status and change** (4.1.3): what an act saved, and what was refused, is announced; a list read
   again after an act keeps what it showed until the new answer comes.
 - **Colour** (1.4.1, 1.4.3, 1.4.11): the look's tokens in both themes; a state is a word, never a

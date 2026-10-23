@@ -1,15 +1,18 @@
-// Which screen each address shows, and the menu that reaches them (ARCHITECTURE §14; FROM-BUILD-1
-// §8, §13). A screen a person may not open isn't in their menu; asked for by its address, the API
-// refuses it and the screen says so. The firm's records are the firm's; everything else is a
-// project's, under /projects/<id>/.
-import type { ReactNode } from 'react';
+// Every screen of the back office, as a place on the desktop (ARCHITECTURE §14; FROM-BUILD-1 §8,
+// §13; desk/places.ts): its address, its title, its picture, and, where it belongs in the menus and
+// on the desktop, its area and who may open it. A screen a person may not open isn't in their
+// menus or folders; asked for by its address, the API refuses it and the screen says so. The
+// firm's records are the firm's; everything else is a project's, under /projects/<id>/. The areas
+// are the work's: the firm, then the project's Tickets, Reports and Forms, Billings (never
+// "Money"), Dispatch and hours, and Setup.
+import type { SessionAnswer } from '@open-adms/contracts';
 
-import { matched } from './router.tsx';
+import { ticketTitle, type Place, type Workplace } from './desk/places.ts';
 import { Account } from './screens/account.tsx';
 import { Home } from './screens/home.tsx';
 import { NotFound } from './screens/not-found.tsx';
 import { Project } from './screens/project.tsx';
-import { holds, isAdmin, type Signed } from './session.tsx';
+import { holds, isAdmin } from './session.tsx';
 import { DispatchBoard } from './people/dispatch.tsx';
 import { FirmSettings } from './people/firm-settings.tsx';
 import { Hours } from './people/hours.tsx';
@@ -36,173 +39,362 @@ import { DropOffLogs, Incidents, Surveys } from './review/form-records.tsx';
 import { ReviewQueue } from './review/queue.tsx';
 import { TicketPage } from './review/ticket.tsx';
 import { HeldRecords, Quarantine, SetAsideJobs } from './review/waiting.tsx';
-import type { MenuSection } from './shell.tsx';
 import { words } from './words.ts';
 
-// The firm's own screens, by their address.
-const firmScreens: Readonly<Record<string, () => ReactNode>> = {
-  '/': () => <Home />,
-  '/account': () => <Account />,
-  '/clients': () => <Clients />,
-  '/declaration-events': () => <DeclarationEvents />,
-  '/contractors': () => <Contractors />,
-  '/lists': () => <FirmLists />,
-  '/people': () => <People />,
-  '/phones': () => <Phones />,
-  '/settings': () => <FirmSettings />,
-};
+const said = words.shell.links;
+const titled = (title: string) => () => title;
+const project = (params: Readonly<Record<string, string>>) => params['projectId'] ?? '';
 
-// The firm's screens of one record, by their address.
-const firmRecordScreens: readonly (readonly [
-  string,
-  (params: Readonly<Record<string, string>>) => ReactNode,
-])[] = [['/people/:userId', (params) => <PersonPage userId={params['userId'] ?? ''} />]];
+// Who may open what (ADR-539): setup, review and dispatch each by their view.
+const setup = (session: SessionAnswer) => holds(session, 'SETUP');
+const viewSetup = (session: SessionAnswer) => holds(session, 'VIEW_SETUP');
+const viewReview = (session: SessionAnswer) => holds(session, 'VIEW_REVIEW');
+const viewDispatch = (session: SessionAnswer) => holds(session, 'VIEW_DISPATCH');
+const everyone = () => true;
 
-// A project's screens, by the rest of their address after /projects/<id>.
-const projectScreens: readonly (readonly [
-  string,
-  (projectId: string, params: Readonly<Record<string, string>>) => ReactNode,
-])[] = [
-  ['', (projectId) => <Project projectId={projectId} />],
-  ['/setup', (projectId) => <ProjectSetup projectId={projectId} />],
-  ['/setup/forms', (projectId) => <Forms projectId={projectId} />],
-  ['/setup/pay-items', (projectId) => <PayItems projectId={projectId} />],
-  ['/setup/rules', (projectId) => <Rules projectId={projectId} />],
-  ['/setup/rules/new', (projectId) => <RuleBuilder projectId={projectId} ruleId={null} />],
-  [
-    '/setup/rules/:ruleId',
-    (projectId, params) => <RuleBuilder projectId={projectId} ruleId={params['ruleId'] ?? ''} />,
-  ],
-  ['/setup/sites', (projectId) => <Sites projectId={projectId} />],
-  ['/setup/map', (projectId) => <ProjectMap projectId={projectId} />],
-  ['/setup/check', (projectId) => <SetupCheck projectId={projectId} />],
-  ['/certifications', (projectId) => <Certifications projectId={projectId} />],
-  [
-    '/certifications/:certificationId',
-    (projectId, params) => (
-      <CertificationPage projectId={projectId} certificationId={params['certificationId'] ?? ''} />
-    ),
-  ],
-  ['/roes', (projectId) => <Roes projectId={projectId} />],
-  ['/surveys', (projectId) => <Surveys projectId={projectId} />],
-  ['/incidents', (projectId) => <Incidents projectId={projectId} />],
-  ['/drop-off-logs', (projectId) => <DropOffLogs projectId={projectId} />],
-  ['/review', (projectId) => <ReviewQueue projectId={projectId} />],
-  [
-    '/tickets/:workflow/:ticketNumber',
-    (projectId, params) => (
+const places: readonly Place[] = [
+  // The firm's.
+  {
+    at: '/',
+    title: titled(said.projects),
+    glyph: 'projects',
+    screen: () => <Home />,
+    area: 'firm',
+    shown: everyone,
+  },
+  {
+    at: '/clients',
+    title: titled(said.clients),
+    glyph: 'building',
+    screen: () => <Clients />,
+    area: 'firm',
+    shown: setup,
+  },
+  {
+    at: '/declaration-events',
+    title: titled(said.events),
+    glyph: 'storm',
+    screen: () => <DeclarationEvents />,
+    area: 'firm',
+    shown: setup,
+  },
+  {
+    at: '/contractors',
+    title: titled(said.contractors),
+    glyph: 'truck',
+    screen: () => <Contractors />,
+    area: 'firm',
+    shown: setup,
+  },
+  {
+    at: '/lists',
+    title: titled(said.lists),
+    glyph: 'list',
+    screen: () => <FirmLists />,
+    area: 'firm',
+    shown: setup,
+  },
+  {
+    at: '/people',
+    title: titled(said.people),
+    glyph: 'people',
+    screen: () => <People />,
+    area: 'firm',
+    shown: viewDispatch,
+  },
+  {
+    at: '/phones',
+    title: titled(said.phones),
+    glyph: 'phone',
+    screen: () => <Phones />,
+    area: 'firm',
+    shown: viewDispatch,
+  },
+  {
+    at: '/settings',
+    title: titled(said.firmSettings),
+    glyph: 'settings',
+    screen: () => <FirmSettings />,
+    area: 'firm',
+    shown: setup,
+  },
+  {
+    at: '/account',
+    title: titled(words.shell.account),
+    glyph: 'account',
+    screen: () => <Account />,
+  },
+  {
+    at: '/people/:userId',
+    title: titled(words.desk.titles.person),
+    glyph: 'account',
+    screen: (params) => <PersonPage userId={params['userId'] ?? ''} />,
+  },
+
+  // A project's own page.
+  {
+    at: '/projects/:projectId',
+    title: titled(words.desk.titles.project),
+    glyph: 'folder',
+    screen: (params) => <Project projectId={project(params)} />,
+  },
+
+  // Tickets.
+  {
+    at: '/projects/:projectId/review',
+    title: titled(said.review),
+    glyph: 'review',
+    screen: (params) => <ReviewQueue projectId={project(params)} />,
+    area: 'tickets',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/quarantine',
+    title: titled(said.quarantine),
+    glyph: 'quarantine',
+    screen: (params) => <Quarantine projectId={project(params)} />,
+    area: 'tickets',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/held',
+    title: titled(said.held),
+    glyph: 'held',
+    screen: (params) => <HeldRecords projectId={project(params)} />,
+    area: 'tickets',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/set-aside-jobs',
+    title: titled(said.jobs),
+    glyph: 'jobs',
+    screen: (params) => <SetAsideJobs projectId={project(params)} />,
+    area: 'tickets',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/tickets/:workflow/:ticketNumber',
+    title: (params) => ticketTitle(params['workflow'], params['ticketNumber']),
+    glyph: 'ticket',
+    screen: (params) => (
       <TicketPage
-        projectId={projectId}
+        projectId={project(params)}
         workflow={params['workflow'] ?? ''}
         ticketNumber={params['ticketNumber'] ?? ''}
       />
     ),
-  ],
-  ['/quarantine', (projectId) => <Quarantine projectId={projectId} />],
-  ['/held', (projectId) => <HeldRecords projectId={projectId} />],
-  ['/set-aside-jobs', (projectId) => <SetAsideJobs projectId={projectId} />],
-  ['/reports', (projectId) => <Reports projectId={projectId} />],
-  ['/exports', (projectId) => <Exports projectId={projectId} />],
-  ['/ledger', (projectId) => <Ledger projectId={projectId} />],
-  ['/qc', (projectId) => <QcAndLock projectId={projectId} />],
-  ['/invoice-batches', (projectId) => <InvoiceBatches projectId={projectId} />],
-  ['/audit', (projectId) => <AuditTrail projectId={projectId} />],
-  ['/closing', (projectId) => <Closing projectId={projectId} />],
-  ['/dispatch', (projectId) => <DispatchBoard projectId={projectId} />],
-  ['/hours', (projectId) => <Hours projectId={projectId} />],
+  },
+
+  // Reports and Forms.
+  {
+    at: '/projects/:projectId/reports',
+    title: titled(said.reports),
+    glyph: 'report',
+    screen: (params) => <Reports projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/exports',
+    title: titled(said.exports),
+    glyph: 'export',
+    screen: (params) => <Exports projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/certifications',
+    title: titled(said.certifications),
+    glyph: 'certification',
+    screen: (params) => <Certifications projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/certifications/:certificationId',
+    title: titled(words.desk.titles.certification),
+    glyph: 'certification',
+    screen: (params) => (
+      <CertificationPage
+        projectId={project(params)}
+        certificationId={params['certificationId'] ?? ''}
+      />
+    ),
+  },
+  {
+    at: '/projects/:projectId/roes',
+    title: titled(said.roes),
+    glyph: 'roe',
+    screen: (params) => <Roes projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/surveys',
+    title: titled(said.surveys),
+    glyph: 'survey',
+    screen: (params) => <Surveys projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/incidents',
+    title: titled(said.incidents),
+    glyph: 'incident',
+    screen: (params) => <Incidents projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/drop-off-logs',
+    title: titled(said.dropOffLogs),
+    glyph: 'dropOff',
+    screen: (params) => <DropOffLogs projectId={project(params)} />,
+    area: 'forms',
+    shown: viewReview,
+  },
+
+  // Billings.
+  {
+    at: '/projects/:projectId/ledger',
+    title: titled(said.ledger),
+    glyph: 'ledger',
+    screen: (params) => <Ledger projectId={project(params)} />,
+    area: 'billings',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/qc',
+    title: titled(said.qc),
+    glyph: 'qc',
+    screen: (params) => <QcAndLock projectId={project(params)} />,
+    area: 'billings',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/invoice-batches',
+    title: titled(said.batches),
+    glyph: 'batches',
+    screen: (params) => <InvoiceBatches projectId={project(params)} />,
+    area: 'billings',
+    shown: viewReview,
+  },
+  {
+    at: '/projects/:projectId/audit',
+    title: titled(said.audit),
+    glyph: 'audit',
+    screen: (params) => <AuditTrail projectId={project(params)} />,
+    area: 'billings',
+    shown: (session) => viewReview(session) || viewSetup(session) || viewDispatch(session),
+  },
+  {
+    at: '/projects/:projectId/closing',
+    title: titled(said.closing),
+    glyph: 'lock',
+    screen: (params) => <Closing projectId={project(params)} />,
+    area: 'billings',
+    shown: isAdmin,
+  },
+
+  // Dispatch and hours.
+  {
+    at: '/projects/:projectId/dispatch',
+    title: titled(said.dispatch),
+    glyph: 'dispatch',
+    screen: (params) => <DispatchBoard projectId={project(params)} />,
+    area: 'dispatch',
+    shown: viewDispatch,
+  },
+  {
+    at: '/projects/:projectId/hours',
+    title: titled(said.hours),
+    glyph: 'clock',
+    screen: (params) => <Hours projectId={project(params)} />,
+    area: 'dispatch',
+    shown: viewDispatch,
+  },
+
+  // Setup.
+  {
+    at: '/projects/:projectId/setup',
+    title: titled(said.projectSetup),
+    glyph: 'setup',
+    screen: (params) => <ProjectSetup projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/forms',
+    title: titled(said.forms),
+    glyph: 'form',
+    screen: (params) => <Forms projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/pay-items',
+    title: titled(said.payItems),
+    glyph: 'payItem',
+    screen: (params) => <PayItems projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/rules',
+    title: titled(said.rules),
+    glyph: 'rules',
+    screen: (params) => <Rules projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/rules/new',
+    title: titled(words.desk.titles.newRule),
+    glyph: 'rules',
+    screen: (params) => <RuleBuilder projectId={project(params)} ruleId={null} />,
+  },
+  {
+    at: '/projects/:projectId/setup/rules/:ruleId',
+    title: titled(words.desk.titles.rule),
+    glyph: 'rules',
+    screen: (params) => <RuleBuilder projectId={project(params)} ruleId={params['ruleId'] ?? ''} />,
+  },
+  {
+    at: '/projects/:projectId/setup/sites',
+    title: titled(said.sites),
+    glyph: 'site',
+    screen: (params) => <Sites projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/map',
+    title: titled(said.map),
+    glyph: 'map',
+    screen: (params) => <ProjectMap projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
+  {
+    at: '/projects/:projectId/setup/check',
+    title: titled(said.setupCheck),
+    glyph: 'checklist',
+    screen: (params) => <SetupCheck projectId={project(params)} />,
+    area: 'setup',
+    shown: viewSetup,
+  },
 ];
 
-export function routeOf(path: string): ReactNode {
-  const firm = firmScreens[path === '' ? '/' : path];
-  if (firm !== undefined) return firm();
-  for (const [pattern, screen] of firmRecordScreens) {
-    const params = matched(pattern, path);
-    if (params !== null) return screen(params);
-  }
-  for (const [rest, screen] of projectScreens) {
-    const params = matched(`/projects/:projectId${rest}`, path);
-    if (params !== null) return screen(params['projectId'] ?? '', params);
-  }
-  return <NotFound />;
-}
-
-export function sectionsOf(signed: Signed, projectId: string | null): readonly MenuSection[] {
-  const said = words.shell;
-  const { session } = signed;
-  const setup = holds(session, 'SETUP');
-  const viewSetup = holds(session, 'VIEW_SETUP');
-  const viewReview = holds(session, 'VIEW_REVIEW');
-  const viewDispatch = holds(session, 'VIEW_DISPATCH');
-  const inProject = (rest: string) => `/projects/${projectId ?? ''}${rest}`;
-  const firm: MenuSection = {
-    label: said.sections.firm,
-    links: [
-      { label: said.links.projects, href: '/', shown: true },
-      { label: said.links.clients, href: '/clients', shown: setup },
-      { label: said.links.events, href: '/declaration-events', shown: setup },
-      { label: said.links.contractors, href: '/contractors', shown: setup },
-      { label: said.links.lists, href: '/lists', shown: setup },
-      { label: said.links.people, href: '/people', shown: viewDispatch },
-      { label: said.links.phones, href: '/phones', shown: viewDispatch },
-      { label: said.links.firmSettings, href: '/settings', shown: setup },
-    ],
-  };
-  if (projectId === null) return [firm];
-  return [
-    firm,
-    {
-      label: said.sections.tickets,
-      links: [
-        { label: said.links.review, href: inProject('/review'), shown: viewReview },
-        { label: said.links.quarantine, href: inProject('/quarantine'), shown: viewReview },
-        { label: said.links.held, href: inProject('/held'), shown: viewReview },
-        { label: said.links.jobs, href: inProject('/set-aside-jobs'), shown: viewReview },
-      ],
-    },
-    {
-      label: said.sections.forms,
-      links: [
-        { label: said.links.reports, href: inProject('/reports'), shown: viewReview },
-        { label: said.links.exports, href: inProject('/exports'), shown: viewReview },
-        { label: said.links.certifications, href: inProject('/certifications'), shown: viewReview },
-        { label: said.links.roes, href: inProject('/roes'), shown: viewReview },
-        { label: said.links.surveys, href: inProject('/surveys'), shown: viewReview },
-        { label: said.links.incidents, href: inProject('/incidents'), shown: viewReview },
-        { label: said.links.dropOffLogs, href: inProject('/drop-off-logs'), shown: viewReview },
-      ],
-    },
-    {
-      label: said.sections.billings,
-      links: [
-        { label: said.links.ledger, href: inProject('/ledger'), shown: viewReview },
-        { label: said.links.qc, href: inProject('/qc'), shown: viewReview },
-        { label: said.links.batches, href: inProject('/invoice-batches'), shown: viewReview },
-        {
-          label: said.links.audit,
-          href: inProject('/audit'),
-          shown: viewReview || viewSetup || viewDispatch,
-        },
-        { label: said.links.closing, href: inProject('/closing'), shown: isAdmin(session) },
-      ],
-    },
-    {
-      label: said.sections.dispatch,
-      links: [
-        { label: said.links.dispatch, href: inProject('/dispatch'), shown: viewDispatch },
-        { label: said.links.hours, href: inProject('/hours'), shown: viewDispatch },
-      ],
-    },
-    {
-      label: said.sections.setup,
-      links: [
-        { label: said.links.projectSetup, href: inProject('/setup'), shown: viewSetup },
-        { label: said.links.forms, href: inProject('/setup/forms'), shown: viewSetup },
-        { label: said.links.payItems, href: inProject('/setup/pay-items'), shown: viewSetup },
-        { label: said.links.rules, href: inProject('/setup/rules'), shown: viewSetup },
-        { label: said.links.sites, href: inProject('/setup/sites'), shown: viewSetup },
-        { label: said.links.map, href: inProject('/setup/map'), shown: viewSetup },
-        { label: said.links.setupCheck, href: inProject('/setup/check'), shown: viewSetup },
-      ],
-    },
-  ];
-}
+export const office: Workplace = {
+  areas: [
+    { id: 'firm', label: words.shell.sections.firm, glyph: 'building' },
+    { id: 'tickets', label: words.shell.sections.tickets, glyph: 'ticket' },
+    { id: 'forms', label: words.shell.sections.forms, glyph: 'form' },
+    { id: 'billings', label: words.shell.sections.billings, glyph: 'billings' },
+    { id: 'dispatch', label: words.shell.sections.dispatch, glyph: 'dispatch' },
+    { id: 'setup', label: words.shell.sections.setup, glyph: 'setup' },
+  ],
+  places,
+  notFound: () => <NotFound />,
+  notFoundTitle: words.notFound.title,
+};

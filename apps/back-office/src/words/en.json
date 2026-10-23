@@ -202,6 +202,48 @@
       "exports": "Exports, photo PDFs and receipts"
     }
   },
+  "desk": {
+    "menus": "The menus",
+    "file": "File",
+    "view": "View",
+    "window": "Window",
+    "help": "Help",
+    "desktop": "Desktop",
+    "showDesktop": "Show the desktop",
+    "icons": "The desktop",
+    "areaIcons": "What {area} holds",
+    "areaAbout": "Open one to work in it.",
+    "themeComputer": "Theme as this computer has it",
+    "themeLight": "Light theme",
+    "themeDark": "Dark theme",
+    "windows": "Open windows",
+    "noWindows": "No windows open",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close",
+    "minimizeWindow": "Minimize the window",
+    "maximizeWindow": "Maximize the window",
+    "restoreWindow": "Restore the window",
+    "closeWindow": "Close the window",
+    "windowNamed": "Window: {title}",
+    "about": "About {name}",
+    "titles": {
+      "ticket": "Ticket {number}",
+      "person": "A person",
+      "certification": "A certification",
+      "rule": "A rule",
+      "newRule": "A new rule",
+      "project": "The project"
+    }
+  },
+  "about": {
+    "title": "About {name}",
+    "builtOn": "Built on Open ADMS {version}",
+    "builtOnOpenAdms": "Built on Open ADMS",
+    "what": "Debris management and field reconciliation for disaster recovery.",
+    "licence": "Open ADMS is open source, under the GNU Affero General Public License, version 3."
+  },
   "home": {
     "title": "Projects",
     "about": "Pick a project to work on it.",

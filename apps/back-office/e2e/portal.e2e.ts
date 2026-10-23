@@ -65,7 +65,7 @@ test('REQ-408 a client user reads P1 read only: its tickets, 101601 whole with w
   await checkScreen(page);
 });
 
-test('ADR-315 a contractor user is shown its own contractor’s work: no ROEs, forms or setup in its menu', async ({
+test('ADR-315 a contractor user is shown its own contractor’s work: no ROEs, forms or setup in its menus or on its desktop', async ({
   page,
   context,
 }) => {
@@ -76,12 +76,28 @@ test('ADR-315 a contractor user is shown its own contractor’s work: no ROEs, f
   });
   await page.goto(`/projects/${p1}`);
   await expect(heading(page)).toHaveText(p1Name);
-  await page.getByRole('button', { name: english.shell.menu }).click();
-  const menu = page.getByRole('navigation', { name: english.shell.navigation });
-  await expect(menu.getByRole('link', { name: said.links.tickets })).toBeVisible();
-  await expect(menu.getByRole('link', { name: said.links.forms })).toHaveCount(0);
-  await expect(menu.getByRole('link', { name: said.links.setup })).toHaveCount(0);
+  // The menu bar's menu of the project, and the desktop's folder of it: its tickets and
+  // certifications, never its forms or setup.
+  await page.getByRole('menuitem', { name: said.sections.project, exact: true }).click();
+  const menu = page.getByRole('menu', { name: said.sections.project });
+  await expect(menu.getByRole('menuitem', { name: said.links.tickets, exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: said.links.forms })).toHaveCount(0);
+  await expect(menu.getByRole('menuitem', { name: said.links.setup })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
+  await page.getByRole('button', { name: english.desk.closeWindow }).click();
+  await expect(page).toHaveURL(`/projects/${p1}/desktop`);
+  await page
+    .getByRole('navigation', { name: english.desk.icons })
+    .getByRole('link', { name: said.sections.project, exact: true })
+    .click();
+  await expect(heading(page)).toHaveText(said.sections.project);
+  const folder = page.getByRole('navigation', {
+    name: english.desk.areaIcons.replace('{area}', said.sections.project),
+  });
+  await expect(folder.getByRole('link')).toHaveText([
+    said.links.tickets,
+    said.links.certifications,
+  ]);
   await checkScreen(page);
 });

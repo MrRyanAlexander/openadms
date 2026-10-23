@@ -5,8 +5,9 @@
 // **Who is signed in decides the screen**: a page loaded anew asks the API for its session by the
 // refresh token's cookie; with none, the sign-in. A person whose password somebody else set
 // chooses their own first, and an admin or a manager/analyst with no authenticator sets one up,
-// before anything else (the API serves them nothing else until then, ADR-410, 412). Signed in, the
-// address names the screen.
+// before anything else (the API serves them nothing else until then, ADR-410, 412), each as a
+// window on an empty desktop. Signed in, the desktop (shell.tsx), where the address names the
+// window shown.
 import '@open-adms/look/tokens.css';
 import '@open-adms/look/components.css';
 import './look/office.css';
@@ -18,15 +19,16 @@ import { createRoot } from 'react-dom/client';
 
 import { Api } from './api.ts';
 import { ApiContext } from './reading.tsx';
-import { isViewer, portalRouteOf, portalSectionsOf } from './portal/portal.tsx';
-import { routeOf, sectionsOf } from './routes.tsx';
+import { keptTheme, showTheme } from './desk/preferences.ts';
+import { isViewer, portal } from './portal/portal.tsx';
+import { office } from './routes.tsx';
 import { navigate, Routed, useWhere } from './router.tsx';
 import { PasswordForm } from './screens/password-form.tsx';
 import { PasswordReset } from './screens/password-reset.tsx';
 import { SignIn, type SignedOutWhy } from './screens/sign-in.tsx';
 import { TwoStepForm } from './screens/two-step-form.tsx';
 import { SignedContext, type Signed } from './session.tsx';
-import { Shell } from './shell.tsx';
+import { Shell, SignedOutDesk } from './shell.tsx';
 import { words } from './words.ts';
 
 type Standing =
@@ -78,54 +80,62 @@ function App({ api }: { readonly api: Api }) {
 
   if (standing.kind === 'opening') return null;
   if (standing.kind === 'out' || signed === null) {
-    if (path === '/password-reset') return <PasswordReset />;
     return (
-      <SignIn
-        why={standing.kind === 'out' ? standing.why : null}
-        onSignedIn={(session) => {
-          setStanding({ kind: 'in', session });
-        }}
-      />
+      <SignedOutDesk>
+        {path === '/password-reset' ? (
+          <PasswordReset />
+        ) : (
+          <SignIn
+            why={standing.kind === 'out' ? standing.why : null}
+            onSignedIn={(session) => {
+              setStanding({ kind: 'in', session });
+            }}
+          />
+        )}
+      </SignedOutDesk>
     );
   }
   const { session } = signed;
   if (session.passwordChangeRequired) {
     return (
       <SignedContext.Provider value={signed}>
-        <main data-screen="password-required" className="page page-narrow" id="content">
-          <ScreenTitle>{words.password.title}</ScreenTitle>
-          <p>{words.password.required}</p>
-          <PasswordForm onChanged={() => void reread()} />
-        </main>
+        <SignedOutDesk>
+          <main data-screen="password-required" className="page page-narrow" id="content">
+            <ScreenTitle>{words.password.title}</ScreenTitle>
+            <p>{words.password.required}</p>
+            <PasswordForm onChanged={() => void reread()} />
+          </main>
+        </SignedOutDesk>
       </SignedContext.Provider>
     );
   }
   if (session.twoStepSetupRequired) {
     return (
       <SignedContext.Provider value={signed}>
-        <main data-screen="two-step-required" className="page page-narrow" id="content">
-          <ScreenTitle>{words.twoStep.title}</ScreenTitle>
-          <p>{words.twoStep.required}</p>
-          <TwoStepForm
-            onSetUp={(next) => {
-              setStanding({ kind: 'in', session: next });
-            }}
-          />
-        </main>
+        <SignedOutDesk>
+          <main data-screen="two-step-required" className="page page-narrow" id="content">
+            <ScreenTitle>{words.twoStep.title}</ScreenTitle>
+            <p>{words.twoStep.required}</p>
+            <TwoStepForm
+              onSetUp={(next) => {
+                setStanding({ kind: 'in', session: next });
+              }}
+            />
+          </main>
+        </SignedOutDesk>
       </SignedContext.Provider>
     );
   }
   if (path === '/password-reset') navigate('/', { replace: true });
   return (
     <SignedContext.Provider value={signed}>
-      {isViewer(session) ? (
-        <Shell sections={portalSectionsOf}>{portalRouteOf(path)}</Shell>
-      ) : (
-        <Shell sections={sectionsOf}>{routeOf(path)}</Shell>
-      )}
+      <Shell key={session.user.id} workplace={isViewer(session) ? portal : office} />
     </SignedContext.Provider>
   );
 }
+
+// The theme the person chose in this browser, before anything is drawn (desk/preferences.ts).
+showTheme(keptTheme());
 
 const place = document.getElementById('app');
 if (place === null) throw new Error('index.html has no element for the app.');

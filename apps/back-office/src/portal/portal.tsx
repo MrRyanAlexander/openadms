@@ -32,11 +32,11 @@ import { ChoiceField } from '../look/fields.tsx';
 import { PagedTable, Table } from '../look/paged-table.tsx';
 import { Photo } from '../look/photo.tsx';
 import { Shown, useRead } from '../reading.tsx';
-import { matched, navigate, useWhere } from '../router.tsx';
+import { ticketTitle, type Place, type Workplace } from '../desk/places.ts';
+import { navigate, useWhere } from '../router.tsx';
 import { Account } from '../screens/account.tsx';
 import { NotFound } from '../screens/not-found.tsx';
-import { useSigned, type Signed } from '../session.tsx';
-import type { MenuSection } from '../shell.tsx';
+import { useSigned } from '../session.tsx';
 import { changeOf } from '../review/history.tsx';
 import { day, money, number, say, words } from '../words.ts';
 
@@ -52,66 +52,74 @@ const at = (timeZone: string, instant: string): string => {
 
 export const portalHref = (projectId: string, rest = '') => `/projects/${projectId}${rest}`;
 
-// Which screen each address shows a viewer.
-export function portalRouteOf(path: string): ReactNode {
-  if (path === '/' || path === '') return <ViewerProjects />;
-  if (path === '/account') return <Account />;
-  const routes: readonly (readonly [
-    string,
-    (params: Readonly<Record<string, string>>) => ReactNode,
-  ])[] = [
-    ['/projects/:projectId', (params) => <ViewerTickets projectId={params['projectId'] ?? ''} />],
-    [
-      '/projects/:projectId/tickets/:workflow/:ticketNumber',
-      (params) => (
-        <ViewerTicket
-          projectId={params['projectId'] ?? ''}
-          workflow={params['workflow'] ?? ''}
-          ticketNumber={params['ticketNumber'] ?? ''}
-        />
-      ),
-    ],
-    [
-      '/projects/:projectId/certifications',
-      (params) => <ViewerCertifications projectId={params['projectId'] ?? ''} />,
-    ],
-    [
-      '/projects/:projectId/forms',
-      (params) => <ViewerForms projectId={params['projectId'] ?? ''} />,
-    ],
-    [
-      '/projects/:projectId/setup',
-      (params) => <ViewerSetup projectId={params['projectId'] ?? ''} />,
-    ],
-  ];
-  for (const [pattern, screen] of routes) {
-    const params = matched(pattern, path);
-    if (params !== null) return screen(params);
-  }
-  return <NotFound />;
-}
+// Every screen a viewer may open, as a place on the desktop (desk/places.ts): their projects, and
+// inside one its tickets, each ticket whole, its certifications, and, for a client user or an
+// auditor, its ROEs and forms and its setup.
+const links = words.portal.links;
+const projectOf = (params: Readonly<Record<string, string>>) => params['projectId'] ?? '';
 
-export function portalSectionsOf(signed: Signed, projectId: string | null): readonly MenuSection[] {
-  const said = words.portal.links;
-  const whole = readsWhole(signed.session);
-  const yours: MenuSection = {
-    label: words.portal.sections.yours,
-    links: [{ label: said.projects, href: '/', shown: true }],
-  };
-  if (projectId === null) return [yours];
-  return [
-    yours,
-    {
-      label: words.portal.sections.project,
-      links: [
-        { label: said.tickets, href: portalHref(projectId), shown: true },
-        { label: said.certifications, href: portalHref(projectId, '/certifications'), shown: true },
-        { label: said.forms, href: portalHref(projectId, '/forms'), shown: whole },
-        { label: said.setup, href: portalHref(projectId, '/setup'), shown: whole },
-      ],
-    },
-  ];
-}
+const places: readonly Place[] = [
+  {
+    at: '/',
+    title: () => links.projects,
+    glyph: 'projects',
+    screen: () => <ViewerProjects />,
+    area: 'yours',
+  },
+  { at: '/account', title: () => words.shell.account, glyph: 'account', screen: () => <Account /> },
+  {
+    at: '/projects/:projectId',
+    title: () => links.tickets,
+    glyph: 'ticket',
+    screen: (params) => <ViewerTickets projectId={projectOf(params)} />,
+    area: 'project',
+  },
+  {
+    at: '/projects/:projectId/tickets/:workflow/:ticketNumber',
+    title: (params) => ticketTitle(params['workflow'], params['ticketNumber']),
+    glyph: 'ticket',
+    screen: (params) => (
+      <ViewerTicket
+        projectId={projectOf(params)}
+        workflow={params['workflow'] ?? ''}
+        ticketNumber={params['ticketNumber'] ?? ''}
+      />
+    ),
+  },
+  {
+    at: '/projects/:projectId/certifications',
+    title: () => links.certifications,
+    glyph: 'certification',
+    screen: (params) => <ViewerCertifications projectId={projectOf(params)} />,
+    area: 'project',
+  },
+  {
+    at: '/projects/:projectId/forms',
+    title: () => links.forms,
+    glyph: 'form',
+    screen: (params) => <ViewerForms projectId={projectOf(params)} />,
+    area: 'project',
+    shown: readsWhole,
+  },
+  {
+    at: '/projects/:projectId/setup',
+    title: () => links.setup,
+    glyph: 'setup',
+    screen: (params) => <ViewerSetup projectId={projectOf(params)} />,
+    area: 'project',
+    shown: readsWhole,
+  },
+];
+
+export const portal: Workplace = {
+  areas: [
+    { id: 'yours', label: words.portal.sections.yours, glyph: 'projects' },
+    { id: 'project', label: words.portal.sections.project, glyph: 'folder' },
+  ],
+  places,
+  notFound: () => <NotFound />,
+  notFoundTitle: words.notFound.title,
+};
 
 // The viewer's projects: each one's name the way into it.
 function ViewerProjects() {

@@ -1,14 +1,21 @@
 /* The back office's own layout, drawn from the look's tokens and beside its components
-   (@open-adms/look): a header always in view, the menu closed by default and over the page when
-   open, and a page as wide as the screen allows, read at a desk and on a phone alike. Nothing here
-   pushes the page sideways at 320 CSS px or with text at 200% (WCAG 1.4.10, 1.4.4): the header
-   wraps, a form is one column, a wide table scrolls inside its own region. */
+   (@open-adms/look): a desktop, as a classic desktop program has one (shell.tsx): the menu bar and
+   the toolbar under it, the desktop's surface with its folder icons, one window at a time with its
+   title bar, and the taskbar. Every colour is a token, each pair one tokens.css holds to WCAG 2.2
+   AA in both themes (test/tokens.test.ts): words on the page or a surface, the page's words on the
+   main colour, a control's edge and the focus ring against what they sit on. The desktop is at
+   least as tall as the screen, and the page scrolls as one, the bars with it: a window that
+   scrolled within itself would hide its words from a person zoomed in, and bars held in view
+   would cover what the page scrolls beneath them (WCAG 2.4.11, 2.5.8). Where the desktop is narrow, counted in its own text's size (a container
+   query, so text at 200% counts), every window is maximized. Nothing here pushes the page
+   sideways at 320 CSS px or with text at 200% (WCAG 1.4.10, 1.4.4): the bars wrap, a form is one
+   column, a wide table scrolls inside its own region. */
 
 .skip-link {
   position: absolute;
   left: var(--space-2);
   top: -10rem;
-  z-index: 30;
+  z-index: 50;
   padding: var(--space-2) var(--space-4);
   border: var(--edge) solid var(--colour-edge);
   border-radius: var(--radius);
@@ -20,137 +27,502 @@
   top: var(--space-2);
 }
 
-.office-header {
-  position: relative;
-  z-index: 10;
+/* --- The desktop's frame --------------------------------------------------------------------- */
+
+.desk-app {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-4);
-  padding: var(--space-2) var(--space-4);
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--colour-surface);
+}
+
+.desk-top {
+  position: relative;
+  z-index: 20;
   border-bottom: var(--edge) solid var(--colour-edge);
   background: var(--colour-page);
 }
 
-.office-name {
+.menubar-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+}
+
+.desk-brand {
+  display: inline-flex;
+  /* The firm's name gives way (wraps) before the menus do, on a narrow screen with large text. */
+  flex: 0 1 auto;
+  min-width: min-content;
+  overflow-wrap: normal;
+  align-items: center;
+  padding: 0 var(--space-3) 0 var(--space-2);
   font-weight: var(--weight-strong);
 }
 
-.office-own {
+.desk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  border-top: var(--edge) solid var(--colour-surface);
+}
+
+.desk-own {
   margin-left: auto;
 }
 
-.menu-toggle {
+/* --- The menu bar ---------------------------------------------------------------------------- */
+
+.menubar-fit {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: min-content;
+}
+
+.menubar {
+  display: flex;
+  /* Until the menus have folded (the frame after the screen narrows), they wrap rather than push
+     the page sideways. */
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menubar-slot {
+  position: relative;
+  display: flex;
+}
+
+.menubar-name {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.menubar-name:hover,
+.menubar-name[aria-expanded='true'] {
+  background: var(--colour-picked);
+}
+
+/* The menus' names side by side, measured out of sight: wider than the room, they fold. */
+.menubar-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+
+.menubar-ruler {
+  display: flex;
+  width: max-content;
+}
+
+.menu-drop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  min-width: 15rem;
+  max-width: calc(100vw - 1rem);
+  max-height: calc(100vh - 4rem);
+  max-height: calc(100dvh - 4rem);
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: var(--radius);
+  background: var(--colour-page);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.25);
+}
+
+.menu-drop-end {
+  right: 0;
+  left: auto;
+}
+
+/* Folded into one menu, it drops from the row's start, as wide as the screen allows. */
+.menubar-fit-folded,
+.menubar-fit-folded .menubar-slot {
+  position: static;
+}
+
+.menubar-fit-folded .menu-drop {
+  right: auto;
+  left: var(--space-2);
+  width: min(22rem, calc(100vw - 1rem));
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  color: var(--colour-words);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus {
+  background: var(--colour-main);
+  color: var(--colour-on-main);
+}
+
+.menu-item[aria-disabled='true'] {
+  color: var(--colour-words-quiet);
+  cursor: default;
+}
+
+.menu-item[aria-disabled='true']:hover,
+.menu-item[aria-disabled='true']:focus {
+  background: var(--colour-surface);
+  color: var(--colour-words);
+}
+
+.menu-item[aria-current='page'] {
+  font-weight: var(--weight-strong);
+}
+
+/* A mark before an item: the theme picked, the window or screen shown. Drawn, never a character. */
+.menu-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+
+.menu-item[aria-checked='true'] .menu-mark::after,
+.menu-item[aria-current='page'] .menu-mark::after {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.menu-line {
+  height: 0;
+  margin: var(--space-1) var(--space-2);
+  border-top: var(--edge) solid var(--colour-surface);
+}
+
+.menu-group + .menu-group {
+  margin-top: var(--space-2);
+  padding-top: var(--space-1);
+  border-top: var(--edge) solid var(--colour-surface);
+}
+
+.menu-group-name {
+  display: block;
+  padding: var(--space-1) var(--space-3);
+  color: var(--colour-words-quiet);
+  font-size: var(--type-small);
+  font-weight: var(--weight-strong);
+}
+
+.menu-group-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* --- The desktop and its windows ------------------------------------------------------------- */
+
+.desk {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  container: desk / inline-size;
+}
+
+.desk-inside {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--space-4);
+  min-height: 0;
+  padding: var(--space-4);
+}
+
+.desk-with-window {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-content: stretch;
+  align-items: start;
+}
+
+.desk-with-window .window {
+  align-self: stretch;
+}
+
+.desk-main {
+  min-width: 0;
+}
+
+/* Icons: a picture on its tile, and its words beneath. One press opens it. */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desk-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-1);
+  border: var(--edge) solid transparent;
+  border-radius: var(--radius);
+  color: var(--colour-words);
+  font-size: var(--type-small);
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.desk-icon[data-hovered],
+.desk-icon:focus {
+  border-color: var(--colour-picked-edge);
+  background: var(--colour-picked);
+}
+
+.desk-icon-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border: var(--edge) solid var(--colour-picked-edge);
+  border-radius: var(--radius);
+  background: var(--colour-page);
+  color: var(--colour-main);
+}
+
+.desk-icon-tile .glyph {
+  width: 2rem;
+  height: 2rem;
+}
+
+.glyph {
+  flex: none;
+  width: 1.25em;
+  height: 1.25em;
+}
+
+/* Beside a window the desktop's icons stand in a column at its left, as on a desktop. */
+.desk-icons-beside .icon-grid {
+  grid-template-columns: 7rem;
+  align-content: start;
+}
+
+/* A folder's icons inside its window. */
+.folder-icons .icon-grid {
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+}
+
+.window {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: var(--edge) solid var(--colour-edge);
+  border-radius: var(--radius);
+  background: var(--colour-page);
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 0.2);
+}
+
+.window-bar {
+  display: flex;
+  /* On a narrow screen with large text the buttons go beneath the title, never squeezing it. */
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 3rem;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: calc(var(--radius) - var(--edge)) calc(var(--radius) - var(--edge)) 0 0;
+  background: var(--colour-main);
+  color: var(--colour-on-main);
+  user-select: none;
+}
+
+.window-title {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font-weight: var(--weight-strong);
+}
+
+.window-buttons {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+  gap: var(--space-1);
+}
+
+.window-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: var(--edge) solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--colour-on-main);
+  cursor: pointer;
+}
+
+.window-button .glyph {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.window-button[data-hovered],
+.window-button[data-pressed] {
+  border-color: var(--colour-on-main);
+  background: var(--colour-main-pressed);
+}
+
+/* On the title bar the ring takes the colour of the bar's words, which stands off the bar. */
+.window-bar [data-focus-visible],
+.window-bar :focus-visible {
+  outline-color: var(--colour-on-main);
+  outline-offset: calc(var(--focus-ring) * -1 - var(--edge));
+}
+
+.window-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Maximized: the window fills the desktop, over its icons. */
+.desk-maximized .desk-with-window {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 0;
+}
+
+.desk-maximized .desk-icons-beside {
+  display: none;
+}
+
+.desk-maximized .window {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.desk-maximized .window-bar {
+  border-radius: 0;
+}
+
+/* A narrow desktop, counted in its text's size: every window maximized, and no button for it. */
+@container desk (max-width: 56em) {
+  .desk-with-window {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .desk-icons-beside,
+  .window-button-size {
+    display: none;
+  }
+
+  .window {
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .window-bar {
+    border-radius: 0;
+  }
+}
+
+/* Signed out: the one window in the middle of the desktop. */
+.desk-signed-out .desk-with-window {
+  grid-template-columns: minmax(0, 36rem);
+  justify-content: center;
+  align-content: start;
+  padding: var(--space-5) var(--space-4);
+}
+
+@container desk (max-width: 40em) {
+  .desk-signed-out .desk-with-window {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+}
+
+/* --- The taskbar ----------------------------------------------------------------------------- */
+
+.taskbar {
+  border-top: var(--edge) solid var(--colour-edge);
+  background: var(--colour-page);
+}
+
+.taskbar-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  list-style: none;
+}
+
+.taskbar-button {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   min-height: 2.75rem;
+  max-width: 16rem;
   padding: var(--space-1) var(--space-3);
   border: var(--edge) solid var(--colour-edge);
   border-radius: var(--radius);
   background: var(--colour-page);
   color: var(--colour-words);
-  font: inherit;
-  font-weight: var(--weight-strong);
+  font-size: var(--type-small);
+  text-decoration: none;
   cursor: pointer;
 }
 
-.menu-toggle-bars,
-.menu-toggle-bars::before,
-.menu-toggle-bars::after {
-  display: block;
-  width: 1.125rem;
-  height: 0.125rem;
-  background: currentColor;
+.taskbar-button[data-hovered] {
+  background: var(--colour-surface);
 }
 
-.menu-toggle-bars {
-  position: relative;
-}
-
-.menu-toggle-bars::before,
-.menu-toggle-bars::after {
-  content: '';
-  position: absolute;
-  left: 0;
-}
-
-.menu-toggle-bars::before {
-  top: -0.375rem;
-}
-
-.menu-toggle-bars::after {
-  top: 0.375rem;
-}
-
-/* The header stays in view where the screen has room for it; on a narrow or short screen, or
-   with large text, it scrolls away with the page, never covering what has the focus (WCAG
-   2.4.11). */
-@media (min-width: 48rem) and (min-height: 32rem) {
-  .office-header {
-    position: sticky;
-    top: 0;
-  }
-}
-
-/* The menu: over the page, beneath the header, as tall as the screen, scrolling on its own. */
-.office-menu {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 20;
-  width: min(20rem, 100%);
-  overflow-y: auto;
-  padding: var(--space-4);
-  border-right: var(--edge) solid var(--colour-edge);
-  background: var(--colour-page);
-  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.35);
-}
-
-.office-menu[hidden] {
-  display: none;
-}
-
-.menu-section + .menu-section {
-  margin-top: var(--space-5);
-}
-
-.menu-heading {
-  font-size: var(--type-small);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--colour-words-quiet);
-}
-
-.menu-links {
-  margin: var(--space-2) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.menu-link {
-  display: block;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
-  color: var(--colour-words);
-  text-decoration: none;
-}
-
-.menu-link[aria-current='page'] {
+.taskbar-button[aria-current='page'] {
+  border-color: var(--colour-picked-edge);
   background: var(--colour-picked);
   font-weight: var(--weight-strong);
 }
 
-.menu-link[data-hovered] {
-  text-decoration: underline;
-}
-
-.menu-foot {
-  margin-top: var(--space-6);
-}
-
-/* The project picker in the header. */
+/* The project picker in the toolbar. */
 .project-picker {
   min-width: 0;
 }
