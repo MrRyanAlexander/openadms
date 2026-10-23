@@ -28,7 +28,7 @@ try {
   process.exit(1);
 }
 
-const log = new WorkerLog();
+const log = new WorkerLog(process.stdout, settings.logLevel);
 const db = openDatabase({
   url: settings.databaseUrl,
   maxConnections: policy.databasePoolConnections,

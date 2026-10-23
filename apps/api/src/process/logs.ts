@@ -18,6 +18,13 @@ interface Answered {
 
 export const requestIdLabel = 'requestId';
 
+// How much the log says (ADMS_LOG_LEVEL): `debug` on a test install, `warn` on a firm's server,
+// `info` where none is set (the user, 2026-10-23: production "not all the extra logs").
+export const logLevels = ['debug', 'info', 'warn', 'error'] as const;
+export type LogLevel = (typeof logLevels)[number];
+export const isLogLevel = (value: string): value is LogLevel =>
+  (logLevels as readonly string[]).includes(value);
+
 // What the server is given so that every request has an id of the server's own making (a caller's
 // header is never taken as one) and is logged by the rules above.
 export const logged = {

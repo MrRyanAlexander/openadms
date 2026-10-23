@@ -79,4 +79,13 @@ describe('PasscodeHasher', () => {
     expect(await hasher.verify('Delphine-2027', phc)).toBe(false);
     expect(await hasher.hash('Delphine-2026')).not.toBe(phc);
   });
+
+  it('knows the hash the API keys at the passcode’s first right use as Argon2id too (ADR-542)', async () => {
+    const phc = await hasher.hash('Delphine-2026');
+    const keyed = phc.replace('p=1$', 'p=1,keyid=djI$');
+    expect(hasher.wellFormed(keyed)).toBe(true);
+    // The installer holds no key: it never takes a keyed hash for its own.
+    expect(await hasher.verify('Delphine-2026', keyed)).toBe(false);
+    expect(hasher.wellFormed(phc.replace('$argon2id$', '$argon2i$'))).toBe(false);
+  });
 });

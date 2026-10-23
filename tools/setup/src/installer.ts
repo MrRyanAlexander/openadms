@@ -2,8 +2,10 @@
 // generates the secrets and sets up the database. A rerun re-checks what it knows, asks only to
 // confirm it and resume, and never makes a secret again. Teardown makes the next run a first run.
 // It never prints a password, a secret, a hash or a connection URL.
-// A first run ends by loading the two sample projects, so a fresh installation already holds them
-// (sample.ts; `--no-sample` skips it, `pnpm sample` loads them later); a rerun never does.
+// A first run asks for the firm's first admin too, and makes them once the API is up, so the back
+// office can be signed in to straight away (the user, 2026-10-23); it ends by loading the two
+// sample projects, so a fresh installation already holds them (sample.ts; `--no-sample` skips it,
+// `pnpm sample` loads them later); a rerun never does either.
 // The master passcode's slow hash is kept in the database alone (ARCHITECTURE §7.5; ADR-281): the
 // installer makes it from what the firm types and hands it to the seed, never through a file.
 import { spawnSync } from 'node:child_process';
@@ -97,6 +99,12 @@ interface Check {
   text: string;
 }
 
+interface FirstAdmin {
+  name: string;
+  email: string;
+  password: string;
+}
+
 export class Installer {
   private readonly root: string;
   private readonly yes: boolean;
@@ -117,6 +125,9 @@ export class Installer {
   // The passcode the firm typed at this first run, in memory only, for the sample's phones; it is
   // handed to the sample's process on its standard input and let go after.
   private samplePasscode: string | undefined;
+  // The firm's first admin as this first run was told them, the password in memory only, handed to
+  // `admin.js` on its standard input and let go after.
+  private firstAdmin: FirstAdmin | undefined;
   private readonly sample: boolean;
 
   constructor(root: string, yes: boolean, sample = true) {
@@ -165,6 +176,7 @@ export class Installer {
           return;
         }
         record = await this.writeSecrets(answers);
+        this.firstAdmin = answers.admin;
         if (this.sample) this.samplePasscode = answers.passcode;
         else this.declineSample();
       }
@@ -184,6 +196,7 @@ export class Installer {
       this.ensureApiSettings();
       this.startApi();
       this.startWorker();
+      this.makeFirstAdmin(record);
       this.loadSample();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
     } finally {
@@ -253,14 +266,37 @@ export class Installer {
     }
   }
 
+  // What a test install's fresh start clears beside the local stack's data (`pnpm start`; the
+  // user, 2026-10-23): the env files and the installation record, so the next run is a first run.
+  // The database they opened went with the stack's data volume, so there is nothing to drop.
+  forget(): void {
+    for (const file of [this.ownerEnv, this.apiEnv, this.workerEnv]) {
+      if (file.exists()) {
+        rmSync(file.path);
+        console.log(`- removed ${this.relative(file.path)}`);
+      }
+    }
+    if (this.state.exists()) {
+      rmSync(join(this.root, 'tools/setup/.state'), { recursive: true });
+      console.log('- removed the installation record');
+    }
+  }
+
   // --- first run -----------------------------------------------------------------------------
 
   private async firstRunQuestions(): Promise<
-    { firm: string; brand: string; mail: InstallationRecord['mail']; passcode: string } | undefined
+    | {
+        firm: string;
+        brand: string;
+        mail: InstallationRecord['mail'];
+        passcode: string;
+        admin: FirstAdmin;
+      }
+    | undefined
   > {
     const interview = this.questions();
     console.log(
-      '\nFirst run: nothing is installed yet. Four questions, then I set it up\n' +
+      '\nFirst run: nothing is installed yet. Five questions, then I set it up\n' +
         (this.sample
           ? 'and load the two sample projects, so you can look round (--no-sample skips that).\n'
           : '(without the sample projects: `pnpm sample` loads them later).\n'),
@@ -286,10 +322,44 @@ export class Installer {
     );
     const passcode = await this.askPasscode(interview);
     console.log(
-      `\nFirm: ${firm}\nADMS: ${brand}\nEmail: ${mail}\nMaster passcode: set (only its slow hash is kept, in the database)`,
+      '5. The firm’s first admin: they sign in to the back office and set everything else up.',
+    );
+    const admin = await this.askFirstAdmin(interview);
+    console.log(
+      `\nFirm: ${firm}\nADMS: ${brand}\nEmail: ${mail}\nMaster passcode: set (only its slow hash is kept, in the database)` +
+        `\nFirst admin: ${admin.name} <${admin.email}> (password set)`,
     );
     if (!(await this.confirm(`Set up ${brand} for ${firm} on this machine?`))) return undefined;
-    return { firm, brand, mail, passcode };
+    return { firm, brand, mail, passcode, admin };
+  }
+
+  // The first admin's address, name and password, the password held to the release's policy
+  // (its length, the breached list) before anything is made; the API checks it again.
+  private async askFirstAdmin(interview: Interview): Promise<FirstAdmin> {
+    let email = '';
+    while (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      email = await interview.ask('   Their email address (they sign in with it)');
+    }
+    let name = '';
+    while (name === '') name = await interview.ask('   Their name');
+    const policy = this.policyEnv.read();
+    const lengths = {
+      shortest: Number(policy['PASSWORD_MINIMUM_LENGTH'] ?? '15'),
+      longest: Number(policy['PASSWORD_MAXIMUM_LENGTH'] ?? '128'),
+    };
+    const breached = new BreachedList(
+      readFileSync(join(this.root, 'packages/domain/breached-passwords.txt'), 'utf8'),
+    );
+    for (;;) {
+      const password = await interview.askSecret(
+        `   Their password (at least ${String(lengths.shortest)} characters)`,
+      );
+      const problem = new PasscodeHasher().problem(password, lengths, breached);
+      if (problem !== undefined) console.log(`   ${problem}`);
+      else if ((await interview.askSecret('   Once more')) === password) {
+        return { name, email, password };
+      } else console.log('   They differ. Again, please.');
+    }
   }
 
   private async askPasscode(interview: Interview): Promise<string> {
@@ -313,6 +383,7 @@ export class Installer {
     brand: string;
     mail: InstallationRecord['mail'];
     passcode: string;
+    admin: FirstAdmin;
   }): Promise<InstallationRecord> {
     const server = this.server();
     const maker = new SecretMaker();
@@ -361,6 +432,7 @@ export class Installer {
       firm: answers.firm,
       mail: answers.mail,
       database: { host, port: server.port, name: databaseName },
+      admin: answers.admin.email,
       steps: { secrets: now, keys: now },
       createdAt: now,
       updatedAt: now,
@@ -642,6 +714,7 @@ export class Installer {
   private describe(record: InstallationRecord): void {
     const { database } = record;
     console.log(`  Firm: ${record.firm}`);
+    if (record.admin !== undefined) console.log(`  First admin: ${record.admin}`);
     console.log(`  Email: ${record.mail}`);
     console.log(
       `  Database: ${database.name} on ${database.host}:${String(database.port)} (the local stack)`,
@@ -908,6 +981,36 @@ export class Installer {
       { stdio: 'inherit' },
     );
     if (result.status !== 0) throw new Error('The worker did not start. Stopped.');
+  }
+
+  // The firm's first admin, on a first run, made as `pnpm installer:admin` makes one (ADR-415):
+  // the API's own admin command, on the server, its answers on its standard input alone, never an
+  // argument. What it says is shown; the password never is.
+  private makeFirstAdmin(record: InstallationRecord): void {
+    const admin = this.firstAdmin;
+    this.firstAdmin = undefined;
+    if (admin === undefined) return;
+    console.log('\nMaking the firm’s first admin (the API’s admin command, on this machine):');
+    const made = spawnSync(process.execPath, [join(this.root, 'apps/api/dist/admin.js')], {
+      cwd: this.root,
+      input: `${admin.email}\n${admin.name}\n${admin.password}\n${admin.password}\n`,
+      encoding: 'utf8',
+    });
+    const said = `${made.stdout}\n${made.stderr}`
+      .split(admin.password)
+      .join('…')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.endsWith(':'))
+      .pop();
+    console.log(said ?? '');
+    if (made.status !== 0) {
+      throw new Error(
+        'The first admin was not made. Make one with `pnpm installer:admin`; the rest is installed.',
+      );
+    }
+    record.admin = admin.email;
+    this.state.save(record);
   }
 
   // The sample projects, on a first run, once the API's settings and the stack are in place. A

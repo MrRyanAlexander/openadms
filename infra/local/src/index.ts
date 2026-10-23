@@ -15,7 +15,17 @@
 //                      then, at a terminal, offers once to load the sample projects (`pnpm sample`);
 //                      ends by saying where each part answers and, once the sample is loaded,
 //                      the field app's sign-ins for its monitors and the badges to scan
-//   pnpm local:down    stop and remove the containers and network; data volumes are kept
+//   pnpm stop          (local:down) stop and remove the containers and network; data volumes are kept
+//   pnpm logs          follow the stack's logs (the API, the worker, Caddy, Postgres), Ctrl-C ends
+//   node infra/local/src/index.ts fresh
+//                      what `pnpm start` runs first (the user, 2026-10-23: a test install starts
+//                      fresh every time): down, then the data volumes (the database, the files),
+//                      the dev passwords, the sample's leftovers and the containers' records go;
+//                      the map servers' built data, the downloaded extract and the stack's root and
+//                      certificates are kept, so no rebuild of the maps and no new certificate to
+//                      trust
+//   node infra/local/src/index.ts report
+//                      where each part answers, and the sample's sign-ins: `pnpm start`'s last words
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the certificates;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
 //   pnpm local:status  list the services and their health
@@ -104,6 +114,21 @@ const readsCertificate: Readonly<Record<string, readonly string[]>> = {
   addresses: ['addresses'],
 };
 const holdsRoot = ['caddy', 'objectstore-tls', 'addresses', 'routing-tls'];
+// What a fresh start takes away (compose.yaml's volumes): the installation's data. The map
+// servers' volumes are public data built from the extract, kept to save a rebuild.
+const dataVolumes = ['postgres_data', 'objectstore_data'];
+// What a fresh start takes away from .generated/: what was made for the installation's data. The
+// stack's root and its certificates stay (a browser may already trust the root).
+const dataRecords = [
+  'api.started',
+  'worker.started',
+  'objectstore',
+  'postgres',
+  'sample-offered',
+  'sample-field-sign-ins.txt',
+];
+// The services whose logs `pnpm logs` follows: the installation's own.
+const followed = ['api', 'worker', 'caddy', 'postgres'];
 
 class DevSecrets {
   // Each made once: the database administrator's password, the object store's administrator
@@ -116,6 +141,11 @@ class DevSecrets {
     ['S3_API_ACCESS_KEY', () => this.accessKey()],
     ['S3_API_SECRET_KEY', () => randomBytes(30).toString('base64url')],
   ];
+
+  // The keys it makes, for a fresh start to take away.
+  keys(): string[] {
+    return this.made.map(([key]) => key);
+  }
 
   // Generated once, into a git-ignored file readable only by its owner.
   generate(): string {
@@ -214,7 +244,7 @@ class LocalStack {
   }
 
   // Where each part answers, over HTTPS, once it is up.
-  private whereEachAnswers(): void {
+  whereEachAnswers(): void {
     const port = Number(this.setting('ADMS_HTTPS_PORT') ?? '443');
     const at = (hostname: string) => `https://${hostname}${port === 443 ? '' : `:${String(port)}`}`;
     const apiUp = existsSync(this.apiEnvFile);
@@ -239,6 +269,51 @@ class LocalStack {
 
   down(): void {
     this.compose([...withServices, 'down', '--remove-orphans']);
+  }
+
+  // A test install's fresh start: the installation's data gone, the maps and certificates kept.
+  fresh(): void {
+    this.compose([...withServices, 'down', '--remove-orphans']);
+    const there = this.volumes();
+    for (const volume of dataVolumes.map((name) => `${project}_${name}`)) {
+      if (!there.includes(volume)) continue;
+      this.run('docker', ['volume', 'rm', volume]);
+      console.log(`- removed the data volume ${volume}`);
+    }
+    for (const record of dataRecords)
+      rmSync(join(this.generated, record), { recursive: true, force: true });
+    // The dev passwords opened the volumes just removed: new ones are made at the next `up`. Only
+    // their lines go; a port or another setting the developer wrote stays.
+    if (existsSync(this.envFile)) {
+      const secret = new Set(new DevSecrets().keys());
+      const kept = readFileSync(this.envFile, 'utf8')
+        .split('\n')
+        .filter((line) => !secret.has(line.split('=', 1)[0] ?? ''))
+        .filter(
+          (line) =>
+            !line.startsWith('# Open ADMS local stack: dev passwords') &&
+            !line.startsWith('# Git-ignored. Never commit'),
+        );
+      const left = kept.filter((line) => line.trim() !== '');
+      if (left.length === 0) rmSync(this.envFile);
+      else writeFileSync(this.envFile, `${left.join('\n')}\n`, { mode: 0o600 });
+      console.log('- removed the dev passwords from infra/local/.env');
+    }
+    console.log(
+      'Kept the map servers’ data, the downloaded extract and the stack’s certificates (no rebuild, nothing new to trust).',
+    );
+  }
+
+  // The installation's own logs, followed until Ctrl-C.
+  logs(): void {
+    spawnSync(
+      'docker',
+      [...this.composeArgs(), ...withServices, 'logs', '--follow', '--tail', '50', ...followed],
+      {
+        stdio: 'inherit',
+        env: this.environment(),
+      },
+    );
   }
 
   wipe(): void {
@@ -516,7 +591,8 @@ class LocalStack {
   }
 
   // A first run generates the passwords. If the data volumes outlived their .env, the passwords
-  // that opened them are gone: stop rather than make new ones that won't match. A file made
+  // that opened them are gone: stop rather than make new ones that won't match (the map
+  // servers' volumes, which a fresh start keeps, opened with none). A file made
   // before a later secret was needed gains it at its end, every line already there left as it
   // was: the object store reads its identities afresh each time its container is made.
   private ensureSecrets(): void {
@@ -530,9 +606,11 @@ class LocalStack {
       }
       return;
     }
-    if (this.volumes().length > 0) {
+    // Only the data volumes were opened by those passwords; the map servers' hold public data.
+    const data = dataVolumes.map((name) => `${project}_${name}`);
+    if (this.volumes().some((volume) => data.includes(volume))) {
       throw new Error(
-        'infra/local/.env is missing but the data volumes exist. Run `pnpm local:wipe` to start fresh.',
+        'infra/local/.env is missing but the data volumes exist. Run `pnpm start` (it starts fresh) or `pnpm local:wipe`.',
       );
     }
     writeFileSync(this.envFile, new DevSecrets().generate(), { mode: 0o600, flag: 'wx' });
@@ -754,6 +832,15 @@ const commands: Record<string, (stack: LocalStack) => Promise<void> | void> = {
   down: (stack) => {
     stack.down();
   },
+  fresh: (stack) => {
+    stack.fresh();
+  },
+  logs: (stack) => {
+    stack.logs();
+  },
+  report: (stack) => {
+    stack.whereEachAnswers();
+  },
   wipe: (stack) => {
     stack.wipe();
   },
@@ -764,7 +851,7 @@ const commands: Record<string, (stack: LocalStack) => Promise<void> | void> = {
 
 const command = commands[process.argv[2] ?? ''];
 if (command === undefined) {
-  console.error('Usage: node infra/local/src/index.ts up|down|wipe|status');
+  console.error('Usage: node infra/local/src/index.ts up|down|fresh|wipe|status|logs|report');
   process.exitCode = 2;
 } else {
   try {

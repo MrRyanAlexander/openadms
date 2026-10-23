@@ -69,8 +69,10 @@ export class PasscodeHasher {
   private static readonly memory = 19456;
   private static readonly passes = 2;
   private static readonly parallelism = 1;
+  // The API keys the hash at the passcode's first right use (ADR-542): the same Argon2id string,
+  // with the name of its key among the parameters.
   private static readonly format =
-    /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
+    /^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)(,keyid=[A-Za-z0-9+/]+)?\$([A-Za-z0-9+/]+)\$([A-Za-z0-9+/]+)$/;
 
   // Why a passcode is refused, or undefined when it's acceptable: its lengths are the release's
   // policy values (ADR-530). With the release's list, a known breached password is refused too
@@ -103,8 +105,9 @@ export class PasscodeHasher {
 
   async verify(passcode: string, phc: string): Promise<boolean> {
     const parts = PasscodeHasher.format.exec(phc);
-    if (parts === null) return false;
-    const [, memory, passes, parallelism, salt, tag] = parts;
+    // A keyed hash is the API's, made with a key the installer never holds.
+    if (parts === null || parts[4] !== undefined) return false;
+    const [, memory, passes, parallelism, , salt, tag] = parts;
     const expected = Buffer.from(tag ?? '', 'base64');
     const actual = await this.derive(passcode, Buffer.from(salt ?? '', 'base64'), {
       memory: Number(memory),

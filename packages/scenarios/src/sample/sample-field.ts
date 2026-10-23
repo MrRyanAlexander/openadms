@@ -364,11 +364,13 @@ export class SampleField {
       },
     ];
     const signIns: SampleSignIn[] = [];
+    const written = new Map<SampleMonitor, { readonly id: string; readonly projectId: string }>();
     for (const { projectId, work, ...assignment } of planned) {
-      await this.luis.answered(writeAssignmentEndpoint, {
+      const answer = await this.luis.answered(writeAssignmentEndpoint, {
         ids: { projectId },
         json: this.assignment(workDate, assignment),
       });
+      written.set(assignment.monitor, { id: answer.record.id, projectId });
       const person = this.person(assignment.monitor);
       signIns.push({
         name: person.name,
@@ -377,7 +379,40 @@ export class SampleField {
         work,
       });
     }
+    await this.signInsProven(written);
     return signIns;
+  }
+
+  // Proven as the firm will try them: on a phone enrolled for the check, each monitor signs in
+  // with the sign-in handed back and takes the day's work written for them; the phone is then
+  // turned in, its key revoked. Signing in only reads an assignment, never ties it to the phone.
+  private async signInsProven(
+    written: ReadonlyMap<SampleMonitor, { readonly id: string; readonly projectId: string }>,
+  ): Promise<void> {
+    const { story } = this;
+    const phone = await story.enrolled('A check of the sample’s sign-ins');
+    let device: SimulatedDevice | undefined;
+    for (const [monitor, assignment] of written) {
+      const person = this.person(monitor);
+      const takenId = await taken(story, person, phone.id);
+      if (takenId !== assignment.id) {
+        throw new Error(`${person.name} signed in but took other work than the day’s.`);
+      }
+      const setup = {
+        name: phone.name,
+        deviceId: phone.id,
+        monitorId: person.id,
+        assignmentId: takenId,
+        projectId: assignment.projectId,
+        lists: await story.lists.held({ assignmentId: takenId, deviceId: phone.id }),
+        timeZone,
+      };
+      if (device === undefined) device = story.phone(setup);
+      else device.signIn(setup);
+    }
+    if (device === undefined) return;
+    const answer = await story.underPasscode.turnIn(device);
+    if (!answer.turnedIn) throw new Error(`${phone.name} wasn’t turned in: ${answer.message}`);
   }
 
   private async monday(): Promise<void> {

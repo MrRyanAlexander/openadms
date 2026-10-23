@@ -22,11 +22,21 @@ export function errorLogged(error: unknown): { kind: string; code?: string; at: 
   };
 }
 
+// How much the log says (ADMS_LOG_LEVEL), as the API's: `debug` and `info` say every line, `warn`
+// only warnings and errors, `error` errors alone.
+export const logLevels = ['debug', 'info', 'warn', 'error'] as const;
+export type LogLevel = (typeof logLevels)[number];
+export const isLogLevel = (value: string): value is LogLevel =>
+  (logLevels as readonly string[]).includes(value);
+const least: Readonly<Record<LogLevel, number>> = { debug: 20, info: 30, warn: 40, error: 50 };
+
 export class WorkerLog {
   private readonly to: LogStream;
+  private readonly least: number;
 
-  constructor(to: LogStream = process.stdout) {
+  constructor(to: LogStream = process.stdout, level: LogLevel = 'info') {
     this.to = to;
+    this.least = least[level];
   }
 
   info(message: string, fields: LogFields = {}): void {
@@ -48,6 +58,7 @@ export class WorkerLog {
   }
 
   private line(level: number, msg: string, fields: Readonly<Record<string, unknown>>): void {
+    if (level < this.least) return;
     this.to.write(
       `${JSON.stringify({ level, time: Date.now(), service: 'worker', ...fields, msg })}\n`,
     );

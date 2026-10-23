@@ -353,6 +353,8 @@ services:
     command: ['node', 'apps/api/dist/main.js']
     environment:
       NODE_ENV: production
+      # A test install says everything it does (the user, 2026-10-23); a firm's server says less.
+      ADMS_LOG_LEVEL: debug
       ADMS_ENV_FILE: /run/secrets/api_env
       ADMS_API_HOST: 0.0.0.0
       ADMS_API_PORT: '3000'
@@ -437,6 +439,7 @@ services:
     command: ['node', 'apps/worker/dist/main.js']
     environment:
       NODE_ENV: production
+      ADMS_LOG_LEVEL: debug
       ADMS_ENV_FILE: /run/secrets/worker_env
       ADMS_WORKER_HOST: 127.0.0.1
       ADMS_WORKER_PORT: '3001'

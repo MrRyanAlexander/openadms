@@ -5,6 +5,7 @@
 // for itself are read from the same place (policy.ts; ADR-395). Its database login's URL asks
 // `sslmode=verify-full`, checked against the root its `sslrootcert` names, or
 // ADMS_DATABASE_CA_FILE where the installation has one (KD-78; ADR-517).
+import { isLogLevel, type LogLevel } from './logs.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,8 @@ export class Settings {
   readonly mapCaFile: string | null;
   // The SHA-256 of the map extract both servers were built from, kept with every mileage.
   readonly mapExtractSha256: string;
+  // How much the log says (logs.ts).
+  readonly logLevel: LogLevel;
   // Where both map servers are when it isn't where their names say (the local stack's proxy,
   // from inside it).
   readonly mapServersAt: { readonly host: string; readonly port: number } | undefined;
@@ -51,6 +54,7 @@ export class Settings {
     addressesUrl: string;
     mapCaFile: string | null;
     mapExtractSha256: string;
+    logLevel: LogLevel;
     mapServersAt: { host: string; port: number } | undefined;
     host: string;
     port: number;
@@ -60,6 +64,7 @@ export class Settings {
     this.addressesUrl = values.addressesUrl;
     this.mapCaFile = values.mapCaFile;
     this.mapExtractSha256 = values.mapExtractSha256;
+    this.logLevel = values.logLevel;
     this.mapServersAt = values.mapServersAt;
     this.host = values.host;
     this.port = values.port;
@@ -132,6 +137,10 @@ export class Settings {
               host: mapServersAddress.split(':')[0] ?? '',
               port: Number(mapServersAddress.split(':')[1]),
             },
+      logLevel: ((): LogLevel => {
+        const level = checked('ADMS_LOG_LEVEL', environment['ADMS_LOG_LEVEL'], isLogLevel);
+        return isLogLevel(level) ? level : 'info';
+      })(),
       host: checked('ADMS_WORKER_HOST', required('ADMS_WORKER_HOST'), (value) => isIP(value) !== 0),
       port: Number(
         checked('ADMS_WORKER_PORT', required('ADMS_WORKER_PORT'), (value) =>

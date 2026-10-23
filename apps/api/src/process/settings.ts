@@ -24,6 +24,7 @@
 // ADMS_SEALING_KEY seals what is kept at rest (authenticators' secrets, offline seeds). Losing the
 // first ends sessions; losing either key means every password, or every authenticator, is set
 // anew; leaking one opens only what it keys.
+import { isLogLevel, type LogLevel } from './logs.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { BlockList, isIP } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -109,6 +110,8 @@ export class Settings {
   // machine's own trust store.
   readonly esriPrivateHosts: readonly string[];
   readonly esriCaFile: string | null;
+  // How much the log says (logs.ts).
+  readonly logLevel: LogLevel;
 
   private constructor(values: {
     databaseUrl: string;
@@ -131,6 +134,7 @@ export class Settings {
     media: MediaSettings;
     esriPrivateHosts: readonly string[];
     esriCaFile: string | null;
+    logLevel: LogLevel;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.readOnlyDatabaseUrl = values.readOnlyDatabaseUrl;
@@ -152,6 +156,7 @@ export class Settings {
     this.media = values.media;
     this.esriPrivateHosts = values.esriPrivateHosts;
     this.esriCaFile = values.esriCaFile;
+    this.logLevel = values.logLevel;
   }
 
   static read(environment: Environment): Settings {
@@ -331,6 +336,10 @@ export class Settings {
       },
       esriPrivateHosts: esriHosts,
       esriCaFile: esriCaFile ?? null,
+      logLevel: ((): LogLevel => {
+        const level = checked('ADMS_LOG_LEVEL', environment['ADMS_LOG_LEVEL'], isLogLevel);
+        return isLogLevel(level) ? level : 'info';
+      })(),
     };
     if (problems.length > 0) throw new SettingsProblem(problems);
     return new Settings(values);

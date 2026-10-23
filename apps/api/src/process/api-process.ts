@@ -204,6 +204,8 @@ export type ProcessSettings = Pick<
   | 'esriPrivateHosts'
   | 'esriCaFile'
 > & {
+  // How much the log says; `info` where it isn't said (a story's, a test's).
+  readonly logLevel?: Settings['logLevel'];
   // The certificate and key the process serves HTTPS with (KD-78; ADR-517). None only for a
   // process a test keeps in its own memory and asks without a connection: `listen` refuses it,
   // so the API never listens in plain HTTP.
@@ -303,7 +305,11 @@ export class ApiProcess {
               minVersion: 'TLSv1.2' as const,
             },
           }),
-      logger: { ...logged.logger, ...(more.stream === undefined ? {} : { stream: more.stream }) },
+      logger: {
+        ...logged.logger,
+        level: settings.logLevel ?? logged.logger.level,
+        ...(more.stream === undefined ? {} : { stream: more.stream }),
+      },
       // A body that says it is larger, or turns out to be, is refused before it is read whole.
       bodyLimit: policy.requestBodyLimitBytes,
       // Whose word is taken for the address a request came from: a listed proxy's, nobody

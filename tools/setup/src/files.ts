@@ -108,6 +108,8 @@ export interface InstallationRecord {
   firm: string;
   mail: 'mail catcher' | 'none';
   database: { host: string; port: number; name: string };
+  // The first admin's address, where this installer made them (none on one made before it did).
+  admin?: string;
   // When each step last finished, as ISO times.
   // `keys`: when the API's password key and sealing key were made (ADR-542), so that one lost
   // afterwards is never made again unseen.
