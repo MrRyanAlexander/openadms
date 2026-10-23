@@ -266,9 +266,11 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
   the cloud.
 - **A firm runs Open ADMS in its own cloud**, on its own servers. Devices sync
   whenever they have a data connection.
-- **Railway (API, worker, database) + Netlify (web apps)** is the one deploy target we ship,
-  as the demo and for development testing. Firms can extend it to host wherever they like; we make
-  the demo case work and document it.
+- **One Linux server with Docker Engine** is the production target we ship (the user, 2026-10-23,
+  replacing Railway + Netlify): `./adms install` builds the images on the server from the release
+  and brings up the same services as the local stack, Caddy taking certificates for the firm's own
+  domain. Other hosts can run the same images later. A developer's machine runs the **test**
+  install, `pnpm start`, fresh every time (`agent_store/BUILD.md`, Settled 11).
 - **Services talk to each other over HTTPS, locally too.** CORS is handled properly, never
   switched off (§6). Every hop inside the local stack's own network too: nothing is served over
   plain HTTP and no data is in flight unencrypted (the user, 2026-10-14, ADR-513; KD-78).
@@ -289,8 +291,7 @@ Every dependency is pinned. Adding one needs an ADR (ADR-093), and the lockfiles
 | Environment | What runs | HTTPS | Notes |
 |---|---|---|---|
 | **Local** | One `docker compose` stack: Postgres, object storage, API, worker, Valhalla, Nominatim (§3), Caddy; web apps served through Caddy | The stack's own root, which Caddy issues from (ADR-517; `infra/local/.generated/caddy-root.crt`); hostnames under `*.adms.localhost`; every hop inside the stack over TLS too | A phone on the same network needs Caddy's root certificate installed and trusted, or a tunnel |
-| **Demo cloud** | Railway: Postgres, API with worker, Valhalla, Nominatim; Netlify: back office and field web build; an S3-compatible bucket | Provider certificates; HSTS on | The back office calls the API **through a same-origin proxy path** (e.g. `/api/*` rewritten to the API), so browser cookies stay first-party and CORS isn't needed for it |
-| **A firm's cloud** | The same containers | The firm's certificates | Documented, not scripted |
+| **A firm's server** | `infra/server/compose.yaml`: the same services, built into images on the server (`./adms install`); no mail catcher, no sample, no test database | Caddy's certificates for the firm's domain (ACME), or its own internal root where the server has no public name; every hop inside over TLS from the installation's own root | Lean: `NODE_ENV=production`, info-level logs, minified web builds, licence notices in the images |
 
 **The installer** (`pnpm installer`; `pnpm setup` is pnpm's own command, ADR-266): an interview that writes local configuration, generates
 secrets, creates the database roles, runs migrations and hardening, and seeds. It follows the

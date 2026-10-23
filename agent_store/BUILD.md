@@ -97,6 +97,16 @@ notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`).
    defaults (`SUMMARY.md` §4, `history/DECISIONS-599-606.md`) all stand. No separate back office
    acceptance file is drafted for approval; its browser tests are the proof.
 10. **Map region:** Delaware stands in for Bayline County.
+11. **Test and production installs** (the user, 2026-10-23): two shapes. **Test**, on a developer's
+    machine with Docker Desktop: `pnpm start` builds a fresh installation every time (new database,
+    file store and secrets, the first-run questions with a new master passcode, the sample), keeps
+    the downloaded map data and the stack's certificates, checks every part, prints verbose details
+    and offers to follow the logs; `pnpm start --keep` carries on; `pnpm stop` stops it.
+    **Production**, on one Linux server with only Docker Engine: `./adms install` builds the images
+    on the server from the release, asks the firm's answers (its names, domain, email, map region,
+    master passcode, first admin), starts with no data, lean logs, minified web builds, licence
+    notices shipped, and prints the firm's URLs; `./adms start|stop|status|logs`. Other hosts run
+    the same images later. This replaces ARCHITECTURE §4's Railway + Netlify target.
 
 ## Defaults taken
 
