@@ -1,0 +1,328 @@
+---
+// The page's actions for people and their agents, as on the documentation sites of 2026:
+//   Copy page        the page's Markdown twin, to the clipboard
+//   View as Markdown the twin itself (/<page>.md)
+//   Open in Claude / Open in ChatGPT
+//                    a new conversation that is asked to read the twin
+//   llms.txt         the index of every page, for an agent
+// A disclosure (a button that shows a list of actions), not an ARIA menu: every action is an
+// ordinary link or button, reached by Tab; the arrow keys move through them too, and Escape closes
+// it and gives focus back to the button. Without JavaScript the links still work.
+import { twinPath, underBase } from '../lib/urls.ts';
+
+interface Props {
+  id: string;
+  title: string;
+}
+
+const { id, title } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const markdown = twinPath(base, id);
+const markdownUrl = Astro.site === undefined ? markdown : new URL(markdown, Astro.site).href;
+const prompt = (url: string) => `Read ${url} so I can ask you questions about it.`;
+const claude = `https://claude.ai/new?q=${encodeURIComponent(prompt(markdownUrl))}`;
+const chatgpt = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(prompt(markdownUrl))}`;
+const llms = underBase(base, 'llms.txt');
+const menuId = 'page-actions-list';
+---
+
+<page-actions class="page-actions not-content" data-markdown={markdown} data-title={title}>
+  <div class="split">
+    <button type="button" class="action main" data-copy>
+      <svg aria-hidden="true" viewBox="0 0 24 24" class="icon" data-icon-copy>
+        <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+        <path d="M5 15V6a2 2 0 0 1 2-2h9"></path>
+      </svg>
+      <svg aria-hidden="true" viewBox="0 0 24 24" class="icon" data-icon-done hidden>
+        <path d="M5 12.5l4.5 4.5L19 7.5"></path>
+      </svg>
+      <span data-copy-label>Copy page</span>
+    </button>
+    <button
+      type="button"
+      class="action toggle"
+      aria-expanded="false"
+      aria-controls={menuId}
+      aria-label="More ways to use this page"
+      data-toggle
+    >
+      <svg aria-hidden="true" viewBox="0 0 24 24" class="icon"><path d="M6 9.5l6 6 6-6"></path></svg>
+    </button>
+  </div>
+  <ul class="list" id={menuId} hidden>
+    <li>
+      <button type="button" class="item" data-copy>
+        <span class="item-title">Copy page</span>
+        <span class="item-hint">This page as Markdown, for an assistant</span>
+      </button>
+    </li>
+    <li>
+      <a class="item" href={markdown} data-markdown-link>
+        <span class="item-title">View as Markdown</span>
+        <span class="item-hint">The page as plain Markdown text</span>
+      </a>
+    </li>
+    <li>
+      <a class="item" href={claude} target="_blank" rel="noopener noreferrer" data-assistant="claude">
+        <span class="item-title">Open in Claude <span class="sr-only">(opens in a new tab)</span></span>
+        <span class="item-hint">Ask Claude about this page</span>
+      </a>
+    </li>
+    <li>
+      <a class="item" href={chatgpt} target="_blank" rel="noopener noreferrer" data-assistant="chatgpt">
+        <span class="item-title">Open in ChatGPT <span class="sr-only">(opens in a new tab)</span></span>
+        <span class="item-hint">Ask ChatGPT about this page</span>
+      </a>
+    </li>
+    <li>
+      <a class="item" href={llms}>
+        <span class="item-title">llms.txt</span>
+        <span class="item-hint">Every page of these docs, for an agent</span>
+      </a>
+    </li>
+  </ul>
+  <p class="sr-only" role="status" data-status></p>
+</page-actions>
+
+<script>
+  const assistants: Record<string, string> = {
+    claude: 'https://claude.ai/new?q=',
+    chatgpt: 'https://chatgpt.com/?hints=search&q=',
+  };
+
+  /** The Markdown twin, to the clipboard: as a promised item where the browser takes one (Safari
+   * keeps the click's permission across the fetch that way), else fetched first and written. */
+  async function copy(url: string): Promise<void> {
+    const text = async (): Promise<string> => {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+      return response.text();
+    };
+    if (typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function') {
+      try {
+        const blob = text().then((body) => new Blob([body], { type: 'text/plain' }));
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+        return;
+      } catch {
+        // Some browsers refuse a promised item: write the text instead.
+      }
+    }
+    await navigator.clipboard.writeText(await text());
+  }
+
+  class PageActions extends HTMLElement {
+    connectedCallback(): void {
+      const toggle = this.querySelector<HTMLButtonElement>('[data-toggle]');
+      const list = this.querySelector<HTMLUListElement>('.list');
+      const status = this.querySelector<HTMLElement>('[data-status]');
+      const label = this.querySelector<HTMLElement>('[data-copy-label]');
+      const iconCopy = this.querySelector<SVGElement>('[data-icon-copy]');
+      const iconDone = this.querySelector<SVGElement>('[data-icon-done]');
+      const markdown = this.dataset['markdown'];
+      if (!toggle || !list || !status || !label || !iconCopy || !iconDone || !markdown) return;
+
+      // The twin's full address, so an assistant can fetch it, whatever host serves the site.
+      const absolute = new URL(markdown, window.location.href).href;
+      const prompt = `Read ${absolute} so I can ask you questions about it.`;
+      this.querySelectorAll<HTMLAnchorElement>('[data-assistant]').forEach((link) => {
+        const start = assistants[link.dataset['assistant'] ?? ''];
+        if (start) link.href = start + encodeURIComponent(prompt);
+      });
+
+      const items = (): HTMLElement[] => [...list.querySelectorAll<HTMLElement>('.item')];
+      const open = (focusFirst: boolean): void => {
+        list.hidden = false;
+        toggle.setAttribute('aria-expanded', 'true');
+        if (focusFirst) items()[0]?.focus();
+      };
+      const close = (returnFocus: boolean): void => {
+        if (list.hidden) return;
+        list.hidden = true;
+        toggle.setAttribute('aria-expanded', 'false');
+        if (returnFocus) toggle.focus();
+      };
+
+      toggle.addEventListener('click', () => {
+        if (list.hidden) open(false);
+        else close(false);
+      });
+      toggle.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          // The list's own arrow keys would move on from the first action at once.
+          event.stopPropagation();
+          open(true);
+        }
+      });
+      this.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          close(true);
+          return;
+        }
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        const all = items();
+        const at = all.indexOf(document.activeElement as HTMLElement);
+        if (at === -1) return;
+        event.preventDefault();
+        const next = event.key === 'ArrowDown' ? at + 1 : at - 1;
+        all[(next + all.length) % all.length]?.focus();
+      });
+      document.addEventListener('click', (event) => {
+        if (!this.contains(event.target as Node)) close(false);
+      });
+      this.addEventListener('focusout', (event) => {
+        const next = event.relatedTarget as Node | null;
+        if (next !== null && !this.contains(next)) close(false);
+      });
+
+      let reset: number | undefined;
+      const say = (message: string, done: boolean): void => {
+        status.textContent = message;
+        label.textContent = done ? 'Copied' : 'Copy page';
+        iconCopy.toggleAttribute('hidden', done);
+        iconDone.toggleAttribute('hidden', !done);
+        window.clearTimeout(reset);
+        reset = window.setTimeout(() => {
+          label.textContent = 'Copy page';
+          iconCopy.removeAttribute('hidden');
+          iconDone.setAttribute('hidden', '');
+          status.textContent = '';
+        }, 2500);
+      };
+      this.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((button) => {
+        button.addEventListener('click', () => {
+          copy(markdown).then(
+            () => {
+              say('This page was copied as Markdown.', true);
+            },
+            () => {
+              say('The page could not be copied. Use View as Markdown instead.', false);
+            },
+          );
+          close(button.classList.contains('item'));
+        });
+      });
+    }
+  }
+
+  customElements.define('page-actions', PageActions);
+</script>
+
+<style>
+  .page-actions {
+    position: relative;
+    flex: none;
+  }
+  .split {
+    display: inline-flex;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: var(--sl-color-bg);
+    box-shadow: var(--sl-shadow-sm);
+  }
+  .action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.25rem;
+    margin: 0;
+    padding: 0 0.75rem;
+    border: 0;
+    background: transparent;
+    color: var(--sl-color-white);
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .action.main {
+    border-radius: 0.5rem 0 0 0.5rem;
+  }
+  .action.toggle {
+    padding: 0 0.5rem;
+    border-left: 1px solid var(--sl-color-gray-5);
+    border-radius: 0 0.5rem 0.5rem 0;
+  }
+  .action:hover {
+    background: var(--sl-color-gray-6);
+  }
+  .action:focus-visible,
+  .item:focus-visible {
+    outline: 2px solid var(--sl-color-text-accent);
+    outline-offset: 2px;
+    position: relative;
+    z-index: 1;
+  }
+  .icon {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .icon[hidden] {
+    display: none;
+  }
+  .toggle[aria-expanded='true'] .icon {
+    transform: rotate(180deg);
+  }
+  .list {
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + 0.375rem);
+    z-index: var(--sl-z-index-menu);
+    width: 18rem;
+    max-width: calc(100vw - 2rem);
+    margin: 0;
+    padding: 0.375rem;
+    list-style: none;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.625rem;
+    background: var(--sl-color-bg);
+    box-shadow: var(--sl-shadow-md);
+  }
+  .list[hidden] {
+    display: none;
+  }
+  /* On a narrow screen the actions sit under the title, at the start: the list opens from there. */
+  @media (max-width: 50rem) {
+    .list {
+      inset-inline-start: 0;
+      inset-inline-end: auto;
+    }
+  }
+  .item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    width: 100%;
+    margin: 0;
+    padding: 0.5rem 0.625rem;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--sl-color-white);
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .item:hover {
+    background: var(--sl-color-gray-6);
+  }
+  .item-title {
+    font-size: var(--sl-text-sm);
+    font-weight: 600;
+  }
+  .item-hint {
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-3);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .toggle .icon {
+      transition: transform 0.15s ease;
+    }
+  }
+</style>

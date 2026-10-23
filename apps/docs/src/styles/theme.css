@@ -1,0 +1,91 @@
+/* The documentation site's look: Open ADMS's own colours and type from the shared look
+   (@open-adms/look/tokens.css, loaded first: its colour pairs are held to WCAG 2.2 AA by its own
+   tests), laid onto Starlight's variables. Starlight's grey scale and its asides' colours stay as
+   Starlight ships them, contrast-checked for both themes. Starlight always sets data-theme on the
+   root element, which is what the look's tokens follow, so the theme switch moves both together. */
+
+:root {
+  /* The accent: links, the current page in the sidebar, buttons, focus. */
+  --sl-color-accent-low: var(--colour-info-surface);
+  --sl-color-accent: var(--colour-main);
+  --sl-color-accent-high: var(--colour-main);
+  --sl-color-black: var(--colour-page);
+
+  /* Type: the platform's own fonts, as every Open ADMS screen uses them. */
+  --sl-font: var(--font-body);
+  --sl-font-mono: var(--font-number);
+  --sl-text-h1: 2rem;
+  --sl-text-h2: 1.5rem;
+  --sl-text-h3: 1.1875rem;
+  --sl-text-h4: 1.0625rem;
+  --sl-line-height: 1.7;
+
+  --sl-content-width: 48rem;
+  --sl-sidebar-width: 17.5rem;
+}
+
+/* Headings: firm and close-set, as reference documentation reads. */
+.sl-markdown-content :is(h1, h2, h3, h4) {
+  letter-spacing: -0.012em;
+  font-weight: 650;
+}
+.sl-markdown-content h2 {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+.sl-markdown-content h2:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+h1#_top {
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+/* Inline code, edged so it reads apart from the words round it in both themes. */
+.sl-markdown-content :not(pre) > code {
+  padding: 0.0625rem 0.3125rem;
+  border: 1px solid var(--sl-color-hairline-light);
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+/* Tables: ruled, with a quiet header, scrolling sideways on a narrow screen. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+  font-size: var(--sl-text-sm);
+  border-collapse: collapse;
+}
+.sl-markdown-content th {
+  background: var(--sl-color-gray-7, var(--sl-color-gray-6));
+  font-weight: 600;
+  text-align: start;
+}
+.sl-markdown-content :is(th, td) {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--sl-color-hairline-light);
+  vertical-align: top;
+}
+
+/* The sidebar's groups, labelled as sections. */
+nav.sidebar .top-level > li > details > summary .group-label .large {
+  font-size: var(--sl-text-xs);
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-2);
+}
+
+/* The header's rule, and the site title's mark sized to the bar. */
+.header {
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+}
+
+/* Focus always shows, in the accent, never only by colour change. */
+:focus-visible {
+  outline: 2px solid var(--sl-color-text-accent);
+  outline-offset: 2px;
+}

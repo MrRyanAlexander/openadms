@@ -1,0 +1,32 @@
+---
+// Starlight's page title, with the page's actions beside it: copy it as Markdown, view its Markdown
+// twin, or open it in an assistant. Pages without a title of their own (the home page's hero) have
+// no actions bar; their twin is still served and listed in llms.txt.
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+
+import PageActions from './PageActions.astro';
+
+const { entry } = Astro.locals.starlightRoute;
+---
+
+<div class="title-row">
+  <Default />
+  <PageActions id={entry.id} title={entry.data.title} />
+</div>
+
+<style>
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+  }
+  .title-row :global(h1) {
+    flex: 1 1 18rem;
+    min-width: 0;
+  }
+  .title-row :global(.page-actions) {
+    margin-top: 1.25rem;
+  }
+</style>

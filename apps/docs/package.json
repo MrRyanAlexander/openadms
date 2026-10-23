@@ -1,0 +1,24 @@
+{
+  "name": "@open-adms/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Open ADMS documentation site: static pages, a Markdown twin of each, llms.txt and llms-full.txt (Astro Starlight).",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "build": "ASTRO_TELEMETRY_DISABLED=1 astro build && node scripts/check-site.ts",
+    "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
+    "typecheck": "ASTRO_TELEMETRY_DISABLED=1 astro sync && tsc --noEmit"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.3",
+    "@astrojs/starlight": "0.42.6",
+    "@open-adms/look": "workspace:*",
+    "astro": "7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.6",
+    "typescript": "6.0.3"
+  }
+}
