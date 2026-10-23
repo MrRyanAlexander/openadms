@@ -7,7 +7,7 @@
 // The master passcode's slow hash is kept in the database alone (ARCHITECTURE §7.5; ADR-281): the
 // installer makes it from what the firm types and hands it to the seed, never through a file.
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { request } from 'node:https';
 import { join } from 'node:path';
 
@@ -166,6 +166,7 @@ export class Installer {
         }
         record = await this.writeSecrets(answers);
         if (this.sample) this.samplePasscode = answers.passcode;
+        else this.declineSample();
       }
       console.log('');
       await this.ensureRoles(database, record);
@@ -917,6 +918,16 @@ export class Installer {
     if (passcode === undefined) return;
     console.log('\nLoading the sample projects (a few minutes; --no-sample skips this):');
     console.log(loadSample(this.root, passcode).line);
+  }
+
+  // A first run with --no-sample (`pnpm start:blank`) answers the local stack's one-time offer of
+  // the sample projects for the firm, so a blank installation stays blank without being asked
+  // again; `pnpm sample` still loads them any time.
+  private declineSample(): void {
+    const remembered = join(this.root, 'infra/local/.generated/sample-offered');
+    if (existsSync(remembered)) return;
+    mkdirSync(join(this.root, 'infra/local/.generated'), { recursive: true });
+    writeFileSync(remembered, `declined ${new Date().toISOString()}\n`, { mode: 0o600 });
   }
 
   // Asks the local stack's helper (infra/local/src/index.ts) and takes its answer.
