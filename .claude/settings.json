@@ -26,6 +26,9 @@
       "Edit(**/.venv/**)"
     ]
   },
+  "worktree": {
+    "bgIsolation": "none"
+  },
   "hooks": {
     "SessionStart": [
       {
