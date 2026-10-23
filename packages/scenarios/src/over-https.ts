@@ -4,6 +4,12 @@
 // the stack's own authority alone, never the machine's trust store (OWASP ASVS 5.0 12.3.2), and
 // TLS is the proxy's (1.2 and 1.3 only, as `door.test.ts` proves of the API's own name). What a
 // request carries is the contracts': a body as JSON, or a file's part as bytes.
+//
+// **Or straight to an API process on this machine** (`Door`): one listening on a loopback port of
+// its own, over HTTPS with the stack's certificate for a process on this machine (`localhost`,
+// infra/local/src/certificates.ts), checked against the same authority alone. The sample projects
+// reach the API process they load through so (`packages/scenarios/src/sample`), never through
+// the proxy's one name for the stories, which a browser test may be holding.
 import { existsSync, readFileSync } from 'node:fs';
 import type { IncomingMessage } from 'node:http';
 import { Agent, request } from 'node:https';
@@ -47,15 +53,33 @@ export function pathOf(served: Endpoint, more: AskedWith = {}): string {
   return query === '' ? path : `${path}?${query}`;
 }
 
+// Where a request goes: the name its certificate is checked against, and the port on this machine
+// that answers for it.
+export interface Door {
+  readonly hostname: string;
+  readonly port: number;
+}
+
+// The stories' own name, through the stack's proxy.
+export function storiesDoor(): Door {
+  return { hostname: storiesHostname, port: Number(process.env['ADMS_HTTPS_PORT'] ?? '443') };
+}
+
+// An API process listening on this machine's loopback at that port, with the stack's certificate
+// for a process on this machine.
+export function loopbackDoor(port: number): Door {
+  return { hostname: 'localhost', port };
+}
+
 export class OverHttps {
   private readonly agent: Agent;
-  private readonly port: number;
+  private readonly door: Door;
 
-  constructor() {
+  constructor(door: Door = storiesDoor()) {
     if (!existsSync(rootCert)) {
       throw new Error('The local stack is not up: run `pnpm local:up` (after `pnpm installer`).');
     }
-    this.port = Number(process.env['ADMS_HTTPS_PORT'] ?? '443');
+    this.door = door;
     // One connection kept open between requests, as a phone keeps one while it syncs.
     this.agent = new Agent({ keepAlive: true, ca: readFileSync(rootCert) });
   }
@@ -68,7 +92,7 @@ export class OverHttps {
           ? undefined
           : Buffer.from(JSON.stringify(more.json), 'utf8');
     const headers: Record<string, string> = {
-      host: storiesHostname,
+      host: this.door.hostname,
       accept: 'application/json',
       ...(body === undefined
         ? {}
@@ -83,8 +107,8 @@ export class OverHttps {
         {
           agent: this.agent,
           host: '127.0.0.1',
-          port: this.port,
-          servername: storiesHostname,
+          port: this.door.port,
+          servername: this.door.hostname,
           method: served.method,
           path: pathOf(served, more),
           headers,
@@ -116,7 +140,7 @@ export class OverHttps {
                 new Error(
                   `${served.name} was answered ${String(answer.statusCode)} with no JSON` +
                     (answer.statusCode === 502
-                      ? ': the stories’ API isn’t listening, or the stack’s proxy can’t reach it.'
+                      ? ': the API process isn’t listening, or the stack’s proxy can’t reach it.'
                       : '.'),
                 ),
               );
@@ -127,8 +151,8 @@ export class OverHttps {
       asked.on('error', (problem) => {
         reject(
           new Error(
-            `The local stack does not answer at https://${storiesHostname}: run \`pnpm local:up\` ` +
-              `(${problem.message}).`,
+            `Nothing answers at https://${this.door.hostname}:${String(this.door.port)}: run ` +
+              `\`pnpm local:up\` (${problem.message}).`,
           ),
         );
       });

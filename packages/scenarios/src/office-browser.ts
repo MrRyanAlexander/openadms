@@ -34,13 +34,12 @@ import type { Database } from '@open-adms/db';
 import { PasswordRules, type Policy } from '@open-adms/domain';
 import {
   OneTimeCodes,
-  PasswordHasher,
   ServerAdmin,
   shippedBreachedPasswords,
+  type PasswordHasher,
 } from '@open-adms/api';
 
 import { answered, codeOf, type Asked, type AskedWith } from './over-https.ts';
-import { storyPasswordKey } from './story-api.ts';
 
 interface Clock {
   now(): Date;
@@ -66,11 +65,12 @@ export async function setOnTheServer(
   clock: Clock,
   policy: Policy,
   admin: OfficePerson,
+  hasher: PasswordHasher,
 ): Promise<string> {
   const password = madeUpPassword();
   const outcome = await new ServerAdmin(db, {
     rules: new PasswordRules(policy, shippedBreachedPasswords()),
-    hasher: new PasswordHasher(storyPasswordKey),
+    hasher,
     sessions: { endAll: () => Promise.resolve(0) },
     clock,
   }).letBackIn(admin.email, password, false);

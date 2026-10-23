@@ -96,7 +96,16 @@ export interface StoryPool {
   readonly pieceOfWork: PieceOfWork;
 }
 
-export class StoryDatabase {
+// What a stage is set on (runner.ts): a database its services' own logins open, each its own
+// client, and the read-only login's for a viewer's reads. A story's own database is one; the
+// installation's, which the sample projects are loaded into, is another (sample/installation.ts).
+export interface StageDatabase {
+  readonly name: string;
+  open(service: Service, pool?: StoryPool): Database;
+  openViewer(pool?: StoryPool): ViewerDatabase;
+}
+
+export class StoryDatabase implements StageDatabase {
   readonly name: string;
   private readonly admin: pg.Client;
   private dropped = false;

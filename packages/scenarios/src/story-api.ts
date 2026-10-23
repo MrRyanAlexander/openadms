@@ -30,6 +30,7 @@
 //   GET (`OfficeBrowser`).
 // - **Started again**, it holds nothing in memory: no part of a file not yet whole, no count.
 import { existsSync } from 'node:fs';
+import { createServer, type AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -78,10 +79,17 @@ import type { Actor, Database, Prisma } from '@open-adms/db';
 import type { Policy } from '@open-adms/domain';
 
 import { localMapServers } from './map-servers.ts';
-import { answered, codeOf, OverHttps, type Asked, type AskedWith } from './over-https.ts';
+import {
+  answered,
+  codeOf,
+  OverHttps,
+  type Asked,
+  type AskedWith,
+  type Door,
+} from './over-https.ts';
 import { ToldToWait, type PhoneServer } from './device.ts';
 import type { SoftwareKey } from './software-key.ts';
-import { storyMasterPasscode, type StoryDatabase } from './story-database.ts';
+import { storyMasterPasscode, type StageDatabase } from './story-database.ts';
 import type { StoryMedia } from './story-media.ts';
 
 // The signing secret of a story's API, and its password and sealing keys (ADR-542): made up, the
@@ -92,6 +100,20 @@ export const storySealingKey = 'made-up-sealing-key-for-the-stories-only';
 
 // Where the stories' API listens: the stack's proxy names it (infra/local/Caddyfile).
 export const storyApiPort = 3180;
+
+// A loopback port nothing listens at now: for an API process of a stage's own, reached straight
+// there (`loopbackDoor`), beside the stories' one.
+export async function freeLoopbackPort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((done) => {
+    server.close(() => {
+      done();
+    });
+  });
+  return port;
+}
 
 // The stack's certificate for a process on this machine (infra/local/src/certificates.ts), which
 // `pnpm local:up` makes: the stories' API serves HTTPS with it, as the API's container does with
@@ -172,8 +194,15 @@ export interface PhoneRequests {
   offlineSignIn(deviceId: string, report: OfflineSignInReport): Promise<string>;
 }
 
+// How a stage's API process is started where it isn't a story's own (the sample projects'
+// installation, sample/installation.ts): on the clock in use, its log lines handed on.
+export type StartApi = (at: {
+  readonly clock: Clock;
+  readonly log: (line: string) => void;
+}) => Promise<ApiProcess>;
+
 export interface StoryApiParts {
-  readonly database: StoryDatabase;
+  readonly database: StageDatabase;
   readonly clock: Clock;
   readonly policy: Policy;
   readonly media: StoryMedia;
@@ -182,6 +211,16 @@ export interface StoryApiParts {
   readonly corsOrigins?: readonly string[];
   // Where the API's mail goes: nowhere, unless a world reads it (`StoryMail`).
   readonly mail?: Mail;
+  // The firm's master passcode, as whoever holds it types it: the stories' made-up one unless
+  // the stage is an installation's.
+  readonly passcode?: string;
+  // How its API process is started and reached, where it isn't the stories' own process at
+  // `stories.adms.localhost` (a process of its own on a loopback port, `loopbackDoor`).
+  readonly start?: StartApi;
+  readonly door?: Door;
+  // The loopback port the stories' own process listens at, where it isn't the one behind
+  // `stories.adms.localhost` (`door` then names it).
+  readonly port?: number;
 }
 
 export class StoryApi {
@@ -214,6 +253,11 @@ export class StoryApi {
   constructor(parts: StoryApiParts) {
     this.parts = parts;
     this.on = parts.clock;
+  }
+
+  // The master passcode whoever holds it types at a phone of this stage.
+  get passcode(): string {
+    return this.parts.passcode ?? storyMasterPasscode;
   }
 
   // A phone the story enrolled: its key, which only it holds, signs its challenges.
@@ -490,7 +534,7 @@ export class StoryApi {
       proving = (async () =>
         this.proved(deviceId, {
           ...(await this.signedChallenge(deviceId)),
-          ...(withPasscode ? { passcode: storyMasterPasscode } : {}),
+          ...(withPasscode ? { passcode: this.passcode } : {}),
         }))().finally(() => this.proving.delete(deviceId));
       this.proving.set(deviceId, proving);
     }
@@ -533,7 +577,7 @@ export class StoryApi {
 
   private async ask(served: Endpoint, more: AskedWith): Promise<Asked> {
     await this.started();
-    this.door ??= new OverHttps();
+    this.door ??= new OverHttps(this.parts.door);
     return this.door.ask(served, more);
   }
 
@@ -555,13 +599,18 @@ export class StoryApi {
   }
 
   private start(): Promise<ApiProcess> {
+    const at = {
+      clock: { now: () => this.on.now() },
+      log: (line: string) => {
+        this.kept(line);
+      },
+    };
+    if (this.parts.start !== undefined) return this.parts.start(at);
     return listeningApi({
       ...this.parts,
       clock: { now: () => this.on.now() },
       corsOrigins: this.parts.corsOrigins ?? [],
-      log: (line) => {
-        this.kept(line);
-      },
+      log: at.log,
       waited: this.waited,
     });
   }
@@ -571,7 +620,7 @@ export class StoryApi {
 // ADR-491, 572): a story's database, the policy, an object store kept in memory, a clock, the
 // pages that may call it from a browser, and where its log lines go.
 export interface ListeningParts {
-  readonly database: StoryDatabase;
+  readonly database: StageDatabase;
   readonly policy: Policy;
   readonly media: StoryMedia;
   readonly clock: Clock;
@@ -586,6 +635,9 @@ export interface ListeningParts {
   readonly asksAddresses?: boolean;
   // Where its mail goes: nowhere, unless a world reads it (`StoryMail`).
   readonly mail?: Mail;
+  // The loopback port it listens at: the stories' own (behind `stories.adms.localhost`) unless
+  // another is given (a stage reached by `loopbackDoor`).
+  readonly port?: number;
 }
 
 // The API's own process, `ApiProcess` with `ApiModule` as `apps/api/src/main.ts` starts it, on a
@@ -608,7 +660,7 @@ export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
     ApiModule,
     {
       host: '127.0.0.1',
-      port: storyApiPort,
+      port: parts.port ?? storyApiPort,
       // Over HTTPS alone, with the stack's certificate for a process on this machine: Caddy
       // reaches it so, checking it against the stack's root (KD-78; ADR-517).
       tls: storyApiTls(),
@@ -657,7 +709,7 @@ export async function listeningApi(parts: ListeningParts): Promise<ApiProcess> {
   } catch (problem) {
     await api.close();
     throw new Error(
-      `The stories’ API could not listen at 127.0.0.1:${String(storyApiPort)}; another run ` +
+      `The stories’ API could not listen at 127.0.0.1:${String(parts.port ?? storyApiPort)}; another run ` +
         `of the stories may hold it (${problem instanceof Error ? problem.message : String(problem)}).`,
       { cause: problem },
     );

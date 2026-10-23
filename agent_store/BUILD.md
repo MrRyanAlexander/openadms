@@ -124,6 +124,15 @@ notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`).
   (`packages/domain/src/brand.ts`, `builtOn.source`): the firm that publishes its own build changes
   it there. A phone reads the name from the public `GET /brand` before it is enrolled and from the
   proven-phone answer after, keeps the last in its store, and shows it with no signal.
+- The sample projects (`pnpm sample`; offered once at a terminal by `pnpm local:up`): the golden
+  mission's P1 (ROW) and P2 (PPDR) plus a Wednesday (an ineligible-site load left in review, a
+  quarantined duplicate and the load waiting for it, HHW, an incident of every type, the time
+  clock), told on October 2026's days by an API process of their own on the installation's
+  settings; picking only shipped list values (the haul-outs Vegetative reduced by grinding, the fill
+  and freon under Stumps and White Goods, no incident sub-type); two managers/analysts made and
+  later archived on the server as `installer:admin` does (never an admin); monitors and phones
+  through the API under the master passcode a person types; everything turned in and archived at
+  the end (`packages/scenarios/src/sample/`).
 
 ## Not in this build
 

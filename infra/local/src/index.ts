@@ -11,7 +11,8 @@
 //                      start its container afresh and check its health answer over HTTPS (ADR-385),
 //                      and the same for the worker, whose health answer is asked inside its own
 //                      container (ADR-419); a container still running exactly what was just
-//                      built, under the settings it was started with, is kept as it is (ADR-448)
+//                      built, under the settings it was started with, is kept as it is (ADR-448);
+//                      then, at a terminal, offers once to load the sample projects (`pnpm sample`)
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the certificates;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
@@ -186,7 +187,28 @@ class LocalStack {
     await this.checkPage('addresses.adms.localhost', '/status');
     await this.api();
     this.worker();
+    this.sample();
     this.whereEachAnswers();
+  }
+
+  // The sample projects (packages/scenarios/src/sample), once the API and the worker answer:
+  // offered once at a terminal, never loaded unasked (their phones are enrolled under the firm's
+  // master passcode, which only a person types), and remembered in .generated/ so they are
+  // offered no more; `pnpm sample` loads them any time. Their own run says whether they are
+  // loaded already. What it says is shown; whether it loads never stops `up`.
+  private sample(): void {
+    if (!existsSync(this.apiEnvFile) || !existsSync(this.workerEnvFile)) return;
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(this.repository, 'packages', 'scenarios', 'src', 'sample-cli.ts'),
+        '--offer',
+        join(this.generated, 'sample-offered'),
+      ],
+      { cwd: this.repository, stdio: 'inherit' },
+    );
+    if (result.status !== 0)
+      console.log('The sample projects were not loaded: `pnpm sample` tries again.');
   }
 
   // Where each part answers, over HTTPS, once it is up.

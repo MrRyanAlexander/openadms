@@ -31,6 +31,7 @@
     "installer:admin": "pnpm --silent generate && tsc --build && node apps/api/dist/admin.js",
     "openapi": "pnpm generate && tsc --build && node apps/api/src/openapi.ts && prettier --write apps/api/openapi.json",
     "scenarios": "pnpm generate && tsc --build && node packages/scenarios/src/cli.ts",
+    "sample": "pnpm generate && tsc --build && node packages/scenarios/src/sample-cli.ts",
     "e2e": "pnpm generate && tsc --build && pnpm --filter @open-adms/field e2e",
     "field:control-tickets": "pnpm generate && tsc --build && pnpm --filter @open-adms/field control-tickets",
     "field:try": "pnpm generate && tsc --build && pnpm --filter @open-adms/field try",

@@ -3,7 +3,8 @@
 // (ADR-419), then what each read-only viewer reads (ADR-435), then one
 // phone's day under the master passcode (ADR-464), then what a sync can't save, held for a
 // person (ADR-475), then a photograph's file sent in parts and an upload interrupted (ADR-483),
-// then a project's every phone syncing at once (ADR-505).
+// then a project's every phone syncing at once (ADR-505), then the sample projects a firm finds
+// on a fresh installation.
 import type { Story } from '../runner.ts';
 import { burst } from './burst.ts';
 import { lostPhoneKey } from './lost-phone-key.ts';
@@ -29,6 +30,7 @@ import { sync } from './sync.ts';
 import { ticket101001 } from './ticket-101001.ts';
 import { offlineSignIn } from './offline-sign-in.ts';
 import { underThePasscode } from './under-the-passcode.ts';
+import { sampleProjects } from './sample-projects.ts';
 
 export const stories: readonly Story[] = [
   ticket101001,
@@ -55,4 +57,5 @@ export const stories: readonly Story[] = [
   interruptedUpload,
   burst,
   lostPhoneKey,
+  sampleProjects,
 ];

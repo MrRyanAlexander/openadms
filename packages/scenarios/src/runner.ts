@@ -20,13 +20,13 @@ import {
   type TurnInHolds,
   type TurnInSent,
 } from '@open-adms/contracts';
-import type { Mail } from '@open-adms/api';
+import { PasswordHasher, type Mail } from '@open-adms/api';
 import type { Database } from '@open-adms/db';
 import type { MasterPasscodeSessionKind, NoAssignmentReason, Policy } from '@open-adms/domain';
 
 import { projectTime, StoryClock, utcOffsetMinutes } from './clock.ts';
 import { SimulatedDevice, type PhoneServer, type PhoneSetup } from './device.ts';
-import type { AskedWith } from './over-https.ts';
+import { loopbackDoor, type AskedWith } from './over-https.ts';
 import {
   madeUpPassword,
   OfficeBrowser,
@@ -37,8 +37,14 @@ import {
 import { HeldLoginList, offlineSignInReport } from './offline-sign-in.ts';
 import { builtInPolicy } from './policy.ts';
 import { SoftwareKey, type EnrolledPhone } from './software-key.ts';
-import { StoryApi } from './story-api.ts';
-import { StoryDatabase, storyMasterPasscode, type StoryTemplate } from './story-database.ts';
+import {
+  freeLoopbackPort,
+  StoryApi,
+  storyPasswordKey,
+  storySigningSecret,
+  type StartApi,
+} from './story-api.ts';
+import { StoryDatabase, type StageDatabase, type StoryTemplate } from './story-database.ts';
 import { StoryMedia } from './story-media.ts';
 
 export interface Story {
@@ -49,6 +55,9 @@ export interface Story {
   readonly timeZone: string;
   // When the story's clock starts, with its offset.
   readonly start: string;
+  // Whether its API listens on a loopback port of its own, reached straight there, not at the
+  // stories' one behind `stories.adms.localhost` (which a browser test's world may be holding).
+  readonly ownPort?: boolean;
   run(context: StoryContext): Promise<void>;
 }
 
@@ -75,6 +84,9 @@ export interface StoryContext {
   readonly apiPool: { readonly connections: number; waitedMs(): readonly number[] };
   // The release's policy values, which a new project's settings start from (ADR-303).
   readonly policy: Policy;
+  // The API's own password hasher, under its keys: for what is done on the server itself, as
+  // `pnpm installer:admin` does it (a person's password set there, ADR-415).
+  readonly passwordHasher: PasswordHasher;
   // Where phones sync, send a photograph's files and are turned in (BACKLOG 2.7.1 part 1;
   // ADR-491): the story's own API, the API's process itself on the story's database and clock,
   // over HTTPS through the local stack's proxy (`StoryApi`). A phone proves itself with its own
@@ -167,6 +179,9 @@ export interface StoryContext {
     // A person an admin created: that admin sets their first password at its endpoint; they sign
     // in with it, set one of their own and, an admin or a manager/analyst, their authenticator.
     person(by: OfficeBrowser, person: OfficePerson): Promise<OfficeBrowser>;
+    // A person whose password was set on the server (with `passwordHasher`): they sign in with
+    // it and, an admin or a manager/analyst, set their authenticator up.
+    signedIn(person: OfficePerson, password: string): Promise<OfficeBrowser>;
     // A browser nobody signed in at.
     readonly signedOut: Pick<OfficeBrowser, 'asked'>;
   };
@@ -240,6 +255,7 @@ export class Runner {
         database,
         timeZone: story.timeZone,
         start: story.start,
+        ...(story.ownPort === true ? { port: await freeLoopbackPort() } : {}),
         out,
         checked(ok) {
           if (ok) passed += 1;
@@ -273,7 +289,7 @@ export class Runner {
 // What a story's stage is set on: its database (made, migrated and seeded already), its time
 // zone and the moment its clock starts, where what happens is said, and each check's verdict.
 export interface StageParts {
-  readonly database: StoryDatabase;
+  readonly database: StageDatabase;
   readonly timeZone: string;
   readonly start: string;
   readonly out: (line: string) => void;
@@ -282,6 +298,19 @@ export interface StageParts {
   readonly corsOrigins?: readonly string[];
   // Where the API's mail goes: nowhere, unless a world reads it (`StoryMail`).
   readonly mail?: Mail;
+  // A loopback port of its own for its API, reached straight there (`loopbackDoor`), not the
+  // stories' one behind `stories.adms.localhost`, which a browser test may hold.
+  readonly port?: number;
+  // An installation's stage, not a story's (the sample projects, sample/installation.ts): how its
+  // API process is started on the installation's settings, the firm's master passcode as whoever
+  // holds it types it, the API's password hasher under the installation's keys, and the password
+  // each monitor created on a phone is given (made up and never kept).
+  readonly installation?: {
+    readonly start: StartApi;
+    readonly passcode: string;
+    readonly passwordHasher: PasswordHasher;
+    readonly monitorPassword: () => string;
+  };
 }
 
 // A story's stage (ADR-275, 491, 603): the services' own clients on its database, its clock, its
@@ -313,6 +342,7 @@ export class StoryStage {
     const policy = builtInPolicy();
     const created = new Map<string, StoryMonitor>();
     const media = new StoryMedia();
+    const { installation } = parts;
     const served = new StoryApi({
       database,
       clock,
@@ -320,7 +350,14 @@ export class StoryStage {
       media,
       corsOrigins: parts.corsOrigins ?? [],
       ...(parts.mail === undefined ? {} : { mail: parts.mail }),
+      ...(parts.port === undefined ? {} : { port: parts.port, door: loopbackDoor(parts.port) }),
+      ...(installation === undefined
+        ? {}
+        : { start: installation.start, passcode: installation.passcode }),
     });
+    const passcode = served.passcode;
+    const passwordHasher =
+      installation?.passwordHasher ?? new PasswordHasher(storyPasswordKey, storySigningSecret);
     const send = (endpoint: Endpoint, more: AskedWith) => served.sent(endpoint, more);
     const browsers = new Map<string, OfficeBrowser>();
     // Every request of a story's phones on one clock, through the story's API.
@@ -334,7 +371,7 @@ export class StoryStage {
           const enrolment = moment === undefined ? asked : served.requests({ now: () => moment });
           const { deviceId } = await enrolment.enrol({
             name,
-            passcode: storyMasterPasscode,
+            passcode,
             publicKey: key.publicKey,
           });
           served.enrolled(deviceId, key);
@@ -345,13 +382,11 @@ export class StoryStage {
           if (known !== undefined) return known;
           if (onPhone === undefined)
             throw new Error(`No monitor ${name}, and no phone to create one on.`);
-          // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…
-          const password = `555${String(101 + created.size).padStart(4, '0')}`;
-          const answer = await asked.monitorCreated(onPhone, {
-            name,
-            password,
-            passcode: storyMasterPasscode,
-          });
+          // A made-up phone number without its area code, one a monitor: 555-0101, 555-0102…;
+          // at an installation, made up afresh and never kept.
+          const password =
+            installation?.monitorPassword() ?? `555${String(101 + created.size).padStart(4, '0')}`;
+          const answer = await asked.monitorCreated(onPhone, { name, password, passcode });
           const monitor = {
             id: answer.userId,
             monitorNumber: answer.monitorNumber,
@@ -372,7 +407,7 @@ export class StoryStage {
         underPasscode: {
           choices: (onPhone, projectId) =>
             asked.setupChoices(onPhone, {
-              passcode: storyMasterPasscode,
+              passcode,
               projectId,
               monitorsAfter: null,
             }),
@@ -381,20 +416,20 @@ export class StoryStage {
               await asked.passcodeSession(onPhone, {
                 personId: monitor.id,
                 kind,
-                passcode: storyMasterPasscode,
+                passcode,
               }),
             );
           },
           // "Sync and turn in" on the phone, the passcode typed by whoever holds it (ADR-488).
-          turnIn: (phone) => phone.turnIn(asked.server, storyMasterPasscode),
-          proves: async (onPhone) => (await served.proves(onPhone, storyMasterPasscode)).answer,
+          turnIn: (phone) => phone.turnIn(asked.server, passcode),
+          proves: async (onPhone) => (await served.proves(onPhone, passcode)).answer,
           async turnInNaming(onPhone, holds, lastUsed = []) {
             const { server } = asked;
             if (server.turnIn === undefined) {
               throw new Error('The story’s server turns no phone in.');
             }
             return turnInAnswerSchema.parse(
-              await server.turnIn(onPhone, { passcode: storyMasterPasscode, holds, lastUsed }),
+              await server.turnIn(onPhone, { passcode, holds, lastUsed }),
             );
           },
         },
@@ -436,6 +471,7 @@ export class StoryStage {
       api,
       worker,
       policy,
+      passwordHasher,
       ...phonesOn(clock, false),
       offline: {
         async loginList(onPhone) {
@@ -493,7 +529,7 @@ export class StoryStage {
         async admin(person) {
           const held = browsers.get(person.id);
           if (held !== undefined) return held;
-          const password = await setOnTheServer(api, clock, policy, person);
+          const password = await setOnTheServer(api, clock, policy, person, passwordHasher);
           const browser = await OfficeBrowser.signIn(send, clock, person, password);
           browsers.set(person.id, browser);
           return browser;
@@ -506,6 +542,13 @@ export class StoryStage {
             ids: { userId: person.id },
             json: { password },
           });
+          const browser = await OfficeBrowser.signIn(send, clock, person, password);
+          browsers.set(person.id, browser);
+          return browser;
+        },
+        async signedIn(person, password) {
+          const held = browsers.get(person.id);
+          if (held !== undefined) return held;
           const browser = await OfficeBrowser.signIn(send, clock, person, password);
           browsers.set(person.id, browser);
           return browser;

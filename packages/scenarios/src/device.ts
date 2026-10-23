@@ -662,6 +662,8 @@ export class SimulatedDevice {
   // The seconds it was told to wait, each time a server said so.
   private readonly waits: number[] = [];
   private photographs = 0;
+  // What its camera writes for a photograph, where a story gives it one (`takesPicturesWith`).
+  private camera: ((label: string) => Buffer) | undefined;
   // The blocks a sync answered, by series: what it holds of each since, until it takes its
   // lists again.
   private readonly toppedUp = new Map<NumberSeries, readonly PhoneBlock[]>();
@@ -717,6 +719,13 @@ export class SimulatedDevice {
     this.crew = undefined;
     this.toppedUp.clear();
     this.setupVersionNow = null;
+  }
+
+  // What its camera writes for each photograph from now on: a picture of its own for each, drawn
+  // from what it is a photograph of (the sample projects' pictures, sample/sample-picture.ts).
+  // Without one, each file is a JPEG's first bytes and made-up bytes after them.
+  takesPicturesWith(camera: (label: string) => Buffer): void {
+    this.camera = camera;
   }
 
   // The blocks it holds: its lists', and of a series a sync has topped up since, what that sync
@@ -1055,7 +1064,9 @@ export class SimulatedDevice {
     this.photographs += 1;
     const file = `${this.name}/${capturedAt.toISOString()}/${String(this.photographs)}`;
     const fingerprint = (of: string): string => createHash('sha256').update(of).digest('hex');
-    const uploaded = fileOf(`${file} as uploaded`, photo.bytes ?? 4096, 'jpeg');
+    const uploaded =
+      this.camera?.(`${file} as uploaded`) ??
+      fileOf(`${file} as uploaded`, photo.bytes ?? 4096, 'jpeg');
     const depth = photo.depthFile === true ? fileOf(`${file} depth`, 1024, 'png') : null;
     const made: RecordedPhoto = {
       id: uuidv7(capturedAt),
