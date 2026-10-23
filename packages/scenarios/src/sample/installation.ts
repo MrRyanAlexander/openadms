@@ -22,7 +22,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 
-import { ApiModule, ApiProcess, NoMail, PasswordHasher, Settings } from '@open-adms/api';
+import {
+  ApiModule,
+  ApiProcess,
+  installationPolicy,
+  NoMail,
+  PasswordHasher,
+  Settings,
+} from '@open-adms/api';
 import {
   openDatabase,
   openViewerDatabase,
@@ -31,7 +38,6 @@ import {
 } from '@open-adms/db';
 
 import { madeUpPassword } from '../office-browser.ts';
-import { builtInPolicy } from '../policy.ts';
 import { StoryStage } from '../runner.ts';
 import { freeLoopbackPort } from '../story-api.ts';
 import type { Service, StageDatabase, StoryPool } from '../story-database.ts';
@@ -102,13 +108,16 @@ export async function installationStage(parts: InstallationParts): Promise<Story
   }
   const port = await freeLoopbackPort();
   // The API's own settings, as it reads them, listening here for this load alone.
-  const settings = Settings.read({
+  const own = {
     ADMS_API_HOST: '127.0.0.1',
     ADMS_API_PORT: String(port),
     ADMS_API_TLS_CERT_FILE: certFile,
     ADMS_API_TLS_KEY_FILE: keyFile,
-  });
-  const policy = builtInPolicy();
+  };
+  const settings = Settings.read(own);
+  // The policy the installation's API runs with: the release's values and the installation's own
+  // over them, read from the same env file as its settings.
+  const policy = installationPolicy(Settings.environment(own));
   const database = new InstallationDatabase(settings, parts.tryingOn);
   const pool = {
     maxConnections: policy.databasePoolConnections,

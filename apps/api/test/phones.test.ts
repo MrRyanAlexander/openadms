@@ -23,7 +23,15 @@ import { Phones } from '../src/dispatch/phones.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { enrolledPhone, proven, turnedIn } from './support/phones.ts';
-import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
+import {
+  danasEmail,
+  long,
+  longer,
+  luissEmail,
+  soleAdmin,
+  worldOn,
+  type Served,
+} from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 import { Outbox, passwordKey } from './support/sign-in.ts';
 
@@ -485,6 +493,7 @@ describe('the master passcode', () => {
   it('AC-02-21, AC-02-22, AC-02-23 Dana changes it, giving her own password again: a new version is kept as an Argon2id hash and the one before is still there; the audit log names her and holds no hash; each phone still says the version it holds until its next sync; every admin is told by mail, never the passcode', async () => {
     const outbox = new Outbox();
     await world(async (served, tx, who) => {
+      await soleAdmin(tx, who.dana);
       const phones = await enrolled(served, tx);
       const before = await inForce(tx);
       const dana = await served.signedIn(danasEmail, long);

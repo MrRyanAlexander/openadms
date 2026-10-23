@@ -2,6 +2,8 @@
 // generates the secrets and sets up the database. A rerun re-checks what it knows, asks only to
 // confirm it and resume, and never makes a secret again. Teardown makes the next run a first run.
 // It never prints a password, a secret, a hash or a connection URL.
+// A first run ends by loading the two sample projects, so a fresh installation already holds them
+// (sample.ts; `--no-sample` skips it, `pnpm sample` loads them later); a rerun never does.
 // The master passcode's slow hash is kept in the database alone (ARCHITECTURE §7.5; ADR-281): the
 // installer makes it from what the firm types and hands it to the seed, never through a file.
 import { spawnSync } from 'node:child_process';
@@ -26,6 +28,7 @@ import {
   StatementTimeout,
   statementTimeoutName,
 } from './policy.ts';
+import { loadSample } from './sample.ts';
 import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
@@ -104,10 +107,15 @@ export class Installer {
   // What the firm named its ADMS this run, for the seed to write on a first run; a rerun has none
   // and the seed leaves the firm's settings as they are.
   private brandName: string | undefined;
+  // The passcode the firm typed at this first run, in memory only, for the sample's phones; it is
+  // handed to the sample's process on its standard input and let go after.
+  private samplePasscode: string | undefined;
+  private readonly sample: boolean;
 
-  constructor(root: string, yes: boolean) {
+  constructor(root: string, yes: boolean, sample = true) {
     this.root = root;
     this.yes = yes;
+    this.sample = sample;
     this.stackEnv = new EnvFile(join(root, 'infra/local/.env'));
     this.state = new InstallationState(join(root, 'tools/setup/.state/installation.json'));
     this.ownerEnv = new EnvFile(join(root, 'packages/db/.env'));
@@ -150,6 +158,7 @@ export class Installer {
           return;
         }
         record = await this.writeSecrets(answers);
+        if (this.sample) this.samplePasscode = answers.passcode;
       }
       console.log('');
       await this.ensureRoles(database, record);
@@ -166,6 +175,7 @@ export class Installer {
       this.ensureApiSettings();
       this.startApi();
       this.startWorker();
+      this.loadSample();
       console.log(`\nInstalled for ${record.firm}. Rerun \`pnpm installer\` any time to re-check.`);
     } finally {
       await database.close();
@@ -240,7 +250,12 @@ export class Installer {
     { firm: string; brand: string; mail: InstallationRecord['mail']; passcode: string } | undefined
   > {
     const interview = this.questions();
-    console.log('\nFirst run: nothing is installed yet. Four questions, then I set it up.\n');
+    console.log(
+      '\nFirst run: nothing is installed yet. Four questions, then I set it up\n' +
+        (this.sample
+          ? 'and load the two sample projects, so you can look round (--no-sample skips that).\n'
+          : '(without the sample projects: `pnpm sample` loads them later).\n'),
+    );
     let firm = '';
     while (firm === '') {
       firm = await interview.ask('1. The firm that runs this installation (its name)');
@@ -851,6 +866,16 @@ export class Installer {
       { stdio: 'inherit' },
     );
     if (result.status !== 0) throw new Error('The worker did not start. Stopped.');
+  }
+
+  // The sample projects, on a first run, once the API's settings and the stack are in place. A
+  // load that stops leaves the installation as it is and says how to load them later.
+  private loadSample(): void {
+    const passcode = this.samplePasscode;
+    this.samplePasscode = undefined;
+    if (passcode === undefined) return;
+    console.log('\nLoading the sample projects (a few minutes; --no-sample skips this):');
+    console.log(loadSample(this.root, passcode).line);
   }
 
   // Asks the local stack's helper (infra/local/src/index.ts) and takes its answer.

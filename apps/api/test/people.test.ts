@@ -35,6 +35,7 @@ import {
   longer,
   luissEmail,
   ran,
+  soleAdmin,
   worldOn,
   wrong,
   type Answer,
@@ -800,6 +801,7 @@ describe('archiving a person, and ending their sessions', () => {
 
   it('AC-02-13 the firm’s only admin can’t be archived, by herself or by the database; with a second admin, one may go', async () => {
     await world(async (served, tx, who) => {
+      await soleAdmin(tx, who.dana);
       const dana = await served.signedIn(danasEmail, long);
       expect(told(await post(served, dana, `/people/${who.dana}/archivings`))).toEqual([
         409,

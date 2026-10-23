@@ -312,9 +312,12 @@ describe('who may change the setup', () => {
       ).toEqual([
         { tableName: 'client', operation: 'INSERT', actorId: who.luis, recordId: record.id },
       ]);
-      expect(saved(findClientsEndpoint, await ask(api, luis, findClientsEndpoint)).records).toEqual(
-        [record],
-      );
+      // The installation may hold clients of its own: this one is found once, whoever else is.
+      expect(
+        saved(findClientsEndpoint, await ask(api, luis, findClientsEndpoint)).records.filter(
+          (found) => found.id === record.id,
+        ),
+      ).toEqual([record]);
       await tx.userPermission.update({
         where: { id: grant.id },
         data: { archivedAt: new Date() },
@@ -348,11 +351,12 @@ describe('who may change the setup', () => {
       for (const caller of [who.luis, who.viewer, who.kim, gone.id, randomUUID()]) {
         expect(await refusedAs(caller), caller).toEqual(Array(5).fill('NOT_ALLOWED'));
       }
+      const held = [await tx.client.count(), await tx.contractor.count()];
       const luis = await projects.client(who.luis, { name: 'Bayline County' });
       expect(luis.saved ? '' : luis.refusal.message).toBe(
         'Luis Ortega may not change the setup: it takes an admin, or a manager/analyst granted "setup" and "view setup". Nothing was changed.',
       );
-      expect([await tx.client.count(), await tx.contractor.count()]).toEqual([0, 0]);
+      expect([await tx.client.count(), await tx.contractor.count()]).toEqual(held);
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
       expect((await projects.client(who.luis, { name: 'Bayline County' })).saved).toBe(true);
       expect((await projects.client(who.dana, { name: 'Town of Egret Point' })).saved).toBe(true);
@@ -396,7 +400,12 @@ describe('Dana sets P1 up through the endpoints', () => {
       ]);
       for (const query of ['?search=bayline', '?search=COUNTY', '']) {
         const found = await ask(api, dana, findClientsEndpoint, { query });
-        expect(saved(findClientsEndpoint, found).records, query).toEqual([client.record]);
+        // Found among whatever clients the installation holds; the search's own words find it alone.
+        const records = saved(findClientsEndpoint, found).records;
+        expect(
+          records.filter((one) => one.id === client.record.id),
+          query,
+        ).toEqual([client.record]);
       }
       const lists = await picked(tx);
       const event = saved(
@@ -806,6 +815,7 @@ describe('a refusal by the database’s own constraints is answered plainly, nev
   it('a project nobody has, named in the path, is not found: nothing is written and the piece of work carries on', async () => {
     await world(async (api, tx) => {
       const dana = await api.signedIn(danasEmail, long);
+      const projectsHeld = await tx.project.count();
       for (const [served, payload] of [
         [closeProjectEndpoint, undefined],
         [changeProjectSettingsEndpoint, { siteCircleMeters: 150 }],
@@ -816,7 +826,7 @@ describe('a refusal by the database’s own constraints is answered plainly, nev
         expect(told(answer), served.name).toEqual([404, 'NOT_FOUND']);
         expect(plainly(answer)).toBe('Nothing with that id is on record.');
       }
-      expect(await tx.project.count()).toBe(0);
+      expect(await tx.project.count()).toBe(projectsHeld);
     });
   });
 });

@@ -16,7 +16,7 @@ export {
   type NewCertification,
 } from './certification/certifications.ts';
 export { NumberAllocator } from './numbering/number-allocator.ts';
-export { builtInPolicy } from './policy.ts';
+export { builtInPolicy, installationPolicy } from './policy.ts';
 export { ApiModule } from './process/api-module.ts';
 export { ApiProcess } from './process/api-process.ts';
 export { Settings } from './process/settings.ts';

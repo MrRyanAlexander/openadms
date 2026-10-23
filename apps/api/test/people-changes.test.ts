@@ -27,7 +27,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { refusedAsTheLastAdmin } from '../src/people/people.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
+import {
+  danasEmail,
+  long,
+  longer,
+  luissEmail,
+  soleAdmin,
+  worldOn,
+  type Served,
+} from './support/served.ts';
 import { ask, saved, told, viewerSignsIn, type Browser } from './support/setup.ts';
 import { Outbox } from './support/sign-in.ts';
 
@@ -448,6 +456,7 @@ describe('an admin changes a role', () => {
 
   it('AC-02-13 the firm’s only admin is never made a manager/analyst, by herself or by the database; with a second admin she may be, and her very next admin’s call is refused', async () => {
     await world(async (served, tx, who) => {
+      await soleAdmin(tx, who.dana);
       const dana = await served.signedIn(danasEmail, long);
       expect(told(await role(served, dana, who.dana, 'MANAGER_ANALYST'))).toEqual([
         409,
