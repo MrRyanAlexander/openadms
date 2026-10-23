@@ -2840,7 +2840,7 @@ a mail server; otherwise admins reset passwords.
 *Refs:* ARCHITECTURE §6, §16; ADR-105.
 
 ### ✅ Q-163 — Open ADMS's own licence
-*(ADR-171)* **Decided: AGPL-3.0.**
+*(ADR-171)* **Decided: AGPL-3.0. Changed by the user, 2026-10-23: Apache-2.0** ("I know about ADR-171, but now I know I was wrong and want to go with Apache 2.0"). The record below is the original, kept as history.
 
 Open ADMS will be open source. The scaffold checks every dependency's licence before pinning it, but
 a licence only "passes" relative to Open ADMS's own, and the repository needs its licence file.

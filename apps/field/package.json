@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Open ADMS field app (React + Vite + Capacitor, ARCHITECTURE \u00a77\u2013\u00a712).",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "build": "tsc --build && vite build",

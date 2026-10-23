@@ -124,7 +124,7 @@ billable CY = certified capacity × load call %
 
 ## 1.4 Who's who
 
-**The firm and its installation.** Open ADMS is self-installed open source (AGPL-3.0). **A firm
+**The firm and its installation.** Open ADMS is self-installed open source (Apache-2.0). **A firm
 installs it and runs it in its own cloud**: one organisation per **installation** (never an
 "instance"), no multi-tenancy. The firm is usually a debris
 **monitoring firm**, sometimes a non-profit doing like-kind work. It sets **one master passcode**, and

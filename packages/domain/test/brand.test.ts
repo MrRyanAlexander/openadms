@@ -38,7 +38,7 @@ describe('what a firm calls its ADMS', () => {
 describe('the built-on line', () => {
   it('names Open ADMS and the release, and says where the source is', () => {
     expect(builtOnLine('0.1.0')).toBe('Built on Open ADMS 0.1.0');
-    expect(builtOn.licence).toBe('AGPL-3.0');
+    expect(builtOn.licence).toBe('Apache-2.0');
     expect(builtOn.source).toMatch(/^https:\/\/[a-z0-9.-]+\/\S+$/i);
   });
 });

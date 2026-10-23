@@ -232,7 +232,7 @@ An overturned row becomes its own task. Nothing changes until you answer.
 | D141 | A rule's *Debris type* criterion reads the **collection's** debris type | 244 | |
 | D142 | People's marks (QC, lock, batch, acceptance) are records of their own beside what they mark | 245 | |
 | D143 | `spec/RULES.md` §7 "Is valid" adopted, the setup check listing invalid rules; the white goods 40-mile example code | 247 | |
-| D144 | Licence `AGPL-3.0-only` (not "-or-later"); `pnpm licences` checks every installed package | 255, 262 | |
+| D144 | Licence `Apache-2.0` (the user, 2026-10-23, superseding ADR-171); `pnpm licences` checks every installed package, refusing GPL, LGPL and AGPL | 255, 262 | |
 | D145 | The local stack's hostnames, port 55432, `down` keeping data; the installer's command names and three questions; **a master passcode of 8 to 128 characters**; the database name `adms` | 263, 266 | |
 | D146 | Database ids are UUIDv7 made by the database (a field event's id made by the phone); foreign keys restrict deletes | 268 | |
 | D147 | Prisma's client and adapter versions; each test story on its own throw-away database; the system actor's guard; `pnpm security` | 273, 275, 276 | |

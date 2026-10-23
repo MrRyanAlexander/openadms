@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Open ADMS look: the tokens, the components every web app is built from on React Aria, the translation layer, and the browser tests' accessibility checks; shared by the field app, the back office and the viewer portal (ARCHITECTURE \u00a714, \u00a718).",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",

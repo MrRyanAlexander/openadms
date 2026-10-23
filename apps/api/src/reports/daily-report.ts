@@ -463,7 +463,7 @@ function endPage(contactEmail: string | null, brand: BrandAnswer): PdfPage {
     contactEmail === null ? reportWords.noContact : reportWords.contact(contactEmail),
   );
   right(page, wide - margin, 28, 9, false, reportWords.endBrand);
-  // The AGPL-3.0 attribution, and where the source is (§13).
+  // The licence, and where the source is.
   const attribution = `${builtOnLine(brand.version)}, ${builtOn.licence}. Source: ${builtOn.source}`;
   page.text(margin, 28, 9, false, fitted(attribution, 9, wide - margin * 2 - 120, false));
   return page;

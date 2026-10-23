@@ -36,7 +36,7 @@ control runs after the fact. *(adms-domain §1.1–1.2, ADR-030, 236)*
 ## 3. Who uses it
 
 A **firm** (usually a monitoring firm) installs Open ADMS in its own cloud: one organisation per
-installation, open source (AGPL-3.0). *(ADR-050, 063, 099, 171)*
+installation, open source (Apache-2.0, the user, 2026-10-23, superseding ADR-171). *(ADR-050, 063, 099)*
 
 | Who | Gets |
 |---|---|

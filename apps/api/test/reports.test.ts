@@ -224,7 +224,7 @@ describe('the daily report', () => {
       expect(file.match(/https?:\/\/[^\s)]+/g)).toEqual([builtOn.source]);
       expect(file).not.toContain('/URI');
       expect(file).toContain(
-        `(${builtOnLine(releaseVersion())}, AGPL-3.0. Source: ${builtOn.source}) Tj`,
+        `(${builtOnLine(releaseVersion())}, Apache-2.0. Source: ${builtOn.source}) Tj`,
       );
       saved(
         changeReportContactEndpoint,

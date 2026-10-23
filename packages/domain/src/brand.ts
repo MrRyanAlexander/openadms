@@ -4,7 +4,7 @@
 // clients on every screen and in what the server writes for them: plain text, one to forty
 // characters once trimmed, the one rule the installer, the contracts, the seed and the database's
 // check all hold. It is no secret. Beside it, every screen and document says which Open ADMS it is
-// built on (the AGPL-3.0 attribution), whose name and version are not the firm's to change.
+// built on (the attribution), whose name and version are not the firm's to change.
 
 // The name an installation starts with, and keeps when the firm never gives one: the product's.
 export const startingBrandName = 'Open ADMS';
@@ -28,12 +28,12 @@ export function suggestedBrandName(firm: string): string {
   return readBrandName(`${firm.trim()} ADMS`) ?? startingBrandName;
 }
 
-// Which Open ADMS an installation is built on, wherever a firm's brand is shown: the AGPL-3.0
-// attribution, and (§13) where the people using it over a network can get the source. The version
+// Which Open ADMS an installation is built on, wherever a firm's brand is shown: the licence
+// attribution, and where the source is (kept visible, though Apache-2.0 does not require it). The version
 // is the release's, from the repository's root package.json.
 export const builtOn = {
   product: 'Open ADMS',
-  licence: 'AGPL-3.0',
+  licence: 'Apache-2.0',
   // Where the source is: the repository this release is built from (the one address, here; the
   // firm that publishes its own build changes it with the build).
   source: 'https://github.com/MrRyanAlexander/openadms_dev',

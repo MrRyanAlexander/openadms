@@ -139,7 +139,7 @@ End each commit message with the attribution lines the session gives. Stage name
 | `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub |
 | `**/.env*`, secrets | ❌ never read, write or print an env file (`.env.example` is fine): reference keys by name, load one in a subshell, compare `shasum`s; never echo, log or commit a secret |
 
-A new dependency: an exact version at least seven days old, licence compatible with AGPL-3.0,
+A new dependency: an exact version at least seven days old, licence compatible with Apache-2.0 (no GPL, LGPL or AGPL in what ships),
 maintained; `pnpm licences` and `pnpm security` after. Say why in the commit message.
 
 ## Non-negotiables (the product)

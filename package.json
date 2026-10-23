@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Open ADMS: offline-capable debris management and field reconciliation for disaster recovery.",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@11.27.1",
   "engines": {

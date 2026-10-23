@@ -1,7 +1,7 @@
 // What the firm calls its ADMS, on the phone (the user, 2026-10-22: the firm "put their own White
 // Label on it at setup … This would then brand it for them"), through the screens, against the real
 // API in the run's own world: the enrolment screen reads the public brand read and names the
-// firm's ADMS beside "Built on Open ADMS <version>" and the way to the source (AGPL-3.0 §13); a
+// firm's ADMS beside "Built on Open ADMS <version>" and the way to the source (Apache-2.0); a
 // firm that renamed its ADMS is read on the first screen and told again at sign-in, kept by the
 // phone and shown when the phone starts with no signal.
 import { builtOn } from '@open-adms/domain';

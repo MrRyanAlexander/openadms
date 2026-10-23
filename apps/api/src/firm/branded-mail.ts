@@ -1,7 +1,7 @@
 // The firm's mail, said in the firm's own words for its ADMS (the user, 2026-10-22): every message
 // the API writes names the product by its own name, and this puts what the firm calls its ADMS in
 // that name's place, and ends the message with the line that says which Open ADMS it is built on
-// (the AGPL-3.0 attribution, and where the source is). It wraps the firm's mail, whatever carries
+// (the licence, and where the source is). It wraps the firm's mail, whatever carries
 // it, so a message written anywhere is branded alike. A firm that kept the product's name is read
 // exactly as the messages are written.
 import { builtOn, builtOnLine } from '@open-adms/domain';

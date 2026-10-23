@@ -1,6 +1,6 @@
 // About, from the Help menu (the user, 2026-10-22): the name the firm gives its ADMS, and that it is
 // built on Open ADMS, at which version; the licence it is shared under, and where its source is
-// (AGPL-3.0 §13: whoever uses it over a network can get the source).
+// (kept visible, though Apache-2.0 does not require it).
 import { ScreenTitle } from '@open-adms/look';
 
 import { builtOn } from '../brand.tsx';

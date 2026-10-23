@@ -1,5 +1,5 @@
 // The firm's own name for its ADMS on the phone, and the line that says which Open ADMS it is built
-// on (the user, 2026-10-22; AGPL-3.0 §13: people using it over a network can get the source).
+// on (the user, 2026-10-22; kept visible, though Apache-2.0 does not require it).
 // `BrandProvider` holds the name the phone last read (phone/brand.ts) and sets the page's title
 // from it; a screen that learns it from the server says so with `learned`. The version is the
 // build's: the code on the phone is that release's, whatever the server runs. Every word is the
@@ -84,7 +84,7 @@ export function useBrand(): Brand {
   return useContext(BrandContext);
 }
 
-// "Built on Open ADMS 0.1.0, AGPL-3.0." and the way to the source.
+// "Built on Open ADMS 0.1.0, Apache-2.0." and the way to the source.
 export function BuiltOnLine() {
   const { version } = useBrand();
   return (

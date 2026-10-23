@@ -1236,10 +1236,11 @@ From Build 1 (`FROM-BUILD-1.md` §14) and from this build's historical code:
 ✅ **Approved**. It replaces the empty `api/`, `field-webapp/` and `back-office-webapp/`
 placeholders. `database/` stays as historical reference.
 
-✅ **Licence** *(ADR-171, user 2026-09-27, Q-163)*: Open ADMS is **AGPL-3.0**. A `LICENSE` file at the
-repository root is added at scaffold (0.2.1). A dependency is pinned only if its licence is
-compatible (permissive, LGPL, GPL-3.0 or AGPL-3.0); source-available and non-commercial licences are
-refused.
+✅ **Licence** *(changed by the user, 2026-10-23, superseding ADR-171)*: Open ADMS is **Apache-2.0**
+("I know about ADR-171, but now I know I was wrong and want to go with Apache 2.0"). A `LICENSE` file
+and a `NOTICE` file are at the repository root. A dependency is pinned only if its licence is
+compatible with Apache-2.0 for what ships (permissive; MPL-2.0 used unmodified); GPL, LGPL and AGPL,
+source-available and non-commercial licences are refused. `pnpm licences` checks every installed package.
 
 ```
 apps/

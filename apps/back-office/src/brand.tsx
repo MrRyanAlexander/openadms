@@ -8,7 +8,7 @@
 // - `brandChanged(name)` is for the screen where whoever holds Setup renames the firm's ADMS: the
 //   change's answer is told to every place the name is shown, with no second read.
 // - `builtOn` is the line's fixed parts: the product, the licence and where the source is (the
-//   AGPL-3.0 attribution, §13). The words around them are the page's translation file's.
+//   Apache-2.0 attribution). The words around them are the page's translation file's.
 import { brandEndpoint } from '@open-adms/contracts';
 import { startingBrandName } from '@open-adms/domain';
 import { useEffect, useSyncExternalStore } from 'react';

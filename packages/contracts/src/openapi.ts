@@ -97,7 +97,7 @@ export function openApiDocument(list: readonly Endpoint[] = endpoints): Json {
     info: {
       title: 'Open ADMS API',
       version: '0.0.0',
-      license: { name: 'AGPL-3.0-only', identifier: 'AGPL-3.0-only' },
+      license: { name: 'Apache-2.0', identifier: 'Apache-2.0' },
     },
     paths,
     components: { schemas: { ErrorAnswer: described(errorAnswerSchema, 'output') } },

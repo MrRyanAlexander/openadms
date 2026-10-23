@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Open ADMS security checks: the dependency audit, the secrets scan, the env files, the grant tests (ARCHITECTURE §15, §16; ADR-276).",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": "./dist/index.js",
   "devDependencies": {

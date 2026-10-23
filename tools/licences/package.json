@@ -2,8 +2,8 @@
   "name": "@open-adms/licences",
   "version": "0.0.0",
   "private": true,
-  "description": "Checks every installed package's licence against the AGPL-3.0 compatibility list (ADR-171).",
-  "license": "AGPL-3.0-only",
+  "description": "Checks every installed package's licence against the Apache-2.0 compatibility list (the user, 2026-10-23).",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": "./dist/index.js",
   "devDependencies": {

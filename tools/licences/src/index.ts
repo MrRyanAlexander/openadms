@@ -1,4 +1,5 @@
-// Checks every installed package's licence against AGPL-3.0 compatibility (ADR-171, ADR-258).
+// Checks every installed package's licence against Apache-2.0 compatibility (the user, 2026-10-23,
+// Apache-2.0, superseding ADR-171; ADR-258 for the check itself).
 // Reads `pnpm licenses list --json` on stdin, prints one line per package and a summary, and
 // exits 1 if any licence is refused or not yet decided. Run from the root: `pnpm licences`.
 // Node 24 runs this file as-is (type stripping), so it uses erasable TypeScript only.
@@ -15,8 +16,8 @@ type Report = Record<string, InstalledPackage[]>;
 type Verdict = 'allowed' | 'refused' | 'undecided';
 
 class LicencePolicy {
-  // Compatible with AGPL-3.0 (ADR-171): permissive, LGPL, GPL-3.0, AGPL-3.0.
-  // SPDX identifiers; the unsuffixed GNU ones are SPDX's deprecated spellings.
+  // Compatible with Apache-2.0 for what ships: permissive licences, and MPL-2.0 (weak, file-level
+  // copyleft, used unmodified). SPDX identifiers.
   static readonly allowed = new Set([
     '0BSD',
     'Apache-2.0',
@@ -30,24 +31,15 @@ class LicencePolicy {
     'Python-2.0',
     'Unlicense',
     'Zlib',
-    'LGPL-2.1',
-    'LGPL-2.1-only',
-    'LGPL-2.1-or-later',
-    'LGPL-3.0',
-    'LGPL-3.0-only',
-    'LGPL-3.0-or-later',
-    'GPL-3.0',
-    'GPL-3.0-only',
-    'GPL-3.0-or-later',
-    'AGPL-3.0',
-    'AGPL-3.0-only',
-    'AGPL-3.0-or-later',
-    // MPL-2.0 names AGPL-3.0 as a Secondary License (§1.12, §3.3) (ADR-260, 262).
     'MPL-2.0',
   ]);
 
-  // Source-available and non-commercial licences are refused (ADR-171).
+  // Refused: strong and network copyleft (GPL, LGPL, AGPL, including SPDX's unsuffixed spellings),
+  // which can't ship inside an Apache-2.0 work; source-available and non-commercial licences too.
   static readonly refused = [
+    /^GPL-/,
+    /^LGPL-/,
+    /^AGPL-/,
     /^BUSL-/,
     /^SSPL-/,
     /^Elastic-/,
@@ -70,6 +62,11 @@ class LicencePolicy {
     ['istextorbinary@9.5.0', 'Artistic-2.0'],
     ['textextensions@6.11.0', 'Artistic-2.0'],
     ['version-range@4.15.0', 'Artistic-2.0'],
+    // libvips (LGPL-3.0-or-later), the prebuilt binary sharp loads, in the docs site's build (Astro):
+    // a build-time tool for static pages, never in the product that ships (the user, 2026-10-23).
+    ['@img/sharp-libvips-darwin-arm64@1.3.4', 'LGPL-3.0-or-later'],
+    ['@img/sharp-libvips-linux-arm64@1.3.4', 'LGPL-3.0-or-later'],
+    ['@img/sharp-libvips-linux-x64@1.3.4', 'LGPL-3.0-or-later'],
     // The SPDX exception list as data, read by secretlint's package-metadata parsing (ADR-276).
     ['spdx-exceptions@2.5.0', 'CC-BY-3.0'],
   ]);

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "The verification chain in one command, with one summary held against agent_store/CHAIN.md (ADR-533).",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "type": "module",
   "exports": "./dist/index.js",
   "devDependencies": {
