@@ -15,6 +15,9 @@ overrides:
   # GHSA-389g-gv7q-r4x8: @nestjs/platform-fastify 12.1.2 asks for fastify 5.12.5; 5.12.6 is the fix,
   # and the API names 5.12.7 itself.
   fastify: 5.12.7
+  # GHSA-rj75-hqrm-r3gf: the docs site's code blocks (@expressive-code/core) ask for postcss-nested 6,
+  # whose postcss-selector-parser 6 has no fix; postcss-nested 7.0.2 carries the fixed 7.x.
+  '@expressive-code/core>postcss-nested': 7.0.2
 # No dependency runs an install script unless it is allowed here, by name, in an ADR.
 strictDepBuilds: true
 allowBuilds:

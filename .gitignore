@@ -28,6 +28,8 @@ GROK_OUTPUTS/
 # The lockfile (pnpm-lock.yaml) is committed.
 node_modules/
 dist/
+# Astro's generated types for the docs site (astro build / sync).
+.astro/
 build/
 # The Prisma client, made from the schema by `pnpm generate` (ADR-273).
 packages/db/src/generated/

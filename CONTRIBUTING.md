@@ -34,7 +34,7 @@ Corepack) and **Docker**.
 ```bash
 git clone https://github.com/MrRyanAlexander/openadms.git
 cd openadms
-eval "$(fnm env --shell zsh)" && fnm use   # every shell: Node 24, from .node-version
+eval "$(fnm env --shell zsh)" && fnm use   # every shell: Node 24, from .nvmrc
 corepack enable
 pnpm install
 pnpm start                                 # the installer, then the whole local stack over HTTPS

@@ -63,7 +63,7 @@ class LicencePolicy {
     ['textextensions@6.11.0', 'Artistic-2.0'],
     ['version-range@4.15.0', 'Artistic-2.0'],
     // libvips (LGPL-3.0-or-later), the prebuilt binary sharp loads, in the docs site's build (Astro):
-    // a build-time tool for static pages, never in the product that ships (the user, 2026-10-23).
+    // a build-time tool for static pages, never in the product that ships (a lead's default, 2026-10-23: the rule is about what ships).
     ['@img/sharp-libvips-darwin-arm64@1.3.4', 'LGPL-3.0-or-later'],
     ['@img/sharp-libvips-linux-arm64@1.3.4', 'LGPL-3.0-or-later'],
     ['@img/sharp-libvips-linux-x64@1.3.4', 'LGPL-3.0-or-later'],
