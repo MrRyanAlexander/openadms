@@ -1,0 +1,68 @@
+name: Field practice
+description: How a contract, a site, a crew or a review really works
+title: "[practice] "
+labels: ["domain", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        In Open ADMS the firm's setup decides how things play out: a project, its forms and debris types, pay items with a rate per prime, rules that name one contract, sites and their facts, and the lists a firm extends. Describing the work accurately is the contribution; you do not need to know how it maps onto setup. Read `spec/INDEX.md` if you want the background.
+
+        **Redact** contract numbers, client names, people and dollar figures.
+
+  - type: input
+    id: name
+    attributes:
+      label: What is it
+      placeholder: "Hazardous tree removal priced by diameter, a tower that weighs every truck, a hanger crew paid by the hour"
+    validations:
+      required: true
+
+  - type: textarea
+    id: work
+    attributes:
+      label: What happens in the field
+      description: The physical work, from the monitor's point of view. Who is where, what they see, and what they write down.
+    validations:
+      required: true
+
+  - type: textarea
+    id: pricing
+    attributes:
+      label: How it is paid
+      description: |
+        The contract line, its unit (per CY, per ton, per each, per hour, per mile...),
+        any size band, and what decides the quantity. Quantity comes from what was
+        recorded, so say what the monitor is reading it off.
+      placeholder: "Per each, banded by diameter measured two feet up: 6-12 in, 13-24 in, 25-36 in, over 36 in."
+
+  - type: textarea
+    id: witnesses
+    attributes:
+      label: Is it witnessed in two places
+      description: |
+        A load is a collection event at the curb and a disposal event at the tower,
+        recorded by two monitors under one ticket number. Say whether this work is
+        similar, or recorded once by one monitor.
+
+  - type: textarea
+    id: review
+    attributes:
+      label: What a reviewer or auditor asks for
+      description: The checks, the paperwork, the photos, and what usually goes wrong.
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Where this comes from
+      description: |
+        A PAPPG section, a state debris plan, a contract clause, or "this is how every
+        program I have run does it".
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted client, project, contract and personal data
+          required: true

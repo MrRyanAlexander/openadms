@@ -1,0 +1,64 @@
+name: Feature request
+description: Something is missing
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Much of what a contract needs is already the firm's own setup: projects, forms and debris types, pay items with a rate per prime, rules, sites and the lists a firm extends. If what you need is a description of how a contract or a site really works, the [field practice](https://github.com/MrRyanAlexander/openadms/issues/new?template=field_practice.yml) form fits better.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is the situation
+      description: |
+        Describe the operational problem, not the feature. What happens today,
+        who it happens to, and what it costs in time or in findings.
+      placeholder: |
+        At closeout the client asks for haul distances broken out by zone. Today
+        that is an export plus a pivot table, done by hand, every week.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would solve it
+    validations:
+      required: true
+
+  - type: dropdown
+    id: shape
+    attributes:
+      label: What shape do you think it takes
+      description: A guess is fine. It helps triage.
+      options:
+        - Setup the firm can already do (a list, a pay item, a rule)
+        - A new rule criterion or action
+        - A new flag
+        - A back office screen or report
+        - A field app change
+        - An API endpoint or export
+        - A schema change
+        - Not sure
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: The workaround, however ugly. It usually says something about the real requirement.
+
+  - type: dropdown
+    id: role
+    attributes:
+      label: Who are you asking as
+      options:
+        - Field monitor
+        - Data manager or analyst
+        - Project manager
+        - Client, city or county
+        - Contractor or hauler
+        - Auditor
+        - Developer
+        - Other

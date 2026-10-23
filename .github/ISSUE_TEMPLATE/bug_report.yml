@@ -1,0 +1,97 @@
+name: Bug report
+description: Something behaves differently than it should
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this.
+
+        **Before you write anything: redact.** No client names, project names, addresses, ticket numbers, contract numbers, dollar figures, people's data or credentials. If you can reproduce it on the sample projects (`pnpm sample`) or with the example world in `spec/CONVENTIONS.md`, use that instead.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where is it
+      options:
+        - Field app (apps/field)
+        - Back office (apps/back-office)
+        - Viewer portal (apps/back-office, /viewer)
+        - API or sync (apps/api)
+        - Reconciliation, rules or pricing (apps/worker, packages/domain)
+        - Database, schema or migrations (packages/db)
+        - Receipts or printing (packages/receipts)
+        - Installer or local stack (tools/setup, infra/local)
+        - Translation or accessibility
+        - Documentation (apps/docs, spec)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+      placeholder: |
+        Ticket 101001's collection and disposal both synced, but it stayed PENDING.
+        I expected the worker to join them and write the completed load.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered, from a known starting state.
+      placeholder: |
+        1. pnpm start, with the sample projects loaded
+        2. Sign in to the back office as the dev admin
+        3. Open the review queue on "Bayline County ROW, Hurricane Delphine"
+        4. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Errors, logs or screenshots
+      description: Paste logs in a code block. Redact first.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or release
+      placeholder: "7b55b17, or v0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: running
+    attributes:
+      label: Where is it running
+      options:
+        - Local stack (pnpm start)
+        - A firm's own installation
+        - Somewhere else
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and device
+      description: For a screen problem.
+      placeholder: "Safari 19 on an iPhone, Chrome 140 on Windows"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have redacted all client, project, contract and personal data
+          required: true
+        - label: This is not a security vulnerability (those go through private reporting)
+          required: true
