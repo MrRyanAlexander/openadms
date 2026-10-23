@@ -17,6 +17,9 @@ export type Params = Readonly<Record<string, string>>;
 export interface Place {
   // Its address: a firm's (`/clients`) or a project's (`/projects/:projectId/review`).
   readonly at: string;
+  // The window it opens in, where that is another place's: a new record's page, which moves to
+  // the record's own address once saved, stays one window (and keeps what the save said).
+  readonly window?: string;
   readonly title: (params: Params) => string;
   readonly glyph: GlyphName;
   readonly screen: (params: Params) => ReactNode;

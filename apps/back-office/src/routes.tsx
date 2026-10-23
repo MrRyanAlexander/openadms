@@ -349,6 +349,8 @@ const places: readonly Place[] = [
   },
   {
     at: '/projects/:projectId/setup/rules/new',
+    // Saved, a new rule moves to its own address in the same window, its outcome still shown.
+    window: '/projects/:projectId/setup/rules/:ruleId',
     title: titled(words.desk.titles.newRule),
     glyph: 'rules',
     screen: (params) => <RuleBuilder projectId={project(params)} ruleId={null} />,

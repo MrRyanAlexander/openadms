@@ -359,7 +359,7 @@ function shownAt(
   if (routed === null) return notFound;
   return {
     kind: 'window',
-    key: windowKey(projectOfPath(path), routed.place.at),
+    key: windowKey(projectOfPath(path), routed.place.window ?? routed.place.at),
     title: routed.place.title(routed.params),
     glyph: routed.place.glyph,
     screen: routed.place.screen(routed.params),
