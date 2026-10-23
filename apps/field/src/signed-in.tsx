@@ -63,6 +63,7 @@ import {
   certificationTitle,
   type Certifying,
 } from './certify.tsx';
+import { BuiltOnLine } from './brand.tsx';
 import { ClockInNudge, ClockOut, ClockOutNudge, TimeClock } from './clock.tsx';
 import { FormCapture, formBegun, formStarted, formTitle, type Filling } from './forms.tsx';
 import { Home } from './home.tsx';
@@ -947,6 +948,7 @@ function SignedInScreens({
           onChange={onScannerKeysAnywhere}
         />
         <p className="field-hint">{said.scannerKeysHint}</p>
+        <BuiltOnLine />
       </div>
       <ScreenActions>
         <Button

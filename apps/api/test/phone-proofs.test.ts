@@ -194,6 +194,8 @@ describe('a phone proves itself', () => {
         keyRevoked: false,
         masterPasscodeVersion: phone.masterPasscodeVersion,
         masterPasscodeVersionInForce: phone.masterPasscodeVersion,
+        // What the firm calls its ADMS, for the phone to keep and show with no signal.
+        brandName: 'Open ADMS',
       });
       expect(mine.text).not.toContain(phone.key.publicKey);
     });

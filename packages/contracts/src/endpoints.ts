@@ -36,6 +36,8 @@ import {
   assignmentsAnswerSchema,
   dayApprovalRecordSchema,
   hoursAnswerSchema,
+  brandAnswerSchema,
+  brandNameSchema,
   csrfAnswerSchema,
   firmSettingsAnswerSchema,
   healthAnswerSchema,
@@ -435,6 +437,19 @@ export const readinessEndpoint = endpoint({
   method: 'GET',
   path: '/readiness',
   answer: healthAnswerSchema,
+});
+
+// What the firm calls its ADMS and which Open ADMS it is built on (the user, 2026-10-22), for the
+// sign-in screens and the footer of every page: so nobody need be signed in. The name is the firm's
+// display name, not a secret; the answer is these two things and nothing else.
+export const brandEndpoint = endpoint({
+  name: 'brand',
+  summary:
+    'The name the firm calls its ADMS and the Open ADMS release it is built on, for the pages that brand themselves. Anybody may ask.',
+  access: 'ANYBODY',
+  method: 'GET',
+  path: '/brand',
+  answer: brandAnswerSchema,
 });
 
 // A password reset by email, for a back-office or outside user of a firm that has mail
@@ -2422,6 +2437,24 @@ export const changeReportContactEndpoint = endpoint({
   path: '/firm-settings/report-contact',
   body: z.strictObject({
     email: z.email().max(320).nullable(),
+    note: z.string().trim().min(1).max(500).optional(),
+  }),
+  answer: firmSettingsAnswerSchema,
+});
+
+// What the firm calls its ADMS (the user, 2026-10-22): asked at setup, changed by whoever sets the
+// firm up, as the reports' address is. The brand read answers it to the pages that show it.
+export const changeBrandNameEndpoint = endpoint({
+  name: 'changeBrandName',
+  summary:
+    'Sets what the firm calls its ADMS: plain text of one to forty characters, shown on every screen and in what the server writes for the firm’s people and clients, beside the Open ADMS release it is built on. Audited.',
+  access: 'SIGNED_IN',
+  roles: backOfficeRoles,
+  permission: 'SETUP',
+  method: 'PATCH',
+  path: '/firm-settings/brand-name',
+  body: z.strictObject({
+    name: brandNameSchema,
     note: z.string().trim().min(1).max(500).optional(),
   }),
   answer: firmSettingsAnswerSchema,
@@ -4811,6 +4844,7 @@ export const receiptBatchEndpoint = endpoint({
 export const endpoints: readonly Endpoint[] = [
   healthEndpoint,
   readinessEndpoint,
+  brandEndpoint,
   requestPasswordResetEndpoint,
   completePasswordResetEndpoint,
   signInEndpoint,
@@ -4932,6 +4966,7 @@ export const endpoints: readonly Endpoint[] = [
   firmSettingsEndpoint,
   changePhoneKeyHoursEndpoint,
   changeReportContactEndpoint,
+  changeBrandNameEndpoint,
   changeViewerTwoStepEndpoint,
   changeMonitorSessionHoursEndpoint,
   listPhonesEndpoint,

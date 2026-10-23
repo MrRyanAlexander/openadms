@@ -2,6 +2,8 @@
 // Every answer's shape lives here, never in a controller.
 import {
   assignmentFormDocumentTypes,
+  brandNameLength,
+  readBrandName,
   builtInKeys,
   certificationViews,
   clockEntryKinds,
@@ -36,6 +38,29 @@ import { billingUnits, dumpedForms, ticketNumberSources } from './setup-answers.
 export const healthAnswerSchema = z.strictObject({ status: z.literal('ok') });
 
 export type HealthAnswer = z.infer<typeof healthAnswerSchema>;
+
+// What the firm calls its ADMS, as the page it signs in on shows it (the user, 2026-10-22), plain
+// text of one to forty characters once trimmed: packages/domain's `readBrandName`, once.
+export const brandNameSchema = z
+  .string()
+  .trim()
+  .min(brandNameLength.shortest)
+  .max(brandNameLength.longest)
+  .refine((typed) => readBrandName(typed) !== undefined, 'Not a name: no control character.');
+
+// The brand answer: the firm's name for its ADMS and the Open ADMS release it is built on, and
+// nothing else. Anybody may ask, since the sign-in screens show it. The name is the firm's display
+// name, no secret; the version is the repository's root package.json's.
+export const brandAnswerSchema = z.strictObject({
+  name: brandNameSchema,
+  version: z
+    .string()
+    .min(5)
+    .max(32)
+    .regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'Not a release number.'),
+});
+
+export type BrandAnswer = z.infer<typeof brandAnswerSchema>;
 
 // A refusal or a failure is a plain code and the request's id, never a message from inside the
 // server. A task that adds a refusal of its own (not signed in, not allowed, limited) adds its code.
@@ -328,6 +353,9 @@ export const firmSettingsAnswerSchema = z.strictObject({
   viewerTwoStepRequired: z.boolean(),
   monitorSessionHours: z.number().int().min(1).max(24),
   reportContactEmail: z.string().nullable(),
+  // What the firm calls its ADMS, asked once at setup (the user, 2026-10-22); the brand read below
+  // answers it to anybody.
+  brandName: brandNameSchema,
 });
 
 export type FirmSettingsAnswer = z.infer<typeof firmSettingsAnswerSchema>;
@@ -727,8 +755,8 @@ export const phoneProvenAnswerSchema = z.strictObject({
 export type PhoneProvenAnswer = z.infer<typeof phoneProvenAnswerSchema>;
 
 // The phone a token is of, as the server has it now: what the dispatch board calls it, whether
-// it is in service, and the version of the master passcode in force beside the one whose check
-// the phone holds. Never a key.
+// it is in service, the version of the master passcode in force beside the one whose check the
+// phone holds, and what the firm calls its ADMS. Never a key.
 export const provenPhoneAnswerSchema = z.strictObject({
   deviceId: z.uuid(),
   name: z.string(),
@@ -739,6 +767,9 @@ export const provenPhoneAnswerSchema = z.strictObject({
   keyRevoked: z.boolean(),
   masterPasscodeVersion: z.number().int().min(1),
   masterPasscodeVersionInForce: z.number().int().min(1),
+  // What the firm calls its ADMS now (the user, 2026-10-22): a phone keeps the last it read, so
+  // its screens show it with no signal, and is told here whenever it proves itself online.
+  brandName: brandNameSchema,
 });
 
 export type ProvenPhoneAnswer = z.infer<typeof provenPhoneAnswerSchema>;

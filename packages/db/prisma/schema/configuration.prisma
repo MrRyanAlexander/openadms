@@ -1370,6 +1370,10 @@ model FirmSettings {
   // Where a reader of the firm's reports writes to be added to their list (REQ-410; the user,
   // spec/FROM-BUILD-1.md §9): printed on the daily report's last page. None is printed as none.
   reportContactEmail        String? @map("report_contact_email")
+  // What the firm calls its ADMS (the user, 2026-10-22): the name every screen and document of the
+  // installation shows beside "Built on Open ADMS <version>". Asked once by the installer, changed
+  // by whoever holds Setup. Plain text, 1 to 40 characters once trimmed (a check).
+  brandName                 String  @default("Open ADMS") @map("brand_name")
 
   @@map("firm_settings")
 }

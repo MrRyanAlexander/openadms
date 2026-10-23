@@ -1,7 +1,13 @@
 {
   "language": "en",
   "app": {
-    "name": "Open ADMS Field"
+    "name": "Open ADMS Field",
+    "title": "{brand} Field"
+  },
+  "brand": {
+    "starting": "Open ADMS",
+    "builtOn": "Built on Open ADMS {version}, {licence}.",
+    "source": "Source code"
   },
   "shell": {
     "testBuild": "Test build: for trying the app out. Real work never goes on this build.",

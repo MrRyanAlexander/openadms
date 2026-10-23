@@ -15,8 +15,10 @@ import {
   readEmailSummaryEndpoint,
 } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
+import { builtOn, builtOnLine } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { releaseVersion } from '../src/process/release.ts';
 import { installationSettings, openInstallation, type Tx } from './support/database.ts';
 import { luisHolds, p1WithTickets } from './support/review.ts';
 import { worldOn, type Served } from './support/served.ts';
@@ -217,7 +219,13 @@ describe('the daily report', () => {
       ]) {
         expect(file, words).toContain(words);
       }
-      expect(file).not.toMatch(/https?:\/\//);
+      // Nothing links out of the installation: the one address in the file is the source's, printed
+      // in the line that says which Open ADMS this is built on, never a link.
+      expect(file.match(/https?:\/\/[^\s)]+/g)).toEqual([builtOn.source]);
+      expect(file).not.toContain('/URI');
+      expect(file).toContain(
+        `(${builtOnLine(releaseVersion())}, AGPL-3.0. Source: ${builtOn.source}) Tj`,
+      );
       saved(
         changeReportContactEndpoint,
         await ask(served, p.dana, changeReportContactEndpoint, {

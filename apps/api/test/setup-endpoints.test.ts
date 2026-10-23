@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  changeBrandNameEndpoint,
   changePhoneKeyHoursEndpoint,
   changeReportContactEndpoint,
   firmSettingsEndpoint,
@@ -172,6 +173,8 @@ const setupEndpoints = [
   changePhoneKeyHoursEndpoint,
   // And where a reader of the firm's reports writes (REQ-410).
   changeReportContactEndpoint,
+  // And what the firm calls its ADMS (the user, 2026-10-22).
+  changeBrandNameEndpoint,
 ] as const;
 
 describe('who may change the setup', () => {
@@ -248,6 +251,7 @@ describe('who may change the setup', () => {
       'GET /firm-settings',
       'PATCH /firm-settings/phone-key',
       'PATCH /firm-settings/report-contact',
+      'PATCH /firm-settings/brand-name',
     ]);
   });
 

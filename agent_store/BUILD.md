@@ -116,6 +116,14 @@ notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`).
   checked against the sync contract before it is sent (`apps/back-office/src/review/waiting.tsx`).
 - An address a reviewer types or corrects on a field event is marked typed, never looked up
   (`apps/back-office/src/review/field-event-form.tsx`).
+- What the firm calls its ADMS (`firm_settings.brand_name`, 1 to 40 characters, "Open ADMS" until
+  named) is asked at the installer's first run (default "<firm> ADMS"), changed by whoever holds
+  Setup, and shown on the field app's first screens, the back office, the daily report and the mail
+  the server writes, beside "Built on Open ADMS <the root package.json's version>, AGPL-3.0" and a
+  link to the source. The source address is the one repository the project has, the git remote's
+  (`packages/domain/src/brand.ts`, `builtOn.source`): the firm that publishes its own build changes
+  it there. A phone reads the name from the public `GET /brand` before it is enrolled and from the
+  proven-phone answer after, keeps the last in its store, and shows it with no signal.
 
 ## Not in this build
 

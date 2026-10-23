@@ -14,12 +14,14 @@
 import type { MonitorCreatedAnswer } from '@open-adms/contracts';
 import { useCallback, useEffect, useState } from 'react';
 
+import { BrandProvider } from './brand.tsx';
 import type { CaptureParts } from './ticket-capture.tsx';
 import { CreateMonitor } from './create-monitor.tsx';
 import { Enrol } from './enrol.tsx';
 import { MonitorCreated } from './monitor-created.tsx';
 import { PasscodeSession } from './passcode-session.tsx';
 import { Phone, type Ended, type SetUpFor } from './phone.tsx';
+import type { PhoneBrand } from './phone/brand.ts';
 import type { PhoneClock } from './phone/clock.ts';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { PhoneLists } from './phone/lists.ts';
@@ -49,6 +51,8 @@ export interface OpenedPhone {
   readonly clock: PhoneClock;
   // The phone's own settings (BUILD.md, settled 7).
   readonly settings: PhoneSettings;
+  // What the firm calls its ADMS, as the phone last read it (the user, 2026-10-22).
+  readonly brand: PhoneBrand;
   readonly identity: PhoneIdentity;
   readonly monitor: MonitorOnPhone;
   readonly lists: PhoneLists;
@@ -95,6 +99,20 @@ type Seen =
     };
 
 export function Shell({
+  server,
+  phone,
+}: {
+  readonly server: Server;
+  readonly phone: Promise<OpenedPhone>;
+}) {
+  return (
+    <BrandProvider phone={phone}>
+      <Screens server={server} phone={phone} />
+    </BrandProvider>
+  );
+}
+
+function Screens({
   server,
   phone,
 }: {

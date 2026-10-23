@@ -17,6 +17,7 @@ import {
   type SeededActor,
   type Server,
 } from './database.ts';
+import { askBrandName } from './brand.ts';
 import { EnvFile, InstallationState, MigrationFolder, type InstallationRecord } from './files.ts';
 import { Interview } from './interview.ts';
 import {
@@ -47,6 +48,8 @@ const warning = 'Git-ignored. Never commit, print or share it.';
 // How the hash reaches the seed (its process's environment), and where an installation made before
 // the database kept it still has it (packages/db/.env, ADR-266).
 const passcodeKey = 'ADMS_MASTER_PASSCODE_HASH';
+// What the firm calls its ADMS, handed to the seed beside the hash (no secret, but no file's).
+const brandKey = 'ADMS_BRAND_NAME';
 // The API's keys of their own purposes beside its signing secret (ADR-542).
 const partedKeys = ['ADMS_PASSWORD_KEY', 'ADMS_SEALING_KEY'] as const;
 // What the worker's settings name of the map servers (apps/worker/src/process/settings.ts).
@@ -98,6 +101,9 @@ export class Installer {
   private interview: Interview | undefined;
   // The master passcode's slow hash, in memory only, when this run has one to hand to the seed.
   private passcodeHash: string | undefined;
+  // What the firm named its ADMS this run, for the seed to write on a first run; a rerun has none
+  // and the seed leaves the firm's settings as they are.
+  private brandName: string | undefined;
 
   constructor(root: string, yes: boolean) {
     this.root = root;
@@ -231,28 +237,35 @@ export class Installer {
   // --- first run -----------------------------------------------------------------------------
 
   private async firstRunQuestions(): Promise<
-    { firm: string; mail: InstallationRecord['mail']; passcode: string } | undefined
+    { firm: string; brand: string; mail: InstallationRecord['mail']; passcode: string } | undefined
   > {
     const interview = this.questions();
-    console.log('\nFirst run: nothing is installed yet. Three questions, then I set it up.\n');
+    console.log('\nFirst run: nothing is installed yet. Four questions, then I set it up.\n');
     let firm = '';
     while (firm === '') {
       firm = await interview.ask('1. The firm that runs this installation (its name)');
     }
+    const brand = await askBrandName(
+      (question, fallback) => interview.ask(question, fallback),
+      firm,
+      (line) => {
+        console.log(line);
+      },
+    );
     const mail = (await interview.confirm(
-      '2. Send email through the local mail catcher (Mailpit, dev only)? Without email, admins reset passwords',
+      '3. Send email through the local mail catcher (Mailpit, dev only)? Without email, admins reset passwords',
     ))
       ? 'mail catcher'
       : 'none';
     console.log(
-      '3. The master passcode: one per firm. It opens phone setup and the supervisor actions.',
+      '4. The master passcode: one per firm. It opens phone setup and the supervisor actions.',
     );
     const passcode = await this.askPasscode(interview);
     console.log(
-      `\nFirm: ${firm}\nEmail: ${mail}\nMaster passcode: set (only its slow hash is kept, in the database)`,
+      `\nFirm: ${firm}\nADMS: ${brand}\nEmail: ${mail}\nMaster passcode: set (only its slow hash is kept, in the database)`,
     );
-    if (!(await this.confirm(`Set up Open ADMS for ${firm} on this machine?`))) return undefined;
-    return { firm, mail, passcode };
+    if (!(await this.confirm(`Set up ${brand} for ${firm} on this machine?`))) return undefined;
+    return { firm, brand, mail, passcode };
   }
 
   private async askPasscode(interview: Interview): Promise<string> {
@@ -273,6 +286,7 @@ export class Installer {
   // The only place secrets are made. Each env file is created exclusively, so none is replaced.
   private async writeSecrets(answers: {
     firm: string;
+    brand: string;
     mail: InstallationRecord['mail'];
     passcode: string;
   }): Promise<InstallationRecord> {
@@ -282,6 +296,7 @@ export class Installer {
       `postgresql://${role}:${maker.password()}@${host}:${String(server.port)}/${databaseName}${this.databaseTls()}`;
     // Kept in memory for the seed, which puts it in the database; never written to a file.
     this.passcodeHash = await new PasscodeHasher().hash(answers.passcode);
+    this.brandName = answers.brand;
     const header = (who: string): string[] => [
       `Open ADMS: ${who}. Written by \`pnpm installer\` (ADR-266).`,
       warning,
@@ -552,10 +567,10 @@ export class Installer {
   // admin join with their models. Safe to repeat; it stops when what it finds isn't what it made.
   private seed(): void {
     console.log('Seed (prisma db seed, as adms_owner):');
-    const { status, output } = this.prisma(
-      ['db', 'seed'],
-      this.passcodeHash === undefined ? {} : { [passcodeKey]: this.passcodeHash },
-    );
+    const { status, output } = this.prisma(['db', 'seed'], {
+      ...(this.passcodeHash === undefined ? {} : { [passcodeKey]: this.passcodeHash }),
+      ...(this.brandName === undefined ? {} : { [brandKey]: this.brandName }),
+    });
     console.log(output);
     if (status !== 0) throw new Error('The seed did not finish. Stopped.');
   }

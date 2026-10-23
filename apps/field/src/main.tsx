@@ -8,6 +8,7 @@ import { Policy, SignInTries } from '@open-adms/domain';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { PhoneBrand } from './phone/brand.ts';
 import { BrowserCamera } from './phone/camera.ts';
 import { PhoneCertifications } from './phone/certifications.ts';
 import { PhoneClock } from './phone/clock.ts';
@@ -29,6 +30,7 @@ import { PhoneSync } from './phone/sync.ts';
 import { PhoneTickets } from './phone/tickets.ts';
 import { PhoneTurnIn } from './phone/turn-in.ts';
 import { Server } from './server.ts';
+import { words } from './words.ts';
 import { Shell } from './shell.tsx';
 import { BrowserKeyring } from './store/browser-keyring.ts';
 import { BrowserStore } from './store/browser-store.ts';
@@ -90,6 +92,8 @@ const phone = BrowserStore.opened().then(async (store) => {
   return {
     clock,
     settings: await PhoneSettings.opened(store),
+    // What the firm calls its ADMS, as the phone last read it (the user, 2026-10-22).
+    brand: await PhoneBrand.opened(store, words.brand.starting),
     capture: {
       tickets,
       forms,

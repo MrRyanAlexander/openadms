@@ -386,6 +386,8 @@ services:
       - api_env
     volumes:
       - ../../node_modules:/srv/open-adms/node_modules:ro
+      # The release's number is the repository's root package.json's: the API reads it at start.
+      - ../../package.json:/srv/open-adms/package.json:ro
       - ../../apps/api/package.json:/srv/open-adms/apps/api/package.json:ro
       - ../../apps/api/node_modules:/srv/open-adms/apps/api/node_modules:ro
       - ../../apps/api/dist:/srv/open-adms/apps/api/dist:ro

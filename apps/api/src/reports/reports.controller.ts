@@ -108,12 +108,12 @@ export class ReportsController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<Buffer> {
-    const { totals, map, contactEmail } = await this.totals.withMap(
+    const { totals, map, contactEmail, brand } = await this.totals.withMap(
       callerOf(request).userId,
       params.projectId,
       totalsAsked(query),
     );
-    const bytes = dailyReportPdf(totals, map, contactEmail);
+    const bytes = dailyReportPdf(totals, map, contactEmail, brand);
     request.log.info({ bytes: bytes.byteLength }, 'A person made a project’s daily report.');
     return asDownload(
       reply,

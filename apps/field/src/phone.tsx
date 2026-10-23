@@ -29,6 +29,7 @@ import {
   StatusStrip,
   TextEntry,
 } from './look/index.ts';
+import { BuiltOnLine, useBrand } from './brand.tsx';
 import type { Enrolment, PhoneIdentity } from './phone/identity.ts';
 import type { LoginList, ScreenTries } from './phone/login-list.ts';
 import { MonitorOnPhone, type SignedIn } from './phone/monitor.ts';
@@ -94,12 +95,15 @@ export function Phone({
   const [tries, setTries] = useState<ScreenTries | null>(null);
   const [phoneLocked, setPhoneLocked] = useState<boolean | null>(null);
   const [now, setNow] = useState(() => new Date());
+  const { title, learned } = useBrand();
 
   useEffect(() => {
     let shown = true;
     void identity.asPhone(provenPhoneEndpoint).then((reply) => {
       if (!shown) return;
       if (reply.kind === 'answered') {
+        // The proof's answer says what the firm calls its ADMS now: kept for the next no-signal start.
+        learned(reply.answer.brandName);
         setStanding(reply.answer.status === 'ACTIVE' ? 'inService' : 'outOfService');
       } else if (reply.kind === 'refused') {
         setStanding(reply.code === 'MASTER_PASSCODE_NEEDED' ? 'passcodeNeeded' : 'notProven');
@@ -116,7 +120,7 @@ export function Phone({
     return () => {
       shown = false;
     };
-  }, [identity, loginList, passcodeOnPhone]);
+  }, [identity, loginList, passcodeOnPhone, learned]);
 
   // While a wait is on the screen, the seconds left are counted down and the button comes back.
   const waitUntil = tries?.waitUntil ?? null;
@@ -245,13 +249,14 @@ export function Phone({
       <main data-screen="phone-locked" className="screen">
         <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now }} />
         <div className="screen-body">
-          <ScreenTitle>{words.app.name}</ScreenTitle>
+          <ScreenTitle>{title}</ScreenTitle>
           <p>{say(said.enrolled, { name: enrolment.name })}</p>
           <Banner tone="notice" announced>
             <p>{said.phoneLocked}</p>
           </Banner>
           <TextEntry label={said.passcode} secret value={passcode} onChange={setPasscode} />
           {problemShown}
+          <BuiltOnLine />
         </div>
         <ScreenActions>
           <Button main wide busy={busy} isDisabled={passcode === ''} onPress={() => void opened()}>
@@ -266,7 +271,7 @@ export function Phone({
     <main data-screen="phone" className="screen">
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now }} />
       <div className="screen-body">
-        <ScreenTitle>{words.app.name}</ScreenTitle>
+        <ScreenTitle>{title}</ScreenTitle>
         <p>{say(said.enrolled, { name: enrolment.name })}</p>
         <p role="status">{said.standing[standing]}</p>
         {endedWords === null ? (
@@ -336,6 +341,7 @@ export function Phone({
             {said.turnIn}
           </Button>
         </div>
+        <BuiltOnLine />
       </div>
       <ScreenActions>
         {locked ? (

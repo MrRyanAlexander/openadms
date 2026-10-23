@@ -135,6 +135,8 @@ import { ProjectSetup } from '../setup/project-setup.ts';
 import { RuleSetup } from '../setup/rule-setup.ts';
 import type { Clock } from '../setup/setup-service.ts';
 import { apiSetupStanding } from '../setup/setup-standing.controller.ts';
+import { BrandedMail } from '../firm/branded-mail.ts';
+import { Branding, apiBranding } from '../firm/branding.ts';
 import { apiFirmSettings } from '../firm/firm-settings.controller.ts';
 import { FirmSettings } from '../firm/firm-settings.ts';
 import { SetupStanding } from '../setup/setup-standing.ts';
@@ -143,6 +145,7 @@ import { SiteSetup } from '../setup/site-setup.ts';
 import { Admission } from '../sign-in/admission.ts';
 import { shippedBreachedPasswords } from '../sign-in/breached-list.ts';
 import { mailFor, type Mail } from '../sign-in/mail.ts';
+import { releaseVersion } from './release.ts';
 import { OneTimeCodes } from '../sign-in/one-time-codes.ts';
 import { PasswordHasher } from '../sign-in/password-hasher.ts';
 import { apiPasswords } from '../sign-in/password-resets.controller.ts';
@@ -380,7 +383,11 @@ export class ApiProcess {
       }
       return limits.arrived(request.ip);
     });
-    const mail = more.mail ?? mailFor(settings);
+    // What the firm calls its ADMS, and the release it is built on (the user, 2026-10-22): said by
+    // the brand read, the daily report and every message the API writes.
+    const version = releaseVersion();
+    const branding = new Branding(database, version);
+    const mail = new BrandedMail(more.mail ?? mailFor(settings), branding);
     // The object store the API keeps files in (task 2.6.4, part 1), under the API's own identity.
     const media =
       more.media ??
@@ -568,6 +575,7 @@ export class ApiProcess {
           ],
           // The firm's own settings (task 2.8.6).
           [apiFirmSettings, new FirmSettings(database, clock)],
+          [apiBranding, branding],
           // Dispatch and phones (task 2.4.3).
           [apiPhones, new Phones(database, clock)],
           [apiAssignments, new Assignments(database, clock)],
@@ -593,7 +601,7 @@ export class ApiProcess {
           // The ledger and a project's tickets to QC and lock (REQ-406).
           [apiLedger, new Ledger(database)],
           // A project's debris totals, its email summary and its daily report (REQ-409, 410).
-          [apiDebrisTotals, new DebrisTotals(database)],
+          [apiDebrisTotals, new DebrisTotals(database, version)],
           // The exports, each read through the read its screen uses (REQ-412).
           [
             apiExports,

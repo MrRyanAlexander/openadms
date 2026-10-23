@@ -20,6 +20,17 @@ const words = JSON.parse(readFileSync(new URL('src/words/en.json', import.meta.u
 };
 const apiOrigin = apiOriginOf(process.env);
 
+// Which Open ADMS this build is of: the repository's root package.json `version`, the one place
+// the number is written (the user, 2026-10-22). The phone says it as "Built on Open ADMS <it>".
+const release = (
+  JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+    version?: unknown;
+  }
+).version;
+if (typeof release !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(release)) {
+  throw new Error('The root package.json holds no release number in its version.');
+}
+
 const policy: Record<string, string> = parseEnv(
   readFileSync(new URL('../../packages/domain/policy.env', import.meta.url), 'utf8'),
 ) as Record<string, string>;
@@ -56,6 +67,7 @@ export default defineConfig({
   envPrefix: 'ADMS_FIELD_PAGE_',
   define: {
     'import.meta.env.ADMS_API_ORIGIN': JSON.stringify(apiOrigin),
+    'import.meta.env.ADMS_RELEASE': JSON.stringify(release),
     'import.meta.env.ADMS_POLICY': JSON.stringify(policy),
   },
   plugins: [page],

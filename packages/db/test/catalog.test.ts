@@ -714,6 +714,12 @@ describe('the guards in the catalog', () => {
         name: 'firm_settings_monitor_session_hours_check',
         definition: 'CHECK (((monitor_session_hours >= 1) AND (monitor_session_hours <= 24)))',
       },
+      // What the firm calls its ADMS: trimmed, 1 to 40 characters, no control character.
+      {
+        name: 'firm_settings_brand_name_check',
+        definition:
+          "CHECK (((brand_name = btrim(brand_name)) AND ((char_length(brand_name) >= 1) AND (char_length(brand_name) <= 40)) AND (brand_name !~ '[[:cntrl:]]'::text)))",
+      },
       {
         name: 'form_debris_type_document_type_check',
         definition:

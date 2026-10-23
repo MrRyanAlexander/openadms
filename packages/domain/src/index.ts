@@ -414,6 +414,14 @@ export {
   type WorkerStatus,
   type WorkflowName,
 } from './tickets.ts';
+export {
+  brandNameLength,
+  builtOn,
+  builtOnLine,
+  readBrandName,
+  startingBrandName,
+  suggestedBrandName,
+} from './brand.ts';
 export { ViewerSettings } from './viewer-settings.ts';
 export {
   QuantityLookup,

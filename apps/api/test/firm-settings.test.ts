@@ -4,6 +4,8 @@
 // installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 import {
+  brandEndpoint,
+  changeBrandNameEndpoint,
   changeMonitorSessionHoursEndpoint,
   changePhoneKeyHoursEndpoint,
   changeReportContactEndpoint,
@@ -11,16 +13,20 @@ import {
   firmSettingsEndpoint,
   monitorCreatedAnswerSchema,
   monitorSignedInAnswerSchema,
+  requestPasswordResetEndpoint,
   sessionAnswerSchema,
 } from '@open-adms/contracts';
+import { builtOn, builtOnLine } from '@open-adms/domain';
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { FirmSettings } from '../src/firm/firm-settings.ts';
+import { releaseVersion } from '../src/process/release.ts';
 import { installationSettings, openInstallation } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
+import { Outbox } from './support/sign-in.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn, type Browser } from './support/setup.ts';
 
@@ -54,6 +60,7 @@ describe('who may read and change them', () => {
           [firmSettingsEndpoint, {}],
           [changePhoneKeyHoursEndpoint, { payload: { hours: 48 } }],
           [changeReportContactEndpoint, { payload: { email: 'reports@gates.example' } }],
+          [changeBrandNameEndpoint, { payload: { name: 'Gates ADMS' } }],
           [changeViewerTwoStepEndpoint, { payload: { required: true } }],
           [changeMonitorSessionHoursEndpoint, { payload: { hours: 12 } }],
         ] as const) {
@@ -68,6 +75,7 @@ describe('who may read and change them', () => {
         viewerTwoStepRequired: false,
         monitorSessionHours: 24,
         reportContactEmail: null,
+        brandName: 'Open ADMS',
       });
       // Setup opens the hours to Luis, never the viewers' sign-in.
       await tx.userPermission.create({ data: { userId: who.luis, permission: 'SETUP' } });
@@ -89,6 +97,7 @@ describe('who may read and change them', () => {
         viewerTwoStepRequired: false,
         monitorSessionHours: 24,
         reportContactEmail: null,
+        brandName: 'Open ADMS',
       });
       expect(
         await tx.auditRecord.findMany({
@@ -294,5 +303,93 @@ describe('REQ-410 where a reader of the firm’s reports writes', () => {
       });
       expect(saved(changeReportContactEndpoint, cleared).reportContactEmail).toBeNull();
     });
+  });
+});
+
+describe('what the firm calls its ADMS', () => {
+  it('is the product’s own name as shipped; set by whoever sets the firm up, audited with their note and the name it was; trimmed, and refused by the schema when it is empty, over forty characters or has a control character', async () => {
+    await world(async (served, tx, who) => {
+      const dana = await served.signedIn(danasEmail, long);
+      const changed = await ask(served, dana, changeBrandNameEndpoint, {
+        payload: { name: '  Gates ADMS ', note: 'The client’s name for it' },
+      });
+      expect(saved(changeBrandNameEndpoint, changed).brandName).toBe('Gates ADMS');
+      expect(
+        await tx.auditRecord.findMany({
+          where: { requestId: changed.requestId },
+          select: {
+            tableName: true,
+            actorId: true,
+            changedFields: true,
+            reason: true,
+          },
+        }),
+      ).toEqual([
+        {
+          tableName: 'firm_settings',
+          actorId: who.dana,
+          changedFields: ['brand_name'],
+          reason: 'The client’s name for it',
+        },
+      ]);
+      // The name it was is kept in the audit log, in full.
+      const [audited] = await tx.auditRecord.findMany({
+        where: { requestId: changed.requestId },
+        select: { priorValue: true },
+      });
+      expect((audited?.priorValue as { brand_name?: string } | null)?.brand_name).toBe('Open ADMS');
+      for (const name of ['', '   ', 'x'.repeat(41), 'Gates\nADMS']) {
+        expect(
+          told(await ask(served, dana, changeBrandNameEndpoint, { payload: { name } })),
+          JSON.stringify(name),
+        ).toEqual([400, 'BAD_REQUEST']);
+      }
+    });
+  });
+
+  it('is read by anybody, with the release it is built on, and nothing else: no sign-in, no setting', async () => {
+    await world(async (served) => {
+      const dana = await served.signedIn(danasEmail, long);
+      const read = async () => ask(served, undefined, brandEndpoint);
+      expect(saved(brandEndpoint, await read())).toEqual({
+        name: 'Open ADMS',
+        version: releaseVersion(),
+      });
+      saved(
+        changeBrandNameEndpoint,
+        await ask(served, dana, changeBrandNameEndpoint, {
+          payload: { name: 'Gates ADMS' },
+        }),
+      );
+      expect(saved(brandEndpoint, await read())).toEqual({
+        name: 'Gates ADMS',
+        version: releaseVersion(),
+      });
+    });
+  });
+
+  it('is the name in the firm’s mail, with the line that says which Open ADMS it is built on; the product’s own until the firm names it', async () => {
+    const outbox = new Outbox();
+    await world(async (served) => {
+      const dana = await served.signedIn(danasEmail, long);
+      const reset = () =>
+        ask(served, undefined, requestPasswordResetEndpoint, { payload: { email: luissEmail } });
+      await reset();
+      saved(
+        changeBrandNameEndpoint,
+        await ask(served, dana, changeBrandNameEndpoint, { payload: { name: 'Gates ADMS' } }),
+      );
+      await reset();
+      const [before, after] = outbox.sent.filter(({ subject }) => subject.startsWith('Reset your'));
+      expect(before?.subject).toBe('Reset your Open ADMS password');
+      expect(after?.subject).toBe('Reset your Gates ADMS password');
+      expect(after?.text).toContain(
+        'Somebody asked to reset the password of your Gates ADMS login.',
+      );
+      expect(after?.text).not.toContain('your Open ADMS login');
+      expect(after?.text.trimEnd().split('\n').at(-1)).toBe(
+        `${builtOnLine(releaseVersion())} (${builtOn.licence}). Source: ${builtOn.source}`,
+      );
+    }, outbox);
   });
 });

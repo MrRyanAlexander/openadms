@@ -15,6 +15,9 @@
 //   already open keeps its end.
 // - **Where a reader of the firm's reports writes** (REQ-410) is changed by the same people as the
 //   phones' hours: it is printed on the daily report's last page, nothing reads it otherwise.
+// - **What the firm calls its ADMS** (the user, 2026-10-22) is asked once by the installer and
+//   changed by the same people as the phones' hours. The public brand read, the mail and the daily
+//   report say it (branding.ts).
 // - Each change says the person's note, where they gave one, to the audit log as its reason.
 import type { Prisma } from '@open-adms/db';
 import { SetupRights } from '@open-adms/domain';
@@ -28,6 +31,7 @@ export interface FirmSettingsRead {
   readonly viewerTwoStepRequired: boolean;
   readonly monitorSessionHours: number;
   readonly reportContactEmail: string | null;
+  readonly brandName: string;
 }
 
 const settingsRead = {
@@ -35,6 +39,7 @@ const settingsRead = {
   viewerTwoStepRequired: true,
   monitorSessionHours: true,
   reportContactEmail: true,
+  brandName: true,
 } as const;
 
 export class FirmSettings extends SetupService {
@@ -102,6 +107,23 @@ export class FirmSettings extends SetupService {
         return tx.firmSettings.update({
           where: { id: 1 },
           data: { reportContactEmail: email },
+          select: settingsRead,
+        });
+      },
+    );
+  }
+
+  // What the firm calls its ADMS: whoever sets the firm up. The name is the domain's (BrandName),
+  // read by the contract before it gets here; the database holds the rule again.
+  changeBrandName(person: string, name: string, note?: string): Promise<Outcome<FirmSettingsRead>> {
+    return this.writeAs(
+      { actorId: person, source: 'BACK_OFFICE', ...(note === undefined ? {} : { reason: note }) },
+      async (tx) => {
+        const refusal = await this.setupRefusal(tx, person);
+        if (refusal !== null) throw new Refused(refusal);
+        return tx.firmSettings.update({
+          where: { id: 1 },
+          data: { brandName: name },
           select: settingsRead,
         });
       },

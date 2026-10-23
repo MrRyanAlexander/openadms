@@ -107,6 +107,7 @@ class TestServer extends Server {
           keyRevoked: false,
           masterPasscodeVersion: 1,
           masterPasscodeVersionInForce: 1,
+          brandName: 'Open ADMS',
         },
       };
     }

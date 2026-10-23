@@ -279,6 +279,7 @@ export class TestServer extends Server {
           keyRevoked: this.keyRevoked !== null,
           masterPasscodeVersion: 1,
           masterPasscodeVersionInForce: 1,
+          brandName: 'Open ADMS',
         },
       };
     }

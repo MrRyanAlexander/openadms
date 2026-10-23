@@ -83,6 +83,50 @@
         }
       }
     },
+    "/brand": {
+      "get": {
+        "operationId": "brand",
+        "summary": "The name the firm calls its ADMS and the Open ADMS release it is built on, for the pages that brand themselves. Anybody may ask.",
+        "x-open-adms-access": "ANYBODY",
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 5,
+                      "maxLength": 32,
+                      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+                    }
+                  },
+                  "required": ["name", "version"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/password-resets": {
       "post": {
         "operationId": "requestPasswordReset",
@@ -23376,13 +23420,19 @@
                     },
                     "reportContactEmail": {
                       "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
                     "monitorSessionHours",
-                    "reportContactEmail"
+                    "reportContactEmail",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }
@@ -23470,13 +23520,19 @@
                     },
                     "reportContactEmail": {
                       "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
                     "monitorSessionHours",
-                    "reportContactEmail"
+                    "reportContactEmail",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }
@@ -23565,13 +23621,112 @@
                     },
                     "reportContactEmail": {
                       "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
                     "monitorSessionHours",
-                    "reportContactEmail"
+                    "reportContactEmail",
+                    "brandName"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "A refusal or a failure: a plain code and the request’s id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorAnswer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firm-settings/brand-name": {
+      "patch": {
+        "operationId": "changeBrandName",
+        "summary": "Sets what the firm calls its ADMS: plain text of one to forty characters, shown on every screen and in what the server writes for the firm’s people and clients, beside the Open ADMS release it is built on. Audited.",
+        "x-open-adms-access": "SIGNED_IN",
+        "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
+        "x-open-adms-permission": "SETUP",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "phoneKeyRevokedAfterHours": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 8760
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "viewerTwoStepRequired": {
+                      "type": "boolean"
+                    },
+                    "monitorSessionHours": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 24
+                    },
+                    "reportContactEmail": {
+                      "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
+                    }
+                  },
+                  "required": [
+                    "phoneKeyRevokedAfterHours",
+                    "viewerTwoStepRequired",
+                    "monitorSessionHours",
+                    "reportContactEmail",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }
@@ -23649,13 +23804,19 @@
                     },
                     "reportContactEmail": {
                       "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
                     "monitorSessionHours",
-                    "reportContactEmail"
+                    "reportContactEmail",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }
@@ -23735,13 +23896,19 @@
                     },
                     "reportContactEmail": {
                       "type": ["string", "null"]
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
                     "phoneKeyRevokedAfterHours",
                     "viewerTwoStepRequired",
                     "monitorSessionHours",
-                    "reportContactEmail"
+                    "reportContactEmail",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }
@@ -24387,6 +24554,11 @@
                       "type": "integer",
                       "minimum": 1,
                       "maximum": 9007199254740991
+                    },
+                    "brandName": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 40
                     }
                   },
                   "required": [
@@ -24396,7 +24568,8 @@
                     "outOfServiceAt",
                     "keyRevoked",
                     "masterPasscodeVersion",
-                    "masterPasscodeVersionInForce"
+                    "masterPasscodeVersionInForce",
+                    "brandName"
                   ],
                   "additionalProperties": false
                 }

@@ -10,7 +10,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import process from 'node:process';
 import { parseEnv } from 'node:util';
 
-import { PhoneKeyRules, Policy } from '@open-adms/domain';
+import {
+  brandNameLength,
+  PhoneKeyRules,
+  Policy,
+  readBrandName,
+  startingBrandName,
+} from '@open-adms/domain';
 
 import { openDatabase, type Database } from './database.ts';
 import { deviceKeyActorId, deviceKeyActorName } from './device-key-actor.ts';
@@ -25,6 +31,9 @@ export interface SeedOptions {
   // The release's policy values, for what a new installation's settings start as. Read from
   // packages/domain/policy.env when not given.
   readonly policy?: Pick<Policy, 'phoneKeyRevokedAfterHours' | 'monitorSessionHours'>;
+  // What the firm calls its ADMS (the installer asks it; the user, 2026-10-22), for an installation
+  // whose settings aren't written yet. Not a secret. Without one, the product's own name.
+  readonly brandName?: string;
 }
 
 // The release's policy values, beside the domain package (the seed runs from src and from dist).
@@ -33,10 +42,20 @@ const releasePolicyFile = new URL('../../domain/policy.env', import.meta.url);
 export class Seed {
   private readonly db: Database;
   private readonly options: SeedOptions;
+  // What the firm calls its ADMS, trimmed (the option, or the product's own name).
+  private readonly brandName: string;
 
   constructor(db: Database, options: SeedOptions = {}) {
     this.db = db;
     this.options = options;
+    // A name the database would refuse stops the seed before it writes anything.
+    const named = readBrandName(options.brandName ?? startingBrandName);
+    if (named === undefined) {
+      throw new Error(
+        `The name the firm gave its ADMS isn't one: ${String(brandNameLength.shortest)} to ${String(brandNameLength.longest)} characters, no control character. Stopped.`,
+      );
+    }
+    this.brandName = named;
   }
 
   // What it did, one line per thing, for the installer to show.
@@ -59,6 +78,7 @@ export class Seed {
     const policy =
       this.options.policy ?? Policy.from(parseEnv(readFileSync(releasePolicyFile, 'utf8')));
     const hours = PhoneKeyRules.startingHours(policy);
+    const brandName = this.brandName;
     await this.db.$write(systemActor, (tx) =>
       tx.firmSettings.create({
         data: {
@@ -66,10 +86,11 @@ export class Seed {
           phoneKeyRevokedAfterHours: hours,
           viewerTwoStepRequired: false,
           monitorSessionHours: policy.monitorSessionHours,
+          brandName,
         },
       }),
     );
-    return `+ wrote the firm's settings: a lost phone's key revoked ${hours === null ? 'never (off)' : `${String(hours)} hours after its mark`}, two-step optional for read-only viewers, a monitor's sign-in on a phone lasting ${String(policy.monitorSessionHours)} hours`;
+    return `+ wrote the firm's settings: a lost phone's key revoked ${hours === null ? 'never (off)' : `${String(hours)} hours after its mark`}, two-step optional for read-only viewers, a monitor's sign-in on a phone lasting ${String(policy.monitorSessionHours)} hours, its ADMS called ${brandName}`;
   }
 
   // Written with itself as the actor, as the first user is (ADR-270 (4)). Never a person: no
@@ -302,7 +323,12 @@ if (import.meta.main) {
   try {
     // The installer hands the hash to this process in its environment, never through a file.
     const hash = process.env['ADMS_MASTER_PASSCODE_HASH'];
-    const options = hash === undefined ? {} : { masterPasscodeHash: hash };
+    // And the name the firm gave its ADMS, the same way: it is no secret, but it is not a file's.
+    const brandName = process.env['ADMS_BRAND_NAME'];
+    const options = {
+      ...(hash === undefined ? {} : { masterPasscodeHash: hash }),
+      ...(brandName === undefined ? {} : { brandName }),
+    };
     for (const line of await new Seed(db, options).run()) console.log(line);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

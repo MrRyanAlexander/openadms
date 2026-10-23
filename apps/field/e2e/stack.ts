@@ -1,6 +1,7 @@
 // The local stack as the field app's browser tests reach it (ADR-564): its names; the keys the
 // browser is told to trust and an answer asked from Node, as every web app's tests take them
 // (@open-adms/look/testing); a page of another origin; and a built folder served from loopback.
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, resolve, sep } from 'node:path';
@@ -9,6 +10,14 @@ export { servedOverHttps, trustedKeys } from '@open-adms/look/testing';
 
 export const fieldOrigin = 'https://field.adms.localhost';
 export const apiOrigin = 'https://api.adms.localhost';
+
+// Which Open ADMS the build is of: the root package.json's version, the one place it is written,
+// which a branded screen says as "Built on Open ADMS <it>".
+export const release = (
+  JSON.parse(readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 // A page of another origin, on this machine's own loopback as the stack is, so that the browser's
 // own guard against a public page reaching this machine (its local network access check) stays

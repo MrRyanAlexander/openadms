@@ -3,12 +3,14 @@
 // phone's token, and the first screen, enrolment's, in the translation file's words.
 import { request } from 'node:http';
 
+import { builtOn } from '@open-adms/domain';
 import type { Page } from '@playwright/test';
 
 import { localApiOrigin, pagePolicy, servedHeaders, servedPolicy } from '../page.ts';
 import english from '../src/words/en.json' with { type: 'json' };
 import { expect, test } from './accessible.ts';
-import { anotherOrigin, apiOrigin, fieldOrigin, servedOverHttps } from './stack.ts';
+import { filled } from './phone-page.ts';
+import { anotherOrigin, apiOrigin, fieldOrigin, release, servedOverHttps } from './stack.ts';
 
 // Every word the translation file holds, at any depth.
 function wordsOf(value: unknown): string[] {
@@ -41,11 +43,11 @@ test('AC-11-01, AC-11-03: the browser build is served over HTTPS at its own name
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(english.app.name);
   await expect(page.getByText(english.shell.testBuild)).toBeVisible();
   await expect(page.getByText(english.enrol.notEnrolled)).toBeVisible();
-  // Its own files, then the API's health answer: no other name, and nothing outside the stack.
+  // Its own files, then the API's brand read: no other name, and nothing outside the stack.
   expect(new Set(asked.map((url) => new URL(url).origin))).toEqual(
     new Set([fieldOrigin, apiOrigin]),
   );
-  expect(asked.filter((url) => url.startsWith(apiOrigin))).toEqual([`${apiOrigin}/health`]);
+  expect(asked.filter((url) => url.startsWith(apiOrigin))).toEqual([`${apiOrigin}/brand`]);
   expect(apiOrigin).toBe(localApiOrigin);
   expect(complaints).toEqual([]);
 });
@@ -215,7 +217,11 @@ test('AC-11-04: every word on the enrolment screen is the translation file’s',
     return { texts, title: document.title, language: document.documentElement.lang };
   });
   expect(shown.texts.length).toBeGreaterThan(0);
-  const words = new Set(wordsOf(english));
+  // And the line that says which Open ADMS it is built on, filled with the release and licence.
+  const words = new Set([
+    ...wordsOf(english),
+    filled(english.brand.builtOn, { version: release, licence: builtOn.licence }),
+  ]);
   expect(shown.texts.filter((text) => !words.has(text))).toEqual([]);
   expect(shown.title).toBe(english.app.name);
   expect(shown.language).toBe(english.language);

@@ -21,6 +21,7 @@ import {
 import { Body, Controller, Inject, Param, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
+import { Branding, apiBranding } from '../firm/branding.ts';
 import { Refusal } from '../process/refusal.ts';
 import { Serves } from '../process/serves.ts';
 import { phoneOf } from '../sign-in/admission.ts';
@@ -31,9 +32,14 @@ export const apiPhoneProofs = Symbol('the API’s proofs of phones');
 @Controller()
 export class PhoneProofsController {
   private readonly proofs: PhoneProofs;
+  private readonly branding: Branding;
 
-  constructor(@Inject(apiPhoneProofs) proofs: PhoneProofs) {
+  constructor(
+    @Inject(apiPhoneProofs) proofs: PhoneProofs,
+    @Inject(apiBranding) branding: Branding,
+  ) {
     this.proofs = proofs;
+    this.branding = branding;
   }
 
   @Serves(challengePhoneEndpoint)
@@ -77,6 +83,7 @@ export class PhoneProofsController {
       keyRevoked: phone.keyRevoked,
       masterPasscodeVersion: phone.masterPasscodeVersion,
       masterPasscodeVersionInForce: await this.proofs.masterPasscodeVersionInForce(),
+      brandName: (await this.branding.current()).name,
     });
   }
 }

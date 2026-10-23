@@ -10,8 +10,9 @@
 // 4. the project's additional stats, with each day of the range;
 // 5. its estimates and objectives: the model holds none, and the page says so rather than
 //    inventing any;
-// 6. an end page: "Open ADMS" centred, "Open Recover" small at the bottom right, and the firm's
-//    address for a reader who wants to be on its list.
+// 6. an end page: what the firm calls its ADMS centred, "Open Recover" small at the bottom right,
+//    "Built on Open ADMS <version>" with its licence and source small at the bottom left, and the
+//    firm's address for a reader who wants to be on its list.
 //
 // **The map is drawn as plain lines, no map tiles** (agent default, in BUILD.md): the project's
 // boundary and zones as its newest map holds them, its sites, and each field event where it was
@@ -25,8 +26,8 @@ import {
   type PagePoint,
   type Rgb,
 } from '@open-adms/receipts';
-import type { DebrisTotalsAnswer } from '@open-adms/contracts';
-import { ProjectClock } from '@open-adms/domain';
+import type { BrandAnswer, DebrisTotalsAnswer } from '@open-adms/contracts';
+import { builtOn, builtOnLine, ProjectClock } from '@open-adms/domain';
 
 import type { ReportMap } from './debris-totals.ts';
 import { grouped, summaryOf, summaryWords, type Summary, type SummarySection } from './summary.ts';
@@ -77,9 +78,8 @@ export const reportWords = {
   haulOutCy: 'Haul-out CY',
   unitRateTickets: 'Unit rate tickets',
   estimates: 'Project Estimates and Objectives',
-  noEstimates:
-    'No estimates or objectives are recorded for this project in Open ADMS, so none is shown here.',
-  endTitle: 'Open ADMS',
+  noEstimates: (adms: string) =>
+    `No estimates or objectives are recorded for this project in ${adms}, so none is shown here.`,
   endBrand: 'Open Recover',
   contact: (email: string) =>
     `To be added to the distribution list for this report, write to ${email}.`,
@@ -436,24 +436,24 @@ function statsPage(section: SummarySection, totals: DebrisTotalsAnswer, subtitle
   return page;
 }
 
-function estimatesPage(subtitle: string): PdfPage {
+function estimatesPage(subtitle: string, brand: BrandAnswer): PdfPage {
   const page = framed(reportWords.estimates, subtitle);
   page.fillColour(colours.muted);
   let y = high - 110;
-  for (const line of linesOf(reportWords.noEstimates, 13, wide - margin * 2)) {
+  for (const line of linesOf(reportWords.noEstimates(brand.name), 13, wide - margin * 2)) {
     page.text(margin, y, 13, false, line);
     y -= 18;
   }
   return page;
 }
 
-function endPage(contactEmail: string | null): PdfPage {
+function endPage(contactEmail: string | null, brand: BrandAnswer): PdfPage {
   const page = new PdfPage(wide, high);
   page.fillColour(colours.accent);
   page.rect(0, 0, wide, 10, 'fill');
   page.rect(0, high - 10, wide, 10, 'fill');
   page.fillColour(colours.ink);
-  centred(page, 320, 40, true, reportWords.endTitle);
+  centred(page, 320, 40, true, brand.name);
   page.fillColour(colours.muted);
   centred(
     page,
@@ -463,6 +463,9 @@ function endPage(contactEmail: string | null): PdfPage {
     contactEmail === null ? reportWords.noContact : reportWords.contact(contactEmail),
   );
   right(page, wide - margin, 28, 9, false, reportWords.endBrand);
+  // The AGPL-3.0 attribution, and where the source is (§13).
+  const attribution = `${builtOnLine(brand.version)}, ${builtOn.licence}. Source: ${builtOn.source}`;
+  page.text(margin, 28, 9, false, fitted(attribution, 9, wide - margin * 2 - 120, false));
   return page;
 }
 
@@ -471,6 +474,7 @@ export function dailyReportPdf(
   totals: DebrisTotalsAnswer,
   map: ReportMap,
   contactEmail: string | null,
+  brand: BrandAnswer,
 ): Uint8Array<ArrayBuffer> {
   const summary = summaryOf(totals);
   const [loads, haulOuts, unitRate, stats] = summary.sections;
@@ -489,10 +493,10 @@ export function dailyReportPdf(
     operationPage(haulOuts, subtitle, map, 'HAUL_OUT'),
     operationPage(unitRate, subtitle, map, 'UNIT_RATE'),
     statsPage(stats, totals, subtitle),
-    estimatesPage(subtitle),
+    estimatesPage(subtitle, brand),
   ];
   middle.forEach((page, place) => {
     footed(page, place + 2, middle.length + 2);
   });
-  return pdfOf([titlePage(summary, totals), ...middle, endPage(contactEmail)]);
+  return pdfOf([titlePage(summary, totals), ...middle, endPage(contactEmail, brand)]);
 }

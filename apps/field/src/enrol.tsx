@@ -5,6 +5,7 @@
 // whether the server answers. The passcode is held only until it is sent.
 import { useEffect, useState } from 'react';
 
+import { BuiltOnLine, useBrand } from './brand.tsx';
 import {
   Banner,
   Button,
@@ -34,16 +35,20 @@ export function Enrol({
   const [passcode, setPasscode] = useState('');
   const [enrolling, setEnrolling] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const { title, learned } = useBrand();
 
+  // The public brand read tells whether the server answers and what the firm calls its ADMS.
   useEffect(() => {
     let shown = true;
-    void server.answers().then((answers) => {
-      if (shown) setReach(answers ? 'answers' : 'unreachable');
+    void server.brand().then((told) => {
+      if (!shown) return;
+      setReach(told === undefined ? 'unreachable' : 'answers');
+      if (told !== undefined) learned(told);
     });
     return () => {
       shown = false;
     };
-  }, [server]);
+  }, [server, learned]);
 
   const enrol = async () => {
     if (!PhoneIdentity.enrolmentReadable(name, passcode)) {
@@ -72,7 +77,7 @@ export function Enrol({
     <main data-screen="enrol" className="screen">
       <StatusStrip standing={{ signedIn: null, waiting: 0, lastSent: null, now: new Date() }} />
       <div className="screen-body">
-        <ScreenTitle>{words.app.name}</ScreenTitle>
+        <ScreenTitle>{title}</ScreenTitle>
         <Banner tone="notice">
           <p>{words.shell.testBuild}</p>
         </Banner>
@@ -90,6 +95,7 @@ export function Enrol({
             <p>{problem}</p>
           </Banner>
         )}
+        <BuiltOnLine />
       </div>
       <ScreenActions>
         <Button main wide busy={enrolling} onPress={() => void enrol()}>

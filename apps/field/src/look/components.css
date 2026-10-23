@@ -350,3 +350,25 @@
   gap: var(--space-3);
   margin-top: auto;
 }
+
+/* The line that says which Open ADMS this is built on, and the way to its source (the AGPL-3.0
+   attribution): quiet, at the foot of the screen's words; its link a target of its own, as tall
+   as a button's row so a gloved thumb finds it. */
+.built-on {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-4);
+  color: var(--colour-words-quiet);
+  font-size: var(--type-small);
+}
+
+.built-on a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--colour-main);
+  text-decoration: underline;
+}

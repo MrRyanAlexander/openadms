@@ -49,6 +49,7 @@ const world = worldOn(() => db);
 const inventory = [
   'health GET /health ANYBODY',
   'readiness GET /readiness ANYBODY',
+  'brand GET /brand ANYBODY',
   'requestPasswordReset POST /password-resets ANYBODY',
   'completePasswordReset POST /password-resets/completions ANYBODY',
   'signIn POST /sessions ANYBODY',
@@ -172,6 +173,7 @@ const inventory = [
   'firmSettings GET /firm-settings SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changePhoneKeyHours PATCH /firm-settings/phone-key SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeReportContact PATCH /firm-settings/report-contact SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
+  'changeBrandName PATCH /firm-settings/brand-name SIGNED_IN ADMIN,MANAGER_ANALYST SETUP',
   'changeViewerTwoStep PATCH /firm-settings/viewer-two-step SIGNED_IN ADMIN',
   'changeMonitorSessionHours PATCH /firm-settings/monitor-sessions SIGNED_IN ADMIN',
   'listPhones GET /phones SIGNED_IN ADMIN,MANAGER_ANALYST VIEW_DISPATCH',

@@ -21,7 +21,7 @@ test('AC-02-18, AC-11-11, AC-11-13: enrolled online under the master passcode, t
   const [enrolment, challenge, proof] = api.slice(1);
   const deviceId = (enrolment?.answer as { deviceId: string }).deviceId;
   expect(api.map(({ method, path, status }) => `${method} ${path} ${String(status)}`)).toEqual([
-    'GET /health 200',
+    'GET /brand 200',
     'POST /phones/enrolments 200',
     `POST /phones/${deviceId}/challenges 200`,
     `POST /phones/${deviceId}/proofs 200`,
@@ -179,7 +179,7 @@ test('AC-02-18, AC-02-07: without a connection nothing is enrolled or created an
   await checkScreen(page);
   // The try with no signal never reached the server: it has no answer.
   expect(toApi(asked).map(({ path, status }) => `${path} ${String(status)}`)).toEqual([
-    '/health 200',
+    '/brand 200',
     '/phones/enrolments 401',
     '/phones/enrolments undefined',
   ]);

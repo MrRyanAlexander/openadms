@@ -20,10 +20,11 @@
 //   contractor matches a ticket whose certification names it as the prime or a sub.
 // - **Limits** (C166): a range of at most `daysAtMost` days, read in one piece of work inside
 //   `DATABASE_WORK_LONGEST_MS`; a wider one is refused in plain words.
-import type { DebrisTotalsAnswer } from '@open-adms/contracts';
+import type { BrandAnswer, DebrisTotalsAnswer } from '@open-adms/contracts';
 import { Prisma, type Database } from '@open-adms/db';
 import type { WorkflowName } from '@open-adms/domain';
 
+import { Branding } from '../firm/branding.ts';
 import { FirmSettings } from '../firm/firm-settings.ts';
 import { instantsOf, projectRead } from '../money/ledger.ts';
 import { Refusal } from '../process/refusal.ts';
@@ -144,9 +145,12 @@ const debrisRead = {
 
 export class DebrisTotals {
   private readonly db: Database;
+  // The Open ADMS release the daily report says it is built on.
+  private readonly version: string;
 
-  constructor(db: Database) {
+  constructor(db: Database, version: string) {
     this.db = db;
+    this.version = version;
   }
 
   read(readerId: string, projectId: string, asked: TotalsAsked): Promise<DebrisTotalsAnswer> {
@@ -161,7 +165,12 @@ export class DebrisTotals {
     readerId: string,
     projectId: string,
     asked: TotalsAsked,
-  ): Promise<{ totals: DebrisTotalsAnswer; map: ReportMap; contactEmail: string | null }> {
+  ): Promise<{
+    totals: DebrisTotalsAnswer;
+    map: ReportMap;
+    contactEmail: string | null;
+    brand: BrandAnswer;
+  }> {
     return this.db.$read(async (tx) => {
       await backOfficeReader(tx, readerId, 'VIEW_REVIEW');
       const { totals, points } = await DebrisTotals.counted(tx, projectId, asked);
@@ -169,6 +178,7 @@ export class DebrisTotals {
         totals,
         map: await DebrisTotals.mapOf(tx, projectId, points),
         contactEmail: (await FirmSettings.of(tx)).reportContactEmail,
+        brand: await Branding.in(tx, this.version),
       };
     });
   }

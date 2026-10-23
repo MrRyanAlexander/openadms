@@ -1,9 +1,11 @@
 // The firm's own settings' endpoints (REQ-214, 215; ADR-520, 530, 531): read them, change the hours
 // a lost phone keeps its key, change whether read-only viewers must use two-step sign-in, change
-// how many hours a monitor's sign-in on a phone lasts, change where a reader of the reports writes. The door
+// how many hours a monitor's sign-in on a phone lasts, change where a reader of the reports writes,
+// change what the firm calls its ADMS. The door
 // has already asked the caller's role and permission (admission.ts); the service asks again
 // inside its own piece of work. The log says what was done or why not, by code: never a note.
 import {
+  changeBrandNameEndpoint,
   changeMonitorSessionHoursEndpoint,
   changePhoneKeyHoursEndpoint,
   changeReportContactEndpoint,
@@ -70,6 +72,23 @@ export class FirmSettingsController {
       request,
       outcome,
       'The email address printed on the firm’s reports was changed.',
+    );
+  }
+
+  @Serves(changeBrandNameEndpoint)
+  async changeBrandName(
+    @Body() body: BodyOf<typeof changeBrandNameEndpoint>,
+    @Req() request: FastifyRequest,
+  ): Promise<FirmSettingsAnswer> {
+    const outcome = await this.settings.changeBrandName(
+      callerOf(request).userId,
+      body.name,
+      body.note,
+    );
+    return FirmSettingsController.answered(
+      request,
+      outcome,
+      'What the firm calls its ADMS was changed.',
     );
   }
 

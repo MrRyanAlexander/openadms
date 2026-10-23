@@ -114,7 +114,8 @@ the old passwords are gone: `pnpm local:wipe`, then `up`.
 before work that needs the database logins (0.3 on):
 
 ```bash
-pnpm installer            # first run: three questions (answers may be piped, one per line);
+pnpm installer            # first run: four questions (the firm, what it calls its ADMS, email, the
+                          # master passcode; answers may be piped, one per line);
                           # rerun: says what it knows, re-checks it, asks once to resume;
                           # a database that was lost: it asks for the master passcode again
 pnpm installer:check      # re-checks only, changes nothing; exit 1 if anything is off

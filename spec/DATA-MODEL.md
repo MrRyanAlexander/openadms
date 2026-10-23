@@ -359,6 +359,9 @@ neither table (ADR-361, *agent default*: ROEs and forms stay unseen unless the u
 | **id** | int | Always 1 |
 | phoneKeyRevokedAfterHours | int | Hours a phone marked lost or retired keeps its key, from its last mark; 1…8,760, or null for off (check). Starts at `PHONE_KEY_REVOKED_AFTER_HOURS` (24; 0 starts it off). An admin or a manager/analyst holding Setup changes it |
 | **viewerTwoStepRequired** | boolean | Whether a read-only viewer must use two-step sign-in (ASVS 6.3.3); false as shipped (ADR-170). An admin alone changes it |
+| monitorSessionHours | int | **Built (ADR-531):** hours a monitor's sign-in on a phone lasts; 1…24 (check); 24 as shipped. An admin alone changes it |
+| reportContactEmail | text | **Built (REQ-410):** the address printed on the daily report's last page for a reader who wants to be added to its list; none prints none. An admin or a manager/analyst holding Setup changes it |
+| **brandName** | text | **Built (the user, 2026-10-22):** what the firm calls its ADMS, shown on every screen and in what the server writes for its people and clients (the daily report, its mail), beside "Built on Open ADMS <version>" (the AGPL-3.0 attribution; the release is the root `package.json`'s). Trimmed, 1…40 characters, no control character (check); `Open ADMS` until the firm names it: the installer asks at the first run (default `<firm> ADMS`) and hands it to the seed. Read by anybody through the public brand read (`GET /brand`: this name and the release, nothing else). An admin or a manager/analyst holding Setup changes it |
 
 #### `MasterPasscode`
 

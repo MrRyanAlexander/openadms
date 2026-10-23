@@ -84,6 +84,18 @@ describe('one address sending requests faster than the policy allows', () => {
     expect((await health('203.0.113.7')).statusCode).toBe(200);
   });
 
+  it('the brand read, open to anybody, is counted by its address like every other request: refused past the limit, with nothing of the firm in the refusal', async () => {
+    const brand = (from: string) =>
+      api.app.inject({ method: 'GET', url: '/brand', remoteAddress: from });
+    // Whatever each answered (this process has no database of its own), three were let through.
+    for (let sent = 0; sent < 3; sent += 1)
+      expect((await brand('203.0.113.31')).statusCode).not.toBe(429);
+    const refused = await brand('203.0.113.31');
+    expect(refused.statusCode).toBe(429);
+    expect(errorAnswerSchema.parse(refused.json()).code).toBe('LIMITED');
+    expect(refused.body).not.toMatch(/ADMS|version/);
+  });
+
   it('the log says that a caller was limited and by which limit, with the request’s id, and never the address', async () => {
     lines.length = 0;
     for (let sent = 0; sent < 4; sent += 1) await health('203.0.113.21');

@@ -65,6 +65,7 @@ const apiPolicy = 'open-adms-media-write-once';
 // built code and the files read beside it. Its dependencies are the lockfile's.
 const runs = {
   api: [
+    'package.json',
     'apps/api/dist',
     'packages/contracts/dist',
     'packages/db/dist',

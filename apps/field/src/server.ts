@@ -7,9 +7,9 @@
 // photograph's file goes as bytes, with its offset and length in the query, and is waited for
 // only so long (ADR-579): past it there is no answer, as with no signal.
 import {
+  brandEndpoint,
   errorAnswerSchema,
   filePartMediaType,
-  healthEndpoint,
   monitorSessionHeader,
   type AnswerOf,
   type Endpoint,
@@ -59,9 +59,11 @@ export class Server {
     this.origin = origin;
   }
 
-  // Whether the API answers now. Nothing waits on it: a phone with no signal works all day.
-  async answers(): Promise<boolean> {
-    return (await this.ask(healthEndpoint)).kind === 'answered';
+  // What the firm calls its ADMS, when the API answers now: the public brand read, which says the
+  // server is there too. Nothing waits on it: a phone with no signal works all day.
+  async brand(): Promise<string | undefined> {
+    const reply = await this.ask(brandEndpoint);
+    return reply.kind === 'answered' ? reply.answer.name : undefined;
   }
 
   async ask<E extends Endpoint>(served: E, asking: Asking = {}): Promise<Reply<E>> {
