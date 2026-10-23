@@ -255,7 +255,7 @@
     "builtOn": "Built on Open ADMS {version}",
     "builtOnOpenAdms": "Built on Open ADMS",
     "what": "Debris management and field reconciliation for disaster recovery.",
-    "licence": "Open ADMS is open source, under the GNU Affero General Public License, version 3.",
+    "licence": "Open ADMS is open source, under the {licence} licence.",
     "source": "The source code of Open ADMS"
   },
   "home": {

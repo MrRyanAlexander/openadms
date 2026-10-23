@@ -19,7 +19,7 @@ export function About({
       <ScreenTitle>{say(said.title, { name })}</ScreenTitle>
       <p>{version === null ? said.builtOnOpenAdms : say(said.builtOn, { version })}</p>
       <p>{said.what}</p>
-      <p className="quiet">{said.licence}</p>
+      <p className="quiet">{say(said.licence, { licence: builtOn.licence })}</p>
       <p>
         <a className="link" href={builtOn.source} rel="noreferrer">
           {said.source}
