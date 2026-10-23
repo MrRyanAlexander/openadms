@@ -12,7 +12,9 @@
 //                      and the same for the worker, whose health answer is asked inside its own
 //                      container (ADR-419); a container still running exactly what was just
 //                      built, under the settings it was started with, is kept as it is (ADR-448);
-//                      then, at a terminal, offers once to load the sample projects (`pnpm sample`)
+//                      then, at a terminal, offers once to load the sample projects (`pnpm sample`);
+//                      ends by saying where each part answers and, once the sample is loaded,
+//                      the field app's sign-ins for its monitors and the badges to scan
 //   pnpm local:down    stop and remove the containers and network; data volumes are kept
 //   pnpm local:wipe    down, plus the data volumes, the generated .env and the certificates;
 //                      the downloaded map extract (public data, infra/local/.cache/) is kept
@@ -226,6 +228,13 @@ class LocalStack {
         : '  the API and the worker: not yet; run `pnpm installer`, then `pnpm local:up` again',
     );
     console.log('  Trust infra/local/.generated/caddy-root.crt in your browser to open them.');
+    // How to try the field app on the sample projects, as their load left it (sample-cli.ts):
+    // shown at every `up`, so a firm never needs `pnpm field:try` to find a way in.
+    const signIns = join(this.generated, 'sample-field-sign-ins.txt');
+    if (apiUp && existsSync(signIns)) {
+      console.log('');
+      process.stdout.write(readFileSync(signIns, 'utf8'));
+    }
   }
 
   down(): void {

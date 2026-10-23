@@ -95,6 +95,28 @@ interface Planned {
   readonly unitRate?: boolean;
 }
 
+// One of the sample's monitors, as they sign in to try the field app on the day it is loaded.
+export interface SampleSignIn {
+  readonly name: string;
+  readonly monitorNumber: string;
+  readonly password: string;
+  readonly work: string;
+}
+
+// Thursday first thing at the yard: each of the sample's phones enrolled under the master
+// passcode, before anything else of the sample is written, so a passcode that isn't the firm's
+// stops the load with nothing of it made (the user, 2026-10-23: a load that stopped there left
+// the projects' setup alone behind it).
+export async function enrolledPhones(
+  story: StoryContext,
+): Promise<ReadonlyMap<SamplePhone, string>> {
+  const phones = new Map<SamplePhone, string>();
+  for (const phone of Object.keys(samplePhones) as SamplePhone[]) {
+    phones.set(phone, (await story.enrolled(samplePhones[phone])).id);
+  }
+  return phones;
+}
+
 export class SampleField {
   private readonly story: StoryContext;
   private readonly luis: OfficeBrowser;
@@ -106,11 +128,18 @@ export class SampleField {
   // Each day's assignments, by the phone (or the monitor, where none is named) they are for.
   private readonly boards = new Map<string, string>();
 
-  constructor(story: StoryContext, luis: OfficeBrowser, set: SampleSetUp, worker: SampleWorker) {
+  constructor(
+    story: StoryContext,
+    luis: OfficeBrowser,
+    set: SampleSetUp,
+    worker: SampleWorker,
+    phones: ReadonlyMap<SamplePhone, string>,
+  ) {
     this.story = story;
     this.luis = luis;
     this.set = set;
     this.worker = worker;
+    for (const [phone, id] of phones) this.phoneIds.set(phone, id);
   }
 
   // Every phone the sample enrolled and every monitor it created, for its end.
@@ -122,13 +151,10 @@ export class SampleField {
     return [...this.people.values()];
   }
 
-  // Thursday afternoon at the yard: each phone enrolled under the master passcode, the six
-  // monitors created on the first, online.
-  async phonesAndMonitors(): Promise<void> {
+  // Thursday afternoon at the yard: the six monitors created on the first phone, online, under
+  // the master passcode (the phones were enrolled first thing, `enrolledPhones`).
+  async monitorsCreated(): Promise<void> {
     this.story.clock.set(sampleDay('08', '15:00'));
-    for (const phone of Object.keys(samplePhones) as SamplePhone[]) {
-      this.phoneIds.set(phone, (await this.story.enrolled(samplePhones[phone])).id);
-    }
     for (const monitor of Object.keys(sampleMonitors) as SampleMonitor[]) {
       this.people.set(
         monitor,
@@ -281,6 +307,77 @@ export class SampleField {
     await this.monday();
     await this.tuesday();
     await this.wednesday();
+  }
+
+  // The day the sample is loaded on (the user, 2026-10-23: "has things loaded ready to test
+  // out"): Luis writes that day's board on both projects, every kind of work a monitor does on
+  // one of the six, on no phone of its own, so each signs in on any enrolled phone (the firm's
+  // browser, enrolled under its master passcode) and it takes their work. Their sign-ins, for
+  // whoever loaded the sample to try the field app with.
+  async readyToTry(workDate: string): Promise<readonly SampleSignIn[]> {
+    const { set } = this;
+    const planned: readonly (Planned & { readonly projectId: string; readonly work: string })[] = [
+      {
+        monitor: 'ana',
+        kinds: ['COLLECTION'],
+        forms: ['INCIDENT'],
+        projectId: set.p1,
+        work: 'collections and incidents, ROW project',
+      },
+      {
+        monitor: 'kim',
+        kinds: ['DISPOSAL'],
+        forms: ['DROP_OFF_LOG'],
+        site: 'tdsr',
+        projectId: set.p1,
+        work: 'disposals and drop-off logs at Marsh Road TDSR, ROW project',
+      },
+      {
+        monitor: 'tariq',
+        kinds: ['DISPOSAL', 'HAUL_OUT_DISPOSAL'],
+        site: 'landfill',
+        projectId: set.p1,
+        work: 'disposals and haul-out disposals at the landfill, ROW project',
+      },
+      {
+        monitor: 'sam',
+        kinds: ['HAUL_OUT_COLLECTION'],
+        site: 'tdsr',
+        certifying: true,
+        projectId: set.p1,
+        work: 'haul-outs at Marsh Road TDSR, and certifying, ROW project',
+      },
+      {
+        monitor: 'jo',
+        kinds: ['UNIT_RATE'],
+        forms: ['INCIDENT'],
+        unitRate: true,
+        projectId: set.p1,
+        work: 'unit rate work and incidents, ROW project',
+      },
+      {
+        monitor: 'lee',
+        kinds: ['COLLECTION'],
+        forms: ['ROE', 'SURVEY'],
+        projectId: set.p2,
+        work: 'collections, ROEs and surveys, PPDR project',
+      },
+    ];
+    const signIns: SampleSignIn[] = [];
+    for (const { projectId, work, ...assignment } of planned) {
+      await this.luis.answered(writeAssignmentEndpoint, {
+        ids: { projectId },
+        json: this.assignment(workDate, assignment),
+      });
+      const person = this.person(assignment.monitor);
+      signIns.push({
+        name: person.name,
+        monitorNumber: person.monitorNumber,
+        password: person.password,
+        work,
+      });
+    }
+    return signIns;
   }
 
   private async monday(): Promise<void> {
@@ -662,22 +759,27 @@ export class SampleField {
     for (const work of planned) {
       const answer = await this.luis.answered(writeAssignmentEndpoint, {
         ids: { projectId },
-        json: {
-          personId: this.person(work.monitor).id,
-          workDate: `2026-10-${day}`,
-          fieldEventKinds: [...(work.kinds ?? [])],
-          certifying: work.certifying ?? false,
-          formDocumentTypes: [...(work.forms ?? [])],
-          siteId: work.site === undefined ? null : this.set.sites[work.site],
-          deviceId: work.phone === undefined ? null : this.phoneId(work.phone),
-          payItemIds: work.unitRate === true ? this.set.unitRateWork.map(({ id }) => id) : [],
-        },
+        json: this.assignment(`2026-10-${day}`, work),
       });
       this.boards.set(
         `${day} ${projectId} ${work.phone ?? 'none'} ${work.monitor}`,
         answer.record.id,
       );
     }
+  }
+
+  // What the board says of one assignment.
+  private assignment(workDate: string, work: Planned) {
+    return {
+      personId: this.person(work.monitor).id,
+      workDate,
+      fieldEventKinds: [...(work.kinds ?? [])],
+      certifying: work.certifying ?? false,
+      formDocumentTypes: [...(work.forms ?? [])],
+      siteId: work.site === undefined ? null : this.set.sites[work.site],
+      deviceId: work.phone === undefined ? null : this.phoneId(work.phone),
+      payItemIds: work.unitRate === true ? this.set.unitRateWork.map(({ id }) => id) : [],
+    };
   }
 
   // A phone that makes numbers takes its first block of each series, at the yard, online.

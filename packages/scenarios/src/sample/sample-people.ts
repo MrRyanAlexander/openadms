@@ -11,9 +11,10 @@
 // phone under the master passcode, as every monitor is (ADR-442), each with a password made up
 // and never kept.
 //
-// **Put away on the server** once the sample is loaded: every one of its people archived, their
-// sessions ended, so that nothing of the sample signs in again (an admin may take one out of the
-// archive and set a password, as for anybody who left). Again each as themselves, with the
+// **Put away on the server** once the sample is loaded: its two managers/analysts archived, their
+// sessions ended, so that neither signs in again (an admin may take one out of the archive and
+// set a password, as for anybody who left); its monitors stay, for the firm to try the field app
+// as (sample-projects.ts), until it archives them. Again each as themselves, with the
 // reason said. Never an admin: the firm's last admin can't be archived (the database's own
 // rule), and the sample makes none.
 import type { Database } from '@open-adms/db';
@@ -24,7 +25,9 @@ import type { StoryContext } from '../runner.ts';
 
 export const sampleReason = 'Done on the server, by the sample projects’ loader.';
 export const archivedReason =
-  'The sample projects are loaded: their people are archived, by the sample projects’ loader.';
+  'The sample projects are loaded: their managers/analysts are archived, by the sample projects’ loader.';
+export const stoppedReason =
+  'A load of the sample projects stopped half-way: what it made is put away, by the sample projects’ loader, before it loads again.';
 
 export interface SamplePerson {
   readonly name: string;
@@ -56,18 +59,20 @@ export async function madeOnTheServer(
   return story.backOffice.signedIn({ id, email: person.email }, password);
 }
 
-// Every one of the sample's people archived and signed out everywhere, each as themselves.
-export async function archived(api: Database, now: Date, people: readonly string[]): Promise<void> {
+// Each of the sample's people named archived and signed out everywhere, each as themselves.
+export async function archived(
+  api: Database,
+  now: Date,
+  people: readonly string[],
+  reason = archivedReason,
+): Promise<void> {
   for (const userId of people) {
-    await api.$write(
-      { actorId: userId, source: 'BACK_OFFICE', reason: archivedReason },
-      async (tx) => {
-        await tx.session.updateMany({
-          where: { userId, revokedAt: null },
-          data: { revokedAt: now },
-        });
-        await tx.user.update({ where: { id: userId }, data: { archivedAt: now } });
-      },
-    );
+    await api.$write({ actorId: userId, source: 'BACK_OFFICE', reason }, async (tx) => {
+      await tx.session.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.user.update({ where: { id: userId }, data: { archivedAt: now } });
+    });
   }
 }

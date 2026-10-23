@@ -31,6 +31,7 @@ import { ticket101001 } from './ticket-101001.ts';
 import { offlineSignIn } from './offline-sign-in.ts';
 import { underThePasscode } from './under-the-passcode.ts';
 import { sampleProjects } from './sample-projects.ts';
+import { sampleStopped } from './sample-stopped.ts';
 
 export const stories: readonly Story[] = [
   ticket101001,
@@ -58,4 +59,5 @@ export const stories: readonly Story[] = [
   burst,
   lostPhoneKey,
   sampleProjects,
+  sampleStopped,
 ];

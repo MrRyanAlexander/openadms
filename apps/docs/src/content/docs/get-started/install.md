@@ -51,6 +51,12 @@ It then confirms and:
 - seeds the firm's lists (program types, debris types, payable types, reasons and the rest; see
   [Lists](/reference/lists/));
 - loads the **two sample projects**, unless you add `--no-sample` (`pnpm sample` loads them later).
+  Their six monitors stay ready to try the field app with, each given that day's work: the end of
+  `pnpm start` (and of every `pnpm local:up`) lists their Monitor IDs, passwords and work, and the
+  badges to scan. Enrol the phone with your master passcode, then sign in as one. Archive them in
+  the back office once you've looked round. The passcode is checked before anything is loaded; if
+  a load stops half-way, `pnpm sample` closes and archives what it made (nothing is deleted) and
+  loads them again.
 
 ### A rerun
 

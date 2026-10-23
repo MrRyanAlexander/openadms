@@ -3,13 +3,18 @@
 // installation's, through the same loader and the same real paths: setup at the setup screens'
 // endpoints, field events from enrolled phones' syncs, the worker's conclusions, the review, QC
 // and lock at the reviewers' endpoints. The story checks that every kind of thing is there, that
-// it leaves no way in behind it, and that a second load finds it and does nothing.
+// its phones are turned in and its managers/analysts put away while its monitors stay ready to
+// try the field app as, with the day's work, and that a second load finds it and does nothing.
 //
 // Its API listens on a loopback port of its own (`ownPort`), as an installation's sample load's
 // does, never the stories' one a browser test may be holding.
 import type { Story } from '../runner.ts';
 import { sample, sampleMonitors, sampleOffice } from '../sample/sample-names.ts';
 import { loadSample, sampleStanding, sampleStart } from '../sample/sample-projects.ts';
+
+// The day the story loads it on: the Friday after its own days.
+const today = { workDate: '2026-10-16', at: new Date('2026-10-16T07:00:00-04:00') };
+import { taken } from './board.ts';
 import { goldenOutcomes, ledgerLine, totalOf } from './golden-outcomes.ts';
 
 // Each ticket of the sample, as its field events stand: its number and its one status.
@@ -41,7 +46,7 @@ const ticketsAtTheEnd = {
 export const sampleProjects: Story = {
   name: 'sample-projects',
   title:
-    'the sample projects: a ROW and a PPDR project holding every kind of record, loaded through the real paths, leaving no way in, loaded once',
+    'the sample projects: a ROW and a PPDR project holding every kind of record, loaded through the real paths, its monitors ready to try the field app as, loaded once',
   timeZone: sample.timeZone,
   start: sampleStart,
   ownPort: true,
@@ -50,13 +55,13 @@ export const sampleProjects: Story = {
     const { api } = story;
     story.at(sampleStart, 'A fresh installation: none of the sample is there');
     story.check('nothing of the sample is there yet', await sampleStanding(api), 'NOT_LOADED');
-    const loaded = await loadSample(story);
+    const loaded = await loadSample(story, today);
     if (!loaded.loaded) throw new Error(`The sample wasn’t loaded: ${loaded.standing}.`);
     const { p1, p2 } = loaded;
     const both = { projectId: { in: [p1, p2] } };
     story.at(
-      '2026-10-15T16:30:00-04:00',
-      'Loaded: set up, certified, worked Monday to Wednesday, reviewed, QC’d and locked; the phones turned in and the people put away',
+      '2026-10-16T07:30:00-04:00',
+      'Loaded: set up, certified, worked Monday to Wednesday, reviewed, QC’d and locked; the phones turned in, the managers/analysts put away, the monitors given Friday’s work',
     );
 
     story.check(
@@ -274,7 +279,7 @@ export const sampleProjects: Story = {
         await api.clockEntry.count({ where: { projectId: p1 } }),
         await api.dayApproval.count({ where: { assignment: { projectId: p1 } } }),
       ],
-      [20, 6, 1],
+      [26, 6, 1],
     );
 
     // The ledger, line by line (golden mission §4's, and what the sample adds).
@@ -333,7 +338,7 @@ export const sampleProjects: Story = {
       [...goldenOutcomes.reviewed.p2.ledger],
     );
 
-    // No way in is left behind it.
+    // Its phones turned in and its managers/analysts put away; its monitors ready to sign in.
     const people = await api.user.findMany({
       where: {
         OR: [
@@ -345,18 +350,69 @@ export const sampleProjects: Story = {
     });
     const devices = await api.device.findMany({ where: { name: { startsWith: 'Sample ' } } });
     story.check(
-      'its eight people archived, none with a session; its eight phones turned in, each key revoked',
+      'its two managers/analysts archived with no session, no admin; its eight phones turned in, each key revoked',
       [
-        people.length,
-        people.filter((person) => person.archivedAt === null || person.sessions.length > 0).length,
+        people
+          .filter((person) => person.role !== 'MONITOR')
+          .map(
+            (person) =>
+              `${person.name} ${person.archivedAt === null ? 'in service' : 'archived'} ${String(person.sessions.length)}`,
+          )
+          .sort(),
         people.filter((person) => person.role === 'ADMIN').length,
         devices.length,
         devices.filter((device) => device.keyRevokedAt === null).map((device) => device.name),
       ],
-      [8, 0, 0, 8, []],
+      [[`${sampleOffice.dana.name} archived 0`, `${sampleOffice.luis.name} archived 0`], 0, 8, []],
+    );
+    const board = await api.assignment.findMany({
+      where: { ...both, workDate: new Date(`${today.workDate}T00:00:00Z`) },
+      include: { person: true },
+    });
+    story.check(
+      'its six monitors in service, each with Friday’s work on the board on no phone of its own, and their sign-ins handed back',
+      [
+        people.filter((person) => person.role === 'MONITOR' && person.archivedAt === null).length,
+        board
+          .map(
+            (one) =>
+              `${one.projectId === p1 ? 'P1' : 'P2'} ${one.person.name} ${one.deviceId ?? 'any phone'}`,
+          )
+          .sort(),
+        loaded.workDate,
+        loaded.signIns.map((monitor) => [monitor.name, /^M\d{6}$/.test(monitor.monitorNumber)]),
+      ],
+      [
+        6,
+        [
+          `P1 ${sampleMonitors.ana} any phone`,
+          `P1 ${sampleMonitors.jo} any phone`,
+          `P1 ${sampleMonitors.kim} any phone`,
+          `P1 ${sampleMonitors.sam} any phone`,
+          `P1 ${sampleMonitors.tariq} any phone`,
+          `P2 ${sampleMonitors.lee} any phone`,
+        ],
+        today.workDate,
+        (['ana', 'kim', 'tariq', 'sam', 'jo', 'lee'] as const).map((key) => [
+          sampleMonitors[key],
+          true,
+        ]),
+      ],
+    );
+    // The firm tries it: its browser enrolled under the master passcode, a monitor signs in on
+    // it with the sign-in handed back, and it takes Friday's work.
+    const [first] = loaded.signIns;
+    const ana = people.find((person) => person.name === first?.name);
+    if (first === undefined || ana === undefined) throw new Error('No sign-in was handed back.');
+    const browser = await story.enrolled('The firm’s browser');
+    const takenId = await taken(story, { id: ana.id, ...first }, browser.id);
+    story.check(
+      'a monitor signs in on a phone the firm enrolled with the sign-in handed back, and it takes their work for the day',
+      board.find((one) => one.id === takenId)?.person.name,
+      sampleMonitors.ana,
     );
 
-    story.at('2026-10-15T16:45:00-04:00', 'The sample is loaded again: it is there, so nothing');
+    story.at('2026-10-16T07:45:00-04:00', 'The sample is loaded again: it is there, so nothing');
     const counted = async (): Promise<number[]> => [
       await api.auditRecord.count(),
       await api.project.count(),
@@ -367,7 +423,7 @@ export const sampleProjects: Story = {
     const before = await counted();
     story.check(
       'a second load finds the sample and does nothing',
-      [await loadSample(story), await counted()],
+      [await loadSample(story, today), await counted()],
       [{ loaded: false, standing: 'LOADED' }, before],
     );
   },

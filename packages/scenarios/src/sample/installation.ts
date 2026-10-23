@@ -13,11 +13,13 @@
 //   database stamps itself (when each audit record was written) is the real time.
 // - **The worker's own run**, on the installation's worker login (sample-worker.ts).
 // - **The firm's master passcode**, as whoever holds it types it: it is kept nowhere but this
-//   process's memory, and never printed. The sample's monitors' passwords are made up and kept
-//   nowhere at all.
+//   process's memory, and never printed. The sample's monitors' passwords are made up here, easy
+//   to type on a phone, and handed back for the firm to try the field app with
+//   (sample-projects.ts); this module keeps none.
 //
 // Whoever runs this holds the firm's server: it reads the API's and the worker's settings as they
 // do, and prints none of them. Its proof is the same as `pnpm installer:admin`'s.
+import { randomInt } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
@@ -37,7 +39,6 @@ import {
   type ViewerDatabase,
 } from '@open-adms/db';
 
-import { madeUpPassword } from '../office-browser.ts';
 import { StoryStage } from '../runner.ts';
 import { freeLoopbackPort } from '../story-api.ts';
 import type { Service, StageDatabase, StoryPool } from '../story-database.ts';
@@ -50,6 +51,15 @@ const workerEnvFile = fileURLToPath(new URL('apps/worker/.env', root));
 const tls = new URL('infra/local/.generated/tls/', root);
 const needs =
   'The sample projects need the installation: `pnpm installer`, then `pnpm local:up` (its settings and its certificates).';
+
+// A monitor's password made up for the sample, typed on a phone to try the field app: four
+// groups of four from letters and digits that can't be misread (no 0, o, 1, l or i), about 79
+// bits, longer than the policy's least.
+const typable = 'abcdefghjkmnpqrstuvwxyz23456789';
+export const typablePassword = (): string =>
+  Array.from({ length: 4 }, () =>
+    Array.from({ length: 4 }, () => typable[randomInt(typable.length)]).join(''),
+  ).join('-');
 
 // The installation's database, as its API's and its worker's own logins open it, each from its
 // own settings; or, for a load tried out (`pnpm sample --try`), another database on the same
@@ -140,7 +150,7 @@ export async function installationStage(parts: InstallationParts): Promise<Story
       passcode: parts.passcode,
       // One key per purpose (ADR-542), as the API's process holds them.
       passwordHasher: new PasswordHasher(settings.passwordKey, settings.tokenSigningSecret),
-      monitorPassword: madeUpPassword,
+      monitorPassword: typablePassword,
       async start({ clock, log }) {
         const api = await ApiProcess.create(
           ApiModule,
