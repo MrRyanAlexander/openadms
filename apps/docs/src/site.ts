@@ -23,7 +23,12 @@ export interface NavGroup {
 export const navigation: NavGroup[] = [
   {
     label: 'Get started',
-    items: ['get-started/what-is-open-adms', 'get-started/quick-start', 'get-started/install'],
+    items: [
+      'get-started/what-is-open-adms',
+      'get-started/quick-start',
+      'get-started/server',
+      'get-started/install',
+    ],
   },
   {
     label: 'Concepts',

@@ -147,6 +147,10 @@ notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`).
   phone of its own; their made-up passwords are shown at every `local:up` from a 0600 git-ignored
   file, and the firm archives them when done (`packages/scenarios/src/sample/sample-projects.ts`,
   `infra/local/src/index.ts`).
+- A firm's server (`./adms`): Let's Encrypt's certificates where the internet reaches it, the
+  installation's own root otherwise; the API and the worker log at warn; the address server's key
+  is readable inside its own container (its image makes its user at start); the map extract is
+  pinned by the SHA-256 it arrived with (`tools/setup/src/server.ts`, `infra/server/`).
 
 ## Not in this build
 

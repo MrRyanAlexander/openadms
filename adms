@@ -1,0 +1,172 @@
+#!/bin/sh
+# Open ADMS on a firm's server (the user, 2026-10-23; agent_store/BUILD.md, Settled 11). The
+# server needs Docker Engine with its Compose plugin, nothing else: every image is built here,
+# from this release, and every step runs in a container (infra/server/compose.yaml). For a
+# developer's machine, `pnpm start` is the test install instead.
+#
+#   ./adms install     the firm's answers, its database and settings, its first admin, every service
+#                      started and checked, then its addresses. Once per server.
+#                      --port <n> and --bind <address> listen elsewhere than 0.0.0.0:443 (and :80)
+#   ./adms start       start it (again), its certificates renewed where they end, then checked
+#   ./adms stop        stop it; every record and file is kept
+#   ./adms status      each service's state, every part checked, the addresses
+#   ./adms logs [-f] [service…]
+#                      its logs (warnings and errors); -f follows them
+#   ./adms admin       make the firm's first admin, or let an admin back in (the API's own command)
+#   ./adms root        the installation's own root certificate, where its addresses use it
+#   ./adms licences    the licences of everything it is built on
+#
+# It never prints a secret: they live in the installation's own volumes, each readable by the
+# one service that needs it.
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+cd "$here"
+compose() {
+  docker compose --project-directory infra/server --file infra/server/compose.yaml "$@"
+}
+site=infra/server/.env
+
+say() { printf '%s\n' "$*"; }
+fail() {
+  say "$*" >&2
+  exit 1
+}
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || fail 'Docker is not installed: install Docker Engine and its Compose plugin (https://docs.docker.com/engine/install/).'
+  docker compose version >/dev/null 2>&1 || fail 'Docker Compose is not installed: install the Compose plugin (https://docs.docker.com/compose/install/linux/).'
+  docker info >/dev/null 2>&1 || fail 'Docker does not answer: start it, or run this as a user in the docker group.'
+}
+
+need_installed() {
+  [ -f "$site" ] || fail 'Not installed: run ./adms install first.'
+}
+
+# The media bucket, made by the object store's own administration and never by the API (ADR-480),
+# keeping every version of an object (ARCHITECTURE §4, Backups).
+bucket() {
+  listed=$(printf 's3.bucket.list\n' | compose exec -T objectstore weed shell 2>/dev/null || true)
+  if ! printf '%s\n' "$listed" | grep -q '^ *adms-media\b'; then
+    printf 's3.bucket.create -name adms-media\n' | compose exec -T objectstore weed shell >/dev/null
+  fi
+  printf 's3.bucket.versioning -name adms-media -enable\n' | compose exec -T objectstore weed shell >/dev/null
+  printf 's3.bucket.versioning -name adms-media\n' | compose exec -T objectstore weed shell | grep -qi 'enabled' ||
+    fail 'The object store’s media bucket does not keep versions. Stopped.'
+  say '✓ the object store’s media bucket is there and keeps every version'
+}
+
+# Every certificate renewed where it ends (exit 3: services started again on the new ones).
+prepare() {
+  set +e
+  compose run --rm --no-deps -T setup server prepare </dev/null
+  prepared=$?
+  set -e
+  [ "$prepared" -eq 0 ] || [ "$prepared" -eq 3 ] || fail 'The installation’s secrets and certificates could not be placed. Stopped.'
+  return 0
+}
+
+up() {
+  say 'Starting every service (a first start builds the map data: from minutes to an hour, by region) …'
+  compose up --detach --wait --wait-timeout 7200 </dev/null
+  if [ "${prepared:-0}" -eq 3 ]; then
+    say 'Some certificates were made afresh: starting the services again on them.'
+    compose restart
+  fi
+}
+
+check() {
+  compose run --rm --no-deps -T setup server check </dev/null
+}
+
+case "${1:-}" in
+install)
+  shift
+  need_docker
+  [ -f "$site" ] && fail 'This server is installed already: ./adms start starts it.'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+    --port)
+      export ADMS_HTTPS_PORT="$2"
+      shift 2
+      ;;
+    --http-port)
+      export ADMS_HTTP_PORT="$2"
+      shift 2
+      ;;
+    --bind)
+      export ADMS_BIND="$2"
+      shift 2
+      ;;
+    *) fail "Unknown option: $1" ;;
+    esac
+  done
+  say 'Building the installer’s image from this release (a few minutes) …'
+  compose --profile setup build setup
+  prepare
+  compose up --detach --wait postgres objectstore objectstore-tls </dev/null
+  bucket
+  compose run --rm --no-deps setup server install || fail 'Not installed.'
+  umask 077
+  compose run --rm --no-deps -T setup server site <"/dev/null" >"$site.next"
+  mv "$site.next" "$site"
+  say 'Building the API’s, the worker’s and the web apps’ images for this server’s addresses (several minutes) …'
+  compose build api caddy </dev/null ||
+    fail 'The images were not built (is the disk full?). Once fixed, ./adms start finishes the install (it builds what is missing) and ./adms admin makes the first admin.'
+  prepare
+  say ''
+  say 'The firm’s first admin: they sign in to the back office and set everything else up.'
+  compose run --rm api node apps/api/dist/admin.js || say 'No admin was made: ./adms admin makes one.'
+  up
+  bucket
+  check || true
+  say ''
+  say 'Installed. ./adms status checks it, ./adms logs shows its logs, ./adms stop stops it.'
+  ;;
+start)
+  need_docker
+  need_installed
+  prepare
+  compose build api caddy </dev/null
+  up
+  check || true
+  ;;
+stop)
+  need_docker
+  need_installed
+  compose stop
+  say 'Stopped. Every record and file is kept: ./adms start starts it again.'
+  ;;
+status)
+  need_docker
+  need_installed
+  compose ps --all
+  check
+  ;;
+logs)
+  shift
+  need_docker
+  need_installed
+  compose logs --tail 200 "$@"
+  ;;
+admin)
+  need_docker
+  need_installed
+  compose run --rm api node apps/api/dist/admin.js
+  ;;
+root)
+  need_docker
+  need_installed
+  compose run --rm --no-deps --entrypoint cat setup /adms/caddy/tls/root.crt
+  ;;
+licences)
+  need_docker
+  need_installed
+  compose run --rm --no-deps --entrypoint cat api /srv/open-adms/THIRD-PARTY-NOTICES.md
+  ;;
+*)
+  say 'Usage: ./adms install|start|stop|status|logs|admin|root|licences'
+  say 'Open ADMS on this server; every command runs in Docker. For a developer’s machine: pnpm start.'
+  exit 2
+  ;;
+esac

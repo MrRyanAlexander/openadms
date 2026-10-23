@@ -1,0 +1,33 @@
+# What the server's image build (infra/server/Dockerfile) never takes from the checkout: what each
+# build makes again itself, every secret and every installation's own files, and what no image
+# holds. Mirrors .gitignore where they overlap.
+.git
+**/node_modules
+**/dist
+**/.astro
+**/.vite
+**/.cache
+**/*.tsbuildinfo
+packages/db/src/generated
+
+# Secrets and an installation's own files, never in an image.
+**/.env
+**/.env.*
+!**/.env.example
+infra/local/.generated
+infra/server/.env
+tools/setup/.state
+
+# The documentation site: no image serves it (its package.json stays, for the workspace's lockfile).
+apps/docs/*
+!apps/docs/package.json
+
+# Tests' output and reference material.
+**/coverage
+**/playwright-report
+**/test-results
+development
+AGENT_OUTPUTS
+CLAUDE_OUTPUTS
+GROK_OUTPUTS
+**/.DS_Store

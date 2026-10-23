@@ -1,0 +1,83 @@
+# Open ADMS on a firm's server: its three addresses (infra/server/compose.yaml), imported by
+# Caddyfile.acme or Caddyfile.own, which say where their certificates come from (`site_tls`).
+# The same pages and policies as the local stack's (infra/local/Caddyfile), at the firm's names:
+# each page's policy is its app's page.ts's, its one server the firm's API. Nothing else of the
+# installation is reachable from outside.
+
+(headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+}
+
+(pages) {
+	@bundle path /assets/*
+	header @bundle Cache-Control "public, max-age=31536000, immutable"
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+}
+
+# The field app's browser build.
+{$ADMS_FIELD_HOST} {
+	import site_tls
+	import headers
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src {$ADMS_API_ORIGIN}; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(self), geolocation=(self), microphone=(), payment=(), usb=()"
+		X-Frame-Options "DENY"
+	}
+	import pages
+	root * /srv/field
+	file_server {
+		hide .*
+	}
+}
+
+# The back office and its viewer portal; and the licences of what Open ADMS is built on.
+{$ADMS_OFFICE_HOST} {
+	import site_tls
+	import headers
+	header {
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob:; font-src 'self'; connect-src {$ADMS_API_ORIGIN}; base-uri 'none'; form-action 'none'; object-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'; frame-ancestors 'none'"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+		X-Frame-Options "DENY"
+	}
+	handle_path /licences/* {
+		root * /srv/licences
+		file_server browse
+	}
+	handle {
+		import pages
+		root * /srv/office
+		try_files {path} /index.html
+		file_server {
+			hide .*
+		}
+	}
+}
+
+# The API: its container publishes no port, so this is the only way in. It sets its own headers.
+{$ADMS_API_HOST} {
+	import site_tls
+	import headers
+	header -Via
+	reverse_proxy api:3000 {
+		transport http {
+			tls
+			tls_trust_pool file /run/adms/tls/root.crt
+			tls_server_name api
+		}
+	}
+}
+
+# Plain HTTP at the API's name is refused, never redirected (ADR-511).
+http://{$ADMS_API_HOST} {
+	abort
+}

@@ -55,6 +55,14 @@ const leafRenewedWithin = 30 * day;
 const backdated = 60 * 60 * 1000;
 
 const rootName = 'Open ADMS local stack root';
+const organization = 'Open ADMS local stack';
+
+// Whose root it is: the local stack's, or a firm's server's (`authority-cli.ts`).
+export interface RootNamed {
+  readonly name: string;
+  readonly organization: string;
+}
+const localRoot: RootNamed = { name: rootName, organization };
 
 export interface Made {
   readonly root: 'kept' | 'made';
@@ -67,12 +75,14 @@ export class StackAuthority {
   readonly folder: string;
   private readonly rootKey: string;
   private readonly leaves: readonly Leaf[];
+  private readonly named: RootNamed;
 
-  constructor(generated: string, leaves: readonly Leaf[] = stackLeaves) {
+  constructor(generated: string, leaves: readonly Leaf[] = stackLeaves, named = localRoot) {
     this.rootCert = join(generated, 'caddy-root.crt');
     this.folder = join(generated, 'tls');
     this.rootKey = join(this.folder, 'root.key');
     this.leaves = leaves;
+    this.named = named;
   }
 
   certFile(name: string): string {
@@ -140,7 +150,7 @@ export class StackAuthority {
 
   private makeRoot(now: Date): { cert: X509Certificate; key: KeyObject } {
     const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-    const name = distinguishedName(rootName);
+    const name = distinguishedName(this.named.name, this.named.organization);
     const keyId = keyIdentifier(publicKey);
     const der = signed(
       {
@@ -169,8 +179,8 @@ export class StackAuthority {
     const rootNotAfter = root.cert.validToDate.getTime();
     const der = signed(
       {
-        issuer: distinguishedName(rootName),
-        subject: distinguishedName(leaf.name),
+        issuer: distinguishedName(this.named.name, this.named.organization),
+        subject: distinguishedName(leaf.name, this.named.organization),
         from: new Date(now.getTime() - backdated),
         until: new Date(Math.min(now.getTime() + leafLifetime, rootNotAfter)),
         publicKey,
@@ -244,9 +254,9 @@ function checked(der: Buffer): X509Certificate {
   return new X509Certificate(der);
 }
 
-function distinguishedName(commonName: string): Buffer {
+function distinguishedName(commonName: string, organization: string): Buffer {
   return sequence(
-    set(sequence(oid(oids.organization), utf8('Open ADMS local stack'))),
+    set(sequence(oid(oids.organization), utf8(organization))),
     set(sequence(oid(oids.commonName), utf8(commonName))),
   );
 }

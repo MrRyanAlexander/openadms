@@ -106,7 +106,8 @@ export class EnvFile {
 export interface InstallationRecord {
   format: 1;
   firm: string;
-  mail: 'mail catcher' | 'none';
+  // A firm's server sends through its own mail server (tools/setup/src/server.ts).
+  mail: 'mail catcher' | 'mail server' | 'none';
   database: { host: string; port: number; name: string };
   // The first admin's address, where this installer made them (none on one made before it did).
   admin?: string;

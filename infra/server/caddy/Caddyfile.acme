@@ -1,0 +1,14 @@
+# Open ADMS on a firm's server whose names the internet reaches: Let's Encrypt issues each
+# address's certificate, kept in Caddy's own volume and renewed by Caddy itself.
+{
+	email {$ADMS_ACME_EMAIL}
+	admin 127.0.0.1:2019
+	servers {
+		protocols h1 h2
+	}
+}
+
+(site_tls) {
+}
+
+import /etc/caddy/sites.caddy

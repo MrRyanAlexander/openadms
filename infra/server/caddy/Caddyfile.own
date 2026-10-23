@@ -1,0 +1,27 @@
+# Open ADMS on a firm's server with no public name (a private network, or a test): Caddy issues
+# each address's certificate from the installation's own root, as the local stack's does; each
+# browser and phone trusts that root once (`./adms root` prints it).
+{
+	local_certs
+	skip_install_trust
+	admin 127.0.0.1:2019
+	servers {
+		protocols h1 h2
+	}
+	pki {
+		ca local {
+			name "Open ADMS installation"
+			root {
+				format pem_file
+				cert /run/adms/tls/root.crt
+				key /run/adms/tls/root.key
+			}
+		}
+	}
+}
+
+(site_tls) {
+	tls internal
+}
+
+import /etc/caddy/sites.caddy

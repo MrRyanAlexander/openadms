@@ -1,9 +1,12 @@
 ---
 title: Quick start
-description: Bring a whole Open ADMS installation up on one machine with one command, over HTTPS, with the two sample projects loaded, and sign in.
+description: Try Open ADMS on your own computer with one command, over HTTPS, fresh every time, with the two sample projects loaded, and sign in.
 ---
 
-This brings up everything on one machine: the database, the object store, the road-routing and
+This is the **test install**, for trying Open ADMS on your own computer. For a firm's real work, on
+its own server, see [Install on a server](/get-started/server/).
+
+It brings up everything on one machine: the database, the object store, the road-routing and
 address servers, the API, the worker, the back office with the viewer portal, and the field app's
 browser build, each at its own HTTPS name under `*.adms.localhost`.
 
@@ -35,18 +38,24 @@ script the workspace hasn't allowed by name: that is the supply-chain policy, no
 pnpm start
 ```
 
-`pnpm start` is the one command. It runs the installer, then starts the local stack:
+`pnpm start` is the one command, and **it starts fresh every time**: a test installation already
+on this machine (its database, its files, its settings) is cleared first, so each run is like the
+first install. The downloaded map data and the stack's certificates are kept, so nothing is
+rebuilt and there is nothing new to trust. Then:
 
-1. **The installer** asks four questions on a first run: the firm's name, what the firm calls its
-   ADMS, whether to send email through the local mail catcher, and the **master passcode** (one per
-   firm; it opens phone setup and the supervisor's actions). It then makes the secrets, the database
-   and its logins, migrates and hardens the database, and loads the **two sample projects** (a few
-   minutes). Run again, it checks what it knows and asks to resume; it never makes a secret twice.
+1. **The installer** asks five questions: the firm's name, what the firm calls its ADMS, whether
+   to send email through the local mail catcher, the **master passcode** (one per firm; it opens
+   phone setup and the supervisor's actions) and **the firm's first admin** (email address, name,
+   password). It makes the secrets, the database and its logins, migrates and hardens the
+   database, makes the admin, and loads the **two sample projects** (a few minutes).
 2. **The local stack** makes its own certificate authority and a certificate for every service,
    downloads the pinned map extract once and checks it, builds the field app and the back office,
    starts every service and waits until each answers over HTTPS.
+3. **Every part is checked**, line by line (the database, its logins and guards, the API, the
+   worker, the sample and a monitor's sign-in), with the logs at their most detailed.
 
-When it finishes it prints where each part answers:
+When it finishes it prints where each part answers, how to sign in to the field app, and offers to
+follow the logs:
 
 | Part                                  | Address                         |
 | ------------------------------------- | ------------------------------- |
@@ -62,18 +71,12 @@ certificate installed and trusted as well.
 
 ## 3. Sign in
 
-The installer creates **nobody who can sign in**. Choose one:
-
-- **The firm's first admin**, as a real installation does it:
-
-  ```bash
-  pnpm installer:admin
-  ```
-
-  It runs on the machine that holds the API's settings, asks for the admin's name, email address and
-  password, and never prints a setting. The admin sets up an authenticator app at their first
-  sign-in.
-
+- **The back office**: as the first admin you named, with their email address and password. They
+  set up an authenticator app at their first sign-in.
+- **The field app**: the end of `pnpm start` lists the sample's six monitors, each with a Monitor
+  ID, a password and that day's work, and the badges to scan. Open the field app, enrol the phone
+  (any name, your master passcode), then sign in as one. On a later day, a monitor with no work on
+  the board sets the phone up with the master passcode.
 - **The dev stack's own accounts**, for trying things by hand on this machine only:
 
   ```bash
@@ -95,17 +98,18 @@ certifications, tickets, flags and ledger. Open the back office and pick a proje
 ## Stop, start again, start afresh
 
 ```bash
-pnpm local:status   # each service and its health
-pnpm local:down     # stop the containers; the data is kept
-pnpm local:up       # start them again
-pnpm local:wipe     # down, plus the data, the generated settings and the certificates
+pnpm stop             # stop it; its data is kept
+pnpm start --keep     # bring it back as it was
+pnpm start            # start afresh, as a first install
+pnpm logs             # follow its logs (Ctrl-C stops following)
+pnpm local:status     # each service and its health
+pnpm local:wipe       # everything gone, the certificates too
 ```
 
-`pnpm installer:teardown` drops the database and its logins and removes the installer's settings,
-so the next `pnpm start` runs like a first run. Every command is listed in
-[Commands](/reference/commands/).
+Every command is listed in [Commands](/reference/commands/).
 
 ## Next steps
 
-- [Install an installation](/get-started/install/): what each step sets up, and running it for real.
+- [Install on a server](/get-started/server/): a firm's real installation.
+- [Install an installation](/get-started/install/): what each step of the installer sets up.
 - [Set up a project](/guides/back-office/set-up-a-project/): your own project, from the client down.

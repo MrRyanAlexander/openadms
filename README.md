@@ -33,28 +33,37 @@ reimburse them. Open ADMS keeps those records straight.
 Your IT person or engineer opens **Terminal** on the computer or server that will run it, clicks
 the copy button on **one** of the boxes below, pastes it, and presses Enter.
 
-### ⭐ Option 1: with the two demo projects (best for a first look)
+### ⭐ Option 1: try it on your computer, with the two demo projects
 
 ```bash
 git clone https://github.com/MrRyanAlexander/openadms.git && cd openadms && corepack enable && pnpm install && pnpm start
 ```
 
 Comes with two made-up sample projects already full of tickets, forms and reviews, so you can click
-around everything before setting up your own. Their names start with **"Sample:"**.
+around everything before setting up your own. Their names start with **"Sample:"**. It is a test
+install: **every `pnpm start` begins fresh**, as if it had never been installed; `pnpm stop` stops
+it.
 
-### Option 2: blank (for your real work)
+### Option 2: on your firm's server (for your real work)
+
+On a Linux server with [Docker](https://docs.docker.com/engine/install/) (nothing else):
 
 ```bash
-git clone https://github.com/MrRyanAlexander/openadms.git && cd openadms && corepack enable && pnpm install && pnpm start:blank
+git clone https://github.com/MrRyanAlexander/openadms.git && cd openadms && ./adms install
 ```
 
-An empty installation, ready for your firm's own clients, contracts and projects.
+An empty installation at your firm's own web addresses, ready for its own clients, contracts and
+projects. It asks seven questions (your firm's name, what you call your ADMS, your domain, its
+certificates, email, your region's map data and the master passcode), then your first admin, and
+prints the addresses to open. See [Install on a server](apps/docs/src/content/docs/get-started/server.md).
 
-### Then
+### Then (Option 1)
 
-It asks **four questions**: your firm's name, what you call your ADMS, how to send email, and a
-**master passcode** your monitors' phones will use. Then it sets everything up (the first run takes
-a while; it downloads map data) and prints where to open it:
+It asks **five questions**: your firm's name, what you call your ADMS, how to send email, a
+**master passcode** your monitors' phones will use, and your **first admin** (who signs in to the
+back office). Then it sets everything up (the first run takes a while; it downloads map data),
+checks every part and prints where to open it, and the sample monitors' sign-ins for the field
+app:
 
 | Open | At |
 |---|---|
@@ -66,8 +75,8 @@ a while; it downloads map data) and prints where to open it:
 > [Docker Desktop](https://www.docker.com/products/docker-desktop/). Both are free installers.
 
 > [!WARNING]
-> Keep demo and real work apart. Use **Option 2** for an installation that will hold a firm's real
-> records.
+> Keep demo and real work apart. A test install starts fresh every time: use **Option 2**, on a
+> server, for an installation that will hold a firm's real records.
 
 <details>
 <summary><b>⚙️ Advanced setup</b> (step by step, test runs, every command)</summary>
@@ -81,12 +90,14 @@ cd openadms
 eval "$(fnm env --shell zsh)" && fnm use   # Node 24, pinned in .nvmrc (or install Node 24 any way you like)
 corepack enable                            # pnpm, pinned in package.json
 pnpm install
-pnpm start                                 # the installer, then the whole stack (pnpm start:blank for no demo)
+pnpm start                                 # a fresh test install, then the whole stack (pnpm start:blank for no demo)
 ```
 
-The installer asks its four questions on a first run, sets up the database, its roles and
-migrations, then builds and starts everything. A rerun re-checks what it knows and never remakes a
-secret. Answers can also come one per line on standard input, for a scripted install.
+`pnpm start` clears the test installation already here (the map data and certificates are kept),
+asks the installer's five questions, sets up the database, its roles and migrations, makes the
+first admin, builds and starts everything, loads the demo and checks every part. `pnpm start
+--keep` carries on with the one already here instead. Answers can also come one per line on
+standard input, for a scripted install.
 
 #### Your browser and the certificate
 
@@ -98,8 +109,12 @@ warning. The API answers at `https://api.adms.localhost`.
 
 | Command | What it does |
 |---|---|
-| `pnpm start` | Installs (first run), then brings the whole stack up, with the demo projects |
-| `pnpm start:blank` | The same, without the demo projects |
+| `pnpm start` | A fresh test install every time, with the demo projects, checked, then the addresses and the field app's sign-ins |
+| `pnpm start --keep` | Brings the test install back as it was, after `pnpm stop` |
+| `pnpm start:blank` | A fresh test install without the demo projects |
+| `pnpm stop` | Stops it, keeping its data |
+| `pnpm logs` | Follows its logs |
+| `./adms install` | A firm's real installation, on its own server ([every `./adms` command](apps/docs/src/content/docs/reference/commands.md)) |
 | `pnpm installer:admin` | Makes the firm's first admin (or lets an admin back in) |
 | `pnpm sample` | Loads the demo projects later, into an installation that doesn't have them |
 | `pnpm local:up` | Brings the stack up again, after it was stopped |

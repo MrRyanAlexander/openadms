@@ -6,21 +6,38 @@ description: Every command run from the repository's root - bringing an installa
 Every command runs from the repository's root, after `eval "$(fnm env --shell zsh)"` (Node 24) and
 `pnpm install`.
 
-## Bring it up
+## On a firm's server
 
-| Command      | What it does                                                                                                                                  |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm start` | The one command: the installer (its questions on a first run, a check and a resume after), then the local stack, then where each part answers |
-| `pnpm ready` | Start the local stack and check the installation, changing nothing                                                                            |
+Run from the release's folder on the server, with Docker alone ([Install on a server](/get-started/server/)):
+
+| Command           | What it does                                                                                                                                                                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `./adms install`  | The firm's seven answers, its database and settings, its first admin, every service built and started, checked, and its addresses printed. Once per server; `--port`, `--http-port` and `--bind` listen elsewhere than `0.0.0.0:443` and `:80` |
+| `./adms start`    | Start it again, its certificates renewed where they end, then check every part                                                                                                                                                                 |
+| `./adms stop`     | Stop it; every record and file is kept                                                                                                                                                                                                         |
+| `./adms status`   | Each service's state, every part checked, the addresses                                                                                                                                                                                        |
+| `./adms logs`     | Its logs, warnings and errors; `-f` follows, a service's name narrows them                                                                                                                                                                     |
+| `./adms admin`    | Make the firm's first admin, or let an admin back in                                                                                                                                                                                           |
+| `./adms root`     | The installation's own root certificate, where its addresses use it                                                                                                                                                                            |
+| `./adms licences` | The licences of everything it is built on                                                                                                                                                                                                      |
+
+## The test install, on a developer's computer
+
+| Command      | What it does                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm start` | A fresh test installation every time: the one already here cleared (the map data and certificates kept), the installer's five questions, everything built and started, the sample loaded, every part checked, then the addresses, the field app's sign-ins and an offer to follow the logs. `--keep` carries on with the one here; `--no-sample` (`pnpm start:blank`) leaves the sample out |
+| `pnpm stop`  | Stop it; its data is kept for `pnpm start --keep`                                                                                                                                                                                                                                                                                                                                           |
+| `pnpm logs`  | Follow the API's, the worker's, Caddy's and Postgres's logs (at debug)                                                                                                                                                                                                                                                                                                                      |
+| `pnpm ready` | Start the local stack and check the installation, changing nothing                                                                                                                                                                                                                                                                                                                          |
 
 ## The installer
 
-| Command                   | What it does                                                                                                                                                                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm installer`          | First run: four questions, the secrets, the database, the sample projects. A rerun checks what it knows, asks to confirm and resume, and never makes a secret twice. Add `--no-sample` to skip the sample projects, `--yes` to answer yes to confirmations |
-| `pnpm installer:check`    | Check what it knows; change nothing (exit 1 if something is off)                                                                                                                                                                                           |
-| `pnpm installer:teardown` | Drop the database and its logins; remove the settings and the installer's record                                                                                                                                                                           |
-| `pnpm installer:admin`    | Make the firm's first admin, or let an admin back in, on the machine that holds the API's settings                                                                                                                                                         |
+| Command                   | What it does                                                                                                                                                                                                                                                                              |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm installer`          | First run: five questions (the first admin's among them), the secrets, the database, the sample projects. A rerun checks what it knows, asks to confirm and resume, and never makes a secret twice. Add `--no-sample` to skip the sample projects, `--yes` to answer yes to confirmations |
+| `pnpm installer:check`    | Check what it knows; change nothing (exit 1 if something is off)                                                                                                                                                                                                                          |
+| `pnpm installer:teardown` | Drop the database and its logins; remove the settings and the installer's record                                                                                                                                                                                                          |
+| `pnpm installer:admin`    | Make the firm's first admin, or let an admin back in, on the machine that holds the API's settings                                                                                                                                                                                        |
 
 ## The local stack
 

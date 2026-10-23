@@ -9,14 +9,15 @@ confidence and run it again safely. For the shortest path, see the [Quick start]
 
 ## Where an installation runs
 
-| Environment            | What runs                                                                                                                                                                                | HTTPS                                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Local**              | One Docker Compose stack: Postgres, an S3-compatible object store, the API, the worker, Valhalla (road routing), Nominatim (addresses) and Caddy, with the web apps served through Caddy | The stack's own certificate authority; names under `*.adms.localhost`; every hop inside the stack over TLS too |
-| **A firm's own cloud** | The same containers, on the firm's servers                                                                                                                                               | The firm's certificates                                                                                        |
+| Environment         | What runs                                                                                                                                                                                | HTTPS                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Local**           | One Docker Compose stack: Postgres, an S3-compatible object store, the API, the worker, Valhalla (road routing), Nominatim (addresses) and Caddy, with the web apps served through Caddy | The stack's own certificate authority; names under `*.adms.localhost`; every hop inside the stack over TLS too |
+| **A firm's server** | The same services, built into images on the server (`./adms install`); no mail catcher, no sample, no test database                                                                      | Let's Encrypt's for the firm's domain, or the installation's own root; every hop inside over TLS               |
 
-Everything runs and is tested locally, over HTTPS, before anything moves to a cloud. A firm's own
-cloud is documented, not scripted: it runs the same containers with its own certificates, secret
-store and backups.
+The **test install** (`pnpm start`, the [Quick start](/get-started/quick-start/)) runs on a
+developer's computer and starts fresh every time. A firm's real installation runs on its own
+server: see [Install on a server](/get-started/server/). This page explains the installer the test
+install runs.
 
 ## The installer
 
@@ -26,11 +27,12 @@ pnpm installer:check    # check what it knows, change nothing (exit 1 if somethi
 pnpm installer:teardown # drop the database and its logins, remove its settings and its record
 ```
 
-`pnpm start` runs `pnpm installer` and then `pnpm local:up`.
+`pnpm start` clears the test installation, then runs `pnpm installer`, which brings the local stack
+up, and checks every part.
 
 ### A first run
 
-The installer asks four questions:
+The installer asks five questions:
 
 1. **The firm** that runs this installation (its name).
 2. **What the firm calls its ADMS**, shown across the back office (it defaults from the firm's name;
@@ -40,6 +42,9 @@ The installer asks four questions:
 4. **The master passcode**: one per firm. It opens phone enrolment and setup and the supervisor's
    actions on a phone. A passcode that is too short, too long or on the list of known breached
    passwords is refused; only its slow hash is kept, in the database.
+5. **The firm's first admin**: their email address, name and password (held to the release's
+   password policy). They are made once the API is up, so the back office can be signed in to at
+   once.
 
 It then confirms and:
 
@@ -65,13 +70,13 @@ migrations are at head), shows you what it knows, and asks whether to resume. It
 for what it already knows except to confirm it, **never prints a secret**, and **never rotates its
 secrets** on a resume. After `pnpm installer:teardown`, the next run behaves like a first run.
 
-Add `--yes` to answer yes to its confirmations in a scripted run (a first run still needs its four
+Add `--yes` to answer yes to its confirmations in a scripted run (a first run still needs its
 answers, one per line on standard input).
 
 ## The first admin
 
-The installer seeds **nobody who can sign in**. Make the firm's first admin on the machine that
-holds the API's settings:
+A first run makes the firm's first admin from its fifth question. Where none was made, make one on
+the machine that holds the API's settings:
 
 ```bash
 pnpm installer:admin

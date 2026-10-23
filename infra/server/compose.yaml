@@ -1,0 +1,403 @@
+# Open ADMS on a firm's server (the user, 2026-10-23; agent_store/BUILD.md, Settled 11;
+# ARCHITECTURE §4). Run it through `./adms` at the repository's root, never by hand: `./adms
+# install` builds the images on this server from the release it holds, asks the firm's answers
+# and starts everything; `./adms start | stop | status | logs | admin | root | licences` after.
+# The server needs Docker Engine with Compose alone.
+#
+# The same services as the local stack (infra/local/compose.yaml), hardened the same way, and:
+# - **The firm's own addresses**: Caddy answers at office., field. and api. under the firm's
+#   domain, with Let's Encrypt's certificates, or the installation's own root's where the server
+#   has no public name; nothing else is reachable from outside. The map servers and the object
+#   store answer only on the installation's own network, over TLS.
+# - **Every hop over TLS from the installation's own root**, made by the installer
+#   (tools/setup/src/server.ts) as the local stack's helper makes its own.
+# - **Each service's secrets in a volume of its own**, owned by the user its container runs as and
+#   mounted at /run/adms, readable by nobody else (a file on the server's disk would be owned by
+#   whoever ran the install, not by the container's user). Only the setup container sees them all.
+# - **Lean**: built images, no mail catcher, no sample, no test database, logs at warn
+#   (ADMS_LOG_LEVEL; `./adms logs` reads them).
+#
+# Its settings (names, ports, the map extract) are the installer's .env beside this file, which
+# `./adms install` writes; nothing secret is in it or here. Every image is pinned by tag and
+# digest, as the local stack's are.
+name: open-adms
+
+x-hardening: &hardening
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+
+x-build: &build
+  context: ../..
+  dockerfile: infra/server/Dockerfile
+
+services:
+  # The installer's server mode, on demand only (`./adms`, `docker compose run setup …`): it
+  # makes and places every secret, so it runs as root, with only the capabilities that takes.
+  setup:
+    profiles: ['setup']
+    build:
+      <<: *build
+      target: setup
+    image: open-adms/setup:local
+    user: '0:0'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    environment:
+      ADMS_BIND: ${ADMS_BIND:-0.0.0.0}
+      ADMS_HTTPS_PORT: ${ADMS_HTTPS_PORT:-443}
+      ADMS_HTTP_PORT: ${ADMS_HTTP_PORT:-80}
+    volumes:
+      - setup_state:/adms/state
+      - postgres_secrets:/adms/postgres
+      - objectstore_secrets:/adms/objectstore
+      - routing_secrets:/adms/routing
+      - addresses_secrets:/adms/addresses
+      - api_secrets:/adms/api
+      - worker_secrets:/adms/worker
+      - caddy_secrets:/adms/caddy
+      - maps:/adms/maps
+
+  postgres:
+    <<: *hardening
+    image: postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+    user: '999:999'
+    tmpfs:
+      - /var/run/postgresql:uid=999,gid=999,mode=0775
+      - /tmp:uid=999,gid=999,mode=0700
+    # TLS alone (ARCHITECTURE §5.7): every login over TCP is `hostssl` (the local stack's
+    # pg_hba.conf), and every service's login asks `verify-full`.
+    command:
+      - postgres
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/adms/tls/postgres.crt
+      - -c
+      - ssl_key_file=/run/adms/tls/postgres.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+      - -c
+      - hba_file=/etc/adms/pg_hba.conf
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/adms/password
+    # No port is published: only the installation's own network reaches it.
+    volumes:
+      - pg_data:/var/lib/postgresql
+      - postgres_secrets:/run/adms:ro
+      - ../local/postgres/pg_hba.conf:/etc/adms/pg_hba.conf:ro
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  objectstore:
+    <<: *hardening
+    image: chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882
+    user: '1000:1000'
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=0700
+    # As on the local stack: every part on the container's own loopback; S3 reached only through
+    # `objectstore-tls`, and that only from the installation's network (the API).
+    command:
+      - server
+      - -dir=/data
+      - -ip=127.0.0.1
+      - -ip.bind=127.0.0.1
+      - -master.telemetry=false
+      - -master.volumeSizeLimitMB=1024
+      - -volume.max=0
+      - -filer
+      - -s3
+      - -s3.port=8334
+      - -s3.config=/run/adms/s3.json
+      - -s3.port.iceberg=0
+      - -s3.port.lance=0
+      - -s3.allowDeleteBucketNotEmpty=false
+    volumes:
+      - objectstore_data:/data
+      - objectstore_secrets:/run/adms:ro
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8334/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  objectstore-tls:
+    <<: *hardening
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: service:objectstore
+    user: '1000:1000'
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      SSL_CERT_FILE: /run/adms/tls/root.crt
+    volumes:
+      - ../local/objectstore/Caddyfile:/etc/caddy/Caddyfile:ro
+      - objectstore_secrets:/run/adms:ro
+    depends_on:
+      objectstore:
+        condition: service_healthy
+        restart: true
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'https://objectstore:8333/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  routing:
+    <<: *hardening
+    image: ghcr.io/valhalla/valhalla:3.9.0@sha256:511c095b8caf393dccceb8b519ec96b6f85a0166b2288ba014a8a748acc5a63c
+    user: '0:0'
+    tmpfs:
+      - /tmp
+    command: ['bash', '/opt/open-adms/start.sh']
+    environment:
+      ADMS_MAP_NAME: ${ADMS_MAP_NAME:-}
+      ADMS_MAP_SHA256: ${ADMS_MAP_SHA256:-}
+    volumes:
+      - ../local/routing/start.sh:/opt/open-adms/start.sh:ro
+      - maps:/maps:ro
+      - routing_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '-o', '/dev/null', 'http://127.0.0.1:8002/status']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # Building the road tiles (a first start, or a new extract) comes before the first answer.
+      start_period: 3600s
+
+  routing-tls:
+    <<: *hardening
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
+    network_mode: service:routing
+    user: '1000:1000'
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /data:uid=1000,gid=1000,mode=0700
+      - /config:uid=1000,gid=1000,mode=0700
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile', '--adapter', 'caddyfile']
+    environment:
+      SSL_CERT_FILE: /run/adms/tls/root.crt
+    volumes:
+      - ../local/routing/Caddyfile:/etc/caddy/Caddyfile:ro
+      - routing_secrets:/run/adms:ro
+    depends_on:
+      routing:
+        condition: service_started
+        restart: true
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'https://routing:8443/status']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 3600s
+
+  addresses:
+    restart: unless-stopped
+    # Hardened as far as its image allows, as on the local stack (its compose file says why).
+    image: mediagis/nominatim:5.3.2-2026-06-23T09-03@sha256:7923a8e67197fc6d4f4ecb7c0e8bbedffeddcfdf4519596fe946e46a28f5a9f8
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+      - KILL
+    command: ['bash', '/opt/open-adms/start.sh']
+    environment:
+      ADMS_MAP_NAME: ${ADMS_MAP_NAME:-}
+      ADMS_MAP_SHA256: ${ADMS_MAP_SHA256:-}
+      PBF_PATH: /maps/region.osm.pbf
+      FREEZE: 'true'
+      REVERSE_ONLY: 'true'
+      IMPORT_STYLE: address
+      THREADS: '4'
+      GUNICORN_WORKERS: '2'
+      GUNICORN_CMD_ARGS: --certfile=/run/adms/tls/addresses.crt --keyfile=/run/adms/tls/addresses.key --no-control-socket
+    shm_size: 1gb
+    volumes:
+      - ../local/addresses/start.sh:/opt/open-adms/start.sh:ro
+      - maps:/maps:ro
+      - addresses_data:/var/lib/postgresql/16/main
+      - addresses_secrets:/run/adms:ro
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - -o
+        - /dev/null
+        - --cacert
+        - /run/adms/tls/root.crt
+        - --resolve
+        - addresses:8080:127.0.0.1
+        - https://addresses:8080/status
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      # The import (a first start, or a new extract) comes before the first answer.
+      start_period: 7200s
+
+  api:
+    <<: *hardening
+    build:
+      <<: *build
+      target: app
+    image: open-adms/app:local
+    user: '1000:1000'
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/api/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_LOG_LEVEL: warn
+      ADMS_ENV_FILE: /run/adms/api.env
+      ADMS_API_HOST: 0.0.0.0
+      ADMS_API_PORT: '3000'
+    volumes:
+      - api_secrets:/run/adms:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      objectstore-tls:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('node:https').get({ host: '127.0.0.1', port: 3000, path: '/health', servername: 'api', ca: require('node:fs').readFileSync('/run/adms/tls/root.crt') }, (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *hardening
+    image: open-adms/app:local
+    user: '1000:1000'
+    working_dir: /srv/open-adms
+    command: ['node', 'apps/worker/dist/main.js']
+    environment:
+      NODE_ENV: production
+      ADMS_LOG_LEVEL: warn
+      ADMS_ENV_FILE: /run/adms/worker.env
+      ADMS_WORKER_HOST: 127.0.0.1
+      ADMS_WORKER_PORT: '3001'
+    volumes:
+      - worker_secrets:/run/adms:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  caddy:
+    <<: *hardening
+    build:
+      <<: *build
+      target: web
+      args:
+        ADMS_OFFICE_API_ORIGIN: ${ADMS_OFFICE_API_ORIGIN:-}
+        ADMS_FIELD_API_ORIGIN: ${ADMS_FIELD_API_ORIGIN:-}
+    image: open-adms/web:local
+    user: '1000:1000'
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /config:uid=1000,gid=1000,mode=0700
+    command:
+      [
+        'caddy',
+        'run',
+        '--config',
+        '/etc/caddy/Caddyfile.${ADMS_TLS_MODE:-acme}',
+        '--adapter',
+        'caddyfile',
+      ]
+    environment:
+      ADMS_OFFICE_HOST: ${ADMS_OFFICE_HOST:-}
+      ADMS_FIELD_HOST: ${ADMS_FIELD_HOST:-}
+      ADMS_API_HOST: ${ADMS_API_HOST:-}
+      ADMS_API_ORIGIN: ${ADMS_OFFICE_API_ORIGIN:-}
+      ADMS_ACME_EMAIL: ${ADMS_ACME_EMAIL:-}
+    networks:
+      default:
+        ipv4_address: 172.30.214.2
+    ports:
+      - '${ADMS_BIND:-0.0.0.0}:${ADMS_HTTPS_PORT:-443}:443'
+      - '${ADMS_BIND:-0.0.0.0}:${ADMS_HTTP_PORT:-80}:80'
+    volumes:
+      # What Caddy keeps: its Let's Encrypt account and certificates, kept across restarts (its
+      # rate limits allow few new ones a week).
+      - caddy_data:/data
+      - caddy_secrets:/run/adms:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:2019/config/']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+# The installation's own network, Caddy's address fixed (ADR-416), apart from the local stack's.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.30.214.0/24
+          ip_range: 172.30.214.128/25
+
+volumes:
+  # The installation's records and files: its evidence, kept indefinitely (ARCHITECTURE §4,
+  # Backups: back these two up).
+  pg_data:
+  objectstore_data:
+  # Built from the firm's map extract, again whenever it changes.
+  maps:
+  routing_data:
+  addresses_data:
+  caddy_data:
+  # Each service's secrets, and the setup's own (every secret, the root's key).
+  setup_state:
+  postgres_secrets:
+  objectstore_secrets:
+  routing_secrets:
+  addresses_secrets:
+  api_secrets:
+  worker_secrets:
+  caddy_secrets:
