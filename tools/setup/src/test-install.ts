@@ -18,6 +18,7 @@ import { createInterface } from 'node:readline';
 import { join } from 'node:path';
 
 import type { Installer } from './installer.ts';
+import { backOfficeSignIn } from './sign-in.ts';
 
 export class TestInstall {
   private readonly root: string;
@@ -46,6 +47,10 @@ export class TestInstall {
     const allWell = await this.installer.check();
     if (!flags.includes('--no-sample')) this.sampleChecked();
     this.helper(['report']);
+    const { port, email } = this.installer.backOfficeSignIn();
+    if (email !== undefined) {
+      for (const line of backOfficeSignIn(port, email)) console.log(line);
+    }
     console.log(
       allWell
         ? '\nEvery check passed.'

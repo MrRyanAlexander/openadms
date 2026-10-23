@@ -266,6 +266,14 @@ export class Installer {
     }
   }
 
+  // The back office address's port and the first admin's email, for `pnpm start` to show; the
+  // password is never kept.
+  backOfficeSignIn(): { port: string | undefined; email: string | undefined } {
+    const port = this.stackEnv.exists() ? this.stackEnv.read()['ADMS_HTTPS_PORT'] : undefined;
+    const email = this.state.exists() ? this.state.load().admin : undefined;
+    return { port, email };
+  }
+
   // What a test install's fresh start clears beside the local stack's data (`pnpm start`; the
   // user, 2026-10-23): the env files and the installation record, so the next run is a first run.
   // The database they opened went with the stack's data volume, so there is nothing to drop.
