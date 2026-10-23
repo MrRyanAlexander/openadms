@@ -50,31 +50,21 @@ exist; and the golden mission run through the screens to the approved numbers.
 - [x] **Reports and exports:** debris totals; the daily report PDF and email summary; exports (CSV,
       Excel-compatible, JSON); photo PDFs; the receipt batch.
 - [x] **The viewer portal:** a viewer's projects, tickets and history, read-only, over `/viewer/…`.
-- [ ] **Up and proven:** the one command; the golden mission through every screen (done when 2);
+- [x] **Up and proven:** the one command; the golden mission through every screen (done when 2);
       the chain green and recorded; SECURITY.md; the conformance notes.
 
-## Where the last part stands (progress note, 2026-10-22)
+## Where the build stands (progress note, 2026-10-22)
 
-Done for **Up and proven**: the one command (`pnpm start`: installer, then `local:up`, then where
-each part answers); `SECURITY.md`; `spec/ACCESSIBILITY-OFFICE.md` (the field app's is
-`spec/ACCESSIBILITY-FIELD.md`); the chain's earlier findings fixed (commit ba57797). The back
-office's mission run (`apps/back-office/playwright.mission.config.ts`) already reviews, QCs and
-locks the mission on the screens to P1 $5,548.25 on 19 lines and P2 $324.00 on 2, and a viewer
-reads it.
-
-Left:
-1. **Done-when 2, one test through every screen**: `apps/field/e2e/golden-mission.mission.ts` now
-   sets P1 and P2 up on the back office's screens (`apps/field/e2e/office-desk.ts`, against the
-   mission's world opened with `screens`: `packages/scenarios/src/mission-world.ts` `adopt`),
-   captures on the field app as before, then reviews, QCs, locks and reads the ledger and the
-   portal on the back office. Its first test (the setup on the screens, then the world adopting it) passes on its own
-   (4.4 minutes). The rest hasn't been run whole yet: the field days, then the review, QC, lock,
-   ledgers and the portal. Run it with
-   `cd apps/field && npx playwright test --config playwright.mission.config.ts` (about 25
-   minutes), fix what it finds, and commit.
-2. **After `pnpm local:up` again** (the API changed: fastify 5.12.7), `pnpm chain`, then
-   `pnpm chain record`. The field app's `certify.e2e.ts` failed once under the chain's load on
-   WCAG 2.4.11 (passes alone): watch it.
+**Every part is done.** The one command is `pnpm start` (the installer, then `local:up`, then where
+each part answers). The golden mission through every screen
+(`cd apps/field && npx playwright test --config playwright.mission.config.ts`) passes whole: 7
+tests in 3.3 minutes. P1 and P2 are set up on the back office's screens, captured on the field app,
+reviewed, QC'd and locked on the back office, and the ledger reads P1 $5,548.25 on 19 lines and P2
+$324.00 on 2. A viewer reads 101002 in the portal. 22 screens passed with 0 accessibility findings.
+`pnpm chain` is green on commit 6ca71e4: 10 of 10 steps, 60 of 60 screens with 0 findings, and the
+field app's `certify.e2e.ts` passed under load this time. The counts are recorded
+(`pnpm chain record`, `agent_store/CHAIN.md`). `SECURITY.md` is written, and so are the conformance
+notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`).
 
 ## How the agent works
 
