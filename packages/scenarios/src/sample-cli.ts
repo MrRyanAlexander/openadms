@@ -72,6 +72,26 @@ async function standing(): Promise<Awaited<ReturnType<typeof sampleStanding>>> {
   }
 }
 
+// When the installation's master passcode in force was set, in the sample's time zone; none
+// where it holds no passcode yet.
+async function passcodeSetOn(): Promise<string | undefined> {
+  const stage = await installationStage({ passcode: '' });
+  try {
+    const current = await stage.context.api.masterPasscode.findFirst({
+      orderBy: { version: 'desc' },
+      select: { createdAt: true },
+    });
+    return current?.createdAt.toLocaleDateString('en-US', {
+      timeZone: sample.timeZone,
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } finally {
+    await stage.close();
+  }
+}
+
 // Where a load into the installation leaves how to try the field app on it.
 export const signInsFile = fileURLToPath(
   new URL('../../../infra/local/.generated/sample-field-sign-ins.txt', import.meta.url),
@@ -230,7 +250,22 @@ async function main(args: readonly string[]): Promise<number> {
       return 0;
     }
   }
-  const passcode = await asked('The firm’s master passcode, to enrol the sample’s phones', true);
+  if (process.stdin.isTTY) {
+    // Not a new passcode: the one the installation already holds (the user, 2026-10-23, took
+    // this question for the passcode's first setting, which is the installer's own first run).
+    const since = await passcodeSetOn();
+    say('');
+    say(
+      'The sample’s phones are enrolled as real ones are, under the firm’s master passcode: type the one',
+    );
+    say(
+      `this installation already has${since === undefined ? '' : ` (set or last changed ${since})`}. This sets no new passcode.`,
+    );
+    say(
+      'Forgotten it? An admin changes it in the back office (The firm, The firm’s settings), then run `pnpm sample`.',
+    );
+  }
+  const passcode = await asked('The installation’s master passcode', true);
   if (passcode === '') {
     say('No passcode: nothing was done.');
     return 1;
