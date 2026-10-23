@@ -16,52 +16,52 @@ below (51 browser tests). The table was carried over from the hand-written page 
 <!-- counts: written by `pnpm chain record`, never by hand -->
 | Step | Its newest run | Took | Passed |
 |---|---|---|---|
-| `local:up` | 2026-10-23 00:12 UTC | 11s | ✓ |
-| `installer:check` | 2026-10-23 00:12 UTC | 2s | ✓ |
-| `install` | 2026-10-23 00:12 UTC | 0s | ✓ |
-| `typecheck` | 2026-10-23 00:12 UTC | 5s | ✓ |
-| `test` | 2026-10-23 00:12 UTC | 5m 02s | ✓ |
-| `scenarios` | 2026-10-23 00:17 UTC | 3m 51s | ✓ |
-| `e2e` | 2026-10-23 00:21 UTC | 4m 44s | ✓ |
-| `security` | 2026-10-23 00:26 UTC | 10s | ✓ |
-| `lint` | 2026-10-23 00:26 UTC | 1m 03s | ✓ |
-| `licences` | 2026-10-23 00:27 UTC | 1s | ✓ |
+| `local:up` | 2026-10-23 05:34 UTC | 22s | ✓ |
+| `installer:check` | 2026-10-23 05:34 UTC | 2s | ✓ |
+| `install` | 2026-10-23 05:34 UTC | 0s | ✓ |
+| `typecheck` | 2026-10-23 05:34 UTC | 3s | ✓ |
+| `test` | 2026-10-23 05:34 UTC | 4m 34s | ✓ |
+| `scenarios` | 2026-10-23 05:39 UTC | 3m 28s | ✓ |
+| `e2e` | 2026-10-23 05:43 UTC | 4m 24s | ✓ |
+| `security` | 2026-10-23 05:47 UTC | 10s | ✓ |
+| `lint` | 2026-10-23 05:47 UTC | 1m 04s | ✓ |
+| `licences` | 2026-10-23 05:48 UTC | 1s | ✓ |
 
 | Step | Count | Today |
 |---|---|---|
-| `installer:check` | installer:check ✓ | 38 |
-| `installer:check` | migrations at head | 152 |
-| `test` | test files | 229 |
-| `test` | tests | 3822 |
-| `test` | tests in apps/api | 793 |
+| `installer:check` | installer:check ✓ | 41 |
+| `installer:check` | migrations at head | 154 |
+| `test` | test files | 239 |
+| `test` | tests | 3883 |
+| `test` | tests in apps/api | 797 |
 | `test` | files in apps/api | 64 |
-| `test` | tests in apps/back-office | 64 |
-| `test` | files in apps/back-office | 2 |
-| `test` | tests in apps/field | 257 |
-| `test` | files in apps/field | 21 |
+| `test` | tests in apps/back-office | 83 |
+| `test` | files in apps/back-office | 4 |
+| `test` | tests in apps/field | 262 |
+| `test` | files in apps/field | 22 |
 | `test` | tests in apps/worker | 51 |
 | `test` | files in apps/worker | 6 |
 | `test` | tests in infra/local | 77 |
 | `test` | files in infra/local | 6 |
-| `test` | tests in packages/contracts | 102 |
-| `test` | files in packages/contracts | 9 |
-| `test` | tests in packages/db | 1113 |
-| `test` | files in packages/db | 50 |
-| `test` | tests in packages/domain | 942 |
-| `test` | files in packages/domain | 51 |
+| `test` | tests in packages/contracts | 107 |
+| `test` | files in packages/contracts | 10 |
+| `test` | tests in packages/db | 1127 |
+| `test` | files in packages/db | 52 |
+| `test` | tests in packages/domain | 946 |
+| `test` | files in packages/domain | 52 |
 | `test` | tests in packages/look | 17 |
 | `test` | files in packages/look | 2 |
 | `test` | tests in packages/receipts | 37 |
 | `test` | files in packages/receipts | 3 |
-| `test` | tests in packages/scenarios | 168 |
-| `test` | files in packages/scenarios | 8 |
+| `test` | tests in packages/scenarios | 170 |
+| `test` | files in packages/scenarios | 9 |
 | `test` | tests in tools/chain | 20 |
 | `test` | files in tools/chain | 1 |
 | `test` | tests in tools/security | 161 |
 | `test` | files in tools/security | 3 |
-| `test` | tests in tools/setup | 20 |
-| `test` | files in tools/setup | 3 |
-| `scenarios` | story migrations | 152 |
+| `test` | tests in tools/setup | 28 |
+| `test` | files in tools/setup | 5 |
+| `scenarios` | story migrations | 154 |
 | `scenarios` | checks in ticket-101001 | 16 |
 | `scenarios` | checks in dispatch-monday | 22 |
 | `scenarios` | checks in setup | 52 |
@@ -86,11 +86,12 @@ below (51 browser tests). The table was carried over from the hand-written page 
 | `scenarios` | checks in interrupted-upload | 8 |
 | `scenarios` | checks in burst | 8 |
 | `scenarios` | checks in lost-phone-key | 14 |
-| `scenarios` | stories | 24 |
-| `e2e` | browser tests | 69 |
+| `scenarios` | checks in sample-projects | 18 |
+| `scenarios` | stories | 25 |
+| `e2e` | browser tests | 71 |
 | `e2e` | screens | 60 |
-| `security` | grant test files | 50 |
-| `security` | grant tests | 1113 |
+| `security` | grant test files | 52 |
+| `security` | grant tests | 1127 |
 | `security` | security checks | 20 |
 | `licences` | licensed packages | 470 |
 <!-- end of counts -->
