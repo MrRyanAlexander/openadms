@@ -13,13 +13,18 @@ import type { Database } from '@open-adms/db';
 
 import type { AuditTrail } from '../review/audit-trail.ts';
 import type { ReviewReads } from '../review/review-reads.ts';
-import type { Ledger, LedgerAsked } from '../money/ledger.ts';
+import type { Ledger, LedgerAsked, TicketsAsked } from '../money/ledger.ts';
+import type { Heading } from './table-pdf.ts';
 import { tableFile, type Column, type TableFile, type TableFormat } from './table-file.ts';
 
 export type ExportDataset = (typeof exportDatasets)[number];
 
 // What every export is narrowed by: the ledger's own filters (the audit history takes none).
-export type ExportAsked = Omit<LedgerAsked, 'after' | 'limit'>;
+export type ExportAsked = Omit<LedgerAsked, 'after' | 'limit'> & {
+  // Of the tickets only, as the tickets list narrows.
+  readonly status?: TicketsAsked['status'];
+  readonly qcStatus?: TicketsAsked['qcStatus'];
+};
 
 // A page as large as the reads let one be.
 const page = 200;
@@ -31,6 +36,13 @@ type CertificationRow = Awaited<
 >['certifications'][number];
 type AuditEntry = Awaited<ReturnType<AuditTrail['projectHistory']>>['entries'][number];
 
+const datasetTitles: Readonly<Record<ExportDataset, string>> = {
+  tickets: 'Tickets',
+  transactions: 'Transactions',
+  certifications: 'Certifications',
+  'audit-history': 'Audit history',
+};
+
 const transactionColumns: readonly Column<LedgerLine>[] = [
   { name: 'workflow', cell: (line) => line.workflow },
   { name: 'ticket_number', cell: (line) => line.ticketNumber },
@@ -41,9 +53,9 @@ const transactionColumns: readonly Column<LedgerLine>[] = [
   { name: 'pay_item_description', cell: (line) => line.payItem.description },
   { name: 'payable_type', cell: (line) => line.payableType },
   { name: 'unit', cell: (line) => line.unit },
-  { name: 'quantity', cell: (line) => line.quantity },
-  { name: 'rate', cell: (line) => line.rate },
-  { name: 'amount', cell: (line) => line.amount },
+  { name: 'quantity', numeric: true, cell: (line) => line.quantity },
+  { name: 'rate', numeric: true, cell: (line) => line.rate },
+  { name: 'amount', numeric: true, cell: (line) => line.amount },
   { name: 'contract', cell: (line) => line.contract.name },
   { name: 'prime', cell: (line) => line.prime.name },
   { name: 'operating_sub', cell: (line) => line.operatingSub?.name ?? null },
@@ -72,7 +84,7 @@ const ticketColumns: readonly Column<ProjectTicket>[] = [
   { name: 'locked', cell: (ticket) => ticket.lock !== null },
   { name: 'invoice_batch', cell: (ticket) => ticket.lock?.invoiceBatch?.name ?? null },
   { name: 'lines', cell: (ticket) => ticket.lines },
-  { name: 'amount', cell: (ticket) => ticket.amount },
+  { name: 'amount', numeric: true, cell: (ticket) => ticket.amount },
   { name: 'why_not_lockable', cell: (ticket) => ticket.lockRefusal?.message ?? null },
 ];
 
@@ -115,6 +127,7 @@ export class Exports {
     format: TableFormat,
     asked: ExportAsked,
   ): Promise<TableFile & { readonly rows: number }> {
+    const heading = await this.headingFor(projectId, dataset, asked);
     switch (dataset) {
       case 'transactions': {
         const rows = await everyPage<LedgerLine>(async (after) => {
@@ -125,7 +138,7 @@ export class Exports {
           });
           return { rows: read.lines, next: read.next };
         });
-        return { ...tableFile(format, transactionColumns, rows), rows: rows.length };
+        return { ...tableFile(format, transactionColumns, rows, heading), rows: rows.length };
       }
       case 'tickets': {
         const rows: ProjectTicket[] = [];
@@ -136,6 +149,8 @@ export class Exports {
             ...(await everyPage<ProjectTicket>(async (after) => {
               const read = await this.ledger.tickets(readerId, projectId, {
                 workflow,
+                status: asked.status,
+                qcStatus: asked.qcStatus,
                 locked: asked.locked,
                 invoiceBatchId: asked.invoiceBatchId,
                 from: asked.from,
@@ -147,7 +162,7 @@ export class Exports {
             })),
           );
         }
-        return { ...tableFile(format, ticketColumns, rows), rows: rows.length };
+        return { ...tableFile(format, ticketColumns, rows, heading), rows: rows.length };
       }
       case 'certifications': {
         const rows = await everyPage<CertificationRow>(async (after) => {
@@ -188,16 +203,57 @@ export class Exports {
             cell: (row) => row.flags.filter((flag) => flag.clearedAt === null).length,
           },
         ];
-        return { ...tableFile(format, columns, rows), rows: rows.length };
+        return { ...tableFile(format, columns, rows, heading), rows: rows.length };
       }
       case 'audit-history': {
         const rows = await everyPage<AuditEntry>(async (after) => {
           const read = await this.audit.projectHistory(readerId, projectId, { after, limit: page });
           return { rows: read.entries, next: read.next };
         });
-        return { ...tableFile(format, auditColumns, rows), rows: rows.length };
+        return { ...tableFile(format, auditColumns, rows, heading), rows: rows.length };
       }
     }
+  }
+
+  // What a workbook's sheet and a PDF's title say: the project, the dataset, what narrows it, and
+  // when it was made in the project's time zone.
+  private headingFor(
+    projectId: string,
+    dataset: ExportDataset,
+    asked: ExportAsked,
+  ): Promise<Heading & { readonly sheet: string }> {
+    return this.db.$read(async (tx) => {
+      const project = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { name: true, timeZone: true },
+      });
+      const narrowed = [
+        asked.workflow === undefined ? null : `Workflow: ${asked.workflow}`,
+        asked.status === undefined ? null : `Status: ${asked.status}`,
+        asked.qcStatus === undefined ? null : `QC status: ${asked.qcStatus}`,
+        asked.locked === undefined ? null : `Locked as invoiced: ${asked.locked ? 'yes' : 'no'}`,
+        asked.invoiceBatchId === undefined ? null : 'One invoice batch',
+        asked.payItemId === undefined ? null : 'One pay item',
+        asked.primeId === undefined ? null : 'One prime',
+        asked.from === undefined && asked.to === undefined
+          ? null
+          : `Days: ${asked.from ?? 'first'} to ${asked.to ?? 'last'}`,
+      ].filter((each) => each !== null);
+      const made = new Intl.DateTimeFormat('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: project.timeZone,
+      }).format(new Date());
+      return {
+        sheet: datasetTitles[dataset],
+        title: `${project.name}: ${datasetTitles[dataset]}`,
+        lines: [
+          narrowed.length === 0 ? 'Not narrowed: every record' : narrowed.join(' · '),
+          `Generated ${made} (${project.timeZone})`,
+        ],
+        page: (at, of) => `Page ${String(at)} of ${String(of)}`,
+      };
+    });
   }
 
   // The names a certification names by id: the project's contractors and the firm's vehicle and

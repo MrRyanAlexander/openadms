@@ -14,13 +14,13 @@ import {
   receiptBatchEndpoint,
 } from '@open-adms/contracts';
 import { workflows } from '@open-adms/domain';
-import { Banner, Button, ScreenTitle } from '@open-adms/look';
+import { Button, ScreenTitle } from '@open-adms/look';
 import { useState } from 'react';
 
-import type { NotAnswered } from '../api.ts';
 import { ChoiceField, DateEntry, SelectField, TextBlock } from '../look/fields.tsx';
+import { useMaking } from '../look/making.tsx';
 import { savedFile } from '../look/save-file.ts';
-import { Trouble, useApi, useRead } from '../reading.tsx';
+import { useApi, useRead } from '../reading.tsx';
 import { optionsOf, Reviewed, useReviewing } from '../review/reviewing.tsx';
 import { words } from '../words.ts';
 
@@ -37,34 +37,6 @@ export function Exports({ projectId }: { readonly projectId: string }) {
 const any = '';
 type Dataset = (typeof exportDatasets)[number];
 type Format = (typeof exportFormats)[number];
-
-// A file being made, and what came of the last one.
-function useMaking() {
-  const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<NotAnswered | null>(null);
-  const [saved, setSaved] = useState(false);
-  const make = (made: () => Promise<NotAnswered | null>) => {
-    setBusy(true);
-    setFailed(null);
-    setSaved(false);
-    void made().then((outcome) => {
-      setBusy(false);
-      setFailed(outcome);
-      setSaved(outcome === null);
-    });
-  };
-  const said = (
-    <>
-      {failed === null ? null : <Trouble reply={failed} />}
-      {saved ? (
-        <Banner tone="good" announced>
-          <p>{words.exports.saved}</p>
-        </Banner>
-      ) : null}
-    </>
-  );
-  return { busy, make, said };
-}
 
 function ExportsOf({ projectId }: { readonly projectId: string }) {
   const api = useApi();

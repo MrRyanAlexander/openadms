@@ -1624,7 +1624,17 @@
       },
       "outcome": "{saved} done; {refused} not.",
       "refused": "{ticketNumber}: {message}",
-      "qcTo": "Set it to"
+      "qcTo": "Set it to",
+      "exportTitle": "Export these tickets",
+      "exportFormat": "File",
+      "exportFormats": {
+        "csv": "CSV",
+        "xlsx": "Excel (.xlsx)",
+        "pdf": "PDF"
+      },
+      "export": "Export",
+      "exporting": "Making it…",
+      "exportAbout": "Every ticket the filters above match, not only this page. Made when you ask; nothing of it is kept."
     },
     "batches": {
       "title": "Invoice batches",
@@ -1753,7 +1763,9 @@
     "format": "Format",
     "formats": {
       "csv": "CSV",
-      "excel": "Excel-compatible",
+      "excel": "Excel-compatible CSV",
+      "xlsx": "Excel workbook (.xlsx)",
+      "pdf": "PDF",
       "json": "JSON"
     },
     "workflow": "Workflow",

@@ -10592,7 +10592,7 @@
     "/projects/{projectId}/exports/{dataset}": {
       "get": {
         "operationId": "exportFile",
-        "summary": "A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark) or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.",
+        "summary": "A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark), an Excel workbook (.xlsx), a landscape PDF table titled with the project, what narrows it and when it was made, or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); tickets also by status and QC status, as the tickets list is; the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.",
         "x-open-adms-access": "SIGNED_IN",
         "x-open-adms-roles": ["ADMIN", "MANAGER_ANALYST"],
         "x-open-adms-permission": "VIEW_REVIEW",
@@ -10622,7 +10622,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": ["csv", "excel", "json"]
+              "enum": ["csv", "excel", "xlsx", "pdf", "json"]
             }
           },
           {
@@ -10692,6 +10692,24 @@
               "format": "date",
               "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
             }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["PENDING", "COMPLETED", "MANUAL_REVIEW", "VOID"]
+            }
+          },
+          {
+            "name": "qcStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["QC_REVIEW", "QC_APPROVED", "QC_ISSUES", "QC_VOID", "NONE"]
+            }
           }
         ],
         "responses": {
@@ -10702,6 +10720,18 @@
                 "schema": {
                   "type": "string",
                   "contentMediaType": "text/csv; charset=utf-8"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/pdf"
                 }
               },
               "application/json; charset=utf-8": {

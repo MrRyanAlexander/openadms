@@ -4782,20 +4782,31 @@ export const exportDatasets = [
   'certifications',
   'audit-history',
 ] as const;
-export const exportFormats = ['csv', 'excel', 'json'] as const;
+export const exportFormats = ['csv', 'excel', 'xlsx', 'pdf', 'json'] as const;
 
 export const exportFileEndpoint = endpoint({
   ...read,
   permission: 'VIEW_REVIEW',
   name: 'exportFile',
   summary:
-    'A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark) or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.',
+    'A project’s tickets, transactions (the ledger, line by line, with its rates and amounts), certifications or audit history as a file to take away: CSV, Excel-compatible CSV (UTF-8 with its byte order mark), an Excel workbook (.xlsx), a landscape PDF table titled with the project, what narrows it and when it was made, or JSON. Narrowed as the ledger is (workflow, pay item, prime, invoice batch, locked or not, days); tickets also by status and QC status, as the tickets list is; the audit history as the reader may read it, the security domain an admin’s alone. A cell beginning =, +, -, @, a tab or a carriage return is written as text. Sent as a download, never as a page; made each time, kept nowhere. Never a driver’s phone or licence number.',
   method: 'GET',
   path: '/projects/:projectId/exports/:dataset',
   params: z.strictObject({ projectId: z.uuid(), dataset: z.enum(exportDatasets) }),
-  query: z.strictObject({ format: z.enum(exportFormats), ...ledgerFilters }),
+  query: z.strictObject({
+    format: z.enum(exportFormats),
+    ...ledgerFilters,
+    // Of the tickets dataset only, as the tickets list narrows (`NONE`: no QC mark yet).
+    status: z.enum(ticketStatuses).optional(),
+    qcStatus: z.enum([...qcStatuses, 'NONE']).optional(),
+  }),
   answersFile: true,
-  answersFileOf: ['text/csv; charset=utf-8', 'application/json; charset=utf-8'],
+  answersFileOf: [
+    'text/csv; charset=utf-8',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/pdf',
+    'application/json; charset=utf-8',
+  ],
   answer: keptFileAnswerSchema,
 });
 

@@ -3,8 +3,12 @@
 // order mark, so its accents and dashes read right), or JSON (an array of rows by column name).
 // **A cell a spreadsheet would run as a formula is written as text** (OWASP ASVS 5.0 1.3.3): one
 // beginning with `=`, `+`, `-`, `@`, a tab or a carriage return is led by an apostrophe, but a
-// plain number (a negative quantity) is a number. No dependency.
+// plain number (a negative quantity) is a number. An Excel workbook (`xlsx-file.ts`) and a landscape
+// PDF table (`table-pdf.ts`) are written the same way. No dependency.
 import type { exportFormats } from '@open-adms/contracts';
+
+import { pdfTableOf, pdfType, type Heading } from './table-pdf.ts';
+import { xlsxOf, xlsxType } from './xlsx-file.ts';
 
 export type TableFormat = (typeof exportFormats)[number];
 
@@ -13,6 +17,8 @@ export type Cell = string | number | boolean | null;
 export interface Column<Row> {
   readonly name: string;
   readonly cell: (row: Row) => Cell;
+  // A decimal written as text (an exact amount) is a number in a workbook.
+  readonly numeric?: boolean;
 }
 
 export interface TableFile {
@@ -46,6 +52,8 @@ export function tableFile<Row>(
   format: TableFormat,
   columns: readonly Column<Row>[],
   rows: readonly Row[],
+  // What a workbook's sheet and a PDF's title say; a CSV and JSON need none.
+  heading?: Heading & { readonly sheet: string },
 ): TableFile {
   const encoder = new TextEncoder();
   switch (format) {
@@ -60,6 +68,26 @@ export function tableFile<Row>(
         bytes: encoder.encode(`\uFEFF${csvOf(columns, rows)}`),
         contentType: 'text/csv; charset=utf-8',
         extension: 'csv',
+      };
+    case 'xlsx':
+      return {
+        bytes: xlsxOf(heading?.sheet ?? 'Export', columns, rows),
+        contentType: xlsxType,
+        extension: 'xlsx',
+      };
+    case 'pdf':
+      return {
+        bytes: pdfTableOf(
+          heading ?? {
+            title: 'Export',
+            lines: [],
+            page: (at, of) => `${String(at)} / ${String(of)}`,
+          },
+          columns,
+          rows,
+        ),
+        contentType: pdfType,
+        extension: 'pdf',
       };
     case 'json':
       return {

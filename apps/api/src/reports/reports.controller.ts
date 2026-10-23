@@ -137,6 +137,8 @@ export class ReportsController {
       query.format,
       {
         workflow: query.workflow,
+        status: query.status,
+        qcStatus: query.qcStatus,
         payItemId: query.payItemId,
         primeId: query.primeId,
         invoiceBatchId: query.invoiceBatchId,

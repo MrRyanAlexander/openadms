@@ -25,6 +25,7 @@ import { Link } from 'react-aria-components';
 import type { NotAnswered } from '../api.ts';
 import { CheckField, ChoiceField, SelectField } from '../look/fields.tsx';
 import { FormDialog, picked, text, type Values } from '../look/form-dialog.tsx';
+import { ExportTickets } from './export-tickets.tsx';
 import { PagedTable } from '../look/paged-table.tsx';
 import { Trouble, useApi, useRead } from '../reading.tsx';
 import { ticketHref } from '../review/queue.tsx';
@@ -197,6 +198,15 @@ function TicketsOf({ projectId }: { readonly projectId: string }) {
           ) : null}
         </div>
       ) : null}
+      <ExportTickets
+        projectId={projectId}
+        narrowed={{
+          workflow,
+          ...(status === any ? {} : { status: status as ProjectTicket['statuses'][number] }),
+          ...(qcStatus === any ? {} : { qcStatus: qcStatus as 'NONE' }),
+          ...(locked === any ? {} : { locked: locked as 'true' | 'false' }),
+        }}
+      />
       <PagedTable
         caption={say(said.caption, { workflow: words.review.workflows[workflow] })}
         served={listProjectTicketsEndpoint}

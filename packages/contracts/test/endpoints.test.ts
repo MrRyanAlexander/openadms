@@ -378,6 +378,8 @@ describe('the endpoints that answer a file', () => {
     }
     expect(exportFileEndpoint.answersFileOf).toEqual([
       'text/csv; charset=utf-8',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/pdf',
       'application/json; charset=utf-8',
     ]);
     expect([

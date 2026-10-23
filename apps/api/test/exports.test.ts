@@ -5,6 +5,7 @@
 // test's work is undone. And the table writer itself: a cell a spreadsheet would run is text.
 import { exportFileEndpoint, photoPdfEndpoint, receiptBatchEndpoint } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
+import { iter } from 'but-unzip';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { numbersIn } from '../src/reports/documents.ts';
@@ -49,6 +50,29 @@ describe('a table written as a file', () => {
     ]);
   });
 
+  it('REQ-412 an Excel workbook is a package of the parts a spreadsheet opens, its header row first, a text beginning = kept text and an exact amount a number', async () => {
+    const columns = [
+      { name: 'ticket', cell: (row: { n: string; a: string }) => row.n },
+      { name: 'amount', numeric: true, cell: (row: { n: string; a: string }) => row.a },
+    ];
+    const made = tableFile('xlsx', columns, [{ n: '=SUM(A1)', a: '12.50' }], {
+      sheet: 'Tickets',
+      title: 'T',
+      lines: [],
+      page: () => '',
+    });
+    expect(made.extension).toBe('xlsx');
+    const parts = new Map<string, string>();
+    for (const entry of iter(made.bytes)) {
+      parts.set(entry.filename, new TextDecoder().decode(await entry.read()));
+    }
+    expect([...parts.keys()]).toContain('xl/worksheets/sheet1.xml');
+    const sheet = parts.get('xl/worksheets/sheet1.xml') ?? '';
+    expect(sheet).toContain('<c r="A1" t="inlineStr"><is><t xml:space="preserve">ticket</t>');
+    expect(sheet).toContain('<c r="A2" t="inlineStr"><is><t xml:space="preserve">=SUM(A1)</t>');
+    expect(sheet).toContain('<c r="B2"><v>12.50</v></c>');
+  });
+
   it('REQ-414 numbers pasted with any separator, each once, in order', () => {
     expect(numbersIn('101001, 101002;101003\n101001  301004')).toEqual([
       '101001',
@@ -81,6 +105,30 @@ describe('the exports, photo PDFs and the receipt batch', () => {
         'workflow,ticket_number,ticket_date,statuses,field_events,qc_status,locked,invoice_batch,lines,amount,why_not_lockable',
       );
       expect(ticketLines.some((line) => line.startsWith('LOAD,101031,'))).toBe(true);
+      const workbook = await exported('tickets', '?format=xlsx&workflow=LOAD');
+      expect(workbook.headers).toMatchObject({
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'content-disposition': 'attachment; filename="tickets.xlsx"',
+      });
+      const parts = new Map<string, string>();
+      for (const entry of iter(workbook.bytes)) {
+        parts.set(entry.filename, new TextDecoder().decode(await entry.read()));
+      }
+      const sheet = parts.get('xl/worksheets/sheet1.xml') ?? '';
+      expect(sheet).toContain('<t xml:space="preserve">ticket_number</t>');
+      expect(sheet).toContain('<t xml:space="preserve">101031</t>');
+      const pdf = await exported('tickets', '?format=pdf&workflow=LOAD');
+      expect(pdf.headers).toMatchObject({
+        'content-type': 'application/pdf',
+        'content-disposition': 'attachment; filename="tickets.pdf"',
+      });
+      const drawn = pdf.bytes.toString('latin1');
+      expect(drawn.startsWith('%PDF-')).toBe(true);
+      expect(drawn).toContain('/MediaBox [0 0 792 612]');
+      expect(drawn).toContain('(101031) Tj');
+      expect(drawn).toContain('Workflow: LOAD');
+      expect(drawn).toContain('Generated ');
+      expect(drawn).toContain('America/');
       const ledger = await exported('transactions', '?format=json');
       expect(ledger.headers['content-type']).toBe('application/json; charset=utf-8');
       expect(JSON.parse(ledger.bytes.toString('utf8'))).toEqual([]);
