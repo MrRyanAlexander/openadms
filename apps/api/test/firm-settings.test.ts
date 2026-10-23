@@ -1,7 +1,7 @@
 // The firm's own settings, against the database (REQ-214, 215; ARCHITECTURE §6, §7.4;
 // spec/acceptance/10-api-and-sync.md AC-10-83, 85; ADR-170, 412, 511, 520, 530, 531). OWASP ASVS 5.0
 // 6.3.3, 8.2.1; API Security Top 10 API5. The real process, in this test's own memory, on the
-// installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
+// test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 import {
   brandEndpoint,
@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { FirmSettings } from '../src/firm/firm-settings.ts';
 import { releaseVersion } from '../src/process/release.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { Outbox } from './support/sign-in.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
@@ -33,7 +33,7 @@ import { ask, saved, told, viewerSignsIn, type Browser } from './support/setup.t
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

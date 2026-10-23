@@ -2,7 +2,7 @@
 // §7.1, §7.4, §7.5; spec/acceptance/02-people-and-devices.md AC-02-15, 16, 18;
 // spec/acceptance/10-api-and-sync.md AC-10-22, 32, 44; BACKLOG 2.5.1, C45, C93, C110; ADR-106,
 // 240, 416, 436…439). NIST SP 800-63B-4 §3.1.6, §3.2.2; OWASP ASVS 5.0 V6, V11, V16. The real
-// process, in this test's own memory, on the installation's database as `adms_api`: it needs
+// process, in this test's own memory, on the test database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 //
@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { installationPolicy } from '../src/policy.ts';
 import { DeviceKeys } from '../src/phone/device-keys.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import { ask, told } from './support/setup.ts';
@@ -31,7 +31,7 @@ import { Outbox, passwordKey } from './support/sign-in.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

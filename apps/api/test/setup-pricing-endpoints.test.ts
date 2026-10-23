@@ -2,7 +2,7 @@
 // spec/RULES.md; ARCHITECTURE §6; acceptance file 01, sections C, E, G and AC-01-80; file 10,
 // AC-10-27, 38; BACKLOG 2.4.2, C97, C98; ADR-364, 422, 424, 425): forms, the debris types on
 // them and the firm's own fields; pay items, a prime's rate and "Pays when"; rules. OWASP ASVS
-// 5.0 V2, V8, V16. The real process, in this test's own memory, on the installation's database
+// 5.0 V2, V8, V16. The real process, in this test's own memory, on the test database
 // as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each
 // test's work is undone (support/database.ts). A refusal by the database ends the test's one
 // piece of work, so each such test makes its refused request last. Who may call each endpoint
@@ -26,7 +26,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FormSetup } from '../src/setup/form-setup.ts';
 import { PayItemSetup } from '../src/setup/pay-item-setup.ts';
 import { RuleSetup } from '../src/setup/rule-setup.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
 import {
@@ -43,7 +43,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

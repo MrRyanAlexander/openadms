@@ -2,7 +2,7 @@
 // (spec/parts/01-setup.md steps 3 and 7; ARCHITECTURE §3 "Project boundary and zones", §6
 // "Uploads", §11; acceptance file 01, AC-01-56, AC-01-59; spec/THREAT-MODEL.md T-25; BACKLOG
 // 2.6.4, C86, C100; ADR-484, 485; KD-76). OWASP ASVS 5.0 V5. The real process, in this test's
-// own memory, on the installation's database as `adms_api`, keeping files in the local stack's
+// own memory, on the test database as `adms_api`, keeping files in the local stack's
 // own object store under the API's identity: it needs `pnpm ready`. Each test's database work
 // is undone; its files, which the API's identity can't delete, are taken away by the stack's
 // administrator. Who may call each endpoint is setup-endpoints.test.ts's.
@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { MediaStore } from '../src/media/media-store.ts';
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   geojsonFile,
   kmlFile,
@@ -51,7 +51,7 @@ let administrator: S3Client;
 const projects = new Set<string>();
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   store = new MediaStore(installationMedia());
   administrator = asTheStacksAdministrator(installationMedia());
 });

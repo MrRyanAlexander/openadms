@@ -3,7 +3,7 @@
 // and-devices.md AC-02-42; spec/acceptance/10-api-and-sync.md AC-10-19, 22, 32; BACKLOG 2.5.4,
 // C113, C114, C122, C123; ADR-095, 106, 120, 438, 443, 456 (3)(d), (5)(d), 462; REQ-202b). NIST
 // SP 800-63B-4 §3.2.2 and its session chapter; OWASP ASVS 5.0 6.3.1, 7.2.4, 7.4.1, 16.3.1. The
-// real process, in this test's own memory, on the installation's database as `adms_api`: it
+// real process, in this test's own memory, on the test database as `adms_api`: it
 // needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -22,7 +22,7 @@ import {
 import { masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   enrolledPhone,
   passcode,
@@ -37,7 +37,7 @@ import { ask, p1Priced, saved, told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

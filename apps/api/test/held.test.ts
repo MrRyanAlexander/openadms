@@ -4,7 +4,7 @@
 // AC-05-46; spec/acceptance/10-api-and-sync.md AC-10-73…76; ARCHITECTURE §8, §9; BACKLOG 2.8.4,
 // C106, C137, C139, C141; ADR-468, 471, 481, 482, 488, 526; REQ-212). OWASP ASVS 5.0 V5, V8,
 // V16; API Security Top 10 API1, API3, API4, API5. The real process, in this test's own memory,
-// on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts). Files are
 // kept in a store of this test's own, in memory.
 import { randomUUID } from 'node:crypto';
@@ -34,7 +34,7 @@ import { photoPlaces } from '../src/media/photo-places.ts';
 import { HeldReview } from '../src/review/held-review.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint } from '../src/sync/sync.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { jpeg, Kept, kimsPhone, nothingHeld, sha256Of, turnedIn } from './support/kims-phone.ts';
 import { passcode, senderOf } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
@@ -45,7 +45,7 @@ import { ask, notSaved, saved, told, type Browser } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

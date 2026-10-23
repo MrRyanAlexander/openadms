@@ -1,10 +1,14 @@
-// The installation's database as the API's own login, for a test that must write (ADR-390, 402):
-// the settings the installer wrote are read here, never printed, and a test that finds none says
-// what to run. What the login writes can't be deleted, so a test's whole work runs inside one
-// piece of work that is then undone: the services under test are handed a database whose
-// `$write` and `$read` run in that same piece of work, each `$write` stating its own actor and
-// the request it is for, as the real one does.
+// The installation's test database as the API's own login, for a test that must write (ADR-390,
+// 402): the settings the installer wrote are read here, never printed, and a test that finds none
+// says what to run. The tests never open the installation's own database, `adms`, which is the
+// firm's (its people, its records, the sample projects): the same logins' URLs are pointed at
+// `adms_test` (or ADMS_TEST_DATABASE), which the installer makes, migrates and seeds beside it
+// (packages/db's test-database.ts), so a test starts from the seed alone. What the login writes
+// can't be deleted, so a test's whole work runs inside one piece of work that is then undone: the
+// services under test are handed a database whose `$write` and `$read` run in that same piece of
+// work, each `$write` stating its own actor and the request it is for, as the real one does.
 import {
+  atTestDatabase,
   openDatabase,
   type Actor,
   type Database,
@@ -17,9 +21,19 @@ import { Settings, SettingsProblem } from '../../src/process/settings.ts';
 
 export type Tx = Prisma.TransactionClient;
 
-export function installationSettings(): Settings {
+// The API's settings as the installer wrote them, with both of its logins on the test's database.
+export function testSettings(): Settings {
+  const environment = Settings.environment({ ADMS_API_HOST: '127.0.0.1', ADMS_API_PORT: '3000' });
+  const onTest = (key: string): Record<string, string> => {
+    const written = environment[key];
+    return written === undefined ? {} : { [key]: atTestDatabase(written) };
+  };
   try {
-    return Settings.read({ ADMS_API_HOST: '127.0.0.1', ADMS_API_PORT: '3000' });
+    return Settings.from({
+      ...environment,
+      ...onTest('DATABASE_URL'),
+      ...onTest('READONLY_DATABASE_URL'),
+    });
   } catch (problem) {
     if (!(problem instanceof SettingsProblem)) throw problem;
     throw new Error('The API has no settings: run `pnpm installer` (after `pnpm local:up`).', {
@@ -28,7 +42,7 @@ export function installationSettings(): Settings {
   }
 }
 
-export function openInstallation(settings: Pick<Settings, 'databaseUrl'>): Database {
+export function openTestDatabase(settings: Pick<Settings, 'databaseUrl'>): Database {
   return openDatabase({ url: settings.databaseUrl, maxConnections: 2 });
 }
 

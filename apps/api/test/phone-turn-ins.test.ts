@@ -3,7 +3,7 @@
 // spec/acceptance/10-api-and-sync.md AC-10-22, 32, 46; spec/THREAT-MODEL.md T-02, T-11; BACKLOG
 // 2.6.5, C47, C64, C126, C139; ADR-065, 096, 134, 468, 488; REQ-202a, 202b, 209). OWASP API
 // Security Top 10 API1, API2, API6; ASVS 5.0 V16.3. The real process, in this test's own memory,
-// on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`,
+// on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`,
 // and fails saying so. Each test's work is undone (support/database.ts). A photograph's file is
 // kept in a store of this test's own, in memory: where files live is `photo-files.test.ts`'s.
 import { randomUUID } from 'node:crypto';
@@ -21,7 +21,7 @@ import { TurnInRules } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { sentFingerprint } from '../src/sync/sync.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   jpeg,
   Kept,
@@ -49,7 +49,7 @@ import { told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

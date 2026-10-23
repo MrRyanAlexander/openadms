@@ -124,10 +124,10 @@ pnpm installer:teardown   # asks for the word `teardown` (or --yes); the next ru
 
 | Command | What it proves | Expected today (2026-10-01) |
 |---|---|---|
-| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms` and `adms_shadow`, `✓ adms_owner, which runs the migrations, is under no statement timeout`, `+ set: a statement of … is stopped after 30000 ms (STATEMENT_TIMEOUT_MS)` ×3 (ADR-394, 396), `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `+ wrote 94 values to the firm's lists (…)` (ADR-302), `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
+| `pnpm installer` (first run) | Secrets made once into owner-only env files; four logins from SCRAM verifiers; database `adms` open only to them; the master passcode's slow hash handed to the seed in memory and kept in the database alone, never in a file (ADR-281) | `+ wrote` ×3, `+ created login` ×4, `+ created database adms`, `adms_shadow` and `adms_test` (migrated and seeded after `adms`), `✓ adms_owner, which runs the migrations, is under no statement timeout`, `+ set: a statement of … is stopped after 30000 ms (STATEMENT_TIMEOUT_MS)` ×3 (ADR-394, 396), `✓ … opens adms with its own password` ×4, `All migrations have been successfully applied.`, `+ created the system actor, Open ADMS (system)`, `+ kept the master passcode's slow hash in the database, version 1`, `+ wrote 94 values to the firm's lists (…)` (ADR-302), `Installed for …`; `packages/db/.env` holds only `DATABASE_URL` |
 | `pnpm installer` (rerun) | Resume without new secrets; migrations at head (ninety-seven today; `packages/db/prisma/migrations/` is the list); the seed re-checks the system actor and stops if it was changed (ADR-273); the install stops if `guard_gaps()` lists an unguarded table; a migration whose SQL is still only comments is refused, not applied | 25 `✓` lines (`✓ adms_owner, which runs the migrations, is under no statement timeout`, ADR-396, and three `✓ a statement of adms_api / adms_worker / adms_readonly is stopped after 30000 ms (STATEMENT_TIMEOUT_MS)`, each read signed in as that login, ADR-394; a login with another value or none is `✗` there and `+ set:` on the resume; an owner's timeout or one kept for a login in one database is `- took off …` on the resume), ending `✓ migrations at head (Database schema is up to date!)`, `✓ every table is guarded` (ADR-271), `✓ the master passcode's slow hash is kept in the database alone (Argon2id, version 1)` (ADR-281) and `✓ the system actor is the seed's, alone, unchanged and guarded` (ADR-276); one confirm; `No pending migrations to apply.`; `✓ the system actor exists, Open ADMS (system)`; `✓ the master passcode's actor exists, Master passcode` (`+ created the master passcode's actor, Master passcode` on the first rerun after ADR-439's migrations); `✓ the device key's actor exists, Device key` (`+ created …` on the first rerun after ADR-440's); `✓ the master passcode's slow hash is kept, version 1`; `✓ the firm's lists are as the firm keeps them, each built-in value in place` (ADR-302); `shasum` of the three env files unchanged |
 | `pnpm installer` (the database lost) | The logins and the database come back with the secrets it has; the master passcode, kept only in the database, is asked for again (ADR-281) | `The database holds no master passcode (it went with the database). Set it again:`, then `+ kept the master passcode's slow hash in the database, version 1`; with no answer it stops, exit 1; env files unchanged |
-| `pnpm installer:teardown` | The next run is a first run | `adms`, `adms_shadow` and four logins dropped, three env files and the record removed |
+| `pnpm installer:teardown` | The next run is a first run | `adms`, `adms_shadow`, `adms_test` and four logins dropped, three env files and the record removed |
 
 **The schema** (ADR-267, 268): after a change to `packages/db/prisma/schema/`, in `packages/db`, `./node_modules/.bin/prisma validate`, then `./node_modules/.bin/prisma migrate dev --create-only --name <what>`, reviewed, then `pnpm installer` to apply it. Never edit a generated or applied migration (ADR-113). **Everything else about a migration, a guard's stub, a backfill, and how each table's tests are written is `schema-and-migrations.md`: read it before the first of them.**
 
@@ -187,7 +187,7 @@ and how a guard's loosening is tried: `database-tests.md`.**
 
 `apps/api/test`, by scenario ID of `spec/acceptance/10-api-and-sync.md`; its files run one at a
 time. Most **need `pnpm ready`**: a test that writes runs in one piece of work on the
-installation's database, undone afterwards. **After a change to an endpoint in
+installation's test database, `adms_test` (never `adms`, the firm's), undone afterwards. **After a change to an endpoint in
 `packages/contracts`, `pnpm openapi`** (`boundary.test.ts` fails on a stale file). **The API's
 container runs what was built when it started: after any change to `apps/api`, `pnpm local:up`
 again** (`door.test.ts` asks the container). Several files hold **exact lists** an endpoint joins
@@ -207,7 +207,7 @@ the worker takes jobs up, and what queues work, are proven by stories (`p1-queue
 
 `packages/scenarios`: `pnpm scenarios [name…] [--keep]`, `pnpm scenarios list`, `pnpm scenarios
 clean`. Each story gets a new database `adms_story_…` on the local stack (made by its administrator,
-owned by `adms_owner`, open only to the logins), migrated through `packages/db/prisma.story.config.js`
+owned by `adms_owner`, open only to the logins), migrated through `packages/db/prisma.test.config.js`
 and seeded, and it's dropped afterwards, pass or fail; a story never touches `adms`. `--keep` leaves it
 to look at; `clean` drops every leftover (only while no story runs; `installer:teardown` can't drop
 `adms_owner` while one is left, C28). A story is a `Story` in `packages/scenarios/src/stories/`, listed
@@ -274,7 +274,7 @@ run), and **one phone's requests at once share its one proof** (ADR-505; `story-
 head, every table guarded, `adms_owner`'s, open to the logins alone) and the runner to its word. A story's context carries `policy`, the release's policy values read from
 `packages/domain/policy.env` (`src/policy.ts`; held to the release's values, the worker's five among them (5 tries, 10 minutes, 5 s, 30 s, 10 connections; ADR-419) and a job's size (200 tickets, ADR-420), by `test/policy.test.ts`,
 which needs no database), and `src/stories/p1.ts` sets up P1's client, declaration event and project
-for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms` still holds only the seed (3 users, 1 master passcode version,
+for both of today's stories (ADR-303), its prime and its contract with them (ADR-305). After a run, `adms_test` still holds only the seed (3 users, 1 master passcode version,
 the lists' 94 values, 98 audit records). Every story's database is seeded with the same made-up master passcode's hash
 (`story-database.ts`); today's stories: `numbering` (ADR-323: blocks cut, topped up, reclaimed and retired through `apps/api`'s `NumberAllocator`; control ranges), `ticket-101001`, `dispatch-monday` (ADR-281; its unit rate
 monitor's pay items, ADR-286) `certification` (ADR-321: P1's trucks and crews certified through `apps/api`'s `Certifications`) and `setup` (ADR-316: the example world's setup through `apps/api`'s
@@ -343,7 +343,7 @@ Report its last line as seen.
 - **What to run:** the one or two test files that hold the rule (the layer's page says which), or
   the story that proves a service (`["node", "packages/scenarios/src/cli.ts", "p1-voided"]` with
   `"build": ["./node_modules/.bin/tsc", "--build"]`).
-- **A guard in the database** is loosened on a throw-away copy of `adms`, not by this script:
+- **A guard in the database** is loosened on a throw-away copy of `adms_test`, not by this script:
   `database-tests.md`.
 - A `SLIPPED` is a finding: add the test, or say why the rule is doubled by construction.
 

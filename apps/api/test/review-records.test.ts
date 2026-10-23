@@ -2,7 +2,7 @@
 // the back office, through their endpoints, against the database (spec/parts/08 steps 2, 9, "One
 // review queue"; spec/acceptance/08 AC-08-19, 21, 25, 26; 10 AC-10-27, 28, 33, 37; BACKLOG 2.4.4;
 // ADR-022, 149, 156, 327, 338, 364, 432). OWASP ASVS 5.0 V2, V8. The real process, in this test's
-// own memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// own memory, on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts).
 //
 // The API's login writes no status, flag or completed load: those are the worker's. So what is
@@ -39,7 +39,7 @@ import { Corrections } from '../src/review/corrections.ts';
 import { QuarantineReview } from '../src/review/quarantine-review.ts';
 import { Intake } from '../src/sync/intake.ts';
 import type { SentFieldEvent, SentRoe } from '../src/sync/sent.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import {
@@ -65,7 +65,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

@@ -2,7 +2,7 @@
 // "Uploads", §9 (5), §11; spec/acceptance/04-field-capture.md AC-04-77; 05-sync.md AC-05-09;
 // 10-api-and-sync.md AC-10-47…49; spec/THREAT-MODEL.md T-25; BACKLOG 2.6.4, C84 (12), C86, C136,
 // C137; ADR-101, 480…482; REQ-203). The real process, in this test's own memory, on the
-// installation's database as `adms_api`, keeping files in the local stack's own object store
+// test database as `adms_api`, keeping files in the local stack's own object store
 // under the API's identity: it needs `pnpm ready`. Each test's database work is undone; its
 // files, which the API's identity can't delete, are taken away by the stack's administrator.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -28,7 +28,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MediaStore } from '../src/media/media-store.ts';
 import { Receiving } from '../src/media/receiving.ts';
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   asTheStacksAdministrator,
   installationMedia,
@@ -55,7 +55,7 @@ let administrator: S3Client;
 const projects = new Set<string>();
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   store = new MediaStore(installationMedia());
   administrator = asTheStacksAdministrator(installationMedia());
 });

@@ -162,6 +162,8 @@ describe('an endpoint that asks for a session, before anything is read', () => {
     expect(endpoints.filter(({ access }) => access === 'ANYBODY').map(({ name }) => name)).toEqual([
       'health',
       'readiness',
+      // What the firm calls its ADMS, for the sign-in screens before anybody is signed in.
+      'brand',
       'requestPasswordReset',
       'completePasswordReset',
       'signIn',

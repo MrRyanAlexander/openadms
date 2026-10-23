@@ -1,7 +1,7 @@
 // Corrections to a ticket's own records through their endpoints, against the database
 // (spec/parts/08 steps 2…4; spec/acceptance/04 AC-04-102, 103; 08 sections C and D; 10 AC-10-27,
 // 28, 33, 37; BACKLOG 2.4.4; ADR-028, 051, 337, 364, 431). OWASP ASVS 5.0 V2, V8. The real
-// process, in this test's own memory, on the installation's database as `adms_api`: it needs
+// process, in this test's own memory, on the test database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 //
@@ -30,7 +30,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { Corrections } from '../src/review/corrections.ts';
 import { ReviewService, type TicketNamed } from '../src/review/review-service.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { audited, jobsFor, luisHolds, newId, notTaken, p1WithTickets } from './support/review.ts';
 import { worldOn } from './support/served.ts';
@@ -47,7 +47,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

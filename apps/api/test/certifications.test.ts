@@ -1,7 +1,7 @@
 // The back office's changes to a certification, through their endpoints, against the database
 // (spec/parts/03-certification.md steps 10…13; spec/acceptance/03 AC-03-38, 51, 52, 55; 10
 // AC-10-27, 28, 33, 35, 37; BACKLOG 2.4.4; ADR-079, 080, 364, 433). OWASP ASVS 5.0 V2, V8. The
-// real process, in this test's own memory, on the installation's database as `adms_api`: it
+// real process, in this test's own memory, on the test database as `adms_api`: it
 // needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 //
@@ -36,7 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Certifications } from '../src/certification/certifications.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { Corrections } from '../src/review/corrections.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { enrolledPhone } from './support/phones.ts';
 import {
@@ -61,7 +61,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

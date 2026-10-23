@@ -9,8 +9,12 @@
 `packages/db/test/*.test.ts`, in the one `pnpm test` run: every grant and refusal of the guard
 migrations, read from the catalog exactly and tried as each login, plus `guard_table` and
 `guard_gaps()`. **They need the local stack and an installation at head** (`pnpm local:up`, then
-`pnpm installer`); without them they fail and say so, never skip. They connect to the database `adms`
-as the local stack's administrator (its password read from `infra/local/.env` in the test process,
+`pnpm installer`); without them they fail and say so, never skip. They connect to the installation's
+**test database `adms_test`**, never `adms` (the firm's: its people, the sample projects), which the
+installer makes, migrates and seeds beside `adms` with the same roles, grants and guards, open to the
+same logins (`packages/db/src/test-database.ts`; `pnpm installer:check` lists it, and a rerun of
+`pnpm installer` adds it to an installation made before it and moves it to head with `adms`). They
+connect as the local stack's administrator (its password read from `infra/local/.env` in the test process,
 never printed), reach each login with `SET LOCAL ROLE`, and roll each test's work back, so nothing is
 left behind. The project runs its files one at a time (`fileParallelism: false`). They also refuse a
 database whose seed hasn't run (the system actor, ADR-273). Beside the guards (ADR-276):
@@ -24,7 +28,7 @@ passcode and its place outside the audit log, number blocks) and `assignments.te
 assignment and the unit rate pay items it names, each its own project's, ADR-286; a field event's
 assignment and setup version). The firm's lists (ADR-302): `lists.test.ts`, section D of
 `spec/acceptance/01-setup.md` by scenario ID, read from the lists the installer's seed wrote (so a
-list changed by hand in `adms` fails it), with `test/support/lists.ts` naming the eighteen tables
+list changed by hand in `adms_test` fails it), with `test/support/lists.ts` naming the eighteen tables
 for the exact grant, trigger and check lists. The client, the declaration event and the project
 (ADR-303): `projects.test.ts`, section A by scenario ID; the example world
 (`test/support/example-world.ts`) is Bayline County, Hurricane Delphine, P1 and P2 as the golden
@@ -59,7 +63,7 @@ list or the other**. **What a contractor user sees** (ADR-361): `contractor-user
 of the golden mission's pay items with Coastline's rates (`world.payItems`, `world.rates`); **a test
 that enters a pay item uses `payItemLike(world, …)`** with `insertOf`, since no capture setting has
 a database default, and an assignment's pay item repeats its `kind_of_work_id`. They also
-refuse a database without the seed's master passcode. **The Monitor ID series on `adms` moves with every run** (a sequence isn't
+refuse a database without the seed's master passcode. **The Monitor ID series on `adms_test` moves with every run** (a sequence isn't
 rolled back); gaps are normal.
 
 **The actor extension's tests** (`actor.test.ts`, ADR-273) connect instead **as the services' own
@@ -76,24 +80,24 @@ version, the 94 values the firm's lists start with, 98 audit records (ADR-302).
 - **A loop over loosenings** that calls `docker exec -i` must close its stdin (`< /dev/null`), or
   the first `docker exec` swallows the rest of the list (seen 2026-10-02).
 - **Proving a guard change is covered:** make a throw-away copy, change it, run the tests on it, drop
-  it (no service may be connected to `adms` while it's copied):
-  `CREATE DATABASE adms_mutation TEMPLATE adms OWNER adms_owner` (owned by `adms_owner`, or its
+  it (nothing may be connected to `adms_test` while it's copied: no test running):
+  `CREATE DATABASE adms_mutation TEMPLATE adms_test OWNER adms_owner` (owned by `adms_owner`, or its
   owner's-rights triggers can't see the schema), then
   `ADMS_TEST_DATABASE=adms_mutation ./node_modules/.bin/vitest run --project @open-adms/db`, then
   `DROP DATABASE adms_mutation`. The admin commands go through
   `docker exec -i open-adms-local-postgres-1 psql -U postgres` (no password on the command line).
 - **Several copies may be tried at once**, each under its own name (`adms_mutation_0`,
-  `adms_mutation_1`…; `ADMS_TEST_DATABASE` takes any name starting `adms`): four at a time took 43
+  `adms_mutation_1`…; `ADMS_TEST_DATABASE` takes any name starting `adms_` but `adms_shadow`, never `adms` itself): four at a time took 43
   loosenings a few minutes (ADR-305). **On this machine, two at a time** (ADR-313): a copy is
   about 85 MB and a plain `CREATE DATABASE` writes it all to the write-ahead log, and four at once
   filled Docker's 8 GB disk and stopped Postgres. Make each copy with `STRATEGY FILE_COPY`, and
   `CHECKPOINT` after each drop.
-- **A guard stub is tried as a migration, not as loose SQL** (ADR-313): copy `adms` under a story's
-  name (`CREATE DATABASE adms_story_try_<what> TEMPLATE adms OWNER adms_owner`), apply the stub with
-  `ADMS_STORY_DATABASE=adms_story_try_<what> ./node_modules/.bin/prisma migrate deploy --config
-  prisma.story.config.js` (in `packages/db`), run the tests on it, and use it as the template for
+- **A guard stub is tried as a migration, not as loose SQL** (ADR-313): copy `adms_test` under a story's
+  name (`CREATE DATABASE adms_story_try_<what> TEMPLATE adms_test OWNER adms_owner`), apply the stub with
+  `ADMS_TEST_DATABASE=adms_story_try_<what> ./node_modules/.bin/prisma migrate deploy --config
+  prisma.test.config.js` (in `packages/db`), run the tests on it, and use it as the template for
   the loosened copies; drop it before `pnpm installer`. While any is running, don't run `pnpm lint`, `pnpm test` or
-  `pnpm generate`, and don't connect to `adms` (a copy can't be made while anyone is).
+  `pnpm generate`, and don't connect to `adms_test` (a copy can't be made while anyone is).
 - **A trigger fires before a check** (seen 2026-10-10, ADR-457): where a guard's trigger asks who is
   writing, a check's own refusal is asked under the actor the trigger lets through, or the trigger
   answers first with another code. **Two refusals of one trigger are told apart by their words**

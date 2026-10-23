@@ -1,11 +1,11 @@
-// The database tests' way in (BACKLOG 0.3.3; ADR-272). They run against the installation's own
-// database on the local stack, as the stack's server administrator, and reach each login with
+// The database tests' way in (BACKLOG 0.3.3; ADR-272). They run against the installation's test
+// database on the local stack (adms_test, made beside adms as adms is: src/test-database.ts), never
+// the installation's own, as the stack's server administrator, and reach each login with
 // SET LOCAL ROLE: the login's own privileges and row-level security apply, and no login's password
 // is read. Each test's work is one database transaction, always rolled back, so nothing is left
 // behind, even when a test fails or the run is killed (the server rolls back a dropped connection).
 // The administrator's password comes from infra/local/.env, read in this process, never printed.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import process from 'node:process';
 import { parseEnv } from 'node:util';
 
 import pg from 'pg';
@@ -13,6 +13,7 @@ import pg from 'pg';
 import { deviceKeyActorId } from '../../src/device-key-actor.ts';
 import { masterPasscodeActorId } from '../../src/master-passcode-actor.ts';
 import { systemActorId } from '../../src/system-actor.ts';
+import { testDatabase } from '../../src/test-database.ts';
 
 export type Login = 'adms_owner' | 'adms_api' | 'adms_worker' | 'adms_readonly';
 export type Source = 'DEVICE' | 'BACK_OFFICE' | 'SYSTEM';
@@ -53,17 +54,14 @@ export class GuardedDatabase {
     this.client = client;
   }
 
-  // Opens the installation's database (or ADMS_TEST_DATABASE, another one on the local stack), and
-  // refuses to test one that isn't at the migrations' head.
+  // Opens the installation's test database (or ADMS_TEST_DATABASE, another test's database on the
+  // local stack), and refuses to test one that isn't at the migrations' head.
   static async open(): Promise<GuardedDatabase> {
     if (!existsSync(stackEnv)) throw new Error(`${needs} (infra/local/.env is missing)`);
     const env = parseEnv(readFileSync(stackEnv, 'utf8'));
     const password = env['POSTGRES_PASSWORD'];
     if (password === undefined) throw new Error(`${needs} (no administrator password)`);
-    const database = process.env['ADMS_TEST_DATABASE'] ?? 'adms';
-    if (!/^adms[a-z0-9_]*$/.test(database)) {
-      throw new Error(`ADMS_TEST_DATABASE must name an Open ADMS database, not ${database}`);
-    }
+    const database = testDatabase();
     const client = new pg.Client({
       host: '127.0.0.1',
       port: Number(env['ADMS_PG_PORT'] ?? '55432'),

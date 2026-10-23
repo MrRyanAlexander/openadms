@@ -32,16 +32,23 @@ import { loadSample } from './sample.ts';
 import { BreachedList, PasscodeHasher, SecretMaker } from './secrets.ts';
 
 const databaseName = 'adms';
+// The tests' own database (packages/db/src/test-database.ts, which names it for the tests): the
+// installation's database is the firm's, so the tests never run in it.
+const testDatabaseName = 'adms_test';
 const host = '127.0.0.1';
-// The installation's database, open to the logins; and the shadow database `prisma migrate dev`
-// checks migrations in, open only to its owner, adms_owner (ADR-268).
+const serviceLogins: readonly LoginRole[] = ['adms_api', 'adms_worker', 'adms_readonly'];
+// The installation's database, open to the logins; the shadow database `prisma migrate dev`
+// checks migrations in, open only to its owner, adms_owner (ADR-268); and the tests' database,
+// made, migrated and seeded as the installation's is, open to the same logins, so the roles,
+// grants and guards its tests prove are the installation's own.
 const databases: readonly { name: string; connect: readonly LoginRole[]; what: string }[] = [
-  {
-    name: databaseName,
-    connect: ['adms_api', 'adms_worker', 'adms_readonly'],
-    what: 'only the logins connect',
-  },
+  { name: databaseName, connect: serviceLogins, what: 'only the logins connect' },
   { name: 'adms_shadow', connect: [], what: "Prisma's shadow, only its owner connects" },
+  {
+    name: testDatabaseName,
+    connect: serviceLogins,
+    what: "the tests' own, made as the installation's is; only the logins connect",
+  },
 ];
 // The logins a service runs as, each under a statement timeout (ADR-394). adms_owner has none:
 // it runs the migrations and the seed, never a service.
@@ -170,6 +177,7 @@ export class Installer {
       await this.requireMasterPasscode();
       this.seed();
       await this.clearEarlierHash();
+      await this.ensureTestDatabase();
       this.state.save(record);
       this.ensureWorkerSettings();
       this.ensureApiSettings();
@@ -212,7 +220,7 @@ export class Installer {
       if (!this.yes) {
         console.log(
           `Teardown deletes this installation: the database ${databaseName} and every record in it, ` +
-            'its shadow, its four logins, their env files and the installation record. ' +
+            "its shadow, the tests' database, its four logins, their env files and the installation record. " +
             'The next run is a first run.',
         );
         const answer = await this.questions().ask('Type teardown to go on');
@@ -603,6 +611,31 @@ export class Installer {
     );
   }
 
+  // The tests' database (adms_test), brought to where the installation's is: migrated by the same
+  // migrations and seeded by the same seed, as adms_owner, through prisma.test.config.js. A first
+  // run makes it with the rest; a rerun of an installation made before it existed adds it, and
+  // every rerun moves it to the migrations' head with adms. Its master passcode is no firm's: the
+  // hash of a secret made here and let go, kept only where the test database holds none yet (the
+  // tests that need a passcode keep one of their own, inside their undone piece of work).
+  private async ensureTestDatabase(): Promise<void> {
+    const at = { ADMS_TEST_DATABASE: testDatabaseName };
+    console.log(`Migrations of ${testDatabaseName} (prisma migrate deploy, as adms_owner):`);
+    const migrated = this.prisma(['migrate', 'deploy', '--config', 'prisma.test.config.js'], at);
+    console.log(migrated.output);
+    if (migrated.status !== 0) {
+      throw new Error(`The migrations did not apply to ${testDatabaseName}. Stopped.`);
+    }
+    console.log(`Seed of ${testDatabaseName} (prisma db seed, as adms_owner):`);
+    const passcodeHash = await new PasscodeHasher().hash(new SecretMaker().password());
+    const seeded = this.prisma(['db', 'seed', '--config', 'prisma.test.config.js'], {
+      ...at,
+      [passcodeKey]: passcodeHash,
+    });
+    console.log(seeded.output);
+    if (seeded.status !== 0)
+      throw new Error(`The seed of ${testDatabaseName} did not finish. Stopped.`);
+  }
+
   // --- what it knows, and whether it's still true ---------------------------------------------
 
   private describe(record: InstallationRecord): void {
@@ -662,8 +695,16 @@ export class Installer {
       );
     }
     const migrations = this.prisma(['migrate', 'status']);
-    const summary = migrations.output.trim().split('\n').at(-1)?.trim() ?? '';
+    const summary = this.verdict(migrations.output);
     checks.push({ ok: migrations.status === 0, text: `migrations at head (${summary})` });
+    const tested = this.prisma(['migrate', 'status', '--config', 'prisma.test.config.js'], {
+      ADMS_TEST_DATABASE: testDatabaseName,
+    });
+    const testSummary = this.verdict(tested.output);
+    checks.push({
+      ok: tested.status === 0,
+      text: `${testDatabaseName}: migrations at head (${testSummary}${tested.status === 0 ? '' : '; `pnpm installer` brings it there'})`,
+    });
     let gaps: string[];
     try {
       gaps = await this.guardGaps();
@@ -1130,15 +1171,18 @@ export class Installer {
   }
 
   // The Prisma CLI in packages/db, whose config reads adms_owner's URL from packages/db/.env; a
-  // DATABASE_URL in this process's environment is left out so it can't redirect a migration.
+  // DATABASE_URL in this process's environment is left out so it can't redirect a migration, and
+  // so is an ADMS_TEST_DATABASE, which only the test database's commands are handed in `more`.
   // Prisma never prints a password; any connection URL in its output is cut out all the same.
   // `more` is handed to the command's own environment (the seed's hash), and to nothing else.
   private prisma(
     args: string[],
     more: Record<string, string> = {},
   ): { status: number; output: string } {
-    const env = { ...process.env, ...more };
+    const env: NodeJS.ProcessEnv = { ...process.env };
     delete env['DATABASE_URL'];
+    delete env['ADMS_TEST_DATABASE'];
+    Object.assign(env, more);
     const folder = join(this.root, 'packages/db');
     const result = spawnSync(
       process.execPath,
@@ -1154,6 +1198,12 @@ export class Installer {
       .map((line) => `  ${line}`)
       .join('\n');
     return { status: result.status ?? 1, output };
+  }
+
+  // What a Prisma command concluded: its error where it gave one, its last line otherwise.
+  private verdict(output: string): string {
+    const lines = output.split('\n').map((line) => line.trim());
+    return lines.find((line) => line.startsWith('Error:')) ?? lines.at(-1) ?? '';
   }
 
   private async confirm(question: string): Promise<boolean> {

@@ -1,6 +1,6 @@
 // The request id, from the answer to the audit record (ARCHITECTURE §5.3, §6, Logs; acceptance
 // file 10, AC-10-43; ADR-390), and the first use of the API's own database login. The real
-// process, in this test's own memory, opening the installation's database as `adms_api` with the
+// process, in this test's own memory, opening the test database as `adms_api` with the
 // settings the installer wrote (read here, never printed): it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. What the login writes can't be deleted, so the write is undone
 // by failing out of its own piece of work, which is also how a request that fails leaves nothing.
@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { apiDatabase } from '../src/process/api-database.ts';
 import { ApiProcess } from '../src/process/api-process.ts';
 import { Serves } from '../src/process/serves.ts';
-import { Settings, SettingsProblem } from '../src/process/settings.ts';
+import { testSettings } from './support/database.ts';
 import { ready, shippedPolicy } from './support/process.ts';
 
 interface Written {
@@ -65,16 +65,7 @@ describe('a write the API makes for a request', () => {
   let api: ApiProcess;
 
   beforeAll(async () => {
-    let settings: Settings;
-    try {
-      settings = Settings.read({ ADMS_API_HOST: '127.0.0.1', ADMS_API_PORT: '3000' });
-    } catch (problem) {
-      if (!(problem instanceof SettingsProblem)) throw problem;
-      throw new Error('The API has no settings: run `pnpm installer` (after `pnpm local:up`).', {
-        cause: problem,
-      });
-    }
-    api = await ApiProcess.create(WritingModule, settings, shippedPolicy, {
+    api = await ApiProcess.create(WritingModule, testSettings(), shippedPolicy, {
       stream: { write: (line) => lines.push(line) },
     });
     await ready(api);

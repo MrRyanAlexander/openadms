@@ -3,7 +3,7 @@
 // AC-10-27; BACKLOG 2.4.2, C97, C98, C99; ADR-321, 422, 423, 426, 529): disposal sites, a site's
 // own shape and its tipping fee pay item; the project's
 // map; the setup check and what each site's phones ask for. OWASP ASVS 5.0 V2, V8, V16. The real
-// process, in this test's own memory, on the installation's database as `adms_api`: it needs
+// process, in this test's own memory, on the test database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts). A refusal by the database ends the test's one piece of work, so each
 // such test makes its refused request last. Who may call each endpoint that takes Setup is
@@ -25,7 +25,7 @@ import {
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -41,7 +41,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

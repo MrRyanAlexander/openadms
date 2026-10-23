@@ -3,7 +3,7 @@
 // AC-02-37; 03-certification.md AC-03-09; 07-pricing-ledger-audit.md AC-07-91; BACKLOG 2.5.3,
 // C103, C114, C115, C117; ADR-151, 207, 213, 223, 227, 240, 243, 449…451). Parts 1 and 2 of the
 // task: the lists the harness's phones capture from, then the rest of the project's. The
-// real process, in this test's own memory, on the installation's database as `adms_api`: it
+// real process, in this test's own memory, on the test database as `adms_api`: it
 // needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import {
@@ -33,7 +33,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Certifications } from '../src/certification/certifications.ts';
 import { NumberAllocator } from '../src/numbering/number-allocator.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -42,7 +42,7 @@ import { ask, p1Priced, saved, told, type Browser } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

@@ -18,7 +18,7 @@ import type { Database } from '@open-adms/db';
 import { permissions } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import {
   danasEmail,
@@ -35,7 +35,7 @@ import { Outbox, signInOn } from './support/sign-in.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

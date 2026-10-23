@@ -4,13 +4,13 @@
 // same file, login and extension the API and the worker will use. What they write can't be
 // deleted, so every test's work runs inside $write and is then undone by throwing out of it.
 import { existsSync, readFileSync } from 'node:fs';
-import process from 'node:process';
 import { parseEnv } from 'node:util';
 
 import { PrismaPg } from '@prisma/adapter-pg';
 
 import type { Actor } from '../../src/actor.ts';
 import { openDatabase, type Database } from '../../src/database.ts';
+import { atTestDatabase } from '../../src/test-database.ts';
 import { PrismaClient, type Prisma } from '../../src/generated/prisma/client.ts';
 import { ViewerDatabase } from '../../src/viewer.ts';
 
@@ -18,8 +18,8 @@ export type Service = 'api' | 'worker';
 
 const root = new URL('../../../../', import.meta.url);
 
-// Opens the service's client on the installation's database (or ADMS_TEST_DATABASE, as the guard
-// tests do). The guard tests' GuardedDatabase.open() has already refused a stale database.
+// Opens the service's client on the installation's test database (or ADMS_TEST_DATABASE, as the
+// guard tests do). The guard tests' GuardedDatabase.open() has already refused a stale database.
 export function openService(
   service: Service,
   maxConnections = 2,
@@ -31,27 +31,21 @@ export function openService(
   }
   const written = parseEnv(readFileSync(envFile, 'utf8'))['DATABASE_URL'];
   if (written === undefined) throw new Error(`apps/${service}/.env has no DATABASE_URL.`);
-  const url = new URL(written);
-  const database = process.env['ADMS_TEST_DATABASE'];
-  if (database !== undefined) url.pathname = `/${database}`;
   return openDatabase({
-    url: url.toString(),
+    url: atTestDatabase(written),
     maxConnections,
     ...(requestNow === undefined ? {} : { requestNow }),
   });
 }
 
 // The read-only login's URL, as the API opens it for a viewer's reads (viewer.ts): the one the
-// installer wrote beside the API's own. Never printed.
+// installer wrote beside the API's own, on the test's database. Never printed.
 function viewerUrl(): string {
   const envFile = new URL('apps/api/.env', root);
   if (!existsSync(envFile)) throw new Error('apps/api/.env is missing: run `pnpm installer`.');
   const written = parseEnv(readFileSync(envFile, 'utf8'))['READONLY_DATABASE_URL'];
   if (written === undefined) throw new Error('apps/api/.env has no READONLY_DATABASE_URL.');
-  const url = new URL(written);
-  const database = process.env['ADMS_TEST_DATABASE'];
-  if (database !== undefined) url.pathname = `/${database}`;
-  return url.toString();
+  return atTestDatabase(written);
 }
 
 // The same login on one connection with the client beside it, for the test that asks what a

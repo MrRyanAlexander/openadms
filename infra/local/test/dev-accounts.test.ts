@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { OneTimeCodes, PasswordHasher, Settings, TwoStepSecrets } from '@open-adms/api';
-import { openDatabase } from '@open-adms/db';
+import { atTestDatabase, openDatabase } from '@open-adms/db';
 import { describe, expect, it } from 'vitest';
 
 import { devAccounts, DevAccounts } from '../src/dev-accounts.ts';
@@ -77,7 +77,8 @@ describe('the dev stack’s accounts', () => {
     const hasher = new PasswordHasher(settings.tokenSigningSecret);
     const secrets = new TwoStepSecrets(settings.tokenSigningSecret);
     const accounts = new DevAccounts({ hasher, secrets });
-    const db = openDatabase({ url: settings.databaseUrl, maxConnections: 1 });
+    // On the tests' database, never the installation's own (packages/db's test-database.ts).
+    const db = openDatabase({ url: atTestDatabase(settings.databaseUrl), maxConnections: 1 });
     const undo = new Error('undone');
     try {
       const actorId = await db.$read((tx) => accounts.actor(tx));

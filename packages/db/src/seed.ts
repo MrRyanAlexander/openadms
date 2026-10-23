@@ -23,6 +23,7 @@ import { deviceKeyActorId, deviceKeyActorName } from './device-key-actor.ts';
 import { startingValues } from './list-seeds.ts';
 import { masterPasscodeActorId, masterPasscodeActorName } from './master-passcode-actor.ts';
 import { systemActor, systemActorId, systemActorName } from './system-actor.ts';
+import { atTestDatabase } from './test-database.ts';
 
 export interface SeedOptions {
   // The master passcode's slow hash (Argon2id, a PHC string), for a database that holds none yet.
@@ -310,12 +311,15 @@ export class Seed {
 }
 
 // adms_owner's URL, from the .env beside the package (the installer writes it), as prisma.config.js.
+// Run through prisma.test.config.js (`--test-database`), the same login on the test's database
+// that ADMS_TEST_DATABASE names, as that config migrates it; never otherwise, so a name left in a
+// shell can't send the installation's seed elsewhere.
 function ownerUrl(): string {
   const envFile = new URL('../.env', import.meta.url);
   const installed = existsSync(envFile) ? parseEnv(readFileSync(envFile, 'utf8')) : {};
   const url = installed['DATABASE_URL'] ?? process.env['DATABASE_URL'];
   if (url === undefined) throw new Error('No DATABASE_URL: run `pnpm installer`.');
-  return url;
+  return process.argv.includes('--test-database') ? atTestDatabase(url) : url;
 }
 
 if (import.meta.main) {

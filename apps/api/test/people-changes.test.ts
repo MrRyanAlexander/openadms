@@ -2,7 +2,7 @@
 // against the database (task 2.4.2, part 4 of 4; BACKLOG C92, C100; ARCHITECTURE §6,
 // Authorization, §7.0; acceptance file 02, AC-02-06, 09, 12, 13, 72, 75, 83; file 10, AC-10-27 for
 // these endpoints; T-14; ADR-415, 427). OWASP ASVS 5.0 V8, 6.3.7; API Security Top 10, API1, API3,
-// API5. The real process, in this test's own memory, on the installation's database as
+// API5. The real process, in this test's own memory, on the test database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's
 // work is undone (support/database.ts).
 import {
@@ -26,16 +26,8 @@ import {
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { refusedAsTheLastAdmin } from '../src/people/people.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
-import {
-  danasEmail,
-  long,
-  longer,
-  luissEmail,
-  soleAdmin,
-  worldOn,
-  type Served,
-} from './support/served.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
+import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn, type Browser } from './support/setup.ts';
 import { Outbox } from './support/sign-in.ts';
 
@@ -49,7 +41,7 @@ const morgan = {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -456,7 +448,6 @@ describe('an admin changes a role', () => {
 
   it('AC-02-13 the firm’s only admin is never made a manager/analyst, by herself or by the database; with a second admin she may be, and her very next admin’s call is refused', async () => {
     await world(async (served, tx, who) => {
-      await soleAdmin(tx, who.dana);
       const dana = await served.signedIn(danasEmail, long);
       expect(told(await role(served, dana, who.dana, 'MANAGER_ANALYST'))).toEqual([
         409,

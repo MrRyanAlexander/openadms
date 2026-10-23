@@ -1,7 +1,7 @@
 // Setting a password, against the database (ARCHITECTURE §6, Passwords, §7.0; acceptance file 10,
 // AC-10-20, 24, 25 and AC-10-32's part; T-16, T-43; ADR-170, 402…405): an admin sets one, a person
 // resets theirs by email where the firm has mail, and all that is kept is the slow hash. The
-// service and the real process, in this test's own memory, on the installation's database as
+// service and the real process, in this test's own memory, on the test database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's
 // work is undone (support/database.ts). The last test sends through the local stack's mail
 // catcher and reads the message back from it.
@@ -23,7 +23,7 @@ import { SmtpMail, type Mail, type Message } from '../src/sign-in/mail.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
 import { Passwords } from '../src/sign-in/passwords.ts';
 import { ResetCodes } from '../src/sign-in/reset-codes.ts';
-import { installationSettings, openInstallation, undone, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, undone, type Tx } from './support/database.ts';
 import { madeUpSettings, ready, shippedPolicy } from './support/process.ts';
 import {
   NoServer,
@@ -89,7 +89,7 @@ function codeIn(message: Message | undefined): string {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -434,7 +434,7 @@ describe('the reset endpoints, through the process', () => {
 });
 
 describe('afterwards', () => {
-  it('each test’s work was undone: the installation’s database holds none of these people', async () => {
+  it('each test’s work was undone: the test database holds none of these people', async () => {
     expect(await db.user.count({ where: { email: { endsWith: '@gates.example' } } })).toBe(0);
   });
 });

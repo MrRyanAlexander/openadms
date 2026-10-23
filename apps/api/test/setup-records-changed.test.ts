@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 // Every setup record changed, archived and put back at the API (spec/parts/01-setup.md;
 // spec/LISTS.md; spec/RULES.md §7; acceptance file 01, AC-01-02, 27, 58, 83; file 02, AC-02-03;
 // BACKLOG 2.8.5, C62, C98…C101, C103, C113, C115, C140; REQ-213, REQ-105e; ADR-527). OWASP ASVS
-// 5.0 V8, V16. The real process, in this test's own memory, on the installation's database as
+// 5.0 V8, V16. The real process, in this test's own memory, on the test database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`. Each test's work is undone. A
 // refusal by the database ends the test's one piece of work, so it is the test's last request.
 // Who may call each endpoint is setup-endpoints.test.ts's.
@@ -42,7 +42,7 @@ import {
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { danasEmail, long, worldOn, type Served } from './support/served.ts';
 import {
   ask,
@@ -58,7 +58,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

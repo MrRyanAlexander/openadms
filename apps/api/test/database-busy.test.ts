@@ -2,7 +2,7 @@
 // AC-05-51, AC-10-71; T-17; REQ-210; BACKLOG 2.8.2, C87, C155, C162 (c); ADR-524): the caller is
 // told the database is busy and how long to wait (`503 BUSY` with `Retry-After`), never that the
 // server failed. Read from what Prisma throws as seen; the same from the real Prisma on the
-// installation's database (it needs the local stack and an installation); and a request
+// test database (it needs the local stack and an installation); and a request
 // answered so through the API's process, its only connection held.
 import { endpoint, errorAnswerSchema, healthAnswerSchema, toldToWait } from '@open-adms/contracts';
 import { openDatabase, type Database } from '@open-adms/db';
@@ -13,10 +13,10 @@ import { apiDatabase } from '../src/process/api-database.ts';
 import { ApiProcess } from '../src/process/api-process.ts';
 import { databaseBusyOf } from '../src/process/database-busy.ts';
 import { Serves } from '../src/process/serves.ts';
-import { installationSettings } from './support/database.ts';
+import { testSettings } from './support/database.ts';
 import { madeUpSettings, shippedPolicy } from './support/process.ts';
 
-// What Prisma 7.10.0 throws, as seen on the installation's database (2026-10-14).
+// What Prisma 7.10.0 throws, as seen on the test database (2026-10-14).
 const prisma = (code: string, message: string, meta: object = {}) => ({
   name: 'PrismaClientKnownRequestError',
   code,
@@ -70,11 +70,11 @@ describe('what says the database was busy', () => {
   });
 });
 
-// The installation's database as the API's login, on a pool of one connection, each piece of
+// The test database as the API's login, on a pool of one connection, each piece of
 // work waiting a fifth of a second for it and running a second at the most.
 const onOneConnection = (): Database =>
   openDatabase({
-    url: installationSettings().databaseUrl,
+    url: testSettings().databaseUrl,
     maxConnections: 1,
     pieceOfWork: { waitMs: 200, longestMs: 1000 },
   });
@@ -107,7 +107,7 @@ const thrownBy = async (work: Promise<unknown>): Promise<unknown> => {
   return 'nothing thrown';
 };
 
-describe('the real Prisma, on the installation’s database', () => {
+describe('the real Prisma, on the test database', () => {
   let db: Database;
 
   beforeAll(() => {

@@ -2,7 +2,7 @@
 // against the database (ARCHITECTURE §7's notes, §7.2, §7.3, §7.5, §10;
 // spec/acceptance/02-people-and-devices.md AC-02-23, 42, 46; spec/acceptance/10-api-and-sync.md
 // AC-10-19, 27; BACKLOG 2.5.4, C46, C122…C125; ADR-100, 106, 438, 456 (3), (5)(e), 462, 464;
-// REQ-202b, 209). The real process, in this test's own memory, on the installation's database
+// REQ-202b, 209). The real process, in this test's own memory, on the test database
 // as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each
 // test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -20,7 +20,7 @@ import {
 import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, provenBoth, senderOf, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -29,7 +29,7 @@ import { ask, p1Priced, saved, told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

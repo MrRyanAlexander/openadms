@@ -2,7 +2,7 @@
 // (ARCHITECTURE §7.4, §7.5; spec/acceptance/02-people-and-devices.md AC-02-21, 22, 23, 59;
 // spec/acceptance/10-api-and-sync.md AC-10-24, 27; BACKLOG 2.4.3, C47, C89; ADR-106, 134, 240,
 // 281, 428). OWASP ASVS 5.0 V6, V7, V8. The real process, in this test's own memory, on the
-// installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
+// test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
 
@@ -21,24 +21,16 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Phones } from '../src/dispatch/phones.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, proven, turnedIn } from './support/phones.ts';
-import {
-  danasEmail,
-  long,
-  longer,
-  luissEmail,
-  soleAdmin,
-  worldOn,
-  type Served,
-} from './support/served.ts';
+import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 import { Outbox, passwordKey } from './support/sign-in.ts';
 
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -493,7 +485,6 @@ describe('the master passcode', () => {
   it('AC-02-21, AC-02-22, AC-02-23 Dana changes it, giving her own password again: a new version is kept as an Argon2id hash and the one before is still there; the audit log names her and holds no hash; each phone still says the version it holds until its next sync; every admin is told by mail, never the passcode', async () => {
     const outbox = new Outbox();
     await world(async (served, tx, who) => {
-      await soleAdmin(tx, who.dana);
       const phones = await enrolled(served, tx);
       const before = await inForce(tx);
       const dana = await served.signedIn(danasEmail, long);

@@ -1,7 +1,7 @@
 // A read-only viewer's path, from the door to the database's read-only login (ARCHITECTURE §5.5,
 // §6; spec/acceptance/02-people-and-devices.md AC-02-74; spec/acceptance/10-api-and-sync.md
 // AC-10-27, 30, 31; BACKLOG 2.4.5, C22; ADR-050, 169, 315, 434). OWASP ASVS 5.0 V8. The real
-// process, in this test's own memory, on the installation's database: it needs `pnpm local:up`
+// process, in this test's own memory, on the test database: it needs `pnpm local:up`
 // after `pnpm installer`, and fails saying so. Each test's work is undone.
 //
 // **What this file can't show, and where it is shown.** The read-only login sees nothing a test
@@ -30,7 +30,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { openApiViewerDatabase } from '../src/process/api-database.ts';
 import { ViewerReads } from '../src/viewer/viewer-reads.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { jpeg, kimsPhone, Kept } from './support/kims-phone.ts';
 import { notTaken, p1WithTickets } from './support/review.ts';
 import { danasEmail, long, longer, luissEmail, worldOn } from './support/served.ts';
@@ -39,7 +39,7 @@ import { ask, at, p1, saved, told, viewerSignsIn } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -282,9 +282,9 @@ describe('a photograph’s file for a viewer', () => {
 
 describe('as the database’s read-only login itself', () => {
   it('AC-10-30 every read the service makes is one the login is granted, and somebody the firm issued no viewer’s login is shown nothing', async () => {
-    // The real login, on the installation's database: a read of a column it isn't granted
+    // The real login, on the test database: a read of a column it isn't granted
     // would be the database's refusal here, whoever is stated.
-    const viewed = openApiViewerDatabase(installationSettings(), { maxConnections: 1 });
+    const viewed = openApiViewerDatabase(testSettings(), { maxConnections: 1 });
     try {
       const reads = new ViewerReads(viewed);
       expect(await reads.projects(randomUUID(), { limit: 200 })).toEqual({

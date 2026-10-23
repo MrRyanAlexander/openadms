@@ -1,7 +1,7 @@
 // The exports, photo PDFs and the receipt batch through their endpoints, against the database
 // (REQ-412, 413, 414; spec/FROM-BUILD-1.md §1, §10; AC-09-27, 28): each a download that is never
 // run, made each time and kept nowhere. The real process, in this test's own memory, on the
-// installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`. Each
+// test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`. Each
 // test's work is undone. And the table writer itself: a cell a spreadsheet would run is text.
 import { exportFileEndpoint, photoPdfEndpoint, receiptBatchEndpoint } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { numbersIn } from '../src/reports/documents.ts';
 import { safeCell, tableFile } from '../src/reports/table-file.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { luisHolds, p1WithTickets } from './support/review.ts';
 import { worldOn } from './support/served.ts';
 import { ask, told, viewerSignsIn } from './support/setup.ts';
@@ -17,7 +17,7 @@ import { ask, told, viewerSignsIn } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

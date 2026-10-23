@@ -3,7 +3,7 @@
 // sync.md AC-10-18, 19, 32; BACKLOG 2.5.2, C90, C112, C113; ADR-105, 134, 409, 417, 440, 441,
 // 443); and the phone takes the monitor's assignment for the day (AC-02-29, 35, 36; C114;
 // ADR-240, 444). NIST SP 800-63B-4 §2.2.3, §3.2.2, §5.1; OWASP ASVS 5.0 V6, V7, V16. The real process,
-// in this test's own memory, on the installation's database as `adms_api`: it needs `pnpm
+// in this test's own memory, on the test database as `adms_api`: it needs `pnpm
 // local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import {
@@ -21,7 +21,7 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven, turnedIn, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -31,7 +31,7 @@ import { Outbox } from './support/sign-in.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

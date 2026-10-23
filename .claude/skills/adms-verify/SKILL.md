@@ -52,7 +52,7 @@ need before you write a test or a migration there; skip the rest.**
 | Touching | Read first |
 |---|---|
 | `packages/db/prisma/schema/`, a migration, a guard, a new table's tests | `schema-and-migrations.md` |
-| `packages/db` or its tests; a throw-away copy of `adms`; a guard's loosening | `database-tests.md` |
+| `packages/db` or its tests; the tests' database `adms_test` and a throw-away copy of it; a guard's loosening | `database-tests.md` |
 | `apps/api`, an endpoint in `packages/contracts`, an API test, a phone's or a monitor's requests | `api-tests.md` (its first section, then the one for your area) |
 | `apps/worker`, the job queue, what queues work | `worker-tests.md` |
 | `apps/field`, its browser end-to-end tests, the field app's page and its headers | `browser-tests.md` (ADR-564, 565) |

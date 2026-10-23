@@ -3,7 +3,7 @@
 // it ever." An admin reads what is still open, closes it by hand (its assignments withdrawn, its
 // numbers retired), and reopens it with a reason; nothing in it changes after, the database
 // refusing it; field work for it that arrives later is held for a person. The real process, in
-// this test's own memory, on the installation's database as `adms_api`: it needs `pnpm ready`.
+// this test's own memory, on the test database as `adms_api`: it needs `pnpm ready`.
 // Each test's work is undone. A refusal by the database ends the test's one piece of work, so it
 // is the test's last request.
 import {
@@ -15,7 +15,7 @@ import {
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { kimsOther, kimsPhone, nothingHeld, turnedIn } from './support/kims-phone.ts';
 import { passcode } from './support/phones.ts';
 import { luisHolds } from './support/review.ts';
@@ -25,7 +25,7 @@ import { ask, notSaved, plainly, saved, told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

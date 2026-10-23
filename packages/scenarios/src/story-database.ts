@@ -2,7 +2,7 @@
 // installation's database (adms); it gets a new one on the local stack, adms_story_…, and the
 // harness drops it afterwards. Made as the installer makes adms: owned by adms_owner, nobody but the
 // logins may connect (Postgres gives a new database an open access list), then migrated by Prisma
-// from the same migrations (prisma.story.config.js) and seeded by the same seed, so every story
+// from the same migrations (prisma.test.config.js) and seeded by the same seed, so every story
 // starts at the migrations' head with only the system actor and the master passcode in it.
 //
 // A run of several stories migrates and seeds once (ADR-447): a template made the same way, which
@@ -220,7 +220,7 @@ export class StoryDatabase implements StageDatabase {
 
   // Every migration, as adms_owner, through Prisma (prisma migrate deploy); how many were applied.
   migrate(): number {
-    const env: NodeJS.ProcessEnv = { ...process.env, ADMS_STORY_DATABASE: this.name };
+    const env: NodeJS.ProcessEnv = { ...process.env, ADMS_TEST_DATABASE: this.name };
     delete env['DATABASE_URL'];
     const folder = fileURLToPath(dbPackage);
     const result = spawnSync(
@@ -230,7 +230,7 @@ export class StoryDatabase implements StageDatabase {
         'migrate',
         'deploy',
         '--config',
-        'prisma.story.config.js',
+        'prisma.test.config.js',
       ],
       { cwd: folder, env, encoding: 'utf8' },
     );

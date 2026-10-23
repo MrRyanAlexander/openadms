@@ -16,7 +16,7 @@ import {
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 import type { MediaStoreSettings } from '../../src/media/media-store.ts';
-import { installationSettings } from './database.ts';
+import { testSettings } from './database.ts';
 import { shippedPolicy } from './process.ts';
 
 const stackEnv = fileURLToPath(new URL('../../../../infra/local/.env', import.meta.url));
@@ -24,7 +24,7 @@ const stackEnv = fileURLToPath(new URL('../../../../infra/local/.env', import.me
 // The store as the installation's API is told of it, with the release's time limit.
 export function installationMedia(): MediaStoreSettings {
   return {
-    ...installationSettings().media,
+    ...testSettings().media,
     timeoutMs: shippedPolicy.mediaStoreAnswerSeconds * 1000,
   };
 }

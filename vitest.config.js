@@ -5,9 +5,10 @@ import process from 'node:process';
 
 import { defineConfig } from 'vitest/config';
 
-// A run on the installation's own database keeps its report, for `pnpm security` to report the
+// A run on the installation's test database (adms_test, migrated and seeded beside adms as adms
+// is; packages/db/src/test-database.ts) keeps its report, for `pnpm security` to report the
 // database tests from where nothing has changed since (ADR-446; tools/security/src/grants.ts).
-// A run on a throw-away copy (ADMS_TEST_DATABASE) keeps none: it says nothing of `adms`.
+// A run on a throw-away copy (ADMS_TEST_DATABASE) keeps none: it says nothing of the real grants.
 // `pnpm security`'s own run of the grant tests names where its report goes (ADMS_TEST_REPORT;
 // ADR-460): a path given on the command line is not taken over the one written here.
 const reporters =
@@ -49,7 +50,7 @@ export default defineConfig({
       // The API as a process (ADR-385): its settings and its error filter need nothing; the door
       // (HTTPS through Caddy, the log) needs the stack up and the installation, and says so.
       // Its files run one at a time (ADR-415): each test's work is one open piece of work on the
-      // installation's database with the example world's people in it, and the database keeps
+      // installation's test database with the example world's people in it, and the database keeps
       // two who sign in from one email address, so a second file's Dana would wait for the first's.
       { test: { name: '@open-adms/api', root: 'apps/api', fileParallelism: false } },
       // The worker's questions to the map servers (ADR-349): they need the stack up too.

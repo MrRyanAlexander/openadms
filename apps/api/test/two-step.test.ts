@@ -1,14 +1,14 @@
 // Two-step sign-in, against the database (ARCHITECTURE §6; acceptance file 02, AC-02-14, 74;
 // file 10, AC-10-26 and AC-10-32's part; T-14, T-16, T-26; ADR-170, 412). NIST SP 800-63B-4
 // §3.1.4, §3.2.2; ASVS 6.4.4, 6.5.1, 6.5.5. The real process, in this test's own memory, on the
-// installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
+// test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 import { sessionAnswerSchema, twoStepSetupAnswerSchema } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OneTimeCodes } from '../src/sign-in/one-time-codes.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   danasEmail,
   danasSecret,
@@ -40,7 +40,7 @@ const heldNow = (): Promise<number[]> =>
   Promise.all([db.session.count(), db.securityEvent.count(), db.userCredential.count()]);
 
 beforeAll(async () => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   before = await heldNow();
 });
 afterAll(async () => {
@@ -667,7 +667,7 @@ describe('the log', () => {
 });
 
 describe('afterwards', () => {
-  it('each test’s work was undone: the installation’s database holds none of these people, and no session, security event or sign-in record more than before', async () => {
+  it('each test’s work was undone: the test database holds none of these people, and no session, security event or sign-in record more than before', async () => {
     expect(await db.user.count({ where: { email: { endsWith: '@gates.example' } } })).toBe(0);
     expect(await heldNow()).toEqual(before);
   });

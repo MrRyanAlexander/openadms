@@ -3,7 +3,7 @@
 // AC-02-38; spec/acceptance/07-pricing-and-ledger.md AC-07-91; spec/acceptance/10-api-and-
 // sync.md AC-10-19, 22, 32; BACKLOG 2.5.4, C113, C124; ADR-106, 240, 462 (4)(f), 463; REQ-202b,
 // 209). OWASP ASVS 5.0 8.2.1, 8.2.2, 14.2.1, 14.2.6, 16.3.1; API Security Top 10 (2023)
-// API1…API5. The real process, in this test's own memory, on the installation's database as
+// API1…API5. The real process, in this test's own memory, on the test database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's
 // work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -26,7 +26,7 @@ import { MasterPasscodeCheck } from '../src/phone/master-passcode-check.ts';
 import { SetupChoices } from '../src/phone/setup-choices.ts';
 import { OfflineChecks } from '../src/phone/offline-checks.ts';
 import { PasswordHasher } from '../src/sign-in/password-hasher.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import {
@@ -43,7 +43,7 @@ import { NoServer, passwordKey, sealingKey } from './support/sign-in.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

@@ -2,7 +2,7 @@
 // spec/acceptance/05-sync.md AC-05-03, 04, 15, 16, 20, 45, 47; spec/acceptance/10-api-and-sync.md
 // AC-10-35, 46, 51; AC-02-23, AC-05-48; spec/DATA-MODEL.md §4.5; BACKLOG 2.6.2, C64, C69, C122,
 // C126…C132, C136; ADR-022, 052, 065, 100, 420, 453, 454, 466…473, 481; KD-56; REQ-016, 203, 308c). The real process, in this test's own
-// memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// memory, on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
 
@@ -41,7 +41,7 @@ import { isMediaKey } from '../src/media/media-store.ts';
 import { HeldThings } from '../src/sync/held.ts';
 import { Intake } from '../src/sync/intake.ts';
 import { sentFingerprint, Sync } from '../src/sync/sync.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { opens } from './support/offline-check.ts';
 import { enrolledPhone, passcode, provenWithPasscode } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
@@ -60,7 +60,7 @@ import { Outbox, sealingKey } from './support/sign-in.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

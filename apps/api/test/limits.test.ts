@@ -2,7 +2,7 @@
 // ADR-416): a caller over a limit is refused with a plain code and told when to try again; one
 // address is counted apart from another, and a login's own count apart from both; the numbers
 // are policy values an installation may state. The first tests need no stack; the ones of
-// sign-in run against the installation's database (`pnpm local:up`), each in its own piece of
+// sign-in run against the test database (`pnpm local:up`), each in its own piece of
 // work, undone.
 import { errorAnswerSchema, healthAnswerSchema } from '@open-adms/contracts';
 import type { Database } from '@open-adms/db';
@@ -14,7 +14,7 @@ import { answerHeaders } from '../src/process/answer-headers.ts';
 import { ApiModule } from '../src/process/api-module.ts';
 import { ApiProcess, type ProcessPolicy } from '../src/process/api-process.ts';
 import { Limited, Limits } from '../src/process/limits.ts';
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { listedOrigin, madeUpSettings, ready, shippedPolicy } from './support/process.ts';
 import {
   danasEmail,
@@ -206,7 +206,7 @@ describe('the counts the server keeps', () => {
 
 let db: Database;
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

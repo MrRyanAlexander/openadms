@@ -1,7 +1,7 @@
 // An address looked up for a phone's GPS, through the API (ARCHITECTURE §3 "Road distance and
 // addresses", §6; spec/acceptance/04-field-capture.md AC-04-24; acceptance file 10's row for it,
 // OWASP API Security Top 10 API7 and API10; BACKLOG 2.5.3, C117, C120; ADR-111, 119, 455). Part
-// 5 of the task. The real process, in this test's own memory, on the installation's database as
+// 5 of the task. The real process, in this test's own memory, on the test database as
 // `adms_api`, asking the local stack's own address server (Delaware's roads stand in for
 // Bayline County's): it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each
 // test's work is undone (support/database.ts).
@@ -17,7 +17,7 @@ import type { GpsPoint } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { AddressServer, type Addresses } from '../src/phone/address-server.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, proven } from './support/phones.ts';
 import { shippedPolicy } from './support/process.ts';
 import { danasEmail, long, worldOn, type Served } from './support/served.ts';
@@ -29,7 +29,7 @@ let db: Database;
 // The installation's own address server, as the API's process is told of it.
 let stacks: AddressServer;
 const serverWith = (more: { url?: string; timeoutMs?: number; answerBytesAtMost?: number }) => {
-  const settings = installationSettings();
+  const settings = testSettings();
   return new AddressServer({
     url: settings.addressesUrl,
     caFile: settings.mapCaFile,
@@ -40,7 +40,7 @@ const serverWith = (more: { url?: string; timeoutMs?: number; answerBytesAtMost?
 };
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   stacks = serverWith({});
 });
 afterAll(async () => {
@@ -339,7 +339,7 @@ describe('what the API asks the address server, and takes from it (API7, API10)'
       serverWith({ url: 'https://addresses.adms.localhost:1' }).addressOf(onTheGreen),
     );
     expect(away).toBe('The address server could not be asked (Error).');
-    const routing = installationSettings().addressesUrl.replace('addresses.', 'routing.');
+    const routing = testSettings().addressesUrl.replace('addresses.', 'routing.');
     const other = await words(serverWith({ url: routing }).addressOf(onTheGreen));
     expect(other).toMatch(/^The address server (answered \d{3} to|didn't answer) \/reverse/);
     for (const said of [late, large, away, other]) {

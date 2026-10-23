@@ -1,7 +1,7 @@
 // A back-office or outside user's session, against the database (ARCHITECTURE §6, Back-office
 // sessions, Abuse; acceptance file 10, AC-10-09, 12…19 and AC-10-32's part, with AC-02-39's web
 // half; T-14, T-15, T-16, T-24; ADR-398, 401, 408…411). The real process, in this test's own
-// memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// memory, on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts), so a test
 // stays short: a piece of work ends after five seconds.
 import { createCipheriv, createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
@@ -11,7 +11,7 @@ import { systemActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { accessCookie, refreshCookie } from '../src/sign-in/session-cookies.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   danasEmail,
   danasSecret,
@@ -41,7 +41,7 @@ const heldNow = (): Promise<number[]> =>
   Promise.all([db.session.count(), db.securityEvent.count(), db.userCredential.count()]);
 
 beforeAll(async () => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   before = await heldNow();
 });
 afterAll(async () => {
@@ -772,7 +772,7 @@ describe('the log', () => {
 });
 
 describe('afterwards', () => {
-  it('each test’s work was undone: the installation’s database holds none of these people, and no session, security event or sign-in record more than before', async () => {
+  it('each test’s work was undone: the test database holds none of these people, and no session, security event or sign-in record more than before', async () => {
     expect(await db.user.count({ where: { email: { endsWith: '@gates.example' } } })).toBe(0);
     expect(await heldNow()).toEqual(before);
   });

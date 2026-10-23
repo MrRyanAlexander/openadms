@@ -1,7 +1,7 @@
 // The back office's reads and bulk acts through their endpoints, against the database (spec/
 // parts/08, "One review queue"; spec/parts/09; spec/acceptance/10-api-and-sync.md AC-10-93…103;
 // BACKLOG 2.8.8; ADR-535, 539). OWASP API1, API3, API4; ASVS V8. The real process, in this test's own
-// memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// memory, on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`. Each test's work is undone (support/database.ts).
 //
 // The API's login writes no flag, status, completed load or line: those are the worker's, so a
@@ -78,7 +78,7 @@ import { QcMarks } from '../src/review/qc-marks.ts';
 import { ReviewReads } from '../src/review/review-reads.ts';
 import { SetupReads } from '../src/setup/setup-reads.ts';
 import { Voids } from '../src/review/voids.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { jpeg, kimsPhone, Kept } from './support/kims-phone.ts';
 import { passcode } from './support/phones.ts';
 import { p1Boundary, p1Zones } from './support/map-files.ts';
@@ -90,7 +90,7 @@ import { ask, p1Priced, saved, told, viewerSignsIn, type Browser } from './suppo
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

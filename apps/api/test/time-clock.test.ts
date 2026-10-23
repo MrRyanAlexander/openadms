@@ -2,7 +2,7 @@
 // AC-02-50, 53…55; BACKLOG 3.7.1; ADR-063, 100, 241, 598): a worker's entries and the lines their
 // clock-out carries, taken at sync as the worker's own word; a manager's approval of the day and
 // its unlock, by the endpoint recipe; the read the export of hours makes. The real process, in
-// this test's own memory, on the installation's database as `adms_api`: it needs `pnpm local:up`
+// this test's own memory, on the test database as `adms_api`: it needs `pnpm local:up`
 // after `pnpm installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import { randomUUID } from 'node:crypto';
 
@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { SetupVersions } from '../src/setup/setup-versions.ts';
 import { Hours } from '../src/time-clock/hours.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, provenWithPasscode } from './support/phones.ts';
 import {
   danasEmail,
@@ -39,7 +39,7 @@ import { ask, notSaved, p1Priced, saved, told, type Browser } from './support/se
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

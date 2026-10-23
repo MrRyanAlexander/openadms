@@ -163,6 +163,11 @@ const startsWith: Record<ListTable, string[]> = {
     'Confirmed with the monitor',
     'Device failed',
     'Device lost',
+    // A phone taken out of service (ADR-530): a new installation's, as spec/LISTS.md gives them.
+    'Lost in the field',
+    'Stolen',
+    'Broken',
+    'Replaced',
   ],
   survey_work_type: ['Pre-work survey', 'Post-work survey', 'ROE'],
   clock_activity: ['Travel', 'Standby', 'Training'],
@@ -508,21 +513,23 @@ describe('reasons', () => {
     }
   });
 
-  it('AC-01-36 each reason says which of the four uses it is offered for', async () => {
+  it('AC-01-36 each reason says which of the five uses it is offered for', async () => {
     expect({
       VOID: await offeredFor('VOID'),
       TYPED_NUMBER: await offeredFor('TYPED_NUMBER'),
       ACCEPT_FLAG: await offeredFor('ACCEPT_FLAG'),
       BACK_OFFICE_RECORD: await offeredFor('BACK_OFFICE_RECORD'),
+      PHONE_REMOVAL: await offeredFor('PHONE_REMOVAL'),
     }).toEqual({
       VOID: ['Duplicate ticket', 'Work never happened', 'Not eligible work'],
       TYPED_NUMBER: ['Barcode damaged', 'Scanner not working'],
       ACCEPT_FLAG: ['Photos confirm', 'Confirmed with the monitor'],
       BACK_OFFICE_RECORD: ['Device failed', 'Device lost'],
+      PHONE_REMOVAL: ['Lost in the field', 'Stolen', 'Broken', 'Replaced'],
     });
   });
 
-  it('AC-01-36 the firm’s own reason may be offered for several uses, and for none but the four', async () => {
+  it('AC-01-36 the firm’s own reason may be offered for several uses, and for none but the five', async () => {
     const { db } = tested;
     await asTheApi();
     await db.run(...(await valueOf('reason', 'Monitor’s mistake', { uses: '{VOID,ACCEPT_FLAG}' })));

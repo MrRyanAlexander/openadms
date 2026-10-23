@@ -1,7 +1,7 @@
 // A reprocess a person asks for with nothing changed, through its endpoint, against the database
 // (spec/parts/08-review-and-corrections.md step 4; spec/acceptance/10 AC-10-27, 28, 33; BACKLOG
 // 2.7.1 piece 4b2, C146; ADR-418, 420, 498). OWASP ASVS 5.0 V8. The real process, in this test's
-// own memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm
+// own memory, on the test database as `adms_api`: it needs `pnpm local:up` after `pnpm
 // installer`, and fails saying so. Each test's work is undone (support/database.ts).
 //
 // The API's login writes no status, flag or completed load, and can't set a job aside (that is
@@ -15,7 +15,7 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Reprocesses } from '../src/review/reprocesses.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { audited, jobsFor, luisHolds, notTaken, p1WithTickets } from './support/review.ts';
 import { worldOn } from './support/served.ts';
@@ -24,7 +24,7 @@ import { ask, notSaved, plainly, saved, told, viewerSignsIn } from './support/se
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

@@ -2,7 +2,7 @@
 // only with somebody signed in on it (ARCHITECTURE §6, Device sessions; §7.2, §7.3; ADR-105,
 // 454, 462, 531; the user, 2026-10-15). The proof is made here as a phone makes it, with Node's
 // own Argon2 and HMAC and the domain's words alone, nothing of the API's. The real process, in
-// this test's own memory, on the installation's database as `adms_api`: it needs `pnpm local:up`
+// this test's own memory, on the test database as `adms_api`: it needs `pnpm local:up`
 // after `pnpm installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import { createHmac, randomUUID } from 'node:crypto';
 
@@ -22,7 +22,7 @@ import { masterPasscodeActorId, type Database } from '@open-adms/db';
 import { OfflineSignInRules, type OfflineSignInKind } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { firstHashOf } from './support/offline-check.ts';
 import { enrolledPhone, passcode, proven, provenWithPasscode } from './support/phones.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -31,7 +31,7 @@ import { ask, p1Priced, saved, told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

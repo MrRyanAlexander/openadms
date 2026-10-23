@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { databaseRefusalOf, lockedTicketOf } from '../src/process/database-refusal.ts';
 
-// What Prisma throws, as seen on the installation's database (2026-10-08).
+// What Prisma throws, as seen on the test database (2026-10-08).
 const thrown = (code: string, cause?: object) => ({
   name: 'PrismaClientKnownRequestError',
   code,

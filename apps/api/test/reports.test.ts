@@ -1,7 +1,7 @@
 // A project's reports through their endpoints, against the database (REQ-409, 410; spec/
 // FROM-BUILD-1.md §9): the debris totals, the email summary in the user's shape, and the daily
 // report's PDF, each read afresh, never a cost. The real process, in this test's own memory, on
-// the installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`.
+// the test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`.
 // Each test's work is undone.
 //
 // The API's login writes no completed load or haul-out: those are the worker's, so what counts
@@ -19,7 +19,7 @@ import { builtOn, builtOnLine } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { releaseVersion } from '../src/process/release.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { luisHolds, p1WithTickets } from './support/review.ts';
 import { worldOn, type Served } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
@@ -27,7 +27,7 @@ import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

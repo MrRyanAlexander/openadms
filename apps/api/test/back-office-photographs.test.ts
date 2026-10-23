@@ -2,7 +2,7 @@
 // file (ARCHITECTURE §6 "Uploads", §11; spec/acceptance/03-certification.md AC-03-65;
 // 10-api-and-sync.md AC-10-92; spec/THREAT-MODEL.md T-25; BACKLOG 2.8.7; ADR-101, 482, 521,
 // 534 (2)). OWASP ASVS 5.0 V5. The real process, in this test's own memory, on the
-// installation's database as `adms_api`, keeping files in the local stack's own object store
+// test database as `adms_api`, keeping files in the local stack's own object store
 // under the API's identity: it needs `pnpm ready`. Each test's database work is undone; its
 // files, which the API's identity can't delete, are taken away by the stack's administrator.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -21,7 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Certifications } from '../src/certification/certifications.ts';
 import { MediaStore } from '../src/media/media-store.ts';
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   asTheStacksAdministrator,
   installationMedia,
@@ -48,7 +48,7 @@ let administrator: S3Client;
 const projects = new Set<string>();
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   store = new MediaStore(installationMedia());
   administrator = asTheStacksAdministrator(installationMedia());
 });

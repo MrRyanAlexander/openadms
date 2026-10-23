@@ -3,7 +3,7 @@
 // AC-05-03; spec/acceptance/10-api-and-sync.md AC-10-32, 45, 46; spec/THREAT-MODEL.md T-02, T-11;
 // BACKLOG 2.5.1, C110, C111; ADR-134, 436, 437, 440). NIST SP 800-63B-4 §3.1.6, §3.2.7, §5.1;
 // OWASP ASVS 5.0 6.7.2, 11.2.3, 11.6.1. The real process, in this test's own memory, on the
-// installation's database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
+// test database as `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and
 // fails saying so. Each test's work is undone (support/database.ts).
 //
 // A test's phone holds a key made in software and is enrolled by the API's own request
@@ -20,7 +20,7 @@ import { deviceKeyActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import {
   answered,
   challengeFor,
@@ -37,7 +37,7 @@ import { told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

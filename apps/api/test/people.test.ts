@@ -2,7 +2,7 @@
 // Authorization, §7.0; acceptance file 02, AC-02-08, 12, 13, 72, 83; file 09, AC-09-18; file 10,
 // AC-10-25's admin half and AC-10-27 for these endpoints; T-14; ADR-315, 364, 406, 415). OWASP
 // ASVS 5.0 V8, 7.4.5; API Security Top 10, API1, API3, API5. The real process, in this test's own
-// memory, on the installation's database as `adms_api`: it needs `pnpm local:up` after
+// memory, on the test database as `adms_api`: it needs `pnpm local:up` after
 // `pnpm installer`, and fails saying so. Each test's work is undone (support/database.ts).
 import {
   adminOnly,
@@ -27,7 +27,7 @@ import { NewProjectSettings } from '@open-adms/domain';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { People } from '../src/people/people.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import {
   danasEmail,
@@ -35,7 +35,6 @@ import {
   longer,
   luissEmail,
   ran,
-  soleAdmin,
   worldOn,
   wrong,
   type Answer,
@@ -63,7 +62,7 @@ const luissGrants = [
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
@@ -801,7 +800,6 @@ describe('archiving a person, and ending their sessions', () => {
 
   it('AC-02-13 the firm’s only admin can’t be archived, by herself or by the database; with a second admin, one may go', async () => {
     await world(async (served, tx, who) => {
-      await soleAdmin(tx, who.dana);
       const dana = await served.signedIn(danasEmail, long);
       expect(told(await post(served, dana, `/people/${who.dana}/archivings`))).toEqual([
         409,

@@ -1,7 +1,7 @@
 // A day's assignments, written on the dispatch board, against the database (ARCHITECTURE §7;
 // spec/acceptance/02-people-and-devices.md AC-02-24…32; spec/acceptance/10-api-and-sync.md
 // AC-10-27, 33; BACKLOG 2.4.3, C102; ADR-240, 286, 308, 429). OWASP ASVS 5.0 V8. The real
-// process, in this test's own memory, on the installation's database as `adms_api`: it needs
+// process, in this test's own memory, on the test database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -22,7 +22,7 @@ import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { Assignments } from '../src/dispatch/assignments.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, provenWithPasscode } from './support/phones.ts';
 import { danasEmail, long, longer, luissEmail, worldOn, type Served } from './support/served.ts';
 import {
@@ -41,7 +41,7 @@ import {
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

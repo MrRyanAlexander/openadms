@@ -18,7 +18,7 @@ import {
 import type { Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { luisHolds, p1WithTickets } from './support/review.ts';
 import { luissEmail, longer, worldOn } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
@@ -26,7 +26,7 @@ import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

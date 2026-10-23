@@ -2,7 +2,7 @@
 // (ARCHITECTURE §7.1, §7.2, §7.5; spec/acceptance/02-people-and-devices.md AC-02-17, AC-02-39,
 // AC-02-41; BACKLOG 2.5.3, C90, C110, C117, C119; ADR-105, 106, 139, 449, 454). Part 4 of the
 // task. A check is tried here as a phone would try it, with Node's own Argon2 and nothing of
-// the API's. The real process, in this test's own memory, on the installation's database as
+// the API's. The real process, in this test's own memory, on the test database as
 // `adms_api`: it needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's
 // work is undone (support/database.ts).
 import {
@@ -24,7 +24,7 @@ import { deviceKeyActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { installationPolicy } from '../src/policy.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { opens } from './support/offline-check.ts';
 import { enrolledPhone, passcode, proven, type TestPhone } from './support/phones.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -33,7 +33,7 @@ import { ask, p1Priced, saved, told, type Browser } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

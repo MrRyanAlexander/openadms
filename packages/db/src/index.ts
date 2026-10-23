@@ -7,6 +7,7 @@ export { ReconciliationJobs, type JobAsked, type JobTicket } from './reconciliat
 export { RuleRows, type RuleNamed } from './rule-rows.ts';
 export { Seed, type SeedOptions } from './seed.ts';
 export { systemActor, systemActorId, systemActorName } from './system-actor.ts';
+export { atTestDatabase, isTestDatabase, testDatabase, testDatabaseName } from './test-database.ts';
 export {
   masterPasscodeActorId,
   masterPasscodeActorName,

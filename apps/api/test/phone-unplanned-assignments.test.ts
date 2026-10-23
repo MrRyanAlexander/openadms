@@ -3,7 +3,7 @@
 // AC-02-38, 46, 47; spec/acceptance/05-sync.md AC-05-40; spec/acceptance/10-api-and-sync.md
 // AC-10-19, 27; BACKLOG 2.5.4, C46, C111, C115, C117, C122; ADR-100, 240, 438, 456, 457, 458;
 // REQ-202b, 209). A site move and a monitor switch are reported the same way (ADR-458). The
-// real process, in this test's own memory, on the installation's database as `adms_api`: it
+// real process, in this test's own memory, on the test database as `adms_api`: it
 // needs `pnpm local:up` after `pnpm installer`, and fails saying so. Each test's work is undone
 // (support/database.ts).
 import { randomUUID } from 'node:crypto';
@@ -25,7 +25,7 @@ import {
 import { deviceKeyActorId, masterPasscodeActorId, type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { enrolledPhone, passcode, provenBoth, senderOf, type TestPhone } from './support/phones.ts';
 import { notTaken } from './support/review.ts';
 import { danasEmail, long, worldOn, type Answer, type Served } from './support/served.ts';
@@ -34,7 +34,7 @@ import { ask, p1Priced, picked, saved, told } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();

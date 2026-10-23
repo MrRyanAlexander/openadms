@@ -1,6 +1,6 @@
 // The API's process on a test's own piece of work, a browser's side of it, and the example
 // world's people with their logins (CONVENTIONS §6), for the tests of sign-in that run against
-// the installation's database (ADR-405, 408, 412; BACKLOG C90). Each test's work is undone.
+// the test database (ADR-405, 408, 412; BACKLOG C90). Each test's work is undone.
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -330,17 +330,6 @@ export type Work = (served: Served, tx: Tx, who: People, within: Database) => Pr
 
 // `luisSees`: whether Luis starts with the three views (`luisSees`); the people's own tests start
 // him with no grant at all.
-// Makes `admin` the only admin in service in this test's own piece of work, for a test of what
-// the last admin may not do. The installation's database may hold admins of its own (a firm's, the
-// sample's); they are archived here, inside the piece of work that is undone, so nothing in the
-// database itself is changed.
-export async function soleAdmin(tx: Tx, admin: string): Promise<void> {
-  await tx.user.updateMany({
-    where: { role: 'ADMIN', archivedAt: null, id: { not: admin } },
-    data: { archivedAt: new Date() },
-  });
-}
-
 export function worldOn(db: () => Database, { luisSees: sees = true } = {}) {
   return (
     work: Work,

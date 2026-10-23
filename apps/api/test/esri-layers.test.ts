@@ -25,7 +25,7 @@ import { MapFileReader } from '../src/setup/map-file-reader.ts';
 import { MapFiles } from '../src/setup/map-files.ts';
 import { ProjectSetup } from '../src/setup/project-setup.ts';
 import { SiteSetup } from '../src/setup/site-setup.ts';
-import { installationSettings, openInstallation, type Tx } from './support/database.ts';
+import { testSettings, openTestDatabase, type Tx } from './support/database.ts';
 import { shippedPolicy } from './support/process.ts';
 import { p1Boundary, p1Zones } from './support/map-files.ts';
 import {
@@ -260,7 +260,7 @@ let administrator: S3Client;
 const projects = new Set<string>();
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
   store = new MediaStore(installationMedia());
   administrator = asTheStacksAdministrator(installationMedia());
 });

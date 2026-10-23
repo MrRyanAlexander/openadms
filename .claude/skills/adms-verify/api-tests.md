@@ -13,7 +13,7 @@
 `error-filter.test.ts` and `boundary.test.ts` need no stack (the last two run the real process in
 memory, with one more controller of the test's own, started through `test/support/process.ts`;
 two of the first start the built `apps/api/dist/main.js`). `request-id.test.ts` runs the process
-in memory too but opens `adms` as the API's own login, and undoes its write by failing out of it.
+in memory too but opens `adms_test` (the tests' database, never `adms`) as the API's own login, and undoes its write by failing out of it.
 **After a change to an endpoint in `packages/contracts`, `pnpm openapi`** (it writes
 `apps/api/openapi.json`; `boundary.test.ts` fails on a stale file, and on a route the contracts
 don't list). A test's own endpoint is made with `endpoint()` from schemas the contracts export:
@@ -34,7 +34,7 @@ curl -sI http://api.adms.localhost/health                                       
 
 `passwords.test.ts` (ADR-402…405) needs no stack: the hash, the release's breached list, the
 reset code, the mail settings and what the two reset endpoints refuse before anything is read.
-`password-set.test.ts` writes: it opens `adms` as the API's login and **runs each test in one
+`password-set.test.ts` writes: it opens `adms_test` as the API's login and **runs each test in one
 piece of work that is undone** (`test/support/database.ts`, `undone`; the services are handed a
 database whose `$write` and `$read` run inside it; a Prisma piece of work ends after five
 seconds, so a test stays short), hands the process its own database, mail and clock
@@ -58,8 +58,8 @@ two files, `passwords.test.ts`, `password-set.test.ts`, `boundary.test.ts` and
 `packages/domain/test/sign-in-tries.test.ts`**: fifty-seven took about ten minutes as a script
 that swaps one string, runs the files and puts the source back (format first, or the strings
 don't match; a loosening that isn't found in the source proves nothing: count it as not
-tried). **To copy `adms` for a guard's loosening, stop the API's container first** (`docker
-stop open-adms-local-api-1`: it holds a connection), and `pnpm local:up` again afterwards.
+tried). **A guard's loosening is tried on a copy of `adms_test`** (`database-tests.md`), made while no
+test runs; the API's container holds a connection to `adms`, never to it.
 
 ### Phones: enrolment, proofs, sign-ins, lists and the passcode
 
@@ -132,8 +132,7 @@ in from one email address, and every test's world has Dana's, so a second file's
 wait for the first's to be undone. **The database keeps the firm's last admin**: a test that
 archives Dana, or makes her anything else, first gives the firm another admin; a refusal by the
 database ends the test's piece of work, so it is a test's last step. **What needs a firm with
-no admin can't be tested on the installation's database** (a developer may have run `pnpm
-local:accounts`): it is the story `first-admin`, which drives `ServerAdmin` and `AdminCommand`
+no admin isn't tested here**: it is the story `first-admin`, which drives `ServerAdmin` and `AdminCommand`
 with typed answers. **A loosening of the door or of `People` is tried on `people.test.ts`**
 (it imports the source); **one of `packages/domain/src/people.ts` on that package's
 `people.test.ts`** (the API reads the domain's built code); **one of the server command on
@@ -163,7 +162,7 @@ lower case (seen 2026-10-07: a run read that way called every caught loosening s
 
 ### Viewers, every endpoint and the checklist's boundary
 
-`viewer-reads.test.ts` (ADR-434) is a read-only viewer's path: who may ask, that each read states the signed-in viewer, the projects' answer, and every request that isn't a GET refused to a viewer. **The read-only login sees nothing a test hasn't committed**, so `Served` hands the process `ViewedWithin` (`test/support/database.ts`), which keeps who was stated (`served.viewerStated`) and reads as the API's login, shown every row: **a test here never proves which rows a viewer is shown** (that is `packages/db`'s `viewers.test.ts`, `row-level-security.test.ts`, `contractor-users.test.ts`, and a story). One test opens the real read-only login on `adms` and calls each read of `ViewerReads` with a made-up viewer: a column the login isn't granted fails there, so **a new read joins that test**. **It holds the exact lists** of the endpoints open to `viewerOnly` and of what a viewer may send that isn't a GET. `packages/db/test/viewer.test.ts` proves the shared place as the read-only login itself (`openViewerOnOneConnection` in `support/service.ts`); it writes nothing. A loosening of `viewer.ts`, `ViewerReads` or its controller is tried on those two files (they import the source). **A viewer's tickets, one ticket and ROEs (ADR-435):** the owner's views (`viewer_transaction_money`, `viewer_roe_citizen`, the three name views, `viewer_field_event_monitor`) are declared in `packages/db/prisma/schema/viewer.prisma` and refused to the API's own login, so **no test here reads one ticket whole**: the file holds the door, the schemas, a page of tickets and the 404 for a ticket nobody is shown (that one before any view is read, and a test's last request). **What each viewer is answered is the story `p1-viewed`** (`pnpm scenarios p1-viewed`, about fifteen seconds once built; it needs the map servers), which reads through `ViewerReads` as the read-only login on its own database (`story.viewed`): a loosening of a read is tried there (`./node_modules/.bin/tsc --build` first, and again once the source is back). After declaring a view, `./node_modules/.bin/prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code` in `packages/db` must still answer `No difference detected.`, and `viewer.test.ts` holds each declaration to its view's columns. A `pg` deprecation warning printed by some API tests and stories comes from inside Prisma's adapter (seen 2026-10-08): not a failure.
+`viewer-reads.test.ts` (ADR-434) is a read-only viewer's path: who may ask, that each read states the signed-in viewer, the projects' answer, and every request that isn't a GET refused to a viewer. **The read-only login sees nothing a test hasn't committed**, so `Served` hands the process `ViewedWithin` (`test/support/database.ts`), which keeps who was stated (`served.viewerStated`) and reads as the API's login, shown every row: **a test here never proves which rows a viewer is shown** (that is `packages/db`'s `viewers.test.ts`, `row-level-security.test.ts`, `contractor-users.test.ts`, and a story). One test opens the real read-only login on `adms_test` and calls each read of `ViewerReads` with a made-up viewer: a column the login isn't granted fails there, so **a new read joins that test**. **It holds the exact lists** of the endpoints open to `viewerOnly` and of what a viewer may send that isn't a GET. `packages/db/test/viewer.test.ts` proves the shared place as the read-only login itself (`openViewerOnOneConnection` in `support/service.ts`); it writes nothing. A loosening of `viewer.ts`, `ViewerReads` or its controller is tried on those two files (they import the source). **A viewer's tickets, one ticket and ROEs (ADR-435):** the owner's views (`viewer_transaction_money`, `viewer_roe_citizen`, the three name views, `viewer_field_event_monitor`) are declared in `packages/db/prisma/schema/viewer.prisma` and refused to the API's own login, so **no test here reads one ticket whole**: the file holds the door, the schemas, a page of tickets and the 404 for a ticket nobody is shown (that one before any view is read, and a test's last request). **What each viewer is answered is the story `p1-viewed`** (`pnpm scenarios p1-viewed`, about fifteen seconds once built; it needs the map servers), which reads through `ViewerReads` as the read-only login on its own database (`story.viewed`): a loosening of a read is tried there (`./node_modules/.bin/tsc --build` first, and again once the source is back). After declaring a view, `./node_modules/.bin/prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema --exit-code` in `packages/db` must still answer `No difference detected.`, and `viewer.test.ts` holds each declaration to its view's columns. A `pg` deprecation warning printed by some API tests and stories comes from inside Prisma's adapter (seen 2026-10-08): not a failure.
 
 `every-endpoint.test.ts` (ADR-512) is AC-10-27 read whole: **it holds the exact list of every endpoint** (name, method and path, access, roles, permission), so **a new endpoint, or one opened wider, adds its line there on purpose** (C86's recipe). Each endpoint is asked by nine kinds of caller (nobody, Dana, Luis with no grant and then every grant on the same session, a client user, a contractor user, an auditor, a proven phone, Lee signed in on it) **with a body or a query no schema takes** (`?nonsense=1` on a GET): the door's verdict is tested apart from the service, nothing is written and no viewer's read reaches `ViewedWithin` (which can't read the owner's views and would abort the test's piece of work with a 500). It also reads the whole log for every cookie, CSRF value, token and password the callers held, and **finds each refusal's one line by its request's id** (`The door refused a request.`, with `userId` or `deviceId` where the door knows; ADR-513). About two seconds.
 

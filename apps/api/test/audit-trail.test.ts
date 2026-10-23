@@ -1,7 +1,7 @@
 // The audit log read, and the jobs set aside, through their endpoints, against the database
 // (ARCHITECTURE §5.3, §13; spec/acceptance/10-api-and-sync.md AC-10-111, 112; REQ-407; ADR-097,
 // 498, 544, 545; the Phase 2 audit's F5 and F6). OWASP API1, API3; ASVS V8, 16.2. The real
-// process, in this test's own memory, on the installation's database as `adms_api`: it needs
+// process, in this test's own memory, on the test database as `adms_api`: it needs
 // `pnpm local:up` after `pnpm installer`. Each test's work is undone (support/database.ts).
 //
 // The API's login writes no line, flag or completed load: a ticket here is a field event made in
@@ -18,7 +18,7 @@ import {
 import { type Database } from '@open-adms/db';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { installationSettings, openInstallation } from './support/database.ts';
+import { testSettings, openTestDatabase } from './support/database.ts';
 import { luisHolds, p1WithTickets } from './support/review.ts';
 import { danasEmail, long, worldOn } from './support/served.ts';
 import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
@@ -26,7 +26,7 @@ import { ask, saved, told, viewerSignsIn } from './support/setup.ts';
 let db: Database;
 
 beforeAll(() => {
-  db = openInstallation(installationSettings());
+  db = openTestDatabase(testSettings());
 });
 afterAll(async () => {
   await db.$disconnect();
