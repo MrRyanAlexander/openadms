@@ -31,9 +31,12 @@ import { useBrand, type Brand } from './brand.tsx';
 import { Glyph, type GlyphName } from './desk/glyphs.tsx';
 import { IconGrid } from './desk/icon-grid.tsx';
 import { MenuBar, type Menu, type MenuEntry } from './desk/menu-bar.tsx';
+import { Clock } from './desk/clock.tsx';
 import {
   closed,
+  focused,
   kept,
+  nextAfterClose,
   onTaskbar,
   opened,
   recalled,
@@ -50,7 +53,14 @@ import {
   type AreaShown,
   type Workplace,
 } from './desk/places.ts';
-import { useMaximized, useTheme, type Theme } from './desk/preferences.ts';
+import {
+  useMaximized,
+  useTheme,
+  useWallpaper,
+  wallpapers,
+  type Theme,
+} from './desk/preferences.ts';
+import { StartMenu } from './desk/start-menu.tsx';
 import { WindowFrame } from './desk/window-frame.tsx';
 import { SelectField } from './look/fields.tsx';
 import { useRead } from './reading.tsx';
@@ -81,6 +91,7 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
   const [memory, setMemory] = useState<DeskMemory>(() => recalled(userId));
   const [maximized, setMaximized] = useMaximized();
   const [theme, setTheme] = useTheme();
+  const [wallpaper, setWallpaper] = useWallpaper(userId);
 
   // The project open: the address's, or the one last open while a firm's window is shown.
   const desk = deskPlaceOf(path);
@@ -109,9 +120,11 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
               projectId: projectOfPath(path),
             });
       const remembered = addressProject ?? was.projectId;
-      return windows === was.windows && remembered === was.projectId
+      // The window shown is the one focused now: last in the order of use.
+      const recent = live === null ? was.recent : focused(was.recent, live);
+      return windows === was.windows && remembered === was.projectId && recent === was.recent
         ? was
-        : { windows, projectId: remembered };
+        : { windows, projectId: remembered, recent };
     });
   }, [href, path, live, liveTitle, liveGlyph, addressProject]);
 
@@ -122,10 +135,22 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
   const toDesktop = useCallback(() => {
     navigate(desktopOf(projectId));
   }, [projectId]);
+  // Closed: the window most recently focused of those left comes forward; the bare desktop only
+  // where none remains.
   const close = useCallback(() => {
-    if (live !== null) setMemory((was) => ({ ...was, windows: closed(was.windows, live) }));
-    navigate(desktopOf(projectId));
-  }, [live, projectId]);
+    if (live === null) {
+      navigate(desktopOf(projectId));
+      return;
+    }
+    const left = closed(memory.windows, live);
+    const next = nextAfterClose(onTaskbar(left, projectId), memory.recent, live);
+    setMemory((was) => ({
+      ...was,
+      windows: closed(was.windows, live),
+      recent: was.recent.filter((each) => each !== live),
+    }));
+    navigate(next === null ? desktopOf(projectId) : next.href);
+  }, [live, projectId, memory]);
 
   const taskbar = onTaskbar(memory.windows, projectId);
   const { name } = brand;
@@ -136,6 +161,15 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
     ['dark', said.themeDark],
   ];
   const noWindow = live === null;
+  const wallpaperEntries: readonly MenuEntry[] = wallpapers.map((each) => ({
+    kind: 'pick' as const,
+    id: `wallpaper-${each}`,
+    label: said.wallpaper[each],
+    picked: wallpaper === each,
+    act: () => {
+      setWallpaper(each);
+    },
+  }));
   const menus: readonly Menu[] = [
     {
       id: 'file',
@@ -169,15 +203,19 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
     {
       id: 'view',
       label: said.view,
-      entries: themes.map(([each, label]) => ({
-        kind: 'pick' as const,
-        id: `theme-${each}`,
-        label,
-        picked: theme === each,
-        act: () => {
-          setTheme(each);
-        },
-      })),
+      entries: [
+        ...themes.map(([each, label]): MenuEntry => ({
+          kind: 'pick',
+          id: `theme-${each}`,
+          label,
+          picked: theme === each,
+          act: () => {
+            setTheme(each);
+          },
+        })),
+        { kind: 'line', id: 'view-line' },
+        ...wallpaperEntries,
+      ],
     },
     ...areas.map((area) => ({
       id: `area-${area.id}`,
@@ -240,8 +278,56 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
     },
   ];
 
+  // The Start menu: the same places the menu bar opens, and the background to pick.
+  const startEntries: readonly MenuEntry[] = [
+    {
+      kind: 'link',
+      id: 'start-desktop',
+      label: said.showDesktop,
+      href: desktopOf(projectId),
+      current: shown.kind === 'desktop',
+    },
+    ...areas.map((area): MenuEntry => ({
+      kind: 'group',
+      id: `start-area-${area.id}`,
+      label: area.label,
+      entries: area.links.map((link): MenuEntry => ({
+        kind: 'link',
+        id: `start:${area.id}:${link.href}`,
+        label: link.label,
+        href: link.href,
+        current: path === link.href,
+      })),
+    })),
+    { kind: 'line', id: 'start-line-1' },
+    { kind: 'group', id: 'start-background', label: said.background, entries: wallpaperEntries },
+    {
+      kind: 'link',
+      id: 'start-account',
+      label: words.shell.account,
+      href: '/account',
+      current: path === '/account',
+    },
+    {
+      kind: 'link',
+      id: 'start-about',
+      label: say(said.about, { name }),
+      href: aboutHref,
+      current: path === aboutHref,
+    },
+    { kind: 'line', id: 'start-line-2' },
+    {
+      kind: 'act',
+      id: 'start-sign-out',
+      label: words.shell.signOut,
+      act: () => {
+        void signed.signOut();
+      },
+    },
+  ];
+
   return (
-    <div className={maximized ? 'desk-app desk-maximized' : 'desk-app'}>
+    <div className={maximized ? 'desk-app desk-maximized' : 'desk-app'} data-wallpaper={wallpaper}>
       <a className="skip-link" href="#content">
         {words.common.skipToContent}
       </a>
@@ -260,6 +346,7 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
         </div>
       </header>
       <div className="desk">
+        <Wallpaper version={brand.version} />
         <div className={shown.kind === 'window' ? 'desk-inside desk-with-window' : 'desk-inside'}>
           {shown.kind === 'desktop' ? (
             <main data-screen="desktop" className="desk-main" id="content">
@@ -288,32 +375,50 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
           )}
         </div>
       </div>
-      <nav className="taskbar" aria-label={said.windows}>
-        <ul className="taskbar-list">
-          <li>
-            <Link
-              className="taskbar-button"
-              href={desktopOf(projectId)}
-              {...(shown.kind === 'desktop' ? { 'aria-current': 'page' as const } : {})}
-            >
-              <Glyph name="desktop" />
-              <span>{said.showDesktop}</span>
-            </Link>
-          </li>
-          {taskbar.map((open) => (
-            <li key={open.key}>
+      <div className="taskbar">
+        <StartMenu label={said.startMenu} buttonLabel={said.start} entries={startEntries} />
+        <nav className="taskbar-windows" aria-label={said.windows}>
+          <ul className="taskbar-list">
+            <li>
               <Link
                 className="taskbar-button"
-                href={open.href}
-                {...(open.key === live ? { 'aria-current': 'page' as const } : {})}
+                href={desktopOf(projectId)}
+                {...(shown.kind === 'desktop' ? { 'aria-current': 'page' as const } : {})}
               >
-                <Glyph name={open.glyph} />
-                <span>{open.title}</span>
+                <Glyph name="desktop" />
+                <span>{said.showDesktop}</span>
               </Link>
             </li>
-          ))}
-        </ul>
-      </nav>
+            {taskbar.map((open) => (
+              <li key={open.key}>
+                <Link
+                  className="taskbar-button"
+                  href={open.href}
+                  {...(open.key === live ? { 'aria-current': 'page' as const } : {})}
+                >
+                  <Glyph name={open.glyph} />
+                  <span>{open.title}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <Clock />
+      </div>
+    </div>
+  );
+}
+
+// The desktop's wallpaper: the product's name and its version, centred, behind everything. Drawn
+// by office.css from the `data-wallpaper` on the desktop; for the eye alone.
+function Wallpaper({ version }: { readonly version: string | null }) {
+  const said = words.desk;
+  return (
+    <div className="wallpaper" aria-hidden="true">
+      <span className="wallpaper-name">{said.product}</span>
+      {version === null ? null : (
+        <span className="wallpaper-version">{say(said.version, { version })}</span>
+      )}
     </div>
   );
 }
@@ -386,13 +491,14 @@ function AreaFolder({ area }: { readonly area: AreaShown }) {
 export function SignedOutDesk({ children }: { readonly children: ReactNode }) {
   const { name } = useBrand();
   return (
-    <div className="desk-app desk-signed-out">
+    <div className="desk-app desk-signed-out" data-wallpaper="teal">
       <header className="desk-top">
         <div className="menubar-row">
           <span className="desk-brand">{name}</span>
         </div>
       </header>
       <div className="desk">
+        <Wallpaper version={null} />
         <div className="desk-inside desk-with-window">
           <WindowFrame title={name} glyph="account">
             {children}

@@ -1,25 +1,24 @@
-/* The back office's own layout, drawn from the look's tokens and beside its components
-   (@open-adms/look): a desktop, as a classic desktop program has one (shell.tsx): the menu bar and
-   the toolbar under it, the desktop's surface with its folder icons, one window at a time with its
-   title bar, and the taskbar. Every colour is a token, each pair one tokens.css holds to WCAG 2.2
-   AA in both themes (test/tokens.test.ts): words on the page or a surface, the page's words on the
-   main colour, a control's edge and the focus ring against what they sit on. The desktop is at
-   least as tall as the screen, and the page scrolls as one, the bars with it: a window that
-   scrolled within itself would hide its words from a person zoomed in, and bars held in view
-   would cover what the page scrolls beneath them (WCAG 2.4.11, 2.5.8). Where the desktop is narrow, counted in its own text's size (a container
-   query, so text at 200% counts), every window is maximized. Nothing here pushes the page
-   sideways at 320 CSS px or with text at 200% (WCAG 1.4.10, 1.4.4): the bars wrap, a form is one
-   column, a wide table scrolls inside its own region. */
+/* The back office's own layout, drawn from win95.css's tokens: a desktop, as a classic one has it
+   (shell.tsx): the menu bar and the toolbar under it, the desktop's surface (a wallpaper) with its
+   icons, one window at a time with its title bar, and the taskbar with the Start button and the
+   clock.
+
+   **The page is the desktop and never moves** (the user, 2026-10-23): fixed to the screen's height,
+   no scrolling of the page itself, no rubber-band. A window's content area is the one place that
+   scrolls, in both directions where its content needs it; nothing inside it scrolls on its own. The
+   taskbar's buttons shrink first and then the strip scrolls sideways inside the taskbar, so the
+   page never grows wider. Where the desktop is narrow (640 CSS px and less, counted in its own
+   text's size so text at 200% counts) every window is maximized to the room above the taskbar
+   (WCAG 1.4.10, 2.4.11, 2.5.8: targets are at least 24 CSS px). */
 
 .skip-link {
   position: absolute;
   left: var(--space-2);
   top: -10rem;
-  z-index: 50;
+  z-index: 90;
   padding: var(--space-2) var(--space-4);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
+  background: var(--colour-face);
+  box-shadow: var(--raised);
   color: var(--colour-words);
 }
 
@@ -30,37 +29,40 @@
 /* --- The desktop's frame --------------------------------------------------------------------- */
 
 .desk-app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  min-height: 100dvh;
-  background: var(--colour-surface);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--colour-face);
 }
 
 .desk-top {
   position: relative;
   z-index: 20;
-  border-bottom: var(--edge) solid var(--colour-edge);
-  background: var(--colour-page);
+  background: var(--colour-face);
+  border-bottom: 1px solid var(--bevel-shade);
+  box-shadow: 0 1px 0 var(--bevel-light);
 }
 
 .menubar-row {
   position: relative;
   display: flex;
   align-items: stretch;
-  gap: var(--space-1);
-  min-height: 2.75rem;
+  gap: var(--space-2);
+  min-height: 1.5rem;
   padding: 0 var(--space-2);
 }
 
 .desk-brand {
   display: inline-flex;
-  /* The firm's name gives way (wraps) before the menus do, on a narrow screen with large text. */
   flex: 0 1 auto;
   min-width: min-content;
   overflow-wrap: normal;
   align-items: center;
-  padding: 0 var(--space-3) 0 var(--space-2);
+  padding: 0 var(--space-4) 0 var(--space-2);
   font-weight: var(--weight-strong);
 }
 
@@ -68,9 +70,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2) var(--space-5);
   padding: var(--space-1) var(--space-3);
-  border-top: var(--edge) solid var(--colour-surface);
+  border-top: 1px solid var(--bevel-light);
 }
 
 .desk-own {
@@ -88,8 +90,6 @@
 
 .menubar {
   display: flex;
-  /* Until the menus have folded (the frame after the screen narrows), they wrap rather than push
-     the page sideways. */
   flex-wrap: wrap;
   min-width: 0;
   margin: 0;
@@ -105,8 +105,8 @@
 .menubar-name {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius);
+  min-height: 1.5rem;
+  padding: 0 var(--space-5);
   white-space: nowrap;
   cursor: default;
   user-select: none;
@@ -114,10 +114,10 @@
 
 .menubar-name:hover,
 .menubar-name[aria-expanded='true'] {
-  background: var(--colour-picked);
+  background: var(--colour-main);
+  color: var(--colour-on-main);
 }
 
-/* The menus' names side by side, measured out of sight: wider than the room, they fold. */
 .menubar-measure {
   position: absolute;
   top: 0;
@@ -133,23 +133,26 @@
   width: max-content;
 }
 
+.menu-drop,
+.start-menu,
+.start-sub {
+  margin: 0;
+  list-style: none;
+  background: var(--colour-face);
+}
+
 .menu-drop {
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 30;
-  min-width: 15rem;
-  max-width: calc(100vw - 1rem);
+  z-index: 70;
+  min-width: 14rem;
+  max-width: calc(100vw - 4px);
   max-height: calc(100vh - 4rem);
   max-height: calc(100dvh - 4rem);
   overflow-y: auto;
-  margin: 0;
-  padding: var(--space-1);
-  list-style: none;
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
-  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.25);
+  padding: var(--space-2);
+  box-shadow: var(--raised);
 }
 
 .menu-drop-end {
@@ -157,7 +160,6 @@
   left: auto;
 }
 
-/* Folded into one menu, it drops from the row's start, as wide as the screen allows. */
 .menubar-fit-folded,
 .menubar-fit-folded .menubar-slot {
   position: static;
@@ -166,76 +168,90 @@
 .menubar-fit-folded .menu-drop {
   right: auto;
   left: var(--space-2);
-  width: min(22rem, calc(100vw - 1rem));
+  width: min(20rem, calc(100vw - 4px));
 }
 
-.menu-item {
+.menu-item,
+.start-item {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: 2.5rem;
-  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
-  border-radius: var(--radius);
+  gap: var(--space-3);
+  min-height: 1.5rem;
+  padding: var(--space-1) var(--space-5) var(--space-1) var(--space-3);
   color: var(--colour-words);
   text-decoration: none;
   cursor: pointer;
 }
 
 .menu-item:hover,
-.menu-item:focus {
+.menu-item:focus,
+.start-item:hover,
+.start-item:focus {
   background: var(--colour-main);
   color: var(--colour-on-main);
+  outline: none;
+}
+
+.menu-item:focus-visible,
+.start-item:focus-visible {
+  outline: 1px dotted var(--colour-on-main);
+  outline-offset: -3px;
 }
 
 .menu-item[aria-disabled='true'] {
   color: var(--colour-words-quiet);
+  text-shadow: 1px 1px 0 var(--bevel-light);
   cursor: default;
 }
 
 .menu-item[aria-disabled='true']:hover,
 .menu-item[aria-disabled='true']:focus {
-  background: var(--colour-surface);
-  color: var(--colour-words);
+  background: var(--colour-face);
+  color: var(--colour-words-quiet);
 }
 
-.menu-item[aria-current='page'] {
+.menu-item[aria-current='page'],
+.start-item[aria-current='page'] {
   font-weight: var(--weight-strong);
 }
 
-/* A mark before an item: the theme picked, the window or screen shown. Drawn, never a character. */
-.menu-mark {
+.menu-mark,
+.start-mark {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
 .menu-item[aria-checked='true'] .menu-mark::after,
-.menu-item[aria-current='page'] .menu-mark::after {
+.menu-item[aria-current='page'] .menu-mark::after,
+.start-item[aria-checked='true'] .start-mark::after {
   content: '';
-  width: 0.5rem;
-  height: 0.5rem;
+  width: 0.375rem;
+  height: 0.375rem;
   border-radius: 50%;
   background: currentColor;
 }
 
-.menu-line {
+.menu-line,
+.start-line {
   height: 0;
-  margin: var(--space-1) var(--space-2);
-  border-top: var(--edge) solid var(--colour-surface);
+  margin: var(--space-2) var(--space-1);
+  border-top: 1px solid var(--bevel-shade);
+  border-bottom: 1px solid var(--bevel-light);
 }
 
 .menu-group + .menu-group {
   margin-top: var(--space-2);
   padding-top: var(--space-1);
-  border-top: var(--edge) solid var(--colour-surface);
+  border-top: 1px solid var(--bevel-shade);
 }
 
 .menu-group-name {
   display: block;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-4);
   color: var(--colour-words-quiet);
   font-size: var(--type-small);
   font-weight: var(--weight-strong);
@@ -250,41 +266,92 @@
 /* --- The desktop and its windows ------------------------------------------------------------- */
 
 .desk {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
+  position: relative;
+  min-width: 0;
   min-height: 0;
+  overflow: hidden;
   container: desk / inline-size;
 }
 
+/* The wallpaper, drawn in CSS alone (the person's pick, `data-wallpaper` on the desktop): the
+   classic teal by default, with the product's name and its version centred. */
+.wallpaper {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: #008080;
+  color: #ffffff;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+[data-wallpaper='navy'] .wallpaper {
+  background: #000080;
+}
+
+[data-wallpaper='green'] .wallpaper {
+  background: #004d40;
+}
+
+[data-wallpaper='slate'] .wallpaper {
+  background: #3b4a5a;
+}
+
+[data-wallpaper='dots'] .wallpaper {
+  background:
+    radial-gradient(circle, #006868 1.5px, transparent 1.75px) 0 0 / 8px 8px,
+    #008080;
+}
+
+[data-wallpaper='weave'] .wallpaper {
+  background: repeating-linear-gradient(45deg, #006e6e 0 2px, #008080 2px 5px);
+}
+
+.wallpaper-name {
+  font-size: clamp(1.5rem, 6vw, 2.75rem);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.02em;
+}
+
+.wallpaper-version {
+  font-size: var(--type-title);
+}
+
 .desk-inside {
+  position: relative;
   display: grid;
-  flex: 1 1 auto;
   grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--space-4);
+  height: 100%;
   min-height: 0;
   padding: var(--space-4);
+  overflow: hidden;
 }
 
 .desk-with-window {
   grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   align-content: stretch;
-  align-items: start;
-}
-
-.desk-with-window .window {
-  align-self: stretch;
+  align-items: stretch;
 }
 
 .desk-main {
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
-/* Icons: a picture on its tile, and its words beneath. One press opens it. */
+/* Icons: a picture and its words beneath. One press opens it. On the desktop the words are white
+   on the wallpaper; in a folder's window, black on white. */
 .icon-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
   gap: var(--space-2);
   margin: 0;
   padding: 0;
@@ -295,12 +362,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-1);
-  min-height: 2.75rem;
+  gap: var(--space-2);
+  min-height: 1.5rem;
   padding: var(--space-2) var(--space-1);
-  border: var(--edge) solid transparent;
-  border-radius: var(--radius);
-  color: var(--colour-words);
+  border: 1px solid transparent;
+  color: #ffffff;
   font-size: var(--type-small);
   line-height: 1.25;
   text-align: center;
@@ -310,25 +376,31 @@
 
 .desk-icon[data-hovered],
 .desk-icon:focus {
-  border-color: var(--colour-picked-edge);
-  background: var(--colour-picked);
+  background: #000080;
+  border-color: #ffffff;
+  border-style: dotted;
+  outline: none;
+}
+
+.desk-icon:focus-visible {
+  outline: 1px dotted #ffffff;
+  outline-offset: -3px;
 }
 
 .desk-icon-tile {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  border: var(--edge) solid var(--colour-picked-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
-  color: var(--colour-main);
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--colour-face);
+  box-shadow: var(--raised);
+  color: #000080;
 }
 
 .desk-icon-tile .glyph {
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .glyph {
@@ -337,45 +409,66 @@
   height: 1.25em;
 }
 
-/* Beside a window the desktop's icons stand in a column at its left, as on a desktop. */
+.desk-icons-beside {
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .desk-icons-beside .icon-grid {
-  grid-template-columns: 7rem;
+  grid-template-columns: 5.5rem;
   align-content: start;
 }
 
-/* A folder's icons inside its window. */
 .folder-icons .icon-grid {
-  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
 }
 
+.folder-icons .desk-icon {
+  color: var(--colour-words);
+}
+
+.folder-icons .desk-icon[data-hovered],
+.folder-icons .desk-icon:focus {
+  background: var(--colour-main);
+  color: var(--colour-on-main);
+  border-color: var(--colour-on-main);
+}
+
+/* A window: grey face, bevelled, a navy title bar, and one sunken content area that scrolls. */
 .window {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
-  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 0.2);
+  min-height: 0;
+  padding: 2px;
+  background: var(--colour-face);
+  box-shadow: var(--raised);
 }
 
 .window-bar {
   display: flex;
-  /* On a narrow screen with large text the buttons go beneath the title, never squeezing it. */
-  flex-wrap: wrap;
+  flex: none;
   align-items: center;
   gap: var(--space-2);
-  min-height: 3rem;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-  border-radius: calc(var(--radius) - var(--edge)) calc(var(--radius) - var(--edge)) 0 0;
+  min-height: 1.75rem;
+  padding: 2px 2px 2px var(--space-2);
   background: var(--colour-main);
   color: var(--colour-on-main);
   user-select: none;
 }
 
+.window-glyph {
+  width: 1rem;
+  height: 1rem;
+}
+
 .window-title {
-  flex: 1 1 8rem;
+  flex: 1 1 0;
   min-width: 0;
+  overflow: hidden;
   font-weight: var(--weight-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .window-buttons {
@@ -389,40 +482,43 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   padding: 0;
-  border: var(--edge) solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--colour-on-main);
+  border: 0;
+  background: var(--colour-face);
+  box-shadow: var(--raised);
+  color: var(--colour-words);
   cursor: pointer;
 }
 
 .window-button .glyph {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
-.window-button[data-hovered],
 .window-button[data-pressed] {
-  border-color: var(--colour-on-main);
-  background: var(--colour-main-pressed);
+  box-shadow: var(--sunken);
 }
 
-/* On the title bar the ring takes the colour of the bar's words, which stands off the bar. */
-.window-bar [data-focus-visible],
-.window-bar :focus-visible {
-  outline-color: var(--colour-on-main);
-  outline-offset: calc(var(--focus-ring) * -1 - var(--edge));
+.window-button:focus-visible,
+.window-button[data-focus-visible] {
+  outline: 1px dotted var(--colour-words);
+  outline-offset: -5px;
 }
 
+/* The content area: the window's one scroller. */
 .window-body {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
+  margin-top: 2px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--colour-page);
+  box-shadow: var(--sunken);
 }
 
-/* Maximized: the window fills the desktop, over its icons. */
 .desk-maximized .desk-with-window {
   grid-template-columns: minmax(0, 1fr);
   padding: 0;
@@ -432,18 +528,9 @@
   display: none;
 }
 
-.desk-maximized .window {
-  border-width: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.desk-maximized .window-bar {
-  border-radius: 0;
-}
-
-/* A narrow desktop, counted in its text's size: every window maximized, and no button for it. */
-@container desk (max-width: 56em) {
+/* A narrow desktop, counted in its text's size (about 640 CSS px): every window is maximized to the
+   room above the taskbar, and no button for it. */
+@container desk (max-width: 49em) {
   .desk-with-window {
     grid-template-columns: minmax(0, 1fr);
     padding: 0;
@@ -453,73 +540,194 @@
   .window-button-size {
     display: none;
   }
-
-  .window {
-    border-width: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-
-  .window-bar {
-    border-radius: 0;
-  }
 }
 
-/* Signed out: the one window in the middle of the desktop. */
 .desk-signed-out .desk-with-window {
   grid-template-columns: minmax(0, 36rem);
   justify-content: center;
   align-content: start;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-6) var(--space-4);
 }
 
-@container desk (max-width: 40em) {
+.desk-signed-out .window {
+  max-height: 100%;
+}
+
+@container desk (max-width: 49em) {
   .desk-signed-out .desk-with-window {
     grid-template-columns: minmax(0, 1fr);
     padding: 0;
   }
+
+  .desk-signed-out .window {
+    max-height: none;
+  }
 }
 
-/* --- The taskbar ----------------------------------------------------------------------------- */
+/* --- The taskbar: Start, the windows, the clock ---------------------------------------------- */
 
 .taskbar {
-  border-top: var(--edge) solid var(--colour-edge);
-  background: var(--colour-page);
-}
-
-.taskbar-list {
+  position: relative;
+  z-index: 60;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  margin: 0;
-  padding: var(--space-1) var(--space-2);
-  list-style: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 3px var(--space-2);
+  background: var(--colour-face);
+  border-top: 2px solid var(--bevel-light);
 }
 
+.start {
+  position: relative;
+  flex: none;
+}
+
+.start-button,
 .taskbar-button {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  min-height: 2.75rem;
-  max-width: 16rem;
-  padding: var(--space-1) var(--space-3);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
+  gap: var(--space-3);
+  min-height: 1.5rem;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: var(--colour-face);
+  box-shadow: var(--raised);
   color: var(--colour-words);
-  font-size: var(--type-small);
+  font: inherit;
   text-decoration: none;
   cursor: pointer;
 }
 
-.taskbar-button[data-hovered] {
-  background: var(--colour-surface);
+.start-button {
+  font-weight: var(--weight-strong);
+}
+
+.start-button .glyph,
+.taskbar-button .glyph {
+  width: 1rem;
+  height: 1rem;
+}
+
+.start-button[aria-expanded='true'],
+.start-button[data-pressed],
+.taskbar-button[aria-current='page'] {
+  box-shadow: var(--sunken);
 }
 
 .taskbar-button[aria-current='page'] {
-  border-color: var(--colour-picked-edge);
-  background: var(--colour-picked);
+  background: var(--colour-surface);
   font-weight: var(--weight-strong);
+}
+
+.start-button:focus-visible,
+.taskbar-button:focus-visible,
+.start-button[data-focus-visible],
+.taskbar-button[data-focus-visible] {
+  outline: 1px dotted var(--colour-words);
+  outline-offset: -5px;
+}
+
+/* The Start menu opens upward from the button; a group in it opens in place, so a touch needs
+   one press for each step and no pointer hover. */
+.start-menu {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 0;
+  z-index: 80;
+  min-width: 14rem;
+  max-width: calc(100vw - 4px);
+  max-height: calc(100vh - 6.5rem);
+  max-height: calc(100dvh - 6.5rem);
+  overflow-y: auto;
+  padding: var(--space-2);
+  box-shadow: var(--raised);
+}
+
+.start-item {
+  min-height: 1.75rem;
+}
+
+.start-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.start-arrow {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 4px solid currentColor;
+}
+
+.start-group[aria-expanded='true'] .start-arrow {
+  border-top: 4px solid currentColor;
+  border-right: 4px solid transparent;
+  border-bottom: 0;
+  border-left: 4px solid transparent;
+}
+
+.start-sub {
+  padding: 0 0 var(--space-2) 1rem;
+}
+
+.start-nested {
+  padding-left: var(--space-3);
+}
+
+.taskbar-windows {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The buttons shrink first (to a minimum, their words cut with an ellipsis), then the strip
+   scrolls sideways inside the taskbar. Its height never changes, so nothing shifts. */
+.taskbar-list {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.taskbar-list li {
+  display: flex;
+  flex: 0 1 11rem;
+  min-width: 4.5rem;
+}
+
+.taskbar-list .taskbar-button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.taskbar-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskbar-clock {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 1.5rem;
+  padding: 0 var(--space-4);
+  box-shadow: var(--sunken);
+  font-size: var(--type-small);
+  font-variant-numeric: tabular-nums;
 }
 
 /* The project picker in the toolbar. */
@@ -530,34 +738,34 @@
 .picker-button {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   max-width: 100%;
-  min-height: 2.75rem;
-  padding: var(--space-1) var(--space-3);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
+  min-height: 1.5rem;
+  padding: 0 var(--space-4);
+  border: 0;
   background: var(--colour-page);
+  box-shadow: var(--sunken);
   color: var(--colour-words);
   font: inherit;
   cursor: pointer;
 }
 
 .picker-chevron {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-right: var(--edge) solid currentColor;
-  border-bottom: var(--edge) solid currentColor;
-  transform: translateY(-0.125rem) rotate(45deg);
+  width: 0.375rem;
+  height: 0.375rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.1rem) rotate(45deg);
 }
 
 .picker-popover {
   min-width: var(--trigger-width);
-  max-width: calc(100vw - 2rem);
+  max-width: calc(100vw - 1rem);
   max-height: 60vh;
   overflow-y: auto;
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
   background: var(--colour-page);
+  box-shadow: var(--raised);
+  border: 1px solid var(--colour-words);
 }
 
 .picker-list {
@@ -565,18 +773,19 @@
 }
 
 .picker-item {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-4);
+  min-height: 1.5rem;
   cursor: pointer;
 }
 
 .picker-item[data-focused],
-.picker-item[data-hovered] {
-  background: var(--colour-surface);
+.picker-item[data-hovered],
+.picker-item[data-selected] {
+  background: var(--colour-main);
+  color: var(--colour-on-main);
 }
 
 .picker-item[data-selected] {
-  background: var(--colour-picked);
   font-weight: var(--weight-strong);
 }
 
@@ -585,9 +794,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  max-width: 80rem;
-  margin: 0 auto;
-  padding: var(--space-5) var(--space-4) var(--space-6);
+  margin: 0;
+  padding: var(--space-4);
 }
 
 .page-narrow {
@@ -599,7 +807,7 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: var(--edge) solid var(--colour-surface);
+  border: var(--edge) solid var(--colour-edge);
   border-radius: var(--radius);
 }
 
@@ -648,25 +856,25 @@
 .choice {
   display: inline-flex;
   align-items: center;
-  min-height: 2.75rem;
-  padding: var(--space-1) var(--space-3);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
+  min-height: 1.5rem;
+  padding: var(--space-1) var(--space-4);
+  background: var(--colour-face);
+  box-shadow: var(--raised);
   cursor: pointer;
 }
 
 .choice[data-selected] {
-  border-color: var(--colour-picked-edge);
-  background: var(--colour-picked);
+  background: var(--colour-surface);
+  box-shadow: var(--sunken);
   font-weight: var(--weight-strong);
 }
 
-/* The table: inside its own region, scrolling sideways there when wider than the screen. */
+/* The table: dense, inside the window's content area, which scrolls where it is wider. */
 .table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-  border: var(--edge) solid var(--colour-surface);
-  border-radius: var(--radius);
+  /* No scroller of its own: the window's content area scrolls (one scroller to a window). */
+  max-width: none;
+  overflow: visible;
+  border: var(--edge) solid var(--colour-edge);
 }
 
 .table {
@@ -683,13 +891,14 @@
 .table th,
 .table td {
   padding: var(--space-2) var(--space-3);
-  border-top: var(--edge) solid var(--colour-surface);
+  border-top: var(--edge) solid var(--bevel-soft);
   text-align: left;
   vertical-align: top;
 }
 
 .table thead th {
-  background: var(--colour-surface);
+  background: var(--colour-face);
+  box-shadow: var(--raised);
   font-size: var(--type-small);
 }
 
@@ -733,7 +942,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
-  min-height: 2.75rem;
+  min-height: 1.5rem;
   cursor: pointer;
 }
 
@@ -742,26 +951,20 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: 0.25rem;
+  width: 1rem;
+  height: 1rem;
   background: var(--colour-page);
+  box-shadow: var(--sunken);
   font-weight: var(--weight-strong);
-}
-
-.check[data-selected] .check-box {
-  border-color: var(--colour-main);
-  background: var(--colour-main);
 }
 
 /* The tick, drawn: never a character a screen reader or a contrast check would read. */
 .check[data-selected] .check-box::after {
   content: '';
-  width: 0.4rem;
-  height: 0.75rem;
-  border-right: 0.1875rem solid var(--colour-on-main);
-  border-bottom: 0.1875rem solid var(--colour-on-main);
+  width: 0.3rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--colour-words);
+  border-bottom: 2px solid var(--colour-words);
   transform: translateY(-0.0625rem) rotate(45deg);
 }
 
@@ -806,9 +1009,8 @@
 
 .dialog {
   padding: var(--space-5);
-  border: var(--edge) solid var(--colour-edge);
-  border-radius: var(--radius);
-  background: var(--colour-page);
+  background: var(--colour-face);
+  box-shadow: var(--raised);
   outline: none;
 }
 

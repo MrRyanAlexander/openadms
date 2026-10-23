@@ -55,3 +55,27 @@ export function useMaximized(): readonly [boolean, (maximized: boolean) => void]
   }, []);
   return [maximized, choose];
 }
+
+// The desktop's background, one of a few drawn in CSS alone (office.css, `data-wallpaper`), kept
+// for each person in this browser. The classic teal is the default.
+export const wallpapers = ['teal', 'navy', 'green', 'slate', 'dots', 'weave'] as const;
+export type Wallpaper = (typeof wallpapers)[number];
+
+const wallpaperKey = (userId: string) => `adms-office-wallpaper:${userId}`;
+
+export function keptWallpaper(userId: string): Wallpaper {
+  const kept = read(wallpaperKey(userId));
+  return wallpapers.find((each) => each === kept) ?? 'teal';
+}
+
+export function useWallpaper(userId: string): readonly [Wallpaper, (wallpaper: Wallpaper) => void] {
+  const [wallpaper, setWallpaper] = useState<Wallpaper>(() => keptWallpaper(userId));
+  const choose = useCallback(
+    (next: Wallpaper) => {
+      write(wallpaperKey(userId), next === 'teal' ? null : next);
+      setWallpaper(next);
+    },
+    [userId],
+  );
+  return [wallpaper, choose];
+}

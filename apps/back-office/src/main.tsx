@@ -8,8 +8,7 @@
 // before anything else (the API serves them nothing else until then, ADR-410, 412), each as a
 // window on an empty desktop. Signed in, the desktop (shell.tsx), where the address names the
 // window shown.
-import '@open-adms/look/tokens.css';
-import '@open-adms/look/components.css';
+import './look/win95.css';
 import './look/office.css';
 
 import { currentSessionEndpoint, signOutEndpoint, type SessionAnswer } from '@open-adms/contracts';

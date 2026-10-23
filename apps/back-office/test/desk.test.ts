@@ -9,7 +9,9 @@ import { nextIcon } from '../src/desk/icon-grid.tsx';
 import { nextByLetter } from '../src/desk/menu-bar.tsx';
 import {
   closed,
+  focused,
   mostOpen,
+  nextAfterClose,
   onTaskbar,
   opened,
   windowKey,
@@ -147,6 +149,34 @@ describe('the taskbar’s windows', () => {
     expect(open).toHaveLength(mostOpen);
     expect(open[0]?.href).toBe('/place-1');
     expect(open.at(-1)?.href).toBe(`/place-${String(mostOpen)}`);
+  });
+
+  it('brings forward the window used just before the one closed, the desktop only when none remains', () => {
+    const a = window_('/a', null, '/a');
+    const b = window_('/b', null, '/b');
+    const c = window_('/c', null, '/c');
+    const all = [a, b, c];
+    // Used in the order a, b, c, then back to a, then c: closing c gives a, then closing a gives b.
+    let recent: readonly string[] = [];
+    for (const each of [a, b, c, a, c]) recent = focused(recent, each.key);
+    expect(recent).toEqual([b.key, a.key, c.key]);
+    expect(nextAfterClose(closed(all, c.key), recent, c.key)).toBe(a);
+    const left = closed(closed(all, c.key), a.key);
+    expect(
+      nextAfterClose(
+        left,
+        recent.filter((key) => key !== c.key),
+        a.key,
+      ),
+    ).toBe(b);
+    expect(nextAfterClose([], [], b.key)).toBeNull();
+  });
+
+  it('falls back to the last window left where the order of use is not known', () => {
+    const a = window_('/a', null, '/a');
+    const b = window_('/b', null, '/b');
+    expect(nextAfterClose([a, b], [], 'gone')).toBe(b);
+    expect(focused([a.key], a.key)).toEqual([a.key]);
   });
 
   it('shows the firm’s windows and the open project’s', () => {

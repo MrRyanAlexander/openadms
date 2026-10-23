@@ -41,6 +41,27 @@ export function closed(windows: readonly OpenWindow[], key: string): readonly Op
   return windows.filter((each) => each.key !== key);
 }
 
+// The order the windows were focused in, the most recent last: the keys only. A window shown is
+// moved to the end, so closing one gives the focus to the one used just before it.
+export function focused(recent: readonly string[], key: string): readonly string[] {
+  if (recent.at(-1) === key) return recent;
+  return [...recent.filter((each) => each !== key), key].slice(-mostOpen * 2);
+}
+
+// The window to show when `key` is closed: the most recently focused of those left on the taskbar
+// (`windows` already without it), else the last of them; none only where no window remains.
+export function nextAfterClose(
+  windows: readonly OpenWindow[],
+  recent: readonly string[],
+  key: string,
+): OpenWindow | null {
+  for (let at = recent.length - 1; at >= 0; at -= 1) {
+    const found = windows.find((each) => each.key === recent[at] && each.key !== key);
+    if (found !== undefined) return found;
+  }
+  return windows.findLast((each) => each.key !== key) ?? null;
+}
+
 // The windows the taskbar shows: the firm's, and the open project's.
 export function onTaskbar(
   windows: readonly OpenWindow[],
@@ -53,9 +74,11 @@ export function onTaskbar(
 export interface DeskMemory {
   readonly windows: readonly OpenWindow[];
   readonly projectId: string | null;
+  // The keys of the windows in the order they were focused, the most recent last.
+  readonly recent: readonly string[];
 }
 
-const empty: DeskMemory = { windows: [], projectId: null };
+const empty: DeskMemory = { windows: [], projectId: null, recent: [] };
 const keyOf = (userId: string) => `adms-desk:${userId}`;
 
 function isOpenWindow(value: unknown): value is OpenWindow {
@@ -76,10 +99,13 @@ export function recalled(userId: string): DeskMemory {
   try {
     const kept = window.sessionStorage.getItem(keyOf(userId));
     if (kept === null) return empty;
-    const read = JSON.parse(kept) as { windows?: unknown; projectId?: unknown };
+    const read = JSON.parse(kept) as { windows?: unknown; projectId?: unknown; recent?: unknown };
     const windows = Array.isArray(read.windows) ? read.windows.filter(isOpenWindow) : [];
     const projectId = typeof read.projectId === 'string' ? read.projectId : null;
-    return { windows: windows.slice(-mostOpen), projectId };
+    const recent = Array.isArray(read.recent)
+      ? read.recent.filter((each): each is string => typeof each === 'string')
+      : [];
+    return { windows: windows.slice(-mostOpen), projectId, recent };
   } catch {
     return empty;
   }
