@@ -92,7 +92,6 @@ CALLS
     fi
     case "$p" in
       "$root/docker-compose.yml") block "the root docker-compose.yml is the historical stack, the user's to retire. The local stack is infra/local/compose.yaml." ;;
-      "$root/README.md")          block "README.md is the user's (AGENTS.md write boundaries)." ;;
       "$root/pnpm-lock.yaml")     block "the lockfile is written by pnpm only (pnpm install)." ;;
     esac
     case "$p" in

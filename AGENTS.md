@@ -134,7 +134,7 @@ End each commit message with the attribution lines the session gives. Stage name
 | The domain skills (`.claude/skills/adms-*` but the two above) | ⚠️ the user's domain content: record what the user decides; never "correct" it |
 | `.claude/settings.json`, `.claude/hooks/` | ⚠️ enforcement: never weaken without the user asking |
 | `development/` | ❌ read-only reference |
-| `pnpm-lock.yaml`; `README.md`; a root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the README is the user's; the local stack is `infra/local/compose.yaml` |
+| `pnpm-lock.yaml`; a root `docker-compose.yml` | ❌ by hand: pnpm writes the lockfile; the local stack is `infra/local/compose.yaml` |
 | `**/node_modules/`, `.git/`; generated: `**/dist/`, `**/src/generated/`, `**/.generated/`, `**/.cache/`, `**/.state/` | ❌ never (change the source, rerun the tool) |
 | `**/prisma/migrations/*.sql` | ❌ never edit a generated or applied migration; a guard migration is written only into Prisma's empty `--create-only` stub |
 | `**/.env*`, secrets | ❌ never read, write or print an env file (`.env.example` is fine): reference keys by name, load one in a subshell, compare `shasum`s; never echo, log or commit a secret |

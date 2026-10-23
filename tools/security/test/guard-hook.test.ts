@@ -166,7 +166,6 @@ describe('the write boundaries (AGENTS.md)', () => {
     ["the installer's record", join(root, 'tools', 'setup', '.state', 'installation.json')],
     ['the map cache', join(root, 'infra', 'local', '.cache', 'maps', 'x.osm.pbf')],
     ['the historical root compose file', join(root, 'docker-compose.yml')],
-    ["the user's README", join(root, 'README.md')],
     ['the lockfile', join(root, 'pnpm-lock.yaml')],
   ])('blocks a write to %s', (_what, path) => {
     expect(write('Write', path).blocked).toBe(true);
@@ -180,6 +179,7 @@ describe('the write boundaries (AGENTS.md)', () => {
     join(root, 'spec', 'DATA-MODEL.md'),
     join(root, 'agent_store', 'PLAN.md'),
     join(root, 'apps', 'api', 'README.md'),
+    join(root, 'README.md'),
     join(root, 'package.json'),
   ])('lets through a write to %s', (path) => {
     expect(write('Write', path).blocked).toBe(false);
