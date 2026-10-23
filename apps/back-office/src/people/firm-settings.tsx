@@ -1,8 +1,10 @@
-// The firm's settings (ARCHITECTURE §7; ADR-428, 511, 530): how long after a phone is marked lost its
+// The firm's settings (ARCHITECTURE §7; ADR-428, 511, 530): what the firm calls its ADMS (the user,
+// 2026-10-22, shown everywhere at once once changed); how long after a phone is marked lost its
 // key is revoked by the firm's time, whether read-only viewers must use two-step sign-in, how long a
 // monitor's session lasts; and the one master passcode, changed with the admin's own password, each
 // phone taking the new one at its next sync. Each change audited with its note.
 import {
+  changeBrandNameEndpoint,
   changeMasterPasscodeEndpoint,
   changeMonitorSessionHoursEndpoint,
   changeReportContactEndpoint,
@@ -20,13 +22,15 @@ import {
   numberOf,
   optional,
   secretOf,
+  text,
 } from '../look/form-dialog.tsx';
+import { brandChanged } from '../brand.tsx';
 import { Shown, useApi, useRead } from '../reading.tsx';
 import { isAdmin, useSigned } from '../session.tsx';
 import { say, words } from '../words.ts';
 import { yesNo } from '../setup/common.tsx';
 
-type Open = 'phoneKey' | 'viewers' | 'sessions' | 'passcode' | 'contact' | null;
+type Open = 'brand' | 'phoneKey' | 'viewers' | 'sessions' | 'passcode' | 'contact' | null;
 
 export function FirmSettings() {
   const api = useApi();
@@ -55,6 +59,8 @@ export function FirmSettings() {
         {(settings) => (
           <>
             <dl className="facts">
+              <dt>{said.brandName}</dt>
+              <dd>{settings.brandName}</dd>
               <dt>{said.phoneKey}</dt>
               <dd>
                 {settings.phoneKeyRevokedAfterHours === null
@@ -69,6 +75,13 @@ export function FirmSettings() {
               <dd>{settings.reportContactEmail ?? words.common.none}</dd>
             </dl>
             <div className="form-actions">
+              <Button
+                onPress={() => {
+                  setOpen('brand');
+                }}
+              >
+                {say(words.common.of, { what: said.change, name: said.brandName })}
+              </Button>
               <Button
                 onPress={() => {
                   setOpen('phoneKey');
@@ -175,6 +188,34 @@ export function FirmSettings() {
                     body: { hours: numberOf(values, 'hours') ?? 0, ...noted(values) },
                   });
                   if (reply.kind !== 'answered') return reply;
+                  setTold(words.common.saved);
+                  reload();
+                  return null;
+                }}
+                onClose={close}
+              />
+            ) : null}
+            {open === 'brand' ? (
+              <FormDialog
+                title={said.brandName}
+                fields={[
+                  {
+                    kind: 'text',
+                    key: 'name',
+                    label: said.brandName,
+                    hint: said.brandNameHint,
+                    required: true,
+                    longest: 40,
+                  },
+                  { kind: 'text', key: 'note', label: said.note, longest: 500 },
+                ]}
+                initial={{ name: settings.brandName }}
+                save={async (values) => {
+                  const reply = await api.ask(changeBrandNameEndpoint, {
+                    body: { name: text(values, 'name'), ...noted(values) },
+                  });
+                  if (reply.kind !== 'answered') return reply;
+                  brandChanged(reply.answer.brandName);
                   setTold(words.common.saved);
                   reload();
                   return null;

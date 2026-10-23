@@ -27,6 +27,7 @@ import { ScreenTitle } from '@open-adms/look';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-aria-components';
 
+import { useBrand, type Brand } from './brand.tsx';
 import { Glyph, type GlyphName } from './desk/glyphs.tsx';
 import { IconGrid } from './desk/icon-grid.tsx';
 import { MenuBar, type Menu, type MenuEntry } from './desk/menu-bar.tsx';
@@ -87,7 +88,9 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
     desk === null ? projectOfPath(path) : desk.kind === 'about' ? null : desk.projectId;
   const projectId = addressProject ?? memory.projectId;
   const areas = areasFor(workplace, session, projectId);
-  const shown = shownAt(workplace, path, desk, areas);
+  // What the firm calls its ADMS, and the Open ADMS it is built on (brand.tsx).
+  const brand = useBrand();
+  const shown = shownAt(workplace, path, desk, areas, brand);
   const live = shown.kind === 'window' ? shown.key : null;
   const liveTitle = shown.kind === 'window' ? shown.title : null;
   const liveGlyph = shown.kind === 'window' ? shown.glyph : null;
@@ -125,8 +128,7 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
   }, [live, projectId]);
 
   const taskbar = onTaskbar(memory.windows, projectId);
-  // brand: the firm's ADMS name, from useBrand() once brand.tsx is in.
-  const name = words.app.name;
+  const { name } = brand;
 
   const themes: readonly (readonly [Theme, string])[] = [
     ['computer', said.themeComputer],
@@ -245,7 +247,6 @@ export function Shell({ workplace }: { readonly workplace: Workplace }) {
       </a>
       <header className="desk-top">
         <div className="menubar-row">
-          {/* brand: the firm's ADMS name. */}
           <span className="desk-brand">{name}</span>
           <MenuBar label={said.menus} menus={menus} foldedLabel={words.shell.menu} />
         </div>
@@ -324,6 +325,7 @@ function shownAt(
   path: string,
   desk: ReturnType<typeof deskPlaceOf>,
   areas: readonly AreaShown[],
+  brand: Brand,
 ): Shown {
   const notFound: Shown = {
     kind: 'window',
@@ -334,14 +336,12 @@ function shownAt(
   };
   if (desk?.kind === 'desktop') return { kind: 'desktop' };
   if (desk?.kind === 'about') {
-    // brand: the firm's ADMS name and the version, from useBrand() once brand.tsx is in.
-    const name = words.app.name;
     return {
       kind: 'window',
       key: windowKey(null, aboutHref),
-      title: say(words.desk.about, { name }),
+      title: say(words.desk.about, { name: brand.name }),
       glyph: 'about',
-      screen: <About name={name} version={null} />,
+      screen: <About name={brand.name} version={brand.version} />,
     };
   }
   if (desk?.kind === 'area') {
@@ -384,8 +384,7 @@ function AreaFolder({ area }: { readonly area: AreaShown }) {
 // Signed out (or yet to choose a password or set up two-step sign-in): the screen as a window on an
 // empty desktop, under the bar with the firm's ADMS name.
 export function SignedOutDesk({ children }: { readonly children: ReactNode }) {
-  // brand: the firm's ADMS name, from useBrand() once brand.tsx is in.
-  const name = words.app.name;
+  const { name } = useBrand();
   return (
     <div className="desk-app desk-signed-out">
       <header className="desk-top">

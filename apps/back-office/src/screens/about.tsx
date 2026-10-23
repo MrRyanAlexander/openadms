@@ -1,7 +1,9 @@
 // About, from the Help menu (the user, 2026-10-22): the name the firm gives its ADMS, and that it is
-// built on Open ADMS, at which version; the licence it is shared under.
+// built on Open ADMS, at which version; the licence it is shared under, and where its source is
+// (AGPL-3.0 §13: whoever uses it over a network can get the source).
 import { ScreenTitle } from '@open-adms/look';
 
+import { builtOn } from '../brand.tsx';
 import { say, words } from '../words.ts';
 
 export function About({
@@ -18,6 +20,11 @@ export function About({
       <p>{version === null ? said.builtOnOpenAdms : say(said.builtOn, { version })}</p>
       <p>{said.what}</p>
       <p className="quiet">{said.licence}</p>
+      <p>
+        <a className="link" href={builtOn.source} rel="noreferrer">
+          {said.source}
+        </a>
+      </p>
     </main>
   );
 }
