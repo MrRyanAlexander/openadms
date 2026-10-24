@@ -1,19 +1,16 @@
 # Open ADMS — Roadmap
 
-> **The one page to look at to see where the build is.** From the first decision to the day people
-> use it. Kept current by agents when a milestone or phase closes, a REQ is ticked, or what waits
-> on the user changes (ADR-280, 594): its row here changes in the same response.
+> **The one page to see where the build is, start to finish.** It **summarises**; it decides
+> nothing. Since 2026-10-22 the live task, what is settled and the defaults taken are
+> `agent_store/BUILD.md`; the plan before it was `history/PLAN-TRACK1.md` (ADR-599, 600), and before
+> that `NEXT.md` and `BACKLOG.md` by phase. If this page disagrees with `BUILD.md`, `BUILD.md` wins.
 >
-> It **summarises**; it decides nothing. The detail and the authority are `NEXT.md` (the next task),
-> `BACKLOG.md` (the active phase's tasks), `REQUIREMENTS.md` / `REQUIREMENTS-LATER.md` (every
-> requirement) and `spec/VISION.md` §7–§8 (the finished surfaces, and what "done" means). If this
-> page disagrees with them, they win.
->
-> **Last updated:** 2026-10-20: Milestone 3.6 (photographs, printing and scanning, in the browser build) is done: task 3.6.3 (ADR-596) lets the field app take a scanned number from a keyboard-style scanner or the camera, and home's "Scan a barcode" says whether the phone holds it; scanning printed paper on real phones is Milestones 3.8 and 3.9; next is Milestone 3.7, the time clock.
->
-> *This line holds the latest change alone (ADR-516); what each session did is its ADRs and its git commit (ADR-594).*
+> **Last updated:** 2026-10-23: brought up to date with the code on `main` (8df35ab). Phase 3's
+> browser build and all of Phase 4 are built; the golden mission runs through every screen to the
+> approved numbers; the phones are paused; a firm installs on its own server with `./adms`. Where
+> the build left this roadmap is §2a.
 
-**Key:** ✅ done · 🟡 in progress · ⬜ not started · 🔒 gated (doesn't open until the phase before it exits)
+**Key:** ✅ done · 🟡 in part · ⏸ paused · ⬜ not started · ➡ replaced (see §2a)
 
 ---
 
@@ -22,68 +19,97 @@
 | | |
 |---|---|
 | **Start** | 2026-09-25: the rebuild decision (ADR-093). Security first, the plan is the core, TypeScript end to end with Prisma, the old `database/` code is history |
-| **Now** | **Phase 3, the field app: open since 2026-10-17 (ADR-557)**; tasks 3.0.1 (the plan, the requirements moved, the phone's scenarios, your accessibility answer) 3.1.1 (the phone's security checklist), 3.1.2 (the field app's shell over HTTPS and its browser tests), 3.1.3 (every screen checked for accessibility on every run), 3.1.4 (the look, the components and the clickable prototype; your four open designs, Q-215…Q-218), 3.2.1 (the phone's encrypted store), 3.2.2 (enrolling a phone and its proof; "Create monitor"), 3.2.3 (signing in online and the day's assignment), 3.2.4 (signing in with no signal from the login list; the phone's own wrong tries and lock; signed out after 30 quiet minutes) 3.3.1 (setting a phone up under the master passcode when its monitor has no assignment) 3.3.2 (switching, moving and sessions under the passcode; ten wrong passcode tries with no signal lock the phone, your answer) 3.4.1 (the phone's sync: what waits kept on the phone until the server has it, what it didn't take shown in its words), 3.4.2 (photographs sent after their records, a piece at a time, picking up where they stopped) and 3.4.3 ("Sync and turn in": everything sent, then the phone erased only on the server's word) done; your Q-215…Q-218 answers recorded (ADR-573). Behind it, **Phase 2, API and sync: exit met 2026-10-17 (ADR-555)**, after reopenings for Milestones 2.8 and 2.9. Phones and the back office talk to the server over HTTPS: sign-in with an authenticator, permissions read on every request (what the back office *sees* granted too, ADR-539), enrolment and a phone's proof of itself, the lists, sync with photographs, turn-in, background jobs, every hop encrypted. The golden mission syncs through the real endpoints and comes out with the numbers you approved (P1 $5,548.25 on 19 lines, P2 $324.00) |
-| **Next task** | **3.7.1, the time clock's records** (the server half of the time clock: clock in, breaks, out and activity lines, a manager's approve and unlock) |
+| **Now** | **The web platform is built and proven (2026-10-22), and installable (2026-10-23).** One command (`pnpm start`) brings up a fresh test installation: the stack, the API, the worker, the field app at `field.adms.localhost`, the back office at `office.adms.localhost` and the read-only viewer portal under `/viewer/…`, each over HTTPS. The golden mission is set up on the back office's screens, captured on the field app, reviewed, QC'd and locked on the back office, and the ledger reads **P1 $5,548.25 on 19 lines, P2 $324.00 on 2**; a viewer reads what the story `p1-viewed` says. A firm installs on its own Linux server with Docker alone (`./adms install`). The iPhone and Android builds are paused until there are devices to test on (ADR-600) |
+| **Next** | Nothing is planned. `BUILD.md`'s task is done; what's left is listed under "Not in this build" there and in §4 here, and the user picks what opens next. The one open item from the build: `pnpm chain` was last recorded green at 2026-10-23 05:34 UTC, before the day's later commits (the sample's fixes, the test and production installs, the xlsx and PDF exports, the Windows 95 desktop); those were proven by their own targeted runs, and the whole chain should be run once on 8df35ab |
 | **Finish line** | A firm installs Open ADMS, and its back office and its monitors run a real mission on it: every app built, tested and working |
-| **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger you signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8) |
+| **How "done" is judged** | Not boxes ticked. A deliberately messy mission (the **golden mission**) comes out with the exact statuses, review queue and ledger the user signed off, at every layer: engine, then API, then the apps (`spec/VISION.md` §8). Met at every layer but the native phones |
 
 ---
 
 ## 2. The road, start to finish
 
-| # | Stage | When it's done, you can… | Requirements met | Status |
-|---|---|---|---|---|
-| — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | 26 rounds of questions, ADR-001…279 | ✅ done 2026-09-29 |
-| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | 17 of 17 | ✅ done 2026-10-01: every task and every requirement, and committed |
-| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios that every later phase must pass | not counted in REQs | 🟡 the golden mission is approved, numbers included (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); the acceptance scenarios are written part by part, each before the code it judges (ADR-300): 9 of 9 files (review and corrections' 65 and invoicing and closeout's 31 written 2026-10-06, ADR-362; pricing, the ledger and audit's 114 written 2026-10-05, ADR-353; reconciliation's 162 written 2026-10-05, ADR-339; the counts before it: setup 82, people and devices 74, certifications 60, capture 98, sync 56; the passing counts are in `spec/acceptance/README.md`); beside them the server's file 10 (ADR-379) and **the phone's file 11, 60 new and 50 listed, written 2026-10-17 for Phase 3 (ADR-560)** |
-| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | 93 of 98 ticked; the other 5 moved to Phases 3 and 4 with what Phase 1 built for each (ADR-371) | ✅ exit met 2026-10-06 (ADR-371, 372), 49 of 49 tasks; open since 2026-10-01 (ADR-299) |
-| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | 22 of 23 ticked; REQ-006 (every service over HTTPS) moved to Phase 3 with what Phase 2 built for it (ADR-518); REQ-210…217 new (ADR-519), all ticked; REQ-218 new (ADR-552), ticked (ADR-553) | ✅ exit met a third time 2026-10-17 (ADR-555), 44 of 44 tasks (2.6.3 withdrawn); open since 2026-10-06 (ADR-376), reopened 2026-10-14 (ADR-519) and 2026-10-17 (ADR-552) |
-| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync. Browser first, then iPhone, then Android | 20 of 33 (REQ-322, 317, ADR-585; REQ-307, ADR-584; REQ-306, 320, 112b, ADR-583; REQ-304, 305, 308a, 319, 124f, ADR-582; REQ-006, ADR-565; REQ-308b, ADR-574; REQ-311a, ADR-576; REQ-308, 308c, ADR-578; REQ-313, 124c, ADR-580; REQ-303, 318, ADR-581; four carried from Phase 1, ADR-371; one from Phase 2 and three new, ADR-518) | 🟡 open since 2026-10-17 (ADR-557), 20 of 33 tasks |
-| **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | 0 of 19 (one carried from Phase 1, ADR-371) | 🔒 |
-| **5a** | **Deploy and go-live checks** | Run it in a real cloud (the shipped demo: Railway + Netlify), passing the scenario suite and load tests, with an outside security test done | 0 of 1 (REQ-517), plus carried-forward items C25, C33, C38…C40, C48, C49 | 🔒 |
-| 🏁 | **Finish line** | **A firm can install it and people use it on a real mission** | | |
-| **5b** | **Later features** | Add the candidate features a project may want (daily report set, parcels, live scales, the HHW trail…), each confirmed by you first | 0 of 12 listed, 2 of them marked not planned | 🔒 after the finish line |
+| # | Stage | When it's done, you can… | Status |
+|---|---|---|---|
+| — | **Design** | Read the whole product on paper: the rules, the spec, the architecture, all approved | ✅ done 2026-09-29 (26 rounds of questions, ADR-001…279) |
+| **0** | **Foundation** | Start the whole local stack with one command over HTTPS, the mileage and address servers included; watch the database itself refuse what the rules forbid; run a ticket's story from a terminal | ✅ done 2026-10-01: 17 of 17 requirements (§3c) |
+| — | **The answer key** | Hold the golden mission's signed-off numbers and the acceptance scenarios every later phase must pass | ✅ the golden mission approved with its numbers (2026-10-01, ADR-297: P1 $5,548.25 on 19 lines, P2 $324.00); 11 scenario files (760 in files 01…09, the API's file 10, the phone's file 11), all approved (`BUILD.md` settled 9). **No back-office file 12:** the back office's browser tests are its proof (§2a) |
+| **1** | **Data core and engine** | Run a whole messy mission from a terminal, no screens, and see the right statuses, flags, ledger and audit trail come out | ✅ exit met 2026-10-06 (ADR-371, 372): 49 of 49 tasks; 93 of 98 requirements, 5 moved to Phases 3 and 4 (§3b) |
+| **2** | **API and sync** | Have phones and the back office talk to the server: sign-in, permissions, device enrolment, sync, background jobs, all hardened | ✅ exit met a third time 2026-10-17 (ADR-555): 44 of 44 tasks; 22 of 23 requirements, REQ-006 moved to Phase 3 and met there (§3a) |
+| **3** | **Field app** | Hand a monitor a phone: enrol it, take the day's assignment, capture every kind of field event offline for days, scan, print, sync | 🟡 **the browser build is done** (2026-10-22): every capture, sync and turn-in, the time clock, photos, receipts as PDFs, scanning, the golden mission through its screens, the WCAG 2.2 AA review and the MASVS checklist. **The iPhone and Android builds are paused** (ADR-600; `BUILD.md` "Not in this build") (§3) |
+| **4** | **Back office and read-only portal** | Set up a project, dispatch the day, review and correct, QC, lock as invoiced, export; clients, contractors and auditors see their own projects | ✅ **built 2026-10-22** as `BUILD.md`'s parts, never opened as a gated phase (§3, §2a) |
+| **5a** | **Install and go-live checks** | Install it for a real firm, with the scenario suite passing, load tests and an outside security test done | 🟡 **re-scoped** (§2a): the Railway + Netlify demo deploy is replaced by a firm's own server (`./adms install`, built 2026-10-23) and a fresh test install (`pnpm start`); `SECURITY.md` written. Still open: monitoring and alerts, backups rehearsed, an outside penetration test before a first live mission, how upgrades reach an installation (Q-167), map data per region (Q-166) |
+| 🏁 | **Finish line** | **A firm can install it and people use it on a real mission** | 🟡 installable and proven in the browser; the native phones and the go-live checks remain |
+| **5b** | **Later features** | Add the candidate features a project may want (daily report set, parcels, live scales, the HHW trail…), each confirmed by the user first | ⬜ after the finish line; the daily report PDF and email summary arrived early with Phase 4 (§2a) |
 
-Phase 5 is one phase in the plan ("later features and the demo deploy"). This page shows it as two
-rows, with the finish line between them, because the deploy is what makes it usable and the later
-features are optional extras. That split is this page's drawing, not a change to the plan.
-
-**No dates.** Nothing in the plan sets one, and none is guessed here. The requirement counts give
-the relative size: Phase 1 is by far the largest piece.
+**No dates.** Nothing in the plan sets one, and none is guessed here.
 
 ---
 
-## 3. Phase 3, Field app: open since 2026-10-17 (ADR-557)
+## 2a. Where the build left this roadmap
 
-Opened at your word. The plan is `BACKLOG.md`'s (ADR-558). It builds the phone against what Phase 2
-serves and adds no rule; its one piece of server work is the time clock's records. The browser
-build comes first and whole; the iPhone and Android builds then add what only a phone has (the
-encrypted store's key in the phone's own vault, the key in secure hardware, the camera, the Zebra
-printer). Sync comes before the capture screens, so every screen is proven through to the server.
+What happened that the roadmap above (as it stood 2026-10-20) didn't say, and how the plan was
+changed to fit. Each is the user's word or a decision on record; none is undone here.
 
-| Milestone | What it is | When it's done, you can… | Tasks | Status |
+| # | Planned | What happened instead | Why, and on whose word | How the roadmap reads now |
 |---|---|---|---|---|
-| 3.0 | Open the phase | Read every Phase 3 task with the requirements each one meets, and the scenarios the phone must pass | 1 of 1 | ✅ 2026-10-17 (ADR-557…560) |
-| 3.1 | The answer and the foundation | Read the phone's security checklist; open the field app's browser build over HTTPS on your machine; see every screen checked for accessibility on every run; see the field app's look and click through the key screens as a prototype, and answer the open designs | 4 of 4 | ✅ done 2026-10-18 (ADR-562…569); your answers to Q-215…Q-218 wait, read before the capture screens |
-| 3.2 | The phone's store, identity and sign-in | Enrol a phone, sign a monitor in online and take the day's assignment, sign in offline from the login list; its data encrypted | 4 of 4 | ✅ done 2026-10-18: the encrypted store (ADR-570); enrolment and the phone's proof (ADR-572); signing in online and the day's assignment (ADR-574); the login list and signing in offline, the phone's own wrong tries, the lock after inactivity (ADR-575): **yours to change if you like: the lock after 30 quiet minutes, and only the phone's own monitor signing in offline** |
-| 3.3 | The master passcode on the phone | Set a phone up when its monitor has no assignment; switch monitors and move sites offline | 2 of 2 | ✅ setting a phone up with no assignment (ADR-576); switching, moving, sessions under the passcode, and your ten-wrong-tries lock (ADR-577): **yours to change if you like: "Set up this phone" on the sign-in screen too** |
-| 3.4 | Sync from the phone | Sync a phone's records and photographs whenever it has signal; turn it in and watch it wipe only once the server has everything | 3 of 3 | ✅ the phone's sync (ADR-578); its photographs, a piece at a time, picking up where they stopped (ADR-579); "Sync and turn in", erased only on the server's word (ADR-580) |
-| 3.5 | Capture | Record every kind of field event on the phone, offline: collections and splits, the tower and haul-outs, unit rate work, forms, certifying a truck | 5 of 5 | ✅ complete 2026-10-19: the collection (ADR-581); the tower and the haul-out (ADR-582); unit rate (ADR-583); the forms (ADR-584); certifying, and a phone told when it is away from its site (ADR-585) |
-| 3.6 | Photographs, printing, scanning | Take photographs, print a receipt (PDF in the browser), scan a ticket back | 3 of 3 | ✅ done 2026-10-20: photographs (ADR-586; unit rate photographs by stage, your notes, ADR-590); receipts printed as PDFs in the browser (ADR-595); scanning by scanner and camera, and "Scan a barcode" on home (ADR-596). Paper on real phones is 3.8 and 3.9 |
-| 3.7 | The time clock | Clock in and out on a phone, with the day's activity filled in from the field events | 0 of 2 | ⬜ |
-| 3.8 | iPhone | Run the app on a real iPhone: airplane mode for a day, a Zebra printer, scanning, the camera, encryption, turn-in | 0 of 4 | ⬜ (needs you and the hardware: §6) |
-| 3.9 | Android | The same on a real Android phone | 0 of 2 | ⬜ (needs you and the hardware: §6) |
-| 3.10 | Prove it | Run the golden mission through the phone's screens and get your numbers; read the security checklist and the accessibility report | 0 of 3 | ⬜ |
+| 1 | **Task by task**, an ADR for each, phases opened and closed at gates with exit criteria, REQs ticked one by one | **ADR-599 (2026-10-21)**: one plan by milestone (`PLAN-TRACK1.md`), ADRs only for real decisions. **2026-10-22** (`BUILD.md`): one final build task with a fixed list of parts, no gates, no ADRs or KDs; a decision is said in the code and the commit, one that touches money, evidence or what a monitor must do gets a line under "Defaults taken" | The user: "the tasks we have planned are starting to miss the mark … I want us to move faster" (ADR-599); "finish the web platform in one run" (2026-10-22) | The ADRs stop at 606. Phase 3's and 4's requirement counts were not kept after 2026-10-20 (Phase 3 stood at 20 of 33): the parts in `BUILD.md`, the browser tests and the golden mission are the proof instead |
+| 2 | **Phase 3 in order:** the browser build, then the iPhone (3.8), then Android (3.9), then the phase's exit (3.10), before Phase 4 opens | The browser build finished (3.7 the time clock, ADR-598, 601; 3.10.1 the golden mission through the field app, ADR-603; 3.10.2 accessibility and MASVS, ADR-606; the two settled items, 2026-10-22). **The phones paused**; Phase 4 started without Phase 3's exit | The user, 2026-10-21: "I dont have an iphone or android we can test on just yet, so let's pause those 2 parts" (ADR-600) | Phase 3 is 🟡: browser ✅, phones ⏸. Its exit criterion 9 (on device) waits with the phones |
+| 3 | **Phase 4 gated** behind Phase 3's exit, with its own plan, its acceptance file `12-back-office.md` for approval, and its REQs | All of Phase 4 built in one day (2026-10-22) as `BUILD.md`'s parts on the branch `phase4-back-office`, now on `main`. No file 12 was drafted | `BUILD.md` settled 9: "its browser tests are the proof" | Phase 4 is ✅, proven by the browser tests and the golden mission through every screen |
+| 4 | **The portal** as its own app | The viewer portal lives inside the back office's app, under `/viewer/…`, on the same sign-in | Fewer apps to host and secure; one shared look (`packages/look`) | Phase 4 counts the portal as part of `apps/back-office` |
+| 5 | **The back office's layout:** a sidebar closed by default, Tickets / Reports and Forms / Billings, one paged table | A **desktop**: a menu bar, folder icons per area, every screen in a window, a taskbar (2026-10-22); restyled as a classic **Windows 95** desktop with a Start menu, a clock and wallpapers (2026-10-23). The address stays the truth, so every deep link still works | The user asked for the back office to work like a classic desktop program | Phase 4's look is the desktop |
+| 6 | **Phase 5a's demo deploy:** Railway (API, worker, Postgres, map servers) + Netlify (web apps), the firm hosting in its own cloud | Two shapes instead (`BUILD.md` settled 11): a **test install** (`pnpm start`: fresh every time, the sample loaded, every part checked; `pnpm start --keep`, `pnpm stop`, `pnpm logs`) and a **production install** on one Linux server with Docker Engine alone (`./adms install`, then `start`, `stop`, `status`, `logs`, `admin`, `root`, `licences`): images built on the server, the firm's answers asked once, Let's Encrypt where the internet reaches it | The user, 2026-10-23: "this replaces ARCHITECTURE §4's Railway + Netlify target" | 5a is 🟡: the install is built; REQ-517's cloud rows (Railway's `migrate deploy`, Netlify's same-origin proxy) no longer apply as written; the hardening, operations and go-live rows still do (§4) |
+| 7 | **The licence:** AGPL-3.0 (ADR-171) | **Apache-2.0** with a NOTICE; `pnpm licences` now refuses GPL, LGPL and AGPL in what ships | The user, 2026-10-23, superseding ADR-171 | Every dependency is checked against Apache-2.0 |
+| 8 | **Not on the roadmap** | Built alongside: the **sample projects** (`pnpm sample`: P1, P2 and a messy Wednesday, through the real paths); the **firm's brand** (what the firm calls its ADMS, "Built on Open ADMS"); a **documentation site** (`apps/docs`, Astro Starlight, 29 pages, Markdown twins and `llms.txt`); a **README** with a one-line install; the tests in a database of their own (`adms_test`) | To make the platform something a firm can install, try and read about | Listed with Phase 4 and 5a in §3 |
+| 9 | **The daily QC and expenditure reports** in 5b (REQ-513) | A **daily report PDF** and an **email summary** arrived with Phase 4's reports, with debris totals and exports as CSV, Excel (.xlsx), JSON and PDF | `BUILD.md`'s "Reports and exports" part | REQ-513's fixed 0700 / 0900 schedule stays in 5b |
+| 10 | **Waiting on the user** (§6 as it stood): photos required as a number, C185, KD-80, the HHW trail, `RULES.md` §7, the map region, approvals, a security policy file | Settled 2026-10-22 ("take your recommendation on every open question", `BUILD.md` settled 1…10); `SECURITY.md` written | The user | §6 holds only what is left |
+| 11 | **Agents don't write to git**; the user commits each response | Agents commit their own work on a work branch, one branch per phase; the user merges | The user, 2026-10-22 (`CLAUDE.md` "Git") | §6's commit row is gone |
 
-**Phase 3's exit criteria** (`NEXT.md`; the agent's, yours to change): the golden mission captured
-through the field app's screens with your numbers; every scenario with a Phase 3 part passing; all
-33 requirements ticked from real runs; the phone's security checklist answered; every screen at
-WCAG 2.2 AA with its report written; every new table guarded; the chain green with the browser
-tests in it; rules and shapes in one place; the on-device runs on a real iPhone and Android phone
-with you; three clean full runs.
+---
 
-**Scenarios with a Phase 3 part:** 138 (`spec/acceptance/11-field-app.md`, ADR-560, 562, 571, 573, 577, 584, 585): 88 new, and
-50 earlier ones whose field app part is still to come. **83 passing whole and 26 more in part** (the file's own count, "The count", names each; task 3.6.1 added AC-11-78 and AC-04-79's field app part whole, and AC-11-44's browser part, ADR-586; task 3.5.5 added AC-11-42, 88 and AC-03-09's, 14's and 36's field app parts whole, and AC-04-70's left out of the count before, ADR-585; task 3.5.4 added AC-11-84…87 and AC-04-101's field app part whole, ADR-584; task 3.5.3 added AC-11-43, 74, 76 and AC-04-70's field app part whole, ADR-583; task 3.5.2 added AC-11-40, 41, 79 and AC-04-38's, 44's field app parts whole, ADR-582; task 3.5.1 added seven of its own and eleven earlier ones' field app parts whole, and seven in part, ADR-581; task 3.4.3 added AC-11-08, 35 and AC-02-58's, AC-05-56's field app parts whole, ADR-580).
+## 3. Phase 3, Field app, and Phase 4, Back office and portal
+
+### Phase 3: the browser build done; the phones paused
+
+Opened 2026-10-17 (ADR-557). The browser build came first and whole (ADR-558), on the API Phase 2
+serves; its one server half was the time clock's records.
+
+| Milestone | What it is | Status |
+|---|---|---|
+| 3.0 | Open the phase: the plan, the requirements moved, the phone's scenarios | ✅ 2026-10-17 (ADR-557…560) |
+| 3.1 | The phone's security checklist; the field app's shell over HTTPS; every screen checked for accessibility on every run; the look, the components and the prototype | ✅ 2026-10-18 (ADR-562…569) |
+| 3.2 | The phone's encrypted store, enrolment, signing in online and offline | ✅ 2026-10-18 (ADR-570, 572, 574, 575) |
+| 3.3 | The master passcode on the phone: setup with no assignment, switching, moving, the ten-tries lock | ✅ (ADR-576, 577) |
+| 3.4 | Sync from the phone, photographs a piece at a time, "Sync and turn in" | ✅ (ADR-578…580) |
+| 3.5 | Capture: collections and splits, the tower and haul-outs, unit rate, forms, certifying | ✅ 2026-10-19 (ADR-581…585) |
+| 3.6 | Photographs, receipts printed as PDFs in the browser, scanning by scanner and camera | ✅ 2026-10-20 (ADR-586, 590, 595, 596) |
+| 3.7 | The time clock: its records on the server; clock in and out on the phone, the day's activity filled in from the field events | ✅ 2026-10-21 (ADR-598, 601) |
+| — | The field app finished (`BUILD.md`'s first part): a stretch past midnight counts on the next day; the scanner-keys setting (WCAG 2.1.4); "Pick one to go on." (3.2.2) | ✅ 2026-10-22 |
+| 3.8 | iPhone: the iOS build and its key in the phone's vault, the native camera and scanning, a Zebra ZQ printer, a day in airplane mode | ⏸ paused until the user has the hardware (ADR-600; `PLAN-TRACK1.md` §P) |
+| 3.9 | Android: the same on a real Android phone | ⏸ paused, as 3.8 |
+| 3.10 | Prove it: the golden mission through the phone's screens; the security checklist and the accessibility review | ✅ in the browser (ADR-603, 606; conformance note `spec/ACCESSIBILITY-FIELD.md`); the on-device runs wait with 3.8 and 3.9 |
+
+### Phase 4: built 2026-10-22, as `BUILD.md`'s parts
+
+Never opened as a gated phase (§2a, 1 and 3). Each part was committed as it landed, on
+`phase4-back-office`, and is on `main`.
+
+| Part | What you can do | Status |
+|---|---|---|
+| Back office foundation | The shared look as a workspace package (`packages/look`: tokens, components, the accessibility helpers, the translation layer) used by both apps; the back office at `office.adms.localhost` with its own page policy; sign-in, two-step, password change and reset, your own sessions, sign-out | ✅ 2026-10-22 |
+| Setting up a project | Clients, declaration events, projects; contractors, primes, contracts; forms, debris types, the firm's lists; pay items with a rate per prime; the rule builder; sites and their quantity lookup; the project map; certification intake; ROEs from paper with their scope; the setup check | ✅ 2026-10-22 |
+| People, phones, the board, the clock | People and permissions; the firm's settings; phones and the master passcode; the dispatch board; the time clock's approval, unlock and hours | ✅ 2026-10-22 |
+| Review and correct | The review queue by workflow and cause; a ticket's page (field events side by side, photos, history); corrections, renumber, void, accept; quarantine; held records and jobs; records made in the back office | ✅ 2026-10-22 |
+| Money, the lock, the close | The ledger; QC; invoice locks and batches; the audit trail; closing and reopening a project | ✅ 2026-10-22 |
+| Reports and exports | Debris totals; the daily report PDF and the email summary; exports (CSV, Excel, JSON; the tickets list also as .xlsx and PDF, 2026-10-23); photo PDFs; the receipt batch | ✅ 2026-10-22 |
+| The viewer portal | A viewer's projects, tickets and history, read-only, under `/viewer/…` | ✅ 2026-10-22 |
+| Up and proven | `pnpm start`; the golden mission through every screen (`apps/field/playwright.mission.config.ts`: 7 tests); the chain green and recorded; `SECURITY.md`; the conformance notes (`spec/ACCESSIBILITY-FIELD.md`, `spec/ACCESSIBILITY-OFFICE.md`) | ✅ 2026-10-22 |
+| The desktop | The back office and the portal as a desktop: a menu bar, folder icons, windows and a taskbar; then the Windows 95 look (§2a, 5) | ✅ 2026-10-22, restyled 2026-10-23 |
+| Beyond the plan | The sample projects; the firm's brand; the documentation site; the README; test and production installs (§2a, 6 and 8) | ✅ 2026-10-22…23 |
+
+**Test state** (`CHAIN.md`, recorded 2026-10-23 05:34 UTC, 10 of 10 steps green): 239 test files,
+3,883 tests; 25 stories; 71 browser tests over 60 screens with 0 accessibility findings; 1,127
+grant tests; 20 security checks; 470 licensed packages. The commits after that run are not in it
+(§1, "Next").
 
 ---
 
@@ -192,20 +218,14 @@ work, and what Phase 0 delivered for each is listed in `REQUIREMENTS.md`.
 
 ---
 
-## 4. What each later phase holds
+## 4. What is left, by stage
 
-| Phase | The pieces, in build order | Proven by |
+| Stage | The pieces | Status |
 |---|---|---|
-| **1. Data core and engine** | Setup records · certifications and capacity · tickets and numbers · sync intake with quarantine · reconciliation · the rule engine · the ledger and audit · review, QC, invoice lock and batches | The golden mission passing at the engine, from a terminal |
-| **2. API and sync** (as planned, ADR-377) | The threat model and the API's scenarios · the API as a process over HTTPS, exact CORS list · sign-in, roles and permissions · reprocessing as jobs and the worker's process · the back office's endpoints wrapping the same rules (no new logic) · device enrolment and device keys · the sync endpoints · rate limits throughout | API tests; the same scenarios syncing through the real endpoints |
-| **3. Field app** (as planned, ADR-558) | The security checklist, the shell over HTTPS, the accessibility check · the encrypted store, enrolment, sign-in online and offline · the master passcode on the phone · sync and turn in · collection, disposal, haul-out, unit rate, forms, certifying · photos, printing, scanning · the time clock · iPhone · Android | Browser end-to-end tests, then on real iPhones, then Android |
-| **4. Back office and portal** | Project setup with its check · contractors and contracts · certification intake · rule builder · dispatch board · one review queue and quarantine resolution · ledger, lock and batches · audit viewer · reports, exports, photo PDFs · worker administration · read-only portal | Browser end-to-end tests; the golden mission run through the screens |
-| **5a. Deploy and go-live checks** | The demo deploy · monitoring and alerts · availability and backups rehearsed · an outside penetration test · how upgrades reach an installation (Q-167) · map data per region (Q-166) | The scenario suite and load tests passing in the cloud |
-| **5b. Later features** | "USACE approved" flag on the load call · hazard tree workflow · Esri feature service · parcel lifecycle · live scale-house link · volume-reduction tracking · daily QC and expenditure reports · the HHW trail | Each confirmed by you before it's built |
-
-Phase 1 by area (98 requirements; two added for split haul-outs, ADR-296): schema and data model 35 · reconciliation engine 36 · ticket
-workflows 12 · ledger and audit 8 · verification 4 · carried from Phase 0, 3. **Phase 1's task-by-task milestones are
-in `BACKLOG.md`** (ADR-300) and summarised in §3b: every one of the 98 is named by the task that meets it.
+| **3. The phones** (`PLAN-TRACK1.md` §P) | The iOS build, its store and its key; the native camera and scanning; printing to a Zebra ZQ; on a real iPhone; the Android build; on a real Android phone; the field app's conformance report for the native builds | ⏸ until the user has the devices; ADR-600 expects it to be taken as one piece of work |
+| **5a. Install and go-live checks** (`PLAN-TRACK1.md`, "The demo deploy", read against §2a, 6) | Done: the production install on a firm's server (`./adms`), Let's Encrypt or the installation's own root, lean logs, licence notices shipped; `SECURITY.md`. Left: monitoring and alerts (`/readiness`, a job set aside, a backup failing, storage filling); availability, restarts and backups rehearsed; the hardening rows of the API's checklist for a server on the internet; an outside penetration test before a firm's first live mission; how upgrades reach an installation (Q-167); map data per region (Q-166); load tests over a real network | 🟡 |
+| **5b. Later features** (each confirmed by the user first) | "USACE approved" flag on the load call · hazard tree workflow · Esri feature service · parcel lifecycle · live scale-house link · volume-reduction tracking · the daily QC and expenditure reports on their schedule · voided tickets in live exports · the HHW trail (not in this build, `BUILD.md` settled 5) | ⬜ |
+| **Ideas, nothing decided** (`PLAN-TRACK1.md`, "Tracks 2…4", 2026-10-21) | A light installation (one small server a firm can stop between missions); a setup agent drafting a project from the firm's contracts, a person approving; a view per audience (mission center, contractor, client, a public map) | ⬜ the user's to open |
 
 ---
 
@@ -215,42 +235,33 @@ in `BACKLOG.md`** (ADR-300) and summarised in §3b: every one of the 98 is named
 
 | Layer | What it proves | Arrives in | Today |
 |---|---|---|---|
-| Unit | The shared rules: capacity math, volume, split shares, checks, pricing, time, number blocks | Phase 1 | ✅ the rules' tests need no database (counts: `CHAIN.md`) |
-| Database | Every grant and every refusal; audit can't be forged or edited | Phase 0 | ✅ in place, grows with each new table |
-| Scenario harness | Whole missions told as stories; exact statuses, queue and ledger | Phases 0–1 | ✅ 23 stories, every phone through the real endpoints and every run the worker's job loop's since Phase 2 (ADR-492…503) |
-| API | Sign-in, permissions, CORS, rate limits, the sync contract | Phase 2 | ✅ every one of the 209 endpoints, asked as nine kinds of caller; 169 scenarios at the API (ADR-539) |
-| Browser end-to-end | The web apps and the field app's browser build | Phases 3–4 | 🟡 in the chain since task 3.1.2 (`pnpm e2e`, Playwright, ADR-564): the field app's shell, its door and its page's policy; each screen adds its own; the back office's in Phase 4 |
-| On device | iPhone, then Android: airplane mode, printing, scanning, camera, encryption, turn in | Phase 3 | ⬜ |
+| Unit | The shared rules: capacity math, volume, split shares, checks, pricing, time, number blocks | Phase 1 | ✅ (counts: `CHAIN.md`) |
+| Database | Every grant and every refusal; audit can't be forged or edited | Phase 0 | ✅ 1,127 grant tests, growing with each table |
+| Scenario harness | Whole missions told as stories; exact statuses, queue and ledger | Phases 0–1 | ✅ 25 stories, every phone through the real endpoints, the sample projects among them |
+| API | Sign-in, permissions, CORS, rate limits, the sync contract | Phase 2 | ✅ every endpoint asked as nine kinds of caller (ADR-539) |
+| Browser end-to-end | The field app's browser build, the back office and the portal | Phases 3–4 | ✅ 71 browser tests over 60 screens, each with the WCAG 2.2 AA check; the golden mission through every screen (7 tests, its own config) |
+| On device | iPhone, then Android: airplane mode, printing, scanning, camera, encryption, turn in | Phase 3 | ⏸ with the phones |
 
 ---
 
-## 6. What waits on you
+## 6. What waits on the user
 
-Nothing here blocks the next task. Each is listed with the point where it starts to matter. **The agent's defaults you may overturn are one list, `SUMMARY.md` §4** (each a yes or no); this table holds only what is yours to do or answer, and a row goes when it is done (ADR-516).
+Nothing blocks what is built. A row goes when it is done.
 
 | What | Why it's yours | Matters by |
 |---|---|---|
-| **The hardware for the on-device runs** | A real iPhone and a real Android phone, a Zebra ZQ printer, a Bluetooth scanner if your monitors use one, Xcode and an Apple developer account. The agent can't hold a phone: those runs are done with you (ADR-558) | By Milestone 3.8 (iPhone), then 3.9 (Android) |
-| **Approve the phone's scenarios** | `spec/acceptance/11-field-app.md` (ADR-560): what the phone must do, written before its first screen | Any time; building doesn't wait |
-| **The agent's defaults** | Each recorded call you may overturn, with its ADR: `SUMMARY.md` §4, all of them on the defaults page above (D1…D162) | Any time; building doesn't wait |
-| **Whether *photos required* should take a number** (asked 2026-10-05, ADR-345) | Today a pay item's *photos required* is yes or no, meaning at least one. Your example spoke of a ticket that requires 4. If you want a firm to set a number, it is a new pay item setting; if "at least one" is enough, nothing changes. Nothing waits on it |
-| Commit each response's changes | Agents don't write to git; every file-changing response ends with a block for you to run. The history began 2026-10-01 (nine commits on `phase0-foundation`, ADR-288) | After each response, so no work sits uncommitted (tasks 1.8.4…1.9.3 and the 2026-10-06 housekeeping were waiting on 2026-10-06; one script commits them) |
-| A `main` branch and a remote | The history lives on one branch on this machine only; where it is pushed and what the default branch is are your call | Before anyone else needs the code, and as the only copy's backup |
-| The map region for examples | The local stack's built-in map extract is Delaware (small, dated), standing in for the made-up Bayline County (ADR-282). Florida's needs more disk than Docker has on this machine (8 GB) | Before the golden mission's GPS points are picked |
-| Approve the ADR-240 notes in ARCHITECTURE §7–§10 | The approved sections were updated to "enrol once, assignment daily" | Any time; building doesn't wait |
-| Approve a security policy file | How a vulnerability is reported and fixed (C40) | Before the repository is public |
+| **The hardware for the phones** | A real iPhone and a real Android phone, a Zebra ZQ printer, a Bluetooth scanner if the firm's monitors use one, Xcode and an Apple developer account (ADR-600) | Before the phones open |
+| **What opens next** | `BUILD.md`'s task is done; the phones, the go-live checks, 5b's features and the ideas in §4 are each the user's to open | Any time |
+| **The defaults taken** | One list to overturn: `BUILD.md` "Defaults taken", then `SUMMARY.md` §4 and `history/DECISIONS-599-606.md` | Any time; nothing waits on it |
+| **An outside penetration test** | A test by someone else, before a firm's first live mission (C40 (b)) | Before a real mission |
+| **Merging work branches** | Agents commit on a work branch and never merge or push (`CLAUDE.md` "Git") | After each piece of work |
+| **Spotlight and `.cache/`** | Excluding the repository's `.cache/` from Spotlight on the user's Mac (seen 2026-10-21: it slowed the browser runs) | When runs feel slow |
 
 ---
 
 ## 7. Keeping this page true
 
-| When | Change here |
-|---|---|
-| A task closes | §3's task count and "next" |
-| A milestone or phase closes | Its row's status in §2 and §3; the test state |
-| A phase opens | Add its milestone table (like §3), from `BACKLOG.md`; the phase before it keeps its table under it |
-| A scenario file is written, or scenarios pass | §3's "Scenarios passing" line and the answer key's row in §2 |
-| Requirements are ticked | The counts in §2 |
-| Something new waits on the user, or stops waiting | §6 |
-
-Always change the "Last updated" line. Never add a date estimate the user didn't give.
+This page is history now: the live record is `BUILD.md` and the git log. When a new piece of work
+opens (the phones, the go-live checks, a 5b feature), change its row in §2 and §4, add a line to
+§2a where it leaves the plan, and change the "Last updated" line. Never add a date estimate the
+user didn't give.
