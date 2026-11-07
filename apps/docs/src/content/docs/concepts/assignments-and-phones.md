@@ -1,6 +1,6 @@
 ---
 title: Assignments and phones
-description: A phone is enrolled once; each day's work comes from the monitor's assignment on the dispatch board; the master passcode is the supervisor's fallback; offline sign-in is protected by the phone itself.
+description: A phone is enrolled once; each day's work comes from the dispatch board; the master passcode is the supervisor's fallback; the phone protects offline sign-in.
 ---
 
 A field monitor's phone never asks them to pick a project or a site. **The phone is enrolled once**,

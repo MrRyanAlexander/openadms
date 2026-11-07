@@ -1,6 +1,10 @@
 ---
 title: Certifications
-description: A certification certifies a container or a crew, never a vehicle. How capacity is measured exactly, why the cert number is the placard and badge number, and how a certification lives and changes.
+description: 'A certification covers a container or a crew, never a vehicle: how capacity is measured, why the cert number is the placard and badge number, how it changes.'
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'Truck and Container Certifications | OpenADMS'
 ---
 
 A **certification** is a one-time inspection that fixes what a truck's container holds, or who a crew

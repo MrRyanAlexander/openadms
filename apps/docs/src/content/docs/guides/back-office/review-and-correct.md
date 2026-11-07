@@ -1,6 +1,6 @@
 ---
 title: Review and correct
-description: The one review queue, a ticket's page, and the tools - correct, renumber, void, accept - with when each is right, plus quarantined records, held records and records made in the back office.
+description: The one review queue, a ticket's page, when to correct, renumber, void or accept, plus quarantined records, held records and records made in the back office.
 ---
 
 Every problem lands in **one review queue**. A permitted person reads the evidence and fixes the

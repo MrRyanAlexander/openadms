@@ -1,6 +1,6 @@
 ---
 title: Contributing
-description: How to contribute to Open ADMS - field knowledge as much as code - the development setup, the workspace's rules, how changes are proven, and where the spec lives.
+description: "How to contribute to Open ADMS (field knowledge as much as code): the development setup, the workspace's rules, how changes are proven and where the spec lives."
 ---
 
 Field experience counts as much as code. A monitor who can describe exactly why a load call gets

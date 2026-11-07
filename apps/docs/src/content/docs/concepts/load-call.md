@@ -1,6 +1,10 @@
 ---
 title: The load call
-description: The percentage a tower monitor calls is the number the money hangs on. How billable volume is worked out, which calls are flagged, when a scale weight is taken instead, and the loads that have no call at all.
+description: 'The percentage a tower monitor calls is what the money hangs on: how billable volume is worked out, which calls are flagged, and when a scale weight is used.'
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'Load Call: Billable Cubic Yards per Load | OpenADMS'
 ---
 
 A container is **certified once** (measured, photographed, given a cert number) to fix its capacity

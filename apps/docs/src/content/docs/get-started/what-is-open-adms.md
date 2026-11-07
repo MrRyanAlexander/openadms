@@ -1,6 +1,10 @@
 ---
 title: What is Open ADMS?
 description: The problem Open ADMS solves, the one sentence it serves, who uses it, what it guarantees and what it deliberately is not.
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'What Is an Automated Debris Management System (ADMS)?'
 ---
 
 Open ADMS is an **automated debris management system** (ADMS): the system of record for a debris
@@ -10,8 +14,8 @@ that uses it.
 
 ## The problem
 
-After a disaster, a jurisdiction (a county, a city, a state agency) is buried in debris. FEMA and
-the US Army Corps of Engineers reimburse it for hauling that debris away, **but only for debris that
+After a disaster, a jurisdiction (a county, a city, a state agency) is buried in debris. FEMA's Public
+Assistance program reimburses it for hauling that debris away, **but only for debris that
 is proven eligible, measured and documented.** Undocumented debris is unreimbursed debris.
 
 The jurisdiction hires **hauling contractors** to pick the debris up, and separately hires a

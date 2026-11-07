@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Where each setting lives - the release's policy defaults by name, the firm's settings, and each project's settings - and the rule that a threshold is policy, never a number in code.
+description: Where each setting lives (the release's policy defaults, the firm's settings, each project's settings) and the rule that a threshold is policy, never code.
 ---
 
 **Thresholds are policy**: never a number in code, never relaxed to pass a test. Settings live in

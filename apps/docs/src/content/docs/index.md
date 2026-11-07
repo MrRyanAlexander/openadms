@@ -1,6 +1,10 @@
 ---
 title: Open ADMS documentation
 description: Open-source debris management and field reconciliation for disaster recovery. Set it up, run a mission, and understand every rule it applies.
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'OpenADMS Docs: Open Source Debris Monitoring Software'
 template: splash
 hero:
   title: Open ADMS documentation

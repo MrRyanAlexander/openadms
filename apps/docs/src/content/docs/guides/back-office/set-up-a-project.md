@@ -1,6 +1,6 @@
 ---
 title: Set up a project
-description: From the client down to the setup check, in the order a mission needs it - client, declaration event, project, contractors and contracts, forms and debris types, pay items, rules, sites, the project map, certifications and ROEs.
+description: 'Set up a project in the order a mission needs it: client, declaration event, project, contracts, pay items, rules, sites, certifications, ROEs, the setup check.'
 ---
 
 Everything a monitor's phone offers, and everything the worker checks and prices, comes from the

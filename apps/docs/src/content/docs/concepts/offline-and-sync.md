@@ -1,6 +1,6 @@
 ---
 title: Offline and sync
-description: Phones work all day without a connection and sync whenever there is signal, in any order. How a sync proves who sent it, never stores a record twice, and quarantines a duplicate number instead of dropping it.
+description: Phones work all day offline and sync whenever there is signal, in any order. How a sync proves its sender, stores nothing twice and quarantines duplicates.
 ---
 
 **Offline is normal.** Curb and dump alike usually have no signal, so nothing in the working day

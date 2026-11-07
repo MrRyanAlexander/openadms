@@ -6,9 +6,8 @@ export const site = {
   title: 'Open ADMS',
   tagline: 'Debris management and field reconciliation for disaster recovery',
   description:
-    'Open ADMS is offline-capable, open-source debris management and field reconciliation for ' +
-    'disaster recovery: two monitors record each load at the curb and at the dump, the server ' +
-    'joins them on the ticket number, flags what disagrees, and keeps an audited ledger.',
+    'Open-source, offline-capable debris management for disaster recovery: two monitors record ' +
+    'each load, the server joins them by ticket and flags what disagrees.',
   repository: 'https://github.com/MrRyanAlexander/openadms',
   branch: 'main',
   licence: 'Apache-2.0',

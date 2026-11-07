@@ -1,6 +1,6 @@
 ---
 title: Lists
-description: Every pick-list in Open ADMS - which ones the firm extends after install and what each starts with, which are fixed because each value is behaviour, and how built-in values sit beside the firm's own.
+description: "Every pick-list: which a firm extends after install, which are fixed because each value is behaviour, and how built-in values sit beside the firm's."
 ---
 
 Every pick-list falls into one of three groups. The group tells you whether a firm can add to the

@@ -1,6 +1,6 @@
 ---
 title: Security
-description: How Open ADMS protects evidence that public money is paid on - the standards it is checked against, sign-in and sessions, phones, the database that enforces its own rules - and how to report a vulnerability.
+description: "How Open ADMS protects the evidence public money is paid on: the standards it meets, sign-in, phones, the database's own rules, and how to report a flaw."
 ---
 
 Open ADMS keeps evidence that public money is paid on: every ticket, photograph and audited change

@@ -1,6 +1,10 @@
 ---
 title: Two field events, one ticket
-description: Why every truckload is recorded twice, by two monitors who cannot see each other, joined only on the server by the bare ticket number, and what the system concludes from the pair.
+description: Why every truckload is recorded twice, by two monitors who cannot see each other, joined on the server by the bare ticket number, and what the pair concludes.
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'Two-Monitor Load Tickets: Collection and Tower | OpenADMS'
 ---
 
 A truckload is **two events**, far apart in place and time, witnessed by **two monitors who cannot
@@ -34,7 +38,7 @@ never dumped; a disposal with no collection is debris from nowhere.
 | **Haul-out**  | Haul-out collection `HOC` at the TDSR → haul-out disposal `HOD` at the final site | The haul-out collection | The haul-out collection: its load call, at the loading end | The completed haul-out `CHO` |
 | **Unit rate** | One unit rate event `URT`, complete on its own                                    | The unit rate event     | Its own count, measurement or hours                        | Its transactions             |
 
-- A **haul-out** is the second leg: debris reduced at a temporary debris staging and reduction site
+- A **haul-out** is the second leg: debris reduced at a temporary debris storage and reduction site
   (TDSR) leaving for final disposal (FDS). It never dumps at a TDSR.
 - **Unit rate work** (hangers, leaners, stumps, white goods, household hazardous waste, crew time) is
   one monitor, one place, one ticket: the one-witness exception, by design.

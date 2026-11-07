@@ -1,6 +1,6 @@
 ---
 title: The ledger and the audit trail
-description: Pay items hold every rate, rules turn tickets into transactions, the ledger is regenerated rather than reversed, and the audit log keeps every prior value for ever.
+description: Pay items hold every rate, rules turn tickets into transactions, the ledger is regenerated, not reversed, and the audit log keeps every prior value for ever.
 ---
 
 The money in Open ADMS is the firm's own setup applied to the evidence. The monitor enters only the

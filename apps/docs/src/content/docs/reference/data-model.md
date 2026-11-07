@@ -1,6 +1,6 @@
 ---
 title: Data model
-description: The records Open ADMS keeps and how they link - firm-wide records, a project's setup, the evidence monitors capture, the worker's conclusions, people's marks and the audit log - and what the database refuses by itself.
+description: "The records Open ADMS keeps and how they link: firm-wide records, a project's setup, field evidence, the worker's conclusions, people's marks and the audit log."
 ---
 
 The data model follows one idea: **field events are the evidence; everything the system writes is

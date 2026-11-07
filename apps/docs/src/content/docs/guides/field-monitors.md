@@ -1,6 +1,10 @@
 ---
 title: Field monitors
-description: Signing in on an enrolled phone, starting every ticket with the badge and the number at New, completing a load, a haul-out and unit rate work, forms, and syncing.
+description: Signing in on an enrolled phone, starting every ticket with the badge and the number at New, completing a load, a haul-out and unit rate work, forms and sync.
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'Field Monitor Guide: Load Tickets on a Phone | OpenADMS'
 ---
 
 A field monitor records **what they witnessed**, fast, offline, and is never blocked. The phone

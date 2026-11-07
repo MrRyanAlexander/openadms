@@ -1,6 +1,6 @@
 ---
 title: Commands
-description: Every command run from the repository's root - bringing an installation up, the installer, the local stack, the sample projects, the checks and the documentation site.
+description: "Every command run from the repository's root: bringing an installation up, the installer, the local stack, the sample projects, the checks and the docs site."
 ---
 
 Every command runs from the repository's root, after `eval "$(fnm env --shell zsh)"` (Node 24) and

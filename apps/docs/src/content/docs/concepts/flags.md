@@ -1,6 +1,10 @@
 ---
 title: Flags, never blocks
-description: After setup nothing refuses field work. Every problem becomes a flag with a plain message, the ticket goes to one review queue, and a person fixes it or accepts it with a reason.
+description: After setup nothing refuses field work. Every problem becomes a flag with a plain message, goes to one review queue, and a person fixes it or accepts it.
+head:
+  # The search-facing title; the page's heading stays the title above.
+  - tag: title
+    content: 'Flags, Never Blocks: Reviewing Load Tickets | OpenADMS'
 ---
 
 **Flag, never block.** After a project is set up, nothing refuses field work or a record over

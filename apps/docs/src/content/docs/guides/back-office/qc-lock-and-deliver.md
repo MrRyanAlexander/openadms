@@ -1,6 +1,6 @@
 ---
 title: QC, the lock and the client package
-description: QC marks set by people, locking QC Approved tickets as invoiced in named batches, the ledger and the audit trail, reports and exports, assembling the client package by hand, and closing the project.
+description: QC marks, locking QC Approved tickets as invoiced in named batches, the ledger and audit trail, reports, exports, the client package and closing the project.
 ---
 
 Once tickets are reviewed, the back office checks them (QC), locks what it invoices, and assembles
